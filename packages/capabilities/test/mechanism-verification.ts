@@ -2,11 +2,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { documentCapabilities } from "@pptxdk/capabilities/all";
-import { deck, font, slide, text } from "@pptxdk/capabilities/document";
+import {
+  deck,
+  defineSlideLayout,
+  font,
+  slide,
+  slideLayout,
+  slideMaster,
+  text,
+} from "@pptxdk/capabilities/document";
 import { Text } from "@pptxdk/capabilities/text-elements";
 import type { NativeMechanismDefinition } from "@pptxdk/core/capability";
 import type { PreviewResult } from "@pptxdk/preview";
-import { Deck, Slide } from "@pptxdk/react";
+import { Deck, Slide, SlideLayout, SlideMaster } from "@pptxdk/react";
 import { createElement } from "react";
 
 import {
@@ -17,6 +25,13 @@ import {
 } from "./acceptance-runner.ts";
 import { chartMechanismVerifications } from "./chart/mechanisms.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
+import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
+import {
+  textBoxRoundtripScenario,
+  textMechanismVerifications,
+} from "./text/mechanisms.ts";
+
+export { textBoxRoundtripScenario };
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
@@ -65,29 +80,64 @@ const jostFont = font("Jost*", [
   },
 ]);
 
-export const textBoxRoundtripScenario: CapabilityScenario = {
-  id: "mechanism-text-box-roundtrip",
-  capability: "text",
+const primaryCoverLayout = defineSlideLayout({
+  id: "cover",
+  name: "Cover Layout",
+  type: "title",
+  preserve: true,
+});
+
+const primaryIdleLayout = defineSlideLayout({
+  id: "custom-idle",
+  name: "Custom Idle",
+  matchingName: "Custom Idle",
+  userDrawn: true,
+  preserve: true,
+  showMasterShapes: false,
+  showMasterPlaceholderAnimations: false,
+});
+
+const secondaryIdleLayout = defineSlideLayout({
+  id: "secondary-blank",
+  name: "Secondary Blank",
+  type: "blank",
+  preserve: true,
+});
+
+export const masterLayoutOwnershipScenario: CapabilityScenario = {
+  id: "mechanism-master-layout-ownership",
+  capability: "masters",
   description:
-    "Minimal single-slide Transitional text-box scenario proving dual-author equivalence and import/edit/re-emit roundtrip.",
+    "Multi-master deck with explicit SlideMasters, used and idle SlideLayouts, preserve semantics, and slide-to-layout relationship binding.",
   visualCheckpoints: [
-    "Single-slide white canvas with left-aligned headline text box and centered body text box.",
+    "Slide 1 renders cleanly against explicit multi-master layout ownership.",
   ],
   nativeCheckpoints: [
-    "Both initial and roundtrip PPTX retain editable <p:sp txBox='1'> objects with matching geometry and text.",
+    "Both masters, all 3 layouts (including 2 idle), preserve settings, and slide-to-layout relationship survive initial emit and import roundtrip.",
   ],
   jsx() {
     return createElement(
       Deck,
       { width: 640, height: 360 },
       createElement(
+        SlideMaster,
+        { id: "brand-a", name: "Brand A Master", preserve: true },
+        createElement(SlideLayout, { layout: primaryCoverLayout }),
+        createElement(SlideLayout, { layout: primaryIdleLayout }),
+      ),
+      createElement(
+        SlideMaster,
+        { id: "brand-b", name: "Brand B Master" },
+        createElement(SlideLayout, { layout: secondaryIdleLayout }),
+      ),
+      createElement(
         Slide,
-        { id: "text-roundtrip" },
+        { id: "cover-slide", layout: primaryCoverLayout },
         createElement(
           Text,
           {
-            id: "headline",
-            name: "Headline",
+            id: "heading",
+            name: "Heading",
             x: 32,
             y: 28,
             width: 320,
@@ -95,42 +145,31 @@ export const textBoxRoundtripScenario: CapabilityScenario = {
             style: {
               fontFamily: jostFont,
               fontSize: "24pt",
-              color: "#111827",
-              align: "left",
-              verticalAlign: "top",
+              color: "#0F172A",
             },
           },
-          "Imported Headline",
-        ),
-        createElement(
-          Text,
-          {
-            id: "caption",
-            name: "Caption",
-            x: 32,
-            y: 96,
-            width: 320,
-            height: 64,
-            style: {
-              fontFamily: jostFont,
-              fontSize: "14pt",
-              color: "#334155",
-              align: "center",
-              verticalAlign: "middle",
-              padding: [6, 12, 6, 12],
-            },
-          },
-          "Roundtrip Body Text",
+          "Master Owned Slide",
         ),
       ),
     );
   },
   document() {
     return deck({ width: 640, height: 360 }).append(
-      slide({ id: "text-roundtrip" }).append(
-        text("Imported Headline", {
-          id: "headline",
-          name: "Headline",
+      slideMaster({
+        id: "brand-a",
+        name: "Brand A Master",
+        preserve: true,
+      }).append(
+        slideLayout(primaryCoverLayout),
+        slideLayout(primaryIdleLayout),
+      ),
+      slideMaster({ id: "brand-b", name: "Brand B Master" }).append(
+        slideLayout(secondaryIdleLayout),
+      ),
+      slide({ id: "cover-slide", layout: primaryCoverLayout }).append(
+        text("Master Owned Slide", {
+          id: "heading",
+          name: "Heading",
           x: 32,
           y: 28,
           width: 320,
@@ -138,81 +177,89 @@ export const textBoxRoundtripScenario: CapabilityScenario = {
           style: {
             fontFamily: jostFont,
             fontSize: "24pt",
-            color: "#111827",
-            align: "left",
-            verticalAlign: "top",
-          },
-        }),
-        text("Roundtrip Body Text", {
-          id: "caption",
-          name: "Caption",
-          x: 32,
-          y: 96,
-          width: 320,
-          height: 64,
-          style: {
-            fontFamily: jostFont,
-            fontSize: "14pt",
-            color: "#334155",
-            align: "center",
-            verticalAlign: "middle",
-            padding: [6, 12, 6, 12],
+            color: "#0F172A",
           },
         }),
       ),
     );
   },
   assert({ validation }) {
+    assert.equal(validation.masters?.length, 2);
+    assert.equal(validation.masters?.[0]?.layouts.length, 2);
+    assert.equal(validation.masters?.[1]?.layouts.length, 1);
     assert.equal(validation.slides.length, 1);
-    assert.equal(validation.slides[0]?.objects.length, 2);
+    assert.equal(
+      validation.slides[0]?.layoutPart,
+      validation.masters?.[0]?.layouts[0]?.part,
+    );
   },
+};
+
+const assertMasterLayoutNative = ({
+  stage,
+  validation,
+}: NativeRoundtripAssertContext): void => {
+  assert.equal(validation.errors.length, 0, `${stage} validation errors`);
+  assert.equal(validation.masters?.length, 2, `${stage} master count`);
+  const [m1, m2] = validation.masters;
+  assert.equal(m1?.name, "Brand A Master");
+  assert.equal(m1?.preserve, true);
+  assert.equal(m1?.layouts.length, 2);
+  assert.equal(m1?.layouts[0]?.name, "Cover Layout");
+  assert.equal(m1?.layouts[0]?.type, "title");
+  assert.equal(m1?.layouts[0]?.preserve, true);
+  assert.equal(m1?.layouts[1]?.name, "Custom Idle");
+  assert.equal(m1?.layouts[1]?.matchingName, "Custom Idle");
+  assert.equal(m1?.layouts[1]?.userDrawn, true);
+  assert.equal(m1?.layouts[1]?.preserve, true);
+  assert.equal(m1?.layouts[1]?.showMasterShapes, false);
+  assert.equal(m1?.layouts[1]?.showMasterPlaceholderAnimations, false);
+
+  assert.equal(m2?.name, "Brand B Master");
+  assert.equal(m2?.preserve, undefined);
+  assert.equal(m2?.layouts.length, 1);
+  assert.equal(m2?.layouts[0]?.name, "Secondary Blank");
+  assert.equal(m2?.layouts[0]?.type, "blank");
+  assert.equal(m2?.layouts[0]?.preserve, true);
+
+  const allIds = [
+    m1.id,
+    m2.id,
+    ...m1.layouts.map((l) => l.id),
+    ...m2.layouts.map((l) => l.id),
+  ];
+  assert.equal(new Set(allIds).size, 5);
+  for (const id of allIds) {
+    assert.ok(id >= 2_147_483_648);
+  }
+  assert.equal(validation.slides.length, 1);
+  assert.equal(validation.slides[0]?.layoutPart, m1?.layouts[0]?.part);
+  assert.equal(validation.slides[0]?.masterPart, m1?.part);
 };
 
 export const productionMechanismVerifications: ExhaustiveMechanismVerificationMap =
   {
-    ...imageMechanismVerifications,
-    "text-box": {
-      scenario: textBoxRoundtripScenario,
-      assertNative({ stage, validation }) {
-        assert.equal(validation.errors.length, 0, `${stage} validation errors`);
-        assert.equal(validation.presentation.widthEmu, 640 * 9525);
-        assert.equal(validation.presentation.heightEmu, 360 * 9525);
-        assert.equal(validation.slides.length, 1);
-        const s = validation.slides[0]!;
-        assert.equal(s.id, "text-roundtrip");
-        assert.equal(s.objects.length, 2);
-
-        const headline = s.objects[0]!;
-        assert.equal(headline.name, "Headline");
-        assert.deepEqual(headline.boxEmu, {
-          x: 32 * 9525,
-          y: 28 * 9525,
-          width: 320 * 9525,
-          height: 48 * 9525,
-        });
-        assert.equal(headline.text?.text, "Imported Headline");
-        assert.equal(headline.text?.paragraphs[0]?.runs[0]?.fontSizePt, 24);
-        assert.equal(headline.text?.paragraphs[0]?.runs[0]?.color, "#111827");
-
-        const caption = s.objects[1]!;
-        assert.equal(caption.name, "Caption");
-        assert.deepEqual(caption.boxEmu, {
-          x: 32 * 9525,
-          y: 96 * 9525,
-          width: 320 * 9525,
-          height: 64 * 9525,
-        });
-        assert.equal(caption.text?.text, "Roundtrip Body Text");
-        assert.equal(caption.text?.paragraphs[0]?.alignment, "ctr");
-        assert.equal(caption.text?.paragraphs[0]?.runs[0]?.fontSizePt, 14);
-      },
+    "slide-master": {
+      scenario: masterLayoutOwnershipScenario,
+      assertNative: assertMasterLayoutNative,
       assertPaint({ initial, roundtrip }) {
         assert.deepEqual(initial.pages[0]?.diagnostics, []);
         assert.ok(initial.pages[0]?.png instanceof Uint8Array);
-        // Until Ticket 02 imports embedded fonts, unembedded imported text reports missing outline font on paint.
         assert.equal(roundtrip.pages.length, 1);
       },
     },
+    "slide-layout": {
+      scenario: masterLayoutOwnershipScenario,
+      assertNative: assertMasterLayoutNative,
+      assertPaint({ initial, roundtrip }) {
+        assert.deepEqual(initial.pages[0]?.diagnostics, []);
+        assert.ok(initial.pages[0]?.png instanceof Uint8Array);
+        assert.equal(roundtrip.pages.length, 1);
+      },
+    },
+    ...imageMechanismVerifications,
+    ...shapeAndGroupMechanismVerifications,
+    ...textMechanismVerifications,
     ...chartMechanismVerifications,
   };
 
@@ -243,12 +290,14 @@ export async function runProductionMechanismVerifications(): Promise<void> {
       runPromise = (async () => {
         const runs = await runCapabilityScenario(entry.scenario);
         const primary = runs[0]!;
-        const roundtrip = await runScenarioRoundtrip(
-          primary.pptx,
-          entry.scenario.pages === undefined
+        const roundtrip = await runScenarioRoundtrip(primary.pptx, {
+          ...(entry.scenario.pages === undefined
             ? {}
-            : { pages: entry.scenario.pages },
-        );
+            : { pages: entry.scenario.pages }),
+          ...(entry.scenario.emitOptions === undefined
+            ? {}
+            : { emitOptions: entry.scenario.emitOptions }),
+        });
         assert.deepEqual(
           roundtrip.importReport.diagnostics,
           [],

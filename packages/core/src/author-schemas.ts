@@ -85,6 +85,7 @@ export type SlideStyle = z.infer<typeof slideStyleSchema>;
 const slideCorePropsObjectSchema = z.strictObject({
   /** Page author id; unique within the deck and written as the stable slide identifier. */
   id: authorIdSchema,
+  layout: z.unknown().optional(),
   theme: themeScopeSchema.optional(),
   style: slideStyleSchema.optional(),
   hidden: z.boolean().optional(),
@@ -286,6 +287,7 @@ export function parseSlideCoreProps(
 ): { readonly id: AuthorId; readonly hidden?: boolean } {
   const allowed = new Set([
     "id",
+    "layout",
     "theme",
     "style",
     "hidden",

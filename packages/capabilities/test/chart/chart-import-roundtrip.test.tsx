@@ -40,7 +40,10 @@ function buildChartDeck(props: ChartProps): Uint8Array {
 
 function slideAt(document: CommonNode, index: number): CommonContainer {
   const container = document as CommonContainer;
-  return container.children[index] as CommonContainer;
+  const slides = container.children.filter(
+    (c) => "kind" in c && c.kind === "slide",
+  );
+  return slides[index] as CommonContainer;
 }
 
 function chartAt(
@@ -50,7 +53,9 @@ function chartAt(
   readonly node: ChartNode;
   readonly props: ChartProps;
 } {
-  const node = slideAt(document, slideIndex).children[0] as ChartNode;
+  const node = slideAt(document, slideIndex).children.find(
+    (c) => "kind" in c && c.kind === "chart",
+  ) as ChartNode;
   return { node, props: node.props as unknown as ChartProps };
 }
 
@@ -295,10 +300,11 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
       const imported = importPptx(bytes);
       bytes.fill(0);
 
-      // Ignore presentation-header-only boilerplate diagnostics (e.g. embedTrueTypeFonts/defaultTextStyle),
-      // while strictly requiring zero diagnostics across all chart and slide parts.
+      // Ignore presentation/master-header boilerplate diagnostics while strictly requiring zero diagnostics across all chart and slide parts.
       const chartAndSlideDiagnostics = imported.report.diagnostics.filter(
-        (d) => d.location.part !== "ppt/presentation.xml",
+        (d) =>
+          d.location.part.startsWith("ppt/charts/") ||
+          /^ppt\/slides\/slide\d+\.xml$/u.test(d.location.part),
       );
       assert.deepEqual(
         chartAndSlideDiagnostics,
@@ -390,7 +396,9 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
       bytes.fill(0);
       assert.deepEqual(
         imported.report.diagnostics.filter(
-          (d) => d.location.part !== "ppt/presentation.xml",
+          (d) =>
+            d.location.part.startsWith("ppt/charts/") ||
+            /^ppt\/slides\/slide\d+\.xml$/u.test(d.location.part),
         ),
         [],
         file,
@@ -543,7 +551,12 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
           d.location.part === "ppt/charts/chart1.xml",
       ),
     );
-    assert.equal(slideAt(corruptResult.document, 0).children.length, 0);
+    assert.equal(
+      slideAt(corruptResult.document, 0).children.filter(
+        (c) => "kind" in c && c.kind === "chart",
+      ).length,
+      0,
+    );
 
     // 2. Missing chart target part
     const { "ppt/charts/chart1.xml": _removed, ...withoutChart } = parts;

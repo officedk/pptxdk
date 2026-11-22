@@ -140,7 +140,42 @@ export type PptxPackageRelationshipSet = {
   readonly relationships: readonly PptxRelationship[];
 };
 
+export type EmittedSlideLayoutSpec = {
+  readonly key: string;
+  readonly name?: string;
+  readonly type?: string;
+  readonly preserve?: boolean;
+  readonly matchingName?: string;
+  readonly userDrawn?: boolean;
+  readonly showMasterShapes?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
+};
+
+export type EmittedSlideMasterSpec = {
+  readonly key: string;
+  readonly name?: string;
+  readonly preserve?: boolean;
+  readonly layouts: readonly EmittedSlideLayoutSpec[];
+};
+
+const defaultEmittedMasters: readonly EmittedSlideMasterSpec[] = [
+  {
+    key: "master-1",
+    name: "Office Theme",
+    layouts: [
+      {
+        key: "layout-1",
+        name: "Blank",
+        type: "blank",
+        preserve: true,
+      },
+    ],
+  },
+];
+
 function contentTypes(
+  masterCount: number,
+  layoutCount: number,
   slideCount: number,
   resources: readonly PptxPackageResource[],
   packageParts: readonly PptxPackagePart[],
@@ -151,18 +186,18 @@ function contentTypes(
       "/ppt/presentation.xml",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
     ],
-    [
-      "/ppt/slideMasters/slideMaster1.xml",
+    ...Array.from({ length: masterCount }, (_, index) => [
+      `/ppt/slideMasters/slideMaster${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml",
-    ],
-    [
-      "/ppt/slideLayouts/slideLayout1.xml",
+    ]),
+    ...Array.from({ length: layoutCount }, (_, index) => [
+      `/ppt/slideLayouts/slideLayout${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
-    ],
-    [
-      "/ppt/theme/theme1.xml",
+    ]),
+    ...Array.from({ length: masterCount }, (_, index) => [
+      `/ppt/theme/theme${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.theme+xml",
-    ],
+    ]),
     ...Array.from({ length: slideCount }, (_, index) => [
       `/ppt/slides/slide${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
@@ -237,18 +272,53 @@ export function themeXml(value: Theme): string {
   );
 }
 
-function master(): string {
+function masterXml(
+  spec: EmittedSlideMasterSpec,
+  layoutIds: readonly { readonly id: number; readonly rId: string }[],
+): string {
   const colorMap =
     '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
-  // Single master and single layout skeleton must avoid ID collision, so the layout takes the next valid value.
+  const preserveAttr =
+    spec.preserve === undefined
+      ? ""
+      : ` preserve="${spec.preserve ? "1" : "0"}"`;
+  const nameAttr =
+    spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
+  const layoutIdList = layoutIds
+    .map(
+      ({ id, rId }) => `<p:sldLayoutId id="${id}" r:id="${xmlEscape(rId)}"/>`,
+    )
+    .join("");
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"><p:cSld name="Office Theme">${shapeTreeXml()}</p:cSld>${colorMap}<p:sldLayoutIdLst><p:sldLayoutId id="${minimumSlideLayoutId + 1}" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
   );
 }
 
-function layout(): string {
+function layoutXml(spec: EmittedSlideLayoutSpec): string {
+  const typeAttr =
+    spec.type === undefined ? "" : ` type="${xmlEscape(spec.type)}"`;
+  const preserveAttr =
+    spec.preserve === undefined
+      ? ""
+      : ` preserve="${spec.preserve ? "1" : "0"}"`;
+  const matchingNameAttr =
+    spec.matchingName === undefined
+      ? ""
+      : ` matchingName="${xmlEscape(spec.matchingName)}"`;
+  const userDrawnAttr =
+    spec.userDrawn === undefined
+      ? ""
+      : ` userDrawn="${spec.userDrawn ? "1" : "0"}"`;
+  const showMasterSpAttr =
+    spec.showMasterShapes === false ? ' showMasterSp="0"' : "";
+  const showMasterPhAnimAttr =
+    spec.showMasterPlaceholderAnimations === false
+      ? ' showMasterPhAnim="0"'
+      : "";
+  const nameAttr =
+    spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}" type="blank" preserve="1"><p:cSld name="Blank">${shapeTreeXml()}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
   );
 }
 
@@ -300,6 +370,7 @@ export function pptxParts(
   size: { readonly width: number; readonly height: number },
   slides: readonly {
     readonly id: string;
+    readonly layoutKey?: string;
     readonly hidden?: boolean;
     readonly shapeXml: string;
     readonly backgroundXml?: string;
@@ -320,15 +391,80 @@ export function pptxParts(
     readonly name: string;
     readonly slideIndexes: readonly number[];
   }[] = [],
+  mastersInput?: readonly EmittedSlideMasterSpec[],
 ): Record<string, string | Uint8Array> {
+  const masters =
+    mastersInput !== undefined && mastersInput.length > 0
+      ? mastersInput
+      : defaultEmittedMasters;
+
+  // Allocate globally unique >= 2147483648 identifiers across every master and layout.
+  let nextMasterLayoutId = minimumSlideLayoutId;
+  let globalLayoutNumber = 0;
+  const allocatedMasters = masters.map((spec, masterIndex) => {
+    const masterNumber = masterIndex + 1;
+    const masterId = nextMasterLayoutId++;
+    const masterPart = `ppt/slideMasters/slideMaster${masterNumber}.xml`;
+    const layouts = spec.layouts.map((layoutSpec, layoutIndex) => {
+      const layoutNumber = ++globalLayoutNumber;
+      const layoutId = nextMasterLayoutId++;
+      const layoutPart = `ppt/slideLayouts/slideLayout${layoutNumber}.xml`;
+      return {
+        spec: layoutSpec,
+        layoutNumber,
+        layoutId,
+        layoutPart,
+        masterRelId: `rId${layoutIndex + 1}`,
+      };
+    });
+    return {
+      spec,
+      masterNumber,
+      masterId,
+      masterPart,
+      presentationRelId: `rId${masterNumber}`,
+      layouts,
+    };
+  });
+
+  const layoutPartByKey = new Map<string, string>();
+  for (const allocatedMaster of allocatedMasters) {
+    for (const allocatedLayout of allocatedMaster.layouts) {
+      layoutPartByKey.set(allocatedLayout.spec.key, allocatedLayout.layoutPart);
+    }
+  }
+  const fallbackLayoutPart =
+    allocatedMasters[0]?.layouts[0]?.layoutPart ??
+    "ppt/slideLayouts/slideLayout1.xml";
+
+  const masterRelationships: PptxRelationship[] = allocatedMasters.map(
+    ({ masterNumber, presentationRelId }) => ({
+      id: presentationRelId,
+      type: `${namespaces.r}/slideMaster`,
+      target: `slideMasters/slideMaster${masterNumber}.xml`,
+    }),
+  );
+  const masterIdsXml = allocatedMasters
+    .map(
+      ({ masterId, presentationRelId }) =>
+        `<p:sldMasterId id="${masterId}" r:id="${presentationRelId}"/>`,
+    )
+    .join("");
+
+  const slideRelStart = allocatedMasters.length + 1;
   const slideRelationships = slides.map((_, index) => ({
-    id: `rId${index + 2}`,
+    id: `rId${slideRelStart + index}`,
     type: `${namespaces.r}/slide`,
     target: `slides/slide${index + 1}.xml`,
   }));
   const slideIds = slides
-    .map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 2}"/>`)
+    .map(
+      (_, index) =>
+        `<p:sldId id="${256 + index}" r:id="rId${slideRelStart + index}"/>`,
+    )
     .join("");
+  const slideIdListXml =
+    slides.length === 0 ? "" : `<p:sldIdLst>${slideIds}</p:sldIdLst>`;
   const presentationAttributeXml = presentationAttributes
     .map(({ name, value }) => ` ${name}="${xmlEscape(value)}"`)
     .join("");
@@ -337,10 +473,12 @@ export function pptxParts(
       ({ sourcePath }) => sourcePath === "ppt/presentation.xml",
     )?.relationships ?? [];
   const presentation = xmlDocument(
-    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>${presentationContent.beforeSlides ?? ""}<p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent.afterNotesSize ?? ""}${sectionListXml(sections)}</p:presentation>`,
+    `<p:presentation xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${presentationAttributeXml}><p:sldMasterIdLst>${masterIdsXml}</p:sldMasterIdLst>${presentationContent.beforeSlides ?? ""}${slideIdListXml}<p:sldSz cx="${pxToEmu(size.width)}" cy="${pxToEmu(size.height)}"/><p:notesSz cx="6858000" cy="9144000"/>${presentationContent.afterNotesSize ?? ""}${sectionListXml(sections)}</p:presentation>`,
   );
   const parts: Record<string, string | Uint8Array> = {
     "[Content_Types].xml": contentTypes(
+      allocatedMasters.length,
+      globalLayoutNumber,
       slides.length,
       resources,
       packageParts,
@@ -364,54 +502,76 @@ export function pptxParts(
     ]),
     "ppt/presentation.xml": presentation,
     "ppt/_rels/presentation.xml.rels": relationships([
-      {
-        id: "rId1",
-        type: `${namespaces.r}/slideMaster`,
-        target: "slideMasters/slideMaster1.xml",
-      },
+      ...masterRelationships,
       ...slideRelationships,
       ...extraPresentationRelationships,
     ]),
-    "ppt/slideMasters/slideMaster1.xml": master(),
-    "ppt/slideMasters/_rels/slideMaster1.xml.rels": relationships([
-      {
-        id: "rId1",
-        type: `${namespaces.r}/slideLayout`,
-        target: "../slideLayouts/slideLayout1.xml",
-      },
-      {
-        id: "rId2",
-        type: `${namespaces.r}/theme`,
-        target: "../theme/theme1.xml",
-      },
-    ]),
-    "ppt/slideLayouts/slideLayout1.xml": layout(),
-    "ppt/slideLayouts/_rels/slideLayout1.xml.rels": relationships([
-      {
-        id: "rId1",
-        type: `${namespaces.r}/slideMaster`,
-        target: "../slideMasters/slideMaster1.xml",
-      },
-    ]),
-    "ppt/theme/theme1.xml": themeXml(themeValue),
   };
-  slides.forEach(({ shapeXml, slideXml, backgroundXml, hidden }, index) => {
-    parts[`ppt/slides/slide${index + 1}.xml`] = slide(
-      slides[index]!.id,
-      shapeXml,
-      slideXml ?? "",
-      backgroundXml ?? "",
-      hidden ?? false,
+
+  const serializedTheme = themeXml(themeValue);
+  for (const allocatedMaster of allocatedMasters) {
+    // PowerPoint rejects presentations where multiple SlideMasters share one theme part.
+    parts[`ppt/theme/theme${allocatedMaster.masterNumber}.xml`] =
+      serializedTheme;
+    parts[allocatedMaster.masterPart] = masterXml(
+      allocatedMaster.spec,
+      allocatedMaster.layouts.map((item) => ({
+        id: item.layoutId,
+        rId: item.masterRelId,
+      })),
     );
-    parts[`ppt/slides/_rels/slide${index + 1}.xml.rels`] = relationships([
-      {
-        id: "rId1",
+    parts[
+      `ppt/slideMasters/_rels/slideMaster${allocatedMaster.masterNumber}.xml.rels`
+    ] = relationships([
+      ...allocatedMaster.layouts.map((item) => ({
+        id: item.masterRelId,
         type: `${namespaces.r}/slideLayout`,
-        target: "../slideLayouts/slideLayout1.xml",
+        target: `../slideLayouts/slideLayout${item.layoutNumber}.xml`,
+      })),
+      {
+        id: `rId${allocatedMaster.layouts.length + 1}`,
+        type: `${namespaces.r}/theme`,
+        target: `../theme/theme${allocatedMaster.masterNumber}.xml`,
       },
-      ...slides[index]!.relationships,
     ]);
-  });
+    for (const allocatedLayout of allocatedMaster.layouts) {
+      parts[allocatedLayout.layoutPart] = layoutXml(allocatedLayout.spec);
+      parts[
+        `ppt/slideLayouts/_rels/slideLayout${allocatedLayout.layoutNumber}.xml.rels`
+      ] = relationships([
+        {
+          id: "rId1",
+          type: `${namespaces.r}/slideMaster`,
+          target: `../slideMasters/slideMaster${allocatedMaster.masterNumber}.xml`,
+        },
+      ]);
+    }
+  }
+
+  slides.forEach(
+    ({ shapeXml, slideXml, backgroundXml, hidden, layoutKey }, index) => {
+      const targetLayoutPart =
+        (layoutKey === undefined
+          ? undefined
+          : layoutPartByKey.get(layoutKey)) ?? fallbackLayoutPart;
+      const targetLayoutRel = `../${targetLayoutPart.slice("ppt/".length)}`;
+      parts[`ppt/slides/slide${index + 1}.xml`] = slide(
+        slides[index]!.id,
+        shapeXml,
+        slideXml ?? "",
+        backgroundXml ?? "",
+        hidden ?? false,
+      );
+      parts[`ppt/slides/_rels/slide${index + 1}.xml.rels`] = relationships([
+        {
+          id: "rId1",
+          type: `${namespaces.r}/slideLayout`,
+          target: targetLayoutRel,
+        },
+        ...slides[index]!.relationships,
+      ]);
+    },
+  );
   if (title !== undefined) parts["docProps/core.xml"] = coreProperties(title);
   for (const resource of resources) {
     parts[`ppt/media/${resource.name}`] = resource.bytes;

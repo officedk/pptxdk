@@ -21,7 +21,8 @@ import {
   type PreviewTransform,
   type ResolvedObject,
 } from "@pptxdk/core/capability";
-import { pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { xmlEscape } from "@pptxdk/emit";
+import { defineCanvasMechanism } from "@pptxdk/import";
 
 import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
 export {
@@ -46,6 +47,10 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
+import {
+  customGeometryShapeImportHandler,
+  presetShapeImportHandler,
+} from "./shape-import.ts";
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "../shared/visual.ts";
 export type {
@@ -68,41 +73,27 @@ import {
 } from "../shared/text-service.ts";
 import {
   emitVisualModel,
+  gradientFillMechanism,
+  imageFillMechanism,
   lineEndStyleKeys,
   paintVisualModel,
   resolveVisualModel,
+  solidFillMechanism,
   visualStyleKeys,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
+import {
+  shapeCoordinateSchema,
+  shapeDeclarationPropsKeys,
+  shapeSizeSchema,
+} from "./shape-declaration.ts";
 
 export {
   createShapeNode,
   type ShapeDeclarationProps,
 } from "./shape-declaration.ts";
 
-const maximumShapeExtentEmu = 2_147_483_647;
-
-const allowedParameters = [
-  "id",
-  "name",
-  "morphKey",
-  "link",
-  "geometry",
-  "flipH",
-  "flipV",
-  "x",
-  "y",
-  "width",
-  "height",
-  "style",
-  "fill",
-  "text",
-  "textStyle",
-  "children",
-  "enter",
-  "emphasis",
-  "motion",
-] as const;
+const allowedParameters: readonly string[] = shapeDeclarationPropsKeys;
 
 export const shapeStyleKeys = [
   ...layoutStyleKeys,
@@ -174,19 +165,15 @@ function validateCoordinate(
   name: "x" | "y",
   path?: string,
 ): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    value < -1_000_000 ||
-    value > 1_000_000
-  ) {
+  const parsed = shapeCoordinateSchema.safeParse(value);
+  if (!parsed.success) {
     throw new CapabilityError(
       "invalid-coordinate",
       `${name} must be a finite pixel number, width and height must be greater than 0, and coordinates must be between -1000000 and 1000000`,
       path,
     );
   }
-  return value;
+  return parsed.data;
 }
 
 function validateSize(
@@ -201,15 +188,15 @@ function validateSize(
       path,
     );
   }
-  const extentEmu = pxToEmu(value);
-  if (extentEmu < 1 || extentEmu > maximumShapeExtentEmu) {
+  const parsed = shapeSizeSchema.safeParse(value);
+  if (!parsed.success) {
     throw new CapabilityError(
       "invalid-coordinate",
-      `${name} must convert to an EMU value between 1 and ${maximumShapeExtentEmu} inclusive`,
+      `${name} must convert to an EMU value between 1 and 2147483647 inclusive`,
       path,
     );
   }
-  return value;
+  return parsed.data;
 }
 
 type TextInsets = ReturnType<typeof textInsets>;
@@ -335,16 +322,41 @@ function paintShapeModel(
   }
 }
 
+/** Native canvas mechanism for DrawingML `<a:prstGeom>` shapes. */
+export const presetShapeMechanism = defineCanvasMechanism({
+  key: "preset-shape",
+  role: "canvas",
+  emit: emitShapeModel,
+  paint: paintShapeModel,
+  import: presetShapeImportHandler,
+});
+
+/** Native canvas mechanism for DrawingML `<a:custGeom>` shapes. */
+export const customGeometryShapeMechanism = defineCanvasMechanism({
+  key: "custom-geometry-shape",
+  role: "canvas",
+  emit: emitShapeModel,
+  paint: paintShapeModel,
+  import: customGeometryShapeImportHandler,
+});
+
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
-export const shapeCapability: ObjectCapabilityModule = {
+export const shapeCapability = {
   declaration: "shape",
+  mechanisms: [
+    presetShapeMechanism,
+    customGeometryShapeMechanism,
+    solidFillMechanism,
+    gradientFillMechanism,
+    imageFillMechanism,
+  ] as const,
 
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
-      (key) => !(allowedParameters as readonly string[]).includes(key),
+      (key) => key !== "children" && !allowedParameters.includes(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(
@@ -655,13 +667,17 @@ export const shapeCapability: ObjectCapabilityModule = {
             ? {}
             : { resourceClaims: resolvedText.resourceClaims }),
           emit(emitContext: EmitContext): EmitOutput {
-            return emitShapeModel(resolvedModel, emitContext);
+            return resolvedModel.visual.geometry.kind === "custom"
+              ? customGeometryShapeMechanism.emit(resolvedModel, emitContext)
+              : presetShapeMechanism.emit(resolvedModel, emitContext);
           },
           paint(paintContext: PaintContext): PaintOutput {
-            return paintShapeModel(resolvedModel, paintContext);
+            return resolvedModel.visual.geometry.kind === "custom"
+              ? customGeometryShapeMechanism.paint(resolvedModel, paintContext)
+              : presetShapeMechanism.paint(resolvedModel, paintContext);
           },
         };
       },
     };
   },
-};
+} satisfies ObjectCapabilityModule;

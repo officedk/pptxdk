@@ -1,4 +1,5 @@
 import { replaceDeclarationProps } from "#/document-internals.ts";
+import { isSlideLayoutDefinition } from "#/masters.ts";
 import { isMorphKey } from "#/morph.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -6,7 +7,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function preservesIdentity(value: object): boolean {
-  if (isMorphKey(value)) return true;
+  if (isMorphKey(value) || isSlideLayoutDefinition(value)) return true;
   // Common nodes expose this adapter hook; projecting their fields would discard node identity.
   if (replaceDeclarationProps in value) return true;
   // Motion scope handles carry a callable identity used by choreography; copying them would sever it.

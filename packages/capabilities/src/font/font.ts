@@ -1,10 +1,14 @@
 import {
+  fontFaceSchema,
+  fontFaceStyleSchema,
   fontOptionsSchema,
+  fontSchema,
   type Font,
   type FontFace,
   type FontOptions,
 } from "@pptxdk/core/capability";
 
+export { fontFaceSchema, fontFaceStyleSchema, fontOptionsSchema, fontSchema };
 export type {
   Font,
   FontFace,

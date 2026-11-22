@@ -5,6 +5,7 @@ import {
   parseCapabilityLayoutContract,
   textStyleFrom,
   textStyleKeys,
+  visualStyleSchema,
   type BoundContainerCollaboration,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
@@ -22,6 +23,7 @@ import {
   type ThemeScope,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
+import { defineCanvasMechanism } from "@pptxdk/import";
 
 import {
   motionContainerAnnotations,
@@ -33,6 +35,8 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
+import { groupDeclarationPropsKeys } from "./group-declaration.ts";
+import { groupImportHandler } from "./group-import.ts";
 import { groupXml } from "./group-xml.ts";
 
 export {
@@ -40,17 +44,7 @@ export {
   type GroupDeclarationProps,
 } from "./group-declaration.ts";
 
-const allowedParameters = [
-  "id",
-  "name",
-  "morphKey",
-  "link",
-  "style",
-  "theme",
-  "enter",
-  "emphasis",
-  "motion",
-] as const;
+const allowedParameters: readonly string[] = groupDeclarationPropsKeys;
 const emuPerPixel = 9525;
 const maximumGroupExtentEmu = 2_147_483_647;
 
@@ -203,16 +197,26 @@ function paintGroupModel(
   };
 }
 
+/** Native canvas mechanism for PresentationML `<p:grpSp>` native groups. */
+export const groupMechanism = defineCanvasMechanism({
+  key: "group",
+  role: "canvas",
+  emit: emitGroupModel,
+  paint: paintGroupModel,
+  import: groupImportHandler,
+});
+
 /** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
-export const groupCapability: ObjectCapabilityModule = {
+export const groupCapability = {
   declaration: "group",
+  mechanisms: [groupMechanism] as const,
 
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
-      (key) => !(allowedParameters as readonly string[]).includes(key),
+      (key) => !allowedParameters.includes(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(
@@ -245,14 +249,14 @@ export const groupCapability: ObjectCapabilityModule = {
     const rawRotation = styleRecord["rotate"];
     if (
       rawRotation !== undefined &&
-      (typeof rawRotation !== "number" || !Number.isFinite(rawRotation))
+      !visualStyleSchema.safeParse({ rotate: rawRotation }).success
     ) {
       throw new CapabilityError(
         "invalid-visual-style",
         "rotate must be a finite angle",
       );
     }
-    const rotation = rawRotation;
+    const rotation = rawRotation as number | undefined;
 
     const theme = context.theme.with(
       input.props["theme"] as ThemeScope | undefined,
@@ -365,13 +369,13 @@ export const groupCapability: ObjectCapabilityModule = {
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
           emit(emitContext: EmitContext): EmitOutput {
-            return emitGroupModel(resolvedModel, emitContext);
+            return groupMechanism.emit(resolvedModel, emitContext);
           },
           paint(paintContext: PaintContext): PaintOutput {
-            return paintGroupModel(resolvedModel, paintContext);
+            return groupMechanism.paint(resolvedModel, paintContext);
           },
         };
       },
     };
   },
-};
+} satisfies ObjectCapabilityModule;

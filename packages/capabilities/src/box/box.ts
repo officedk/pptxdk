@@ -38,18 +38,11 @@ import {
   resolveVisualModel,
   visualStyleKeys,
 } from "../shared/visual.ts";
+import { boxDeclarationPropsKeys } from "./box-declaration.ts";
 
 export { createBoxNode, type BoxDeclarationProps } from "./box-declaration.ts";
 
-const boxAllowedParameters = [
-  "id",
-  "style",
-  "theme",
-  "morphKey",
-  "link",
-  "enter",
-  "motion",
-] as const;
+const boxAllowedParameters: readonly string[] = boxDeclarationPropsKeys;
 
 const boxAllowedStyleKeys = new Set<string>([
   ...layoutStyleKeys,
@@ -84,7 +77,7 @@ export const boxCapability: ObjectCapabilityModule = {
     context: CapabilityParseContext,
   ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
-      (key) => !(boxAllowedParameters as readonly string[]).includes(key),
+      (key) => !boxAllowedParameters.includes(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(

@@ -42,6 +42,15 @@ function createSamplePngBytes(): Uint8Array {
 
 const samplePng = createSamplePngBytes();
 
+function firstSlideNode(document: CommonNode): CommonNode {
+  const slideNode = document.children.find(
+    (child): child is CommonNode =>
+      child instanceof CommonNode && child.type === "slide",
+  );
+  assert.ok(slideNode !== undefined, "Expected an imported Slide node");
+  return slideNode;
+}
+
 describe("Ticket 04: Image roundtrip, external links, and partial loss recovery", () => {
   it("detaches embedded image bytes on import and keeps image, crop, and links editable after zeroing inputBytes", async () => {
     const doc = deck({ width: 640, height: 360 }).append(
@@ -80,7 +89,7 @@ describe("Ticket 04: Image roundtrip, external links, and partial loss recovery"
     inputCopy.fill(0);
 
     assert.deepEqual(imported.report.diagnostics, []);
-    const slide1 = imported.document.children[0] as CommonNode;
+    const slide1 = firstSlideNode(imported.document);
     const importedHero = slide1.children[0] as CommonNode;
     assert.equal(importedHero.kind, "image");
     assert.deepEqual(
@@ -153,7 +162,7 @@ describe("Ticket 04: Image roundtrip, external links, and partial loss recovery"
       assert.equal(networkCalls, 0);
       assert.deepEqual(imported.report.diagnostics, []);
 
-      const slideNode = imported.document.children[0] as CommonNode;
+      const slideNode = firstSlideNode(imported.document);
       const importedExt = slideNode.children[0] as CommonNode;
       assert.deepEqual(
         { ...(importedExt.props["src"] as Record<string, unknown>) },
@@ -246,8 +255,7 @@ describe("Ticket 04: Image roundtrip, external links, and partial loss recovery"
     );
 
     // Adjacent valid text object survives and remains editable & re-emittable!
-    const recoveredSlide = missingMediaResult.document
-      .children[0] as CommonNode;
+    const recoveredSlide = firstSlideNode(missingMediaResult.document);
     assert.equal(recoveredSlide.children.length, 1);
     const siblingNode = recoveredSlide.children[0] as CommonNode;
     assert.equal(siblingNode.kind, "text");
@@ -273,7 +281,7 @@ describe("Ticket 04: Image roundtrip, external links, and partial loss recovery"
       ),
     );
     assert.equal(
-      (corruptBytesResult.document.children[0] as CommonNode).children.length,
+      firstSlideNode(corruptBytesResult.document).children.length,
       1,
     );
 
@@ -308,7 +316,7 @@ describe("Ticket 04: Image roundtrip, external links, and partial loss recovery"
     );
     assert.ok(brokenRelDiag !== undefined);
     assert.equal(brokenRelDiag.disposition, "omitted");
-    const keptImage = (brokenRelResult.document.children[0] as CommonNode)
+    const keptImage = firstSlideNode(brokenRelResult.document)
       .children[0] as CommonNode;
     assert.equal(keptImage.kind, "image");
     assert.equal(keptImage.props["link"], undefined);

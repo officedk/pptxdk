@@ -22,6 +22,19 @@ export type {
 } from "#/diagnostics.ts";
 export { createImporter, MalformedXmlPartError } from "#/import.ts";
 export type { ImportResult } from "#/import.ts";
+export { allocateScopedAuthorId, importMastersAndLayouts } from "#/masters.ts";
+export {
+  readEmbeddedFontList,
+  readPresentationThemeFontScheme,
+  unpackEotFontData,
+} from "#/fonts.ts";
+export type {
+  EmbeddedFontRecord,
+  EmbeddedFontSlot,
+  EmbeddedFontSlotRecord,
+  PresentationFontSchemeInfo,
+  UnpackedEotResult,
+} from "#/fonts.ts";
 export { defineCanvasMechanism, defineShowMechanism } from "#/mechanism.ts";
 export type {
   DeckImportContext,
@@ -35,6 +48,8 @@ export type {
   SlideImportContext,
   SlideImportHandler,
   SlideImportOutcome,
+  TextInlineImportContext,
+  TextInlineImportHandler,
 } from "#/mechanism.ts";
 export {
   A_NS,
@@ -52,6 +67,7 @@ export {
   REL_DIAGRAM_DRAWING,
   REL_DIAGRAM_LAYOUT,
   REL_DIAGRAM_QUICK_STYLE,
+  REL_FONT,
   REL_HYPERLINK,
   REL_IMAGE,
   REL_OFFICE_DOCUMENT,

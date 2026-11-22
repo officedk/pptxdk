@@ -396,8 +396,32 @@ export type FileNotes = {
   readonly text: FileText;
 };
 
+export type FileSlideLayout = {
+  readonly part: string;
+  readonly masterPart: string;
+  readonly id: number;
+  readonly name?: string;
+  readonly type?: string;
+  readonly preserve?: boolean;
+  readonly matchingName?: string;
+  readonly userDrawn?: boolean;
+  readonly showMasterShapes?: boolean;
+  readonly showMasterPlaceholderAnimations?: boolean;
+};
+
+export type FileSlideMaster = {
+  readonly part: string;
+  readonly id: number;
+  readonly name?: string;
+  readonly preserve?: boolean;
+  readonly themePart?: string;
+  readonly layouts: readonly FileSlideLayout[];
+};
+
 export type FileSlide = {
   readonly id: string;
+  readonly layoutPart?: string;
+  readonly masterPart?: string;
   readonly hidden?: boolean;
   readonly advanceAfterMs?: number;
   readonly section?: string;
@@ -1526,6 +1550,7 @@ export type ValidationResult = {
   };
   readonly errors: readonly ValidationIssue[];
   readonly extensions: readonly ValidationExtension[];
+  readonly masters?: readonly FileSlideMaster[];
   readonly presentation: {
     readonly slideCount: number;
     readonly widthEmu?: number;
@@ -1760,8 +1785,8 @@ function themeTextReader(
 function validateThemeFonts(
   documents: Documents,
   errors: ValidationIssue[],
+  part = "ppt/theme/theme1.xml",
 ): void {
-  const part = "ppt/theme/theme1.xml";
   const theme = documents.get(part)?.documentElement;
   if (theme == null) return;
   const themeElements = first(theme, drawingNamespace, "themeElements");
@@ -2224,18 +2249,6 @@ function validateContentTypes(
       "/ppt/presentation.xml",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml",
     ],
-    [
-      "/ppt/slideMasters/slideMaster1.xml",
-      "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml",
-    ],
-    [
-      "/ppt/slideLayouts/slideLayout1.xml",
-      "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
-    ],
-    [
-      "/ppt/theme/theme1.xml",
-      "application/vnd.openxmlformats-officedocument.theme+xml",
-    ],
   ];
   for (const [path, contentType] of required) {
     if (overrides.get(path) !== contentType) {
@@ -2247,49 +2260,49 @@ function validateContentTypes(
       );
     }
   }
-  for (const path of Object.keys(files).filter((entry) =>
-    /^ppt\/slides\/slide\d+\.xml$/u.test(entry),
-  )) {
-    if (
-      overrides.get(`/${path}`) !==
-      "application/vnd.openxmlformats-officedocument.presentationml.slide+xml"
-    ) {
-      issue(
-        errors,
-        part,
-        "missing-content-type",
-        `/${path} missing slide content type`,
-      );
-    }
-  }
-  for (const path of Object.keys(files).filter((entry) =>
-    /^ppt\/notesSlides\/notesSlide\d+\.xml$/u.test(entry),
-  )) {
-    if (
-      overrides.get(`/${path}`) !==
-      "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"
-    ) {
-      issue(
-        errors,
-        part,
-        "missing-content-type",
-        `/${path} missing notes slide content type`,
-      );
-    }
-  }
-  for (const path of Object.keys(files).filter((entry) =>
-    /^ppt\/notesMasters\/notesMaster\d+\.xml$/u.test(entry),
-  )) {
-    if (
-      overrides.get(`/${path}`) !==
-      "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"
-    ) {
-      issue(
-        errors,
-        part,
-        "missing-content-type",
-        `/${path} missing notes master content type`,
-      );
+  for (const [pattern, expectedType, label] of [
+    [
+      /^ppt\/slideMasters\/slideMaster\d+\.xml$/u,
+      "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml",
+      "slide master",
+    ],
+    [
+      /^ppt\/slideLayouts\/slideLayout\d+\.xml$/u,
+      "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
+      "slide layout",
+    ],
+    [
+      /^ppt\/theme\/theme\d+\.xml$/u,
+      "application/vnd.openxmlformats-officedocument.theme+xml",
+      "theme",
+    ],
+    [
+      /^ppt\/slides\/slide\d+\.xml$/u,
+      "application/vnd.openxmlformats-officedocument.presentationml.slide+xml",
+      "slide",
+    ],
+    [
+      /^ppt\/notesSlides\/notesSlide\d+\.xml$/u,
+      "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml",
+      "notes slide",
+    ],
+    [
+      /^ppt\/notesMasters\/notesMaster\d+\.xml$/u,
+      "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml",
+      "notes master",
+    ],
+  ] as const) {
+    for (const path of Object.keys(files).filter((entry) =>
+      pattern.test(entry),
+    )) {
+      if (overrides.get(`/${path}`) !== expectedType) {
+        issue(
+          errors,
+          part,
+          "missing-content-type",
+          `/${path} missing ${label} content type`,
+        );
+      }
     }
   }
   return { defaults, overrides };
@@ -2379,34 +2392,363 @@ function requireRoot(
   }
 }
 
-function validateSlideLayoutIds(
+function parseOptionalBooleanAttr(
+  element: XmlElement,
+  name: string,
+): boolean | undefined {
+  if (!element.hasAttribute(name)) return undefined;
+  const raw = attribute(element, name);
+  if (raw === "1" || raw === "true") return true;
+  if (raw === "0" || raw === "false") return false;
+  return undefined;
+}
+
+function readMastersAndLayouts(
+  files: XmlFiles,
   documents: Documents,
+  relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
   errors: ValidationIssue[],
-): void {
-  const part = "ppt/slideMasters/slideMaster1.xml";
-  const root = documents.get(part)?.documentElement;
-  if (root == null) return;
-  const layoutIds = first(root, presentationNamespace, "sldLayoutIdLst");
-  if (layoutIds === undefined) return;
-  for (const layoutId of elements(
-    layoutIds,
+): {
+  readonly masters: readonly FileSlideMaster[];
+  readonly layoutByPart: ReadonlyMap<string, FileSlideLayout>;
+} {
+  const presentationPart = "ppt/presentation.xml";
+  const presentationRoot = documents.get(presentationPart)?.documentElement;
+  const masters: FileSlideMaster[] = [];
+  const layoutByPart = new Map<string, FileSlideLayout>();
+  if (
+    presentationRoot == null ||
+    presentationRoot.localName !== "presentation" ||
+    presentationRoot.namespaceURI !== presentationNamespace
+  ) {
+    return { masters, layoutByPart };
+  }
+
+  const masterIdList = first(
+    presentationRoot,
     presentationNamespace,
-    "sldLayoutId",
-  )) {
-    const id = integerAttribute(layoutId, "id");
+    "sldMasterIdLst",
+  );
+  const masterIdElements =
+    masterIdList === undefined
+      ? []
+      : elements(masterIdList, presentationNamespace, "sldMasterId");
+  if (masterIdElements.length === 0) {
+    issue(
+      errors,
+      presentationPart,
+      "missing-slide-master",
+      "Presentation contains no slide masters",
+    );
+    return { masters, layoutByPart };
+  }
+
+  const presentationRels = relationships.get(presentationPart) ?? new Map();
+  const seenGlobalIds = new Set<number>();
+  const validatedThemes = new Set<string>();
+
+  for (const masterIdElement of masterIdElements) {
+    const masterId = integerAttribute(masterIdElement, "id");
     if (
-      id === undefined ||
-      id < minimumSlideLayoutId ||
-      id > maximumSlideLayoutId
+      masterId === undefined ||
+      masterId < minimumSlideLayoutId ||
+      masterId > maximumSlideLayoutId
     ) {
       issue(
         errors,
-        part,
-        "invalid-slide-layout-id",
-        `Master layout identifier ${attribute(layoutId, "id")} must be an integer between ${minimumSlideLayoutId} and ${maximumSlideLayoutId}`,
+        presentationPart,
+        "invalid-slide-master-id",
+        `Slide master identifier ${attribute(masterIdElement, "id")} must be an integer between ${minimumSlideLayoutId} and ${maximumSlideLayoutId}`,
+      );
+    } else if (seenGlobalIds.has(masterId)) {
+      issue(
+        errors,
+        presentationPart,
+        "duplicate-slide-master-layout-id",
+        `Duplicate slide master/layout identifier ${masterId}`,
+      );
+    } else {
+      seenGlobalIds.add(masterId);
+    }
+
+    const rId =
+      masterIdElement.getAttributeNS(relationshipNamespace, "id") ?? "";
+    const masterRel = presentationRels.get(rId);
+    if (
+      masterRel === undefined ||
+      attribute(masterRel, "Type") !== `${relationshipNamespace}/slideMaster`
+    ) {
+      issue(
+        errors,
+        presentationPart,
+        "missing-slide-master-relationship",
+        `Slide master missing relationship ${rId}`,
+      );
+      continue;
+    }
+
+    const masterPart = relationshipTargetPath(
+      presentationPart,
+      attribute(masterRel, "Target"),
+    );
+    if (files[masterPart] === undefined) {
+      issue(
+        errors,
+        masterPart,
+        "missing-part",
+        "PPTX missing referenced slide master part",
+      );
+      continue;
+    }
+    if (
+      contentTypes.overrides.get(`/${masterPart}`) !==
+      "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"
+    ) {
+      issue(
+        errors,
+        "[Content_Types].xml",
+        "missing-content-type",
+        `/${masterPart} missing slide master content type`,
       );
     }
+
+    requireRoot(
+      documents,
+      errors,
+      masterPart,
+      presentationNamespace,
+      "sldMaster",
+    );
+    const masterRoot = documents.get(masterPart)?.documentElement;
+    if (
+      masterRoot == null ||
+      masterRoot.namespaceURI !== presentationNamespace ||
+      masterRoot.localName !== "sldMaster"
+    ) {
+      continue;
+    }
+
+    const masterRels = relationships.get(masterPart) ?? new Map();
+    const themeRel = [...masterRels.values()].find(
+      (entry) => attribute(entry, "Type") === `${relationshipNamespace}/theme`,
+    );
+    let themePart: string | undefined;
+    if (themeRel === undefined) {
+      issue(
+        errors,
+        masterPart,
+        "missing-required-relationship",
+        `Slide master ${masterPart} missing theme relationship`,
+      );
+    } else {
+      themePart = relationshipTargetPath(
+        masterPart,
+        attribute(themeRel, "Target"),
+      );
+      if (files[themePart] === undefined) {
+        issue(
+          errors,
+          themePart,
+          "missing-part",
+          "PPTX missing referenced theme part",
+        );
+      } else if (!validatedThemes.has(themePart)) {
+        validatedThemes.add(themePart);
+        requireRoot(documents, errors, themePart, drawingNamespace, "theme");
+        validateThemeFonts(documents, errors, themePart);
+        if (
+          contentTypes.overrides.get(`/${themePart}`) !==
+          "application/vnd.openxmlformats-officedocument.theme+xml"
+        ) {
+          issue(
+            errors,
+            "[Content_Types].xml",
+            "missing-content-type",
+            `/${themePart} missing theme content type`,
+          );
+        }
+      }
+    }
+
+    const masterCommonSlideData = first(
+      masterRoot,
+      presentationNamespace,
+      "cSld",
+    );
+    const masterName =
+      masterCommonSlideData !== undefined &&
+      masterCommonSlideData.hasAttribute("name")
+        ? attribute(masterCommonSlideData, "name")
+        : undefined;
+    const masterPreserve = parseOptionalBooleanAttr(masterRoot, "preserve");
+
+    const layoutIdsElement = first(
+      masterRoot,
+      presentationNamespace,
+      "sldLayoutIdLst",
+    );
+    const layoutIdElements =
+      layoutIdsElement === undefined
+        ? []
+        : elements(layoutIdsElement, presentationNamespace, "sldLayoutId");
+    if (layoutIdElements.length === 0) {
+      issue(
+        errors,
+        masterPart,
+        "missing-slide-layout",
+        `Slide master ${masterPart} contains no slide layouts`,
+      );
+    }
+
+    const masterLayouts: FileSlideLayout[] = [];
+    for (const layoutIdElement of layoutIdElements) {
+      const layoutId = integerAttribute(layoutIdElement, "id");
+      if (
+        layoutId === undefined ||
+        layoutId < minimumSlideLayoutId ||
+        layoutId > maximumSlideLayoutId
+      ) {
+        issue(
+          errors,
+          masterPart,
+          "invalid-slide-layout-id",
+          `Master layout identifier ${attribute(layoutIdElement, "id")} must be an integer between ${minimumSlideLayoutId} and ${maximumSlideLayoutId}`,
+        );
+      } else if (seenGlobalIds.has(layoutId)) {
+        issue(
+          errors,
+          masterPart,
+          "duplicate-slide-master-layout-id",
+          `Duplicate slide master/layout identifier ${layoutId}`,
+        );
+      } else {
+        seenGlobalIds.add(layoutId);
+      }
+
+      const layoutRelId =
+        layoutIdElement.getAttributeNS(relationshipNamespace, "id") ?? "";
+      const layoutRel = masterRels.get(layoutRelId);
+      if (
+        layoutRel === undefined ||
+        attribute(layoutRel, "Type") !== `${relationshipNamespace}/slideLayout`
+      ) {
+        issue(
+          errors,
+          masterPart,
+          "missing-required-relationship",
+          `Slide master ${masterPart} missing slideLayout relationship ${layoutRelId}`,
+        );
+        continue;
+      }
+
+      const layoutPart = relationshipTargetPath(
+        masterPart,
+        attribute(layoutRel, "Target"),
+      );
+      if (files[layoutPart] === undefined) {
+        issue(
+          errors,
+          layoutPart,
+          "missing-part",
+          "PPTX missing referenced slide layout part",
+        );
+        continue;
+      }
+      if (
+        contentTypes.overrides.get(`/${layoutPart}`) !==
+        "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"
+      ) {
+        issue(
+          errors,
+          "[Content_Types].xml",
+          "missing-content-type",
+          `/${layoutPart} missing slide layout content type`,
+        );
+      }
+      requireRoot(
+        documents,
+        errors,
+        layoutPart,
+        presentationNamespace,
+        "sldLayout",
+      );
+      requireRelationship(
+        layoutPart,
+        `${relationshipNamespace}/slideMaster`,
+        masterPart,
+        relationships,
+        errors,
+      );
+
+      const layoutRoot = documents.get(layoutPart)?.documentElement;
+      if (
+        layoutRoot == null ||
+        layoutRoot.namespaceURI !== presentationNamespace ||
+        layoutRoot.localName !== "sldLayout"
+      ) {
+        continue;
+      }
+
+      const layoutCommonSlideData = first(
+        layoutRoot,
+        presentationNamespace,
+        "cSld",
+      );
+      const layoutName =
+        layoutCommonSlideData !== undefined &&
+        layoutCommonSlideData.hasAttribute("name")
+          ? attribute(layoutCommonSlideData, "name")
+          : undefined;
+      const layoutType = layoutRoot.hasAttribute("type")
+        ? attribute(layoutRoot, "type")
+        : undefined;
+      const layoutPreserve = parseOptionalBooleanAttr(layoutRoot, "preserve");
+      const matchingName = layoutRoot.hasAttribute("matchingName")
+        ? attribute(layoutRoot, "matchingName")
+        : undefined;
+      const userDrawn = parseOptionalBooleanAttr(layoutRoot, "userDrawn");
+      const showMasterShapes = parseOptionalBooleanAttr(
+        layoutRoot,
+        "showMasterSp",
+      );
+      const showMasterPlaceholderAnimations = parseOptionalBooleanAttr(
+        layoutRoot,
+        "showMasterPhAnim",
+      );
+
+      const layoutInfo: FileSlideLayout = {
+        part: layoutPart,
+        masterPart,
+        id: layoutId ?? 0,
+        ...(layoutName === undefined ? {} : { name: layoutName }),
+        ...(layoutType === undefined ? {} : { type: layoutType }),
+        ...(layoutPreserve === undefined ? {} : { preserve: layoutPreserve }),
+        ...(matchingName === undefined ? {} : { matchingName }),
+        ...(userDrawn === undefined ? {} : { userDrawn }),
+        ...(showMasterShapes === undefined ? {} : { showMasterShapes }),
+        ...(showMasterPlaceholderAnimations === undefined
+          ? {}
+          : { showMasterPlaceholderAnimations }),
+      };
+      masterLayouts.push(layoutInfo);
+      layoutByPart.set(layoutPart, layoutInfo);
+    }
+
+    masters.push({
+      part: masterPart,
+      id: masterId ?? 0,
+      ...(masterName === undefined ? {} : { name: masterName }),
+      ...(masterPreserve === undefined ? {} : { preserve: masterPreserve }),
+      ...(themePart === undefined ? {} : { themePart }),
+      layouts: masterLayouts,
+    });
   }
+
+  return { masters, layoutByPart };
 }
 
 function validateTextValueRange(
@@ -9334,13 +9676,22 @@ function readPresentation(
     defaults: Map<string, string>;
     overrides: Map<string, string>;
   },
+  mastersRead: {
+    readonly masters: readonly FileSlideMaster[];
+    readonly layoutByPart: ReadonlyMap<string, FileSlideLayout>;
+  },
   errors: ValidationIssue[],
 ): {
   presentation: ValidationResult["presentation"];
   slides: FileSlide[];
   extensions: ValidationExtension[];
 } {
-  const textTheme = themeTextReader(documents);
+  const firstMaster = mastersRead.masters[0];
+  const textTheme = themeTextReader(
+    documents,
+    firstMaster?.themePart ?? "ppt/theme/theme1.xml",
+    firstMaster?.part ?? "ppt/slideMasters/slideMaster1.xml",
+  );
   const part = "ppt/presentation.xml";
   const document = documents.get(part);
   const root = document?.documentElement;
@@ -9508,28 +9859,61 @@ function readPresentation(
       seenIds.add(object.id);
       pending.push(...(object.members ?? []));
     }
-    const stableSlideId =
-      commonSlideData === undefined ? "" : attribute(commonSlideData, "name");
-    if (stableSlideId === "") {
+    const slideLayoutRels = [
+      ...(relationships.get(slidePath)?.values() ?? []),
+    ].filter(
+      (entry) =>
+        attribute(entry, "Type") === `${relationshipNamespace}/slideLayout`,
+    );
+    let slideLayoutPart: string | undefined;
+    let slideMasterPart: string | undefined;
+    if (slideLayoutRels.length !== 1) {
       issue(
         errors,
         slidePath,
-        "missing-stable-slide-id",
-        "Slide missing stable slide identifier",
+        "missing-required-relationship",
+        `Slide ${slidePath} must declare exactly one slideLayout relationship`,
       );
+    } else {
+      const candidateLayoutPart = relationshipTargetPath(
+        slidePath,
+        attribute(slideLayoutRels[0]!, "Target"),
+      );
+      const matchedLayout = mastersRead.layoutByPart.get(candidateLayoutPart);
+      if (matchedLayout === undefined) {
+        issue(
+          errors,
+          slidePath,
+          "unknown-slide-layout-relationship",
+          `Slide ${slidePath} references layout ${candidateLayoutPart} not owned by any presentation slide master`,
+        );
+      } else {
+        slideLayoutPart = matchedLayout.part;
+        slideMasterPart = matchedLayout.masterPart;
+      }
     }
-    if (stableSlideIds.has(stableSlideId)) {
-      issue(
-        errors,
-        slidePath,
-        "duplicate-stable-slide-id",
-        `Duplicate slide identifier ${stableSlideId}`,
-      );
+    const rawSlideName =
+      commonSlideData === undefined ? "" : attribute(commonSlideData, "name");
+    let stableSlideId =
+      rawSlideName !== "" ? rawSlideName : `slide-${index + 1}`;
+    while (stableSlideIds.has(stableSlideId)) {
+      if (rawSlideName !== "") {
+        issue(
+          errors,
+          slidePath,
+          "duplicate-stable-slide-id",
+          `Duplicate slide identifier ${stableSlideId}`,
+        );
+        break;
+      }
+      stableSlideId = `${stableSlideId}-dup`;
     }
     stableSlideIds.add(stableSlideId);
     presentationSlideIds.set(presentationId, stableSlideId);
     slides.push({
       id: stableSlideId,
+      ...(slideLayoutPart === undefined ? {} : { layoutPart: slideLayoutPart }),
+      ...(slideMasterPart === undefined ? {} : { masterPart: slideMasterPart }),
       ...(attribute(slideRoot, "show") === "false" ? { hidden: true } : {}),
       ...(advanceAfterMs === undefined ? {} : { advanceAfterMs }),
       ...(background === undefined ? {} : { background }),
@@ -9575,16 +9959,8 @@ function readPresentation(
     return { ...slide, ...(section === undefined ? {} : { section }) };
   });
   const title = readCoreTitle(documents, relationships, errors);
-  if (slideIds.length === 0)
+  if (slideIds.length === 0 && mastersRead.masters.length === 0)
     issue(errors, part, "missing-slides", "Presentation contains no slides");
-  if (files["ppt/theme/theme1.xml"] === undefined) {
-    issue(
-      errors,
-      "ppt/theme/theme1.xml",
-      "missing-theme",
-      "Missing required theme part",
-    );
-  }
   return {
     presentation: {
       slideCount: slideIds.length,
@@ -9639,40 +10015,12 @@ export async function validatePptx(
     "_rels/.rels",
     "ppt/presentation.xml",
     "ppt/_rels/presentation.xml.rels",
-    "ppt/slideMasters/slideMaster1.xml",
-    "ppt/slideMasters/_rels/slideMaster1.xml.rels",
-    "ppt/slideLayouts/slideLayout1.xml",
-    "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
-    "ppt/theme/theme1.xml",
   ]) {
     if (files[requiredPart] === undefined)
       issue(errors, requiredPart, "missing-part", "PPTX missing required part");
   }
   const relationships = checkRelationships(files, documents, errors);
   const contentTypes = validateContentTypes(files, documents, errors);
-  requireRoot(
-    documents,
-    errors,
-    "ppt/slideMasters/slideMaster1.xml",
-    presentationNamespace,
-    "sldMaster",
-  );
-  validateSlideLayoutIds(documents, errors);
-  requireRoot(
-    documents,
-    errors,
-    "ppt/slideLayouts/slideLayout1.xml",
-    presentationNamespace,
-    "sldLayout",
-  );
-  requireRoot(
-    documents,
-    errors,
-    "ppt/theme/theme1.xml",
-    drawingNamespace,
-    "theme",
-  );
-  validateThemeFonts(documents, errors);
   requireRelationship(
     "",
     `${relationshipNamespace}/officeDocument`,
@@ -9680,32 +10028,11 @@ export async function validatePptx(
     relationships,
     errors,
   );
-  requireRelationship(
-    "ppt/presentation.xml",
-    `${relationshipNamespace}/slideMaster`,
-    "ppt/slideMasters/slideMaster1.xml",
+  const mastersRead = readMastersAndLayouts(
+    files,
+    documents,
     relationships,
-    errors,
-  );
-  requireRelationship(
-    "ppt/slideMasters/slideMaster1.xml",
-    `${relationshipNamespace}/slideLayout`,
-    "ppt/slideLayouts/slideLayout1.xml",
-    relationships,
-    errors,
-  );
-  requireRelationship(
-    "ppt/slideMasters/slideMaster1.xml",
-    `${relationshipNamespace}/theme`,
-    "ppt/theme/theme1.xml",
-    relationships,
-    errors,
-  );
-  requireRelationship(
-    "ppt/slideLayouts/slideLayout1.xml",
-    `${relationshipNamespace}/slideMaster`,
-    "ppt/slideMasters/slideMaster1.xml",
-    relationships,
+    contentTypes,
     errors,
   );
   const { presentation, slides, extensions } = readPresentation(
@@ -9713,17 +10040,9 @@ export async function validatePptx(
     documents,
     relationships,
     contentTypes,
+    mastersRead,
     errors,
   );
-  for (const [index] of slides.entries()) {
-    requireRelationship(
-      `ppt/slides/slide${index + 1}.xml`,
-      `${relationshipNamespace}/slideLayout`,
-      "ppt/slideLayouts/slideLayout1.xml",
-      relationships,
-      errors,
-    );
-  }
   for (const extension of extensions) {
     if (
       options.allowedExtensions !== undefined &&
@@ -9746,6 +10065,7 @@ export async function validatePptx(
     },
     errors,
     extensions,
+    masters: mastersRead.masters,
     presentation,
     slides,
   };

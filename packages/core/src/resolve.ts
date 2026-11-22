@@ -882,10 +882,30 @@ function resolveSlides(
           ? {}
           : { headerFooter: parsedLayout.data.headerFooter }),
       };
+      const reservedFooterIndices: number[] = [];
+      for (const footerSource of [
+        parsedMaster.data.footerPlaceholders,
+        parsedLayout.data.footerPlaceholders,
+      ]) {
+        if (footerSource === undefined) continue;
+        if (footerSource.dateTime !== undefined) {
+          reservedFooterIndices.push(footerSource.dateTime.idx ?? 2);
+        }
+        if (footerSource.footer !== undefined) {
+          reservedFooterIndices.push(footerSource.footer.idx ?? 3);
+        }
+        if (footerSource.slideNumber !== undefined) {
+          reservedFooterIndices.push(footerSource.slideNumber.idx ?? 4);
+        }
+      }
+      const normalizedLayoutPlaceholders = normalizeLayoutPlaceholderIndices(
+        parsedLayout.data.placeholders,
+        reservedFooterIndices,
+      );
       const layoutSlideProps: Record<string, unknown> =
-        parsedLayout.data.placeholders === undefined
+        normalizedLayoutPlaceholders === undefined
           ? {}
-          : { placeholders: parsedLayout.data.placeholders };
+          : { placeholders: normalizedLayoutPlaceholders };
       for (const prop of slidePropertySet) {
         if (prop === "background") continue;
         if (Object.hasOwn(effectiveLayoutProps, prop)) {
@@ -897,9 +917,9 @@ function resolveSlides(
         key: layoutKey,
         path: layoutPath,
         data: layoutData,
-        ...(parsedLayout.data.placeholders === undefined
+        ...(normalizedLayoutPlaceholders === undefined
           ? {}
-          : { placeholders: parsedLayout.data.placeholders }),
+          : { placeholders: normalizedLayoutPlaceholders }),
         ...(parsedLayout.data.background === undefined
           ? {}
           : { background: parsedLayout.data.background }),
@@ -2963,6 +2983,64 @@ function resolveMasterOrLayoutSlideCapability(args: {
           ),
     ]);
   }
+}
+
+function normalizeLayoutPlaceholderIndices(
+  placeholders: PlaceholderMap | undefined,
+  reservedIndices: readonly number[] = [],
+): PlaceholderMap | undefined {
+  if (placeholders === undefined) return undefined;
+  const entries = Object.entries(placeholders);
+  if (entries.length <= 1) return placeholders;
+
+  const usedIndices = new Set<number>();
+  let unindexedCount = 0;
+  for (const [, spec] of entries) {
+    if (spec.idx === undefined) {
+      unindexedCount += 1;
+    } else {
+      usedIndices.add(spec.idx);
+    }
+  }
+
+  // ECMA-376 omits idx to mean idx=0; if 2+ slots omit idx (or one collides with explicit idx=0),
+  // PowerPoint matches slide placeholders with omitted idx onto the first idx=0 slot.
+  if (unindexedCount === 0 || (unindexedCount === 1 && !usedIndices.has(0))) {
+    return placeholders;
+  }
+
+  for (const reserved of reservedIndices) {
+    usedIndices.add(reserved);
+  }
+
+  let primaryKey: string | undefined;
+  if (!usedIndices.has(0)) {
+    const primaryTitle = entries.find(
+      ([, spec]) =>
+        spec.idx === undefined &&
+        (spec.type === "title" || spec.type === "ctrTitle"),
+    );
+    const firstUnindexed = entries.find(([, spec]) => spec.idx === undefined);
+    primaryKey = (primaryTitle ?? firstUnindexed)?.[0];
+    if (primaryKey !== undefined) {
+      usedIndices.add(0);
+    }
+  }
+
+  let nextIdx = 1;
+  const updated: Record<string, PlaceholderMap[string]> = {};
+  for (const [key, spec] of entries) {
+    if (spec.idx !== undefined || key === primaryKey) {
+      updated[key] = spec;
+      continue;
+    }
+    while (usedIndices.has(nextIdx)) {
+      nextIdx += 1;
+    }
+    usedIndices.add(nextIdx);
+    updated[key] = Object.freeze({ ...spec, idx: nextIdx });
+  }
+  return Object.freeze(updated);
 }
 
 function deriveFooterPlaceholdersFromMap(

@@ -1157,4 +1157,68 @@ describe("typed text placeholders and style inheritance", () => {
         ),
     );
   });
+
+  it("assigns distinct placeholder idx values when multiple layout placeholders omit idx so PowerPoint does not collide at implicit idx=0", async () => {
+    const unindexedLayout = defineSlideLayout({
+      id: "unindexed-content",
+      name: "Unindexed Content",
+      type: "obj",
+      preserve: true,
+      placeholders: {
+        title: {
+          type: "title",
+          x: 48,
+          y: 64,
+          width: 544,
+          height: 56,
+          style: { fontFamily: jostFont, fontSize: "32pt", color: "#0F172A" },
+        },
+        body: {
+          type: "body",
+          x: 48,
+          y: 136,
+          width: 544,
+          height: 140,
+          style: { fontFamily: jostFont, fontSize: "14pt", color: "#334155" },
+        },
+      },
+    });
+
+    const built = await build(
+      deck({ width: 640, height: 360 }).append(
+        slideMaster({ id: "m-idx", name: "Master Idx" }).append(
+          slideLayout(unindexedLayout),
+        ),
+        slide({
+          id: "s-idx",
+          layout: unindexedLayout,
+          placeholders: {
+            title: "Main Title",
+            body: "Main Body",
+          },
+        }),
+      ),
+      { embedFonts: "subset" },
+    );
+
+    const validated = await validatePptx(built.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const zip = unzipSync(built.pptx);
+    const layoutXml = strFromU8(zip["ppt/slideLayouts/slideLayout1.xml"]!);
+    const slideXml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    assert.match(layoutXml, /<p:ph type="title"\/>/u);
+    assert.match(layoutXml, /<p:ph type="body" idx="1"\/>/u);
+    assert.match(slideXml, /<p:ph type="title"\/>/u);
+    assert.match(slideXml, /<p:ph type="body" idx="1"\/>/u);
+
+    const imported = importPptx(built.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const importedSlides = imported.document.children.filter(
+      (child): child is SlideContainer =>
+        child instanceof SlideContainer && child.kind === "slide",
+    );
+    assert.ok(importedSlides[0]?.placeholder("title") !== undefined);
+    assert.ok(importedSlides[0]?.placeholder("body") !== undefined);
+  });
 });

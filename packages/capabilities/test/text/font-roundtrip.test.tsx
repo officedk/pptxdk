@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { deck, shape, slide } from "@pptxdk/capabilities/document";
 import { font } from "@pptxdk/capabilities/font";
 import { P, Span, Text } from "@pptxdk/capabilities/text-elements";
 import { defineTheme } from "@pptxdk/core";
@@ -148,6 +149,36 @@ describe("Embedded font resource roundtrip & isolation", () => {
         ),
       );
     }
+  });
+
+  it("attaches imported embedded fonts to Shape.textStyle so paint() renders shape text after inputBytes.fill(0)", async () => {
+    const doc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "shape-font" }).append(
+        shape({
+          id: "badge",
+          x: 40,
+          y: 40,
+          width: 240,
+          height: 80,
+          fill: "#2563EB",
+          text: "Shape Embedded Font",
+          textStyle: {
+            fontFamily: jostFont,
+            fontSize: 16,
+            color: "#FFFFFF",
+          },
+        }),
+      ),
+    );
+    const initialEmit = emit(resolveDocument(doc), { embedFonts: "full" });
+    const copy = new Uint8Array(initialEmit.pptx);
+    const imported = importDocument(copy);
+    copy.fill(0);
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const painted = paint(resolveDocument(imported.document));
+    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.ok(painted.pages[0]?.png instanceof Uint8Array);
   });
 
   it("isolates compressed, obfuscated, and corrupt .fntdata gracefully while preserving editable text", async () => {

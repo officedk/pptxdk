@@ -396,6 +396,15 @@ export type FileNotes = {
   readonly text: FileText;
 };
 
+export type FileThemeSnapshot = {
+  readonly name?: string;
+  readonly colors: Readonly<Record<string, string>>;
+  readonly fonts: {
+    readonly major?: string;
+    readonly minor?: string;
+  };
+};
+
 export type FileSlideLayout = {
   readonly part: string;
   readonly masterPart: string;
@@ -407,6 +416,9 @@ export type FileSlideLayout = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly colorMapOverride?: "master" | Readonly<Record<string, string>>;
+  readonly themeOverridePart?: string;
+  readonly themeOverride?: FileThemeSnapshot;
 };
 
 export type FileSlideMaster = {
@@ -415,6 +427,8 @@ export type FileSlideMaster = {
   readonly name?: string;
   readonly preserve?: boolean;
   readonly themePart?: string;
+  readonly theme?: FileThemeSnapshot;
+  readonly colorMap?: Readonly<Record<string, string>>;
   readonly layouts: readonly FileSlideLayout[];
 };
 
@@ -422,6 +436,9 @@ export type FileSlide = {
   readonly id: string;
   readonly layoutPart?: string;
   readonly masterPart?: string;
+  readonly colorMapOverride?: "master" | Readonly<Record<string, string>>;
+  readonly themeOverridePart?: string;
+  readonly themeOverride?: FileThemeSnapshot;
   readonly hidden?: boolean;
   readonly advanceAfterMs?: number;
   readonly section?: string;
@@ -1707,24 +1724,28 @@ const themeColorSlots = [
   "folHlink",
 ] as const;
 
-function themeTextReader(
-  documents: Documents,
-  themePath = "ppt/theme/theme1.xml",
-  masterPath = "ppt/slideMasters/slideMaster1.xml",
-): ThemeTextReader {
-  const theme = documents.get(themePath)?.documentElement;
-  const themeElements =
-    theme == null ? undefined : first(theme, drawingNamespace, "themeElements");
-  const colorScheme =
-    themeElements === undefined
-      ? undefined
-      : first(themeElements, drawingNamespace, "clrScheme");
+const allSchemeColorSlots = [
+  "bg1",
+  "tx1",
+  "bg2",
+  "tx2",
+  "accent1",
+  "accent2",
+  "accent3",
+  "accent4",
+  "accent5",
+  "accent6",
+  "hlink",
+  "folHlink",
+] as const;
+
+function readColorSchemeMap(
+  colorScheme: XmlElement | undefined,
+): Map<string, string> {
   const colors = new Map<string, string>();
+  if (colorScheme === undefined) return colors;
   for (const slot of themeColorSlots) {
-    const entry =
-      colorScheme === undefined
-        ? undefined
-        : first(colorScheme, drawingNamespace, slot);
+    const entry = first(colorScheme, drawingNamespace, slot);
     const rgb =
       entry === undefined
         ? undefined
@@ -1733,28 +1754,36 @@ function themeTextReader(
       entry === undefined
         ? undefined
         : first(entry, drawingNamespace, "sysClr");
-    const value =
-      rgb !== undefined
-        ? attribute(rgb, "val")
-        : system === undefined
-          ? ""
-          : attribute(system, "lastClr") || attribute(system, "val");
+    let value = "";
+    if (rgb !== undefined) {
+      value = attribute(rgb, "val");
+    } else if (system !== undefined) {
+      const lastClr = attribute(system, "lastClr");
+      const sysVal = attribute(system, "val");
+      value =
+        lastClr !== ""
+          ? lastClr
+          : sysVal === "windowText"
+            ? "000000"
+            : sysVal === "window"
+              ? "FFFFFF"
+              : "";
+    }
     if (/^[0-9a-f]{6}$/iu.test(value)) colors.set(slot, value.toUpperCase());
   }
+  return colors;
+}
 
-  const fontScheme =
-    themeElements === undefined
-      ? undefined
-      : first(themeElements, drawingNamespace, "fontScheme");
+function readFontSchemeMap(
+  fontScheme: XmlElement | undefined,
+): Map<string, string> {
   const fonts = new Map<string, string>();
+  if (fontScheme === undefined) return fonts;
   for (const [name, token] of [
     ["majorFont", "major"],
     ["minorFont", "minor"],
   ] as const) {
-    const fontSet =
-      fontScheme === undefined
-        ? undefined
-        : first(fontScheme, drawingNamespace, name);
+    const fontSet = first(fontScheme, drawingNamespace, name);
     const latin =
       fontSet === undefined
         ? undefined
@@ -1762,40 +1791,145 @@ function themeTextReader(
     const family = latin === undefined ? "" : attribute(latin, "typeface");
     if (family !== "") fonts.set(token, family);
   }
+  return fonts;
+}
+
+function readColorMapRecord(
+  element: XmlElement | undefined,
+): Readonly<Record<string, string>> | undefined {
+  if (element === undefined) return undefined;
+  const result: Record<string, string> = {};
+  for (const slot of allSchemeColorSlots) {
+    const mapped = attribute(element, slot);
+    if (mapped !== "") result[slot] = mapped;
+  }
+  return Object.keys(result).length === 0 ? undefined : result;
+}
+
+function readColorMapOverrideForPart(
+  root: XmlElement | null | undefined,
+): "master" | Readonly<Record<string, string>> | undefined {
+  if (root == null) return undefined;
+  const ovr = first(root, presentationNamespace, "clrMapOvr");
+  if (ovr === undefined) return undefined;
+  if (first(ovr, drawingNamespace, "masterClrMapping") !== undefined) {
+    return "master";
+  }
+  const overrideMapping = first(ovr, drawingNamespace, "overrideClrMapping");
+  return overrideMapping === undefined
+    ? undefined
+    : readColorMapRecord(overrideMapping);
+}
+
+function readThemeSnapshot(
+  root: XmlElement | null | undefined,
+  isOverride = false,
+): FileThemeSnapshot | undefined {
+  if (root == null) return undefined;
+  const container = isOverride
+    ? root
+    : first(root, drawingNamespace, "themeElements");
+  if (container === undefined) return undefined;
+  const colorScheme = first(container, drawingNamespace, "clrScheme");
+  const fontScheme = first(container, drawingNamespace, "fontScheme");
+  const colorsMap = readColorSchemeMap(colorScheme);
+  const fontsMap = readFontSchemeMap(fontScheme);
+  const colors: Record<string, string> = {};
+  for (const [key, value] of colorsMap) colors[key] = `#${value}`;
+  const themeName = root.hasAttribute("name")
+    ? attribute(root, "name")
+    : undefined;
+  const major = fontsMap.get("major");
+  const minor = fontsMap.get("minor");
+  return {
+    ...(themeName === undefined ? {} : { name: themeName }),
+    colors,
+    fonts: {
+      ...(major === undefined ? {} : { major }),
+      ...(minor === undefined ? {} : { minor }),
+    },
+  };
+}
+
+function themeTextReader(
+  documents: Documents,
+  themePath = "ppt/theme/theme1.xml",
+  masterPath = "ppt/slideMasters/slideMaster1.xml",
+  themeOverridePaths: readonly (string | undefined)[] = [],
+  colorMapOverrides: readonly (
+    | "master"
+    | Readonly<Record<string, string>>
+    | undefined
+  )[] = [],
+): ThemeTextReader {
+  const theme = documents.get(themePath)?.documentElement;
+  const themeElements =
+    theme == null ? undefined : first(theme, drawingNamespace, "themeElements");
+  const colors = readColorSchemeMap(
+    themeElements === undefined
+      ? undefined
+      : first(themeElements, drawingNamespace, "clrScheme"),
+  );
+  const fonts = readFontSchemeMap(
+    themeElements === undefined
+      ? undefined
+      : first(themeElements, drawingNamespace, "fontScheme"),
+  );
+
+  for (const overridePath of themeOverridePaths) {
+    if (overridePath === undefined) continue;
+    const overrideRoot = documents.get(overridePath)?.documentElement;
+    if (overrideRoot == null) continue;
+    const overrideColors = readColorSchemeMap(
+      first(overrideRoot, drawingNamespace, "clrScheme"),
+    );
+    for (const [slot, hex] of overrideColors) colors.set(slot, hex);
+    const overrideFonts = readFontSchemeMap(
+      first(overrideRoot, drawingNamespace, "fontScheme"),
+    );
+    for (const [token, family] of overrideFonts) fonts.set(token, family);
+  }
 
   const master = documents.get(masterPath)?.documentElement;
   const colorMap =
     master == null ? undefined : first(master, presentationNamespace, "clrMap");
   const schemeSlots = new Map<string, string>();
   for (const slot of themeColorSlots) schemeSlots.set(slot, slot);
-  for (const [scheme, fallback] of [
-    ["tx1", "dk1"],
-    ["bg1", "lt1"],
-    ["tx2", "dk2"],
-    ["bg2", "lt2"],
-  ] as const) {
-    schemeSlots.set(
-      scheme,
-      (colorMap === undefined ? "" : attribute(colorMap, scheme)) || fallback,
-    );
+  const defaultSchemes: Readonly<Record<string, string>> = {
+    bg1: "lt1",
+    tx1: "dk1",
+    bg2: "lt2",
+    tx2: "dk2",
+    accent1: "accent1",
+    accent2: "accent2",
+    accent3: "accent3",
+    accent4: "accent4",
+    accent5: "accent5",
+    accent6: "accent6",
+    hlink: "hlink",
+    folHlink: "folHlink",
+  };
+  for (const scheme of allSchemeColorSlots) {
+    const mapped = colorMap === undefined ? "" : attribute(colorMap, scheme);
+    schemeSlots.set(scheme, mapped || defaultSchemes[scheme]!);
+  }
+  for (const overrideMap of colorMapOverrides) {
+    if (overrideMap === undefined || overrideMap === "master") continue;
+    for (const scheme of allSchemeColorSlots) {
+      const mapped = overrideMap[scheme];
+      if (mapped !== undefined && mapped !== "") {
+        schemeSlots.set(scheme, mapped);
+      }
+    }
   }
   return { colors, schemeSlots, fonts };
 }
 
-function validateThemeFonts(
-  documents: Documents,
+function validateFontSchemeSlots(
+  fontScheme: XmlElement,
+  part: string,
   errors: ValidationIssue[],
-  part = "ppt/theme/theme1.xml",
 ): void {
-  const theme = documents.get(part)?.documentElement;
-  if (theme == null) return;
-  const themeElements = first(theme, drawingNamespace, "themeElements");
-  if (themeElements === undefined) return;
-  const fontScheme = first(themeElements, drawingNamespace, "fontScheme");
-  if (fontScheme === undefined) {
-    issue(errors, part, "missing-font-scheme", "Theme is missing font scheme");
-    return;
-  }
   for (const name of ["majorFont", "minorFont"] as const) {
     const fontSet = first(fontScheme, drawingNamespace, name);
     if (fontSet === undefined) {
@@ -1837,6 +1971,84 @@ function validateThemeFonts(
       );
     }
   }
+}
+
+function validateThemeFonts(
+  documents: Documents,
+  errors: ValidationIssue[],
+  part = "ppt/theme/theme1.xml",
+): void {
+  const theme = documents.get(part)?.documentElement;
+  if (theme == null) return;
+  const themeElements = first(theme, drawingNamespace, "themeElements");
+  if (themeElements === undefined) return;
+  const fontScheme = first(themeElements, drawingNamespace, "fontScheme");
+  if (fontScheme === undefined) {
+    issue(errors, part, "missing-font-scheme", "Theme is missing font scheme");
+    return;
+  }
+  validateFontSchemeSlots(fontScheme, part, errors);
+}
+
+function readAndValidateThemeOverride(
+  part: string,
+  files: XmlFiles,
+  documents: Documents,
+  relationships: Map<string, Map<string, XmlElement>>,
+  contentTypes: {
+    defaults: Map<string, string>;
+    overrides: Map<string, string>;
+  },
+  errors: ValidationIssue[],
+):
+  | { readonly part: string; readonly snapshot?: FileThemeSnapshot }
+  | undefined {
+  const rels = relationships.get(part) ?? new Map();
+  const rel = [...rels.values()].find(
+    (entry) =>
+      attribute(entry, "Type") === `${relationshipNamespace}/themeOverride`,
+  );
+  if (rel === undefined) return undefined;
+  const overridePart = relationshipTargetPath(part, attribute(rel, "Target"));
+  if (files[overridePart] === undefined) {
+    issue(
+      errors,
+      overridePart,
+      "missing-part",
+      "PPTX missing referenced themeOverride part",
+    );
+    return { part: overridePart };
+  }
+  requireRoot(
+    documents,
+    errors,
+    overridePart,
+    drawingNamespace,
+    "themeOverride",
+  );
+  if (
+    contentTypes.overrides.get(`/${overridePart}`) !==
+    "application/vnd.openxmlformats-officedocument.themeOverride+xml"
+  ) {
+    issue(
+      errors,
+      "[Content_Types].xml",
+      "missing-content-type",
+      `/${overridePart} missing themeOverride content type`,
+    );
+  }
+  const root = documents.get(overridePart)?.documentElement;
+  if (root != null) {
+    const fontScheme = first(root, drawingNamespace, "fontScheme");
+    if (fontScheme !== undefined) {
+      validateFontSchemeSlots(fontScheme, overridePart, errors);
+    }
+  }
+  const snapshot = readThemeSnapshot(root, true);
+  return {
+    part: overridePart,
+    ...(snapshot === undefined ? {} : { snapshot }),
+  };
 }
 
 function shadedThemeColor(hex: string, fill: XmlElement): string {
@@ -2275,6 +2487,11 @@ function validateContentTypes(
       /^ppt\/theme\/theme\d+\.xml$/u,
       "application/vnd.openxmlformats-officedocument.theme+xml",
       "theme",
+    ],
+    [
+      /^ppt\/theme\/themeOverride\d+\.xml$/u,
+      "application/vnd.openxmlformats-officedocument.themeOverride+xml",
+      "theme override",
     ],
     [
       /^ppt\/slides\/slide\d+\.xml$/u,
@@ -2720,6 +2937,16 @@ function readMastersAndLayouts(
         "showMasterPhAnim",
       );
 
+      const layoutColorMapOverride = readColorMapOverrideForPart(layoutRoot);
+      const layoutThemeOverride = readAndValidateThemeOverride(
+        layoutPart,
+        files,
+        documents,
+        relationships,
+        contentTypes,
+        errors,
+      );
+
       const layoutInfo: FileSlideLayout = {
         part: layoutPart,
         masterPart,
@@ -2733,10 +2960,27 @@ function readMastersAndLayouts(
         ...(showMasterPlaceholderAnimations === undefined
           ? {}
           : { showMasterPlaceholderAnimations }),
+        ...(layoutColorMapOverride === undefined
+          ? {}
+          : { colorMapOverride: layoutColorMapOverride }),
+        ...(layoutThemeOverride === undefined
+          ? {}
+          : { themeOverridePart: layoutThemeOverride.part }),
+        ...(layoutThemeOverride?.snapshot === undefined
+          ? {}
+          : { themeOverride: layoutThemeOverride.snapshot }),
       };
       masterLayouts.push(layoutInfo);
       layoutByPart.set(layoutPart, layoutInfo);
     }
+
+    const masterColorMap = readColorMapRecord(
+      first(masterRoot, presentationNamespace, "clrMap"),
+    );
+    const masterThemeSnapshot =
+      themePart === undefined
+        ? undefined
+        : readThemeSnapshot(documents.get(themePart)?.documentElement, false);
 
     masters.push({
       part: masterPart,
@@ -2744,6 +2988,10 @@ function readMastersAndLayouts(
       ...(masterName === undefined ? {} : { name: masterName }),
       ...(masterPreserve === undefined ? {} : { preserve: masterPreserve }),
       ...(themePart === undefined ? {} : { themePart }),
+      ...(masterThemeSnapshot === undefined
+        ? {}
+        : { theme: masterThemeSnapshot }),
+      ...(masterColorMap === undefined ? {} : { colorMap: masterColorMap }),
       layouts: masterLayouts,
     });
   }
@@ -9687,10 +9935,8 @@ function readPresentation(
   extensions: ValidationExtension[];
 } {
   const firstMaster = mastersRead.masters[0];
-  const textTheme = themeTextReader(
-    documents,
-    firstMaster?.themePart ?? "ppt/theme/theme1.xml",
-    firstMaster?.part ?? "ppt/slideMasters/slideMaster1.xml",
+  const masterByPart = new Map(
+    mastersRead.masters.map((master) => [master.part, master] as const),
   );
   const part = "ppt/presentation.xml";
   const document = documents.get(part);
@@ -9801,6 +10047,60 @@ function readPresentation(
       );
       return;
     }
+    const slideLayoutRels = [
+      ...(relationships.get(slidePath)?.values() ?? []),
+    ].filter(
+      (entry) =>
+        attribute(entry, "Type") === `${relationshipNamespace}/slideLayout`,
+    );
+    let slideLayoutPart: string | undefined;
+    let slideMasterPart: string | undefined;
+    let matchedLayout: FileSlideLayout | undefined;
+    if (slideLayoutRels.length !== 1) {
+      issue(
+        errors,
+        slidePath,
+        "missing-required-relationship",
+        `Slide ${slidePath} must declare exactly one slideLayout relationship`,
+      );
+    } else {
+      const candidateLayoutPart = relationshipTargetPath(
+        slidePath,
+        attribute(slideLayoutRels[0]!, "Target"),
+      );
+      matchedLayout = mastersRead.layoutByPart.get(candidateLayoutPart);
+      if (matchedLayout === undefined) {
+        issue(
+          errors,
+          slidePath,
+          "unknown-slide-layout-relationship",
+          `Slide ${slidePath} references layout ${candidateLayoutPart} not owned by any presentation slide master`,
+        );
+      } else {
+        slideLayoutPart = matchedLayout.part;
+        slideMasterPart = matchedLayout.masterPart;
+      }
+    }
+    const matchedMaster =
+      slideMasterPart === undefined
+        ? firstMaster
+        : (masterByPart.get(slideMasterPart) ?? firstMaster);
+    const slideColorMapOverride = readColorMapOverrideForPart(slideRoot);
+    const slideThemeOverride = readAndValidateThemeOverride(
+      slidePath,
+      files,
+      documents,
+      relationships,
+      contentTypes,
+      errors,
+    );
+    const textTheme = themeTextReader(
+      documents,
+      matchedMaster?.themePart ?? "ppt/theme/theme1.xml",
+      matchedMaster?.part ?? "ppt/slideMasters/slideMaster1.xml",
+      [matchedLayout?.themeOverridePart, slideThemeOverride?.part],
+      [matchedLayout?.colorMapOverride, slideColorMapOverride],
+    );
     const objects = readObjects(
       slideTree,
       slidePath,
@@ -9859,39 +10159,6 @@ function readPresentation(
       seenIds.add(object.id);
       pending.push(...(object.members ?? []));
     }
-    const slideLayoutRels = [
-      ...(relationships.get(slidePath)?.values() ?? []),
-    ].filter(
-      (entry) =>
-        attribute(entry, "Type") === `${relationshipNamespace}/slideLayout`,
-    );
-    let slideLayoutPart: string | undefined;
-    let slideMasterPart: string | undefined;
-    if (slideLayoutRels.length !== 1) {
-      issue(
-        errors,
-        slidePath,
-        "missing-required-relationship",
-        `Slide ${slidePath} must declare exactly one slideLayout relationship`,
-      );
-    } else {
-      const candidateLayoutPart = relationshipTargetPath(
-        slidePath,
-        attribute(slideLayoutRels[0]!, "Target"),
-      );
-      const matchedLayout = mastersRead.layoutByPart.get(candidateLayoutPart);
-      if (matchedLayout === undefined) {
-        issue(
-          errors,
-          slidePath,
-          "unknown-slide-layout-relationship",
-          `Slide ${slidePath} references layout ${candidateLayoutPart} not owned by any presentation slide master`,
-        );
-      } else {
-        slideLayoutPart = matchedLayout.part;
-        slideMasterPart = matchedLayout.masterPart;
-      }
-    }
     const rawSlideName =
       commonSlideData === undefined ? "" : attribute(commonSlideData, "name");
     let stableSlideId =
@@ -9914,6 +10181,15 @@ function readPresentation(
       id: stableSlideId,
       ...(slideLayoutPart === undefined ? {} : { layoutPart: slideLayoutPart }),
       ...(slideMasterPart === undefined ? {} : { masterPart: slideMasterPart }),
+      ...(slideColorMapOverride === undefined
+        ? {}
+        : { colorMapOverride: slideColorMapOverride }),
+      ...(slideThemeOverride === undefined
+        ? {}
+        : { themeOverridePart: slideThemeOverride.part }),
+      ...(slideThemeOverride?.snapshot === undefined
+        ? {}
+        : { themeOverride: slideThemeOverride.snapshot }),
       ...(attribute(slideRoot, "show") === "false" ? { hidden: true } : {}),
       ...(advanceAfterMs === undefined ? {} : { advanceAfterMs }),
       ...(background === undefined ? {} : { background }),

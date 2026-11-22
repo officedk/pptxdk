@@ -2,16 +2,17 @@ import {
   CapabilityError,
   linearGradientSchema,
   radialGradientSchema,
+  schemeColorNameSchema,
   shadowSchema,
   visualStyleSchema,
   type CapabilityResource,
   type ColorValue,
   type GradientStop,
   type LinearGradient,
-  type NativeColorSlot,
   type PaintOutput,
   type RadialGradient,
   type ResolvedColor,
+  type SchemeColorName,
   type ThemeContext,
   type VisualStyle as CoreVisualStyle,
 } from "@pptxdk/core/capability";
@@ -1418,51 +1419,13 @@ const SrgbColorAttrSchema = z.object({
 });
 
 const SchemeColorAttrSchema = z.object({
-  val: z.enum([
-    "tx1",
-    "bg1",
-    "tx2",
-    "bg2",
-    "dk1",
-    "lt1",
-    "dk2",
-    "lt2",
-    "accent1",
-    "accent2",
-    "accent3",
-    "accent4",
-    "accent5",
-    "accent6",
-    "hlink",
-    "folHlink",
-  ]),
+  val: schemeColorNameSchema,
 });
 
 const SysColorAttrSchema = z.object({
   val: z.string().min(1),
   lastClr: HexRgb6Schema.optional(),
 });
-
-const schemeToNativeSlot: Readonly<
-  Record<z.infer<typeof SchemeColorAttrSchema>["val"], NativeColorSlot>
-> = {
-  tx1: "dk1",
-  bg1: "lt1",
-  tx2: "dk2",
-  bg2: "lt2",
-  dk1: "dk1",
-  lt1: "lt1",
-  dk2: "dk2",
-  lt2: "lt2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
 
 const GradStopAttrSchema = z.object({
   pos: OoxmlNonNegativeIntSchema,
@@ -1510,7 +1473,7 @@ export function readDrawingColor(
 ): ColorValue | undefined {
   let colorCursor: XmlElementCursor | undefined;
   let baseHex: string | undefined;
-  let slot: NativeColorSlot | undefined;
+  let slot: SchemeColorName | undefined;
 
   for (const child of parentCursor.remainingElementChildren()) {
     if (child.namespaceUri !== A_NS) {
@@ -1556,7 +1519,7 @@ export function readDrawingColor(
         });
         return undefined;
       }
-      slot = schemeToNativeSlot[parsed.data.val];
+      slot = parsed.data.val;
     } else if (child.localName === "sysClr" && colorCursor === undefined) {
       colorCursor = child;
       const raw = child.attrsObject(["val", "lastClr"]);

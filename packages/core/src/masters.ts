@@ -1,7 +1,16 @@
 import { z } from "zod";
 
 import { CapabilityError } from "#/diagnostics.ts";
-import type { TextStyle, ThemeInput } from "#/theme.ts";
+import {
+  colorMapOverrideSchema,
+  colorMapSchema,
+  themeOverrideSchema,
+  type ColorMapOverride,
+  type TextStyle,
+  type Theme,
+  type ThemeInput,
+  type ThemeOverride,
+} from "#/theme.ts";
 
 /** Official OOXML ST_SlideLayoutType enumeration values (ECMA-376 §19.7.15). */
 export const slideLayoutTypeValues = [
@@ -51,12 +60,13 @@ export const slideMasterDataPropsSchema = z
     id: z.string().trim().min(1).optional(),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
+    colorMap: colorMapSchema.optional(),
   })
   .readonly();
 export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
 
 export type SlideMasterProps = SlideMasterDataProps & {
-  readonly theme?: ThemeInput | undefined;
+  readonly theme?: ThemeInput | Theme | undefined;
   readonly style?: TextStyle | undefined;
 };
 
@@ -70,6 +80,8 @@ export const slideLayoutDataPropsSchema = z
     userDrawn: z.boolean().optional(),
     showMasterShapes: z.boolean().optional(),
     showMasterPlaceholderAnimations: z.boolean().optional(),
+    colorMapOverride: colorMapOverrideSchema.optional(),
+    themeOverride: themeOverrideSchema.optional(),
   })
   .readonly();
 export type SlideLayoutDataProps = z.infer<typeof slideLayoutDataPropsSchema>;
@@ -84,6 +96,8 @@ export const slideLayoutObservationSchema = z
     userDrawn: z.boolean().optional(),
     showMasterShapes: z.boolean().optional(),
     showMasterPlaceholderAnimations: z.boolean().optional(),
+    colorMapOverride: colorMapOverrideSchema.optional(),
+    themeOverride: themeOverrideSchema.optional(),
   })
   .readonly();
 export type SlideLayoutObservation = z.infer<
@@ -95,6 +109,7 @@ export const slideMasterObservationSchema = z
     id: z.string().min(1),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
+    colorMap: colorMapSchema.optional(),
     layouts: z.array(slideLayoutObservationSchema).readonly(),
   })
   .readonly();
@@ -120,6 +135,8 @@ export type SlideLayoutDefinition<
   readonly userDrawn?: boolean | undefined;
   readonly showMasterShapes?: boolean | undefined;
   readonly showMasterPlaceholderAnimations?: boolean | undefined;
+  readonly colorMapOverride?: ColorMapOverride | undefined;
+  readonly themeOverride?: ThemeOverride | undefined;
 };
 
 export type SlideLayoutProps = SlideLayoutDataProps & {
@@ -183,5 +200,11 @@ export function defineSlideLayout<const Spec extends SlideLayoutDataProps>(
           showMasterPlaceholderAnimations:
             frozenProps.showMasterPlaceholderAnimations,
         }),
+    ...(frozenProps.colorMapOverride === undefined
+      ? {}
+      : { colorMapOverride: frozenProps.colorMapOverride }),
+    ...(frozenProps.themeOverride === undefined
+      ? {}
+      : { themeOverride: frozenProps.themeOverride }),
   });
 }

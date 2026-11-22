@@ -1,12 +1,22 @@
 import { createHash } from "node:crypto";
 
 import {
+  defaultColorMap,
   defaultTheme,
   isFont,
   nativeColorSlots,
+  schemeColorSlots,
+  type ColorMap,
+  type ColorMapOverride,
+  type FormatColorTransform,
+  type FormatEffectStyle,
+  type FormatFillStyle,
+  type FormatLineStyle,
+  type FormatScheme,
   type NativeColorSlot,
   type ResolvedColor,
   type Theme,
+  type ThemeOverride,
 } from "@pptxdk/core/theme";
 
 import { shapeTreeXml } from "#/shape-tree.ts";
@@ -79,9 +89,11 @@ export function resolvedColorXml(value: ResolvedColor): string {
       ? ""
       : `<a:alpha val="${Math.round(value.alpha * 100000)}"/>`,
   ].join("");
-  const element = value.slot === undefined ? "srgbClr" : "schemeClr";
-  const color =
-    value.slot === undefined ? value.hex : nativeSchemeReference[value.slot];
+  const schemeVal =
+    value.scheme ??
+    (value.slot === undefined ? undefined : nativeSchemeReference[value.slot]);
+  const element = schemeVal === undefined ? "srgbClr" : "schemeClr";
+  const color = schemeVal ?? value.hex;
   return children === ""
     ? `<a:${element} val="${color}"/>`
     : `<a:${element} val="${color}">${children}</a:${element}>`;
@@ -149,12 +161,16 @@ export type EmittedSlideLayoutSpec = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
 };
 
 export type EmittedSlideMasterSpec = {
   readonly key: string;
   readonly name?: string;
   readonly preserve?: boolean;
+  readonly theme?: Theme;
+  readonly colorMap?: ColorMap;
   readonly layouts: readonly EmittedSlideLayoutSpec[];
 };
 
@@ -176,6 +192,8 @@ const defaultEmittedMasters: readonly EmittedSlideMasterSpec[] = [
 function contentTypes(
   masterCount: number,
   layoutCount: number,
+  themeCount: number,
+  themeOverrideCount: number,
   slideCount: number,
   resources: readonly PptxPackageResource[],
   packageParts: readonly PptxPackagePart[],
@@ -194,9 +212,13 @@ function contentTypes(
       `/ppt/slideLayouts/slideLayout${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
     ]),
-    ...Array.from({ length: masterCount }, (_, index) => [
+    ...Array.from({ length: themeCount }, (_, index) => [
       `/ppt/theme/theme${index + 1}.xml`,
       "application/vnd.openxmlformats-officedocument.theme+xml",
+    ]),
+    ...Array.from({ length: themeOverrideCount }, (_, index) => [
+      `/ppt/theme/themeOverride${index + 1}.xml`,
+      "application/vnd.openxmlformats-officedocument.themeOverride+xml",
     ]),
     ...Array.from({ length: slideCount }, (_, index) => [
       `/ppt/slides/slide${index + 1}.xml`,
@@ -234,50 +256,275 @@ function contentTypes(
   );
 }
 
-/**
- * Serializes a resolved deck theme as a native theme part.
- *
- * Capability modules that own a master part (for example the notes master) can write a second
- * theme part from the same author theme, keeping a distinct OPC identity while preserving its
- * colors and fonts.
- */
-export function themeXml(value: Theme): string {
-  const name = xmlEscape(value.name);
-  const colors = `<a:clrScheme name="${name}">${nativeColorSlots
+function normalizedHex6(color: string, label: string): string {
+  const trimmed = color.trim();
+  const six = /^#[0-9a-f]{3}$/iu.test(trimmed)
+    ? trimmed
+        .slice(1)
+        .split("")
+        .map((c) => c + c)
+        .join("")
+    : /^#[0-9a-f]{6}$/iu.test(trimmed)
+      ? trimmed.slice(1)
+      : undefined;
+  if (six === undefined) {
+    throw new Error(`${label} must be a #RRGGBB color`);
+  }
+  return six.toUpperCase();
+}
+
+function colorSchemeXml(
+  name: string,
+  colors: Readonly<Record<NativeColorSlot, string>>,
+): string {
+  return `<a:clrScheme name="${xmlEscape(name)}">${nativeColorSlots
     .map((slot) => {
-      const color = value.colors[slot];
-      if (!/^#[0-9a-f]{6}$/iu.test(color)) {
-        throw new Error(`Theme.colors.${slot} must be a #RRGGBB color`);
-      }
-      const schemeName =
-        slot === "hlink" ? "hlink" : slot === "folHlink" ? "folHlink" : slot;
-      return `<a:${schemeName}><a:srgbClr val="${color.slice(1).toUpperCase()}"/></a:${schemeName}>`;
+      const hex = normalizedHex6(colors[slot], `Theme.colors.${slot}`);
+      return `<a:${slot}><a:srgbClr val="${hex}"/></a:${slot}>`;
     })
     .join("")}</a:clrScheme>`;
-  const major = isFont(value.fonts.major)
-    ? value.fonts.major.family
-    : value.fonts.major;
-  const minor = isFont(value.fonts.minor)
-    ? value.fonts.minor.family
-    : value.fonts.minor;
+}
+
+function fontSchemeXml(
+  name: string,
+  majorValue: Theme["fonts"]["major"],
+  minorValue: Theme["fonts"]["minor"],
+): string {
+  const major = isFont(majorValue) ? majorValue.family : majorValue;
+  const minor = isFont(minorValue) ? minorValue.family : minorValue;
   const majorEscaped = xmlEscape(major);
   const minorEscaped = xmlEscape(minor);
-  const fonts = `<a:fontScheme name="${name}"><a:majorFont><a:latin typeface="${majorEscaped}"/><a:ea typeface="${majorEscaped}"/><a:cs typeface="${majorEscaped}"/></a:majorFont><a:minorFont><a:latin typeface="${minorEscaped}"/><a:ea typeface="${minorEscaped}"/><a:cs typeface="${minorEscaped}"/></a:minorFont></a:fontScheme>`;
+  return `<a:fontScheme name="${xmlEscape(name)}"><a:majorFont><a:latin typeface="${majorEscaped}"/><a:ea typeface="${majorEscaped}"/><a:cs typeface="${majorEscaped}"/></a:majorFont><a:minorFont><a:latin typeface="${minorEscaped}"/><a:ea typeface="${minorEscaped}"/><a:cs typeface="${minorEscaped}"/></a:minorFont></a:fontScheme>`;
+}
+
+function formatColorTransformXml(transform: FormatColorTransform): string {
+  const mods = [
+    transform.tint === undefined
+      ? ""
+      : `<a:tint val="${Math.round(transform.tint * 100_000)}"/>`,
+    transform.shade === undefined
+      ? ""
+      : `<a:shade val="${Math.round(transform.shade * 100_000)}"/>`,
+    transform.satMod === undefined
+      ? ""
+      : `<a:satMod val="${Math.round(transform.satMod * 100_000)}"/>`,
+    transform.lumMod === undefined
+      ? ""
+      : `<a:lumMod val="${Math.round(transform.lumMod * 100_000)}"/>`,
+    transform.lumOff === undefined
+      ? ""
+      : `<a:lumOff val="${Math.round(transform.lumOff * 100_000)}"/>`,
+    transform.alpha === undefined
+      ? ""
+      : `<a:alpha val="${Math.round(transform.alpha * 100_000)}"/>`,
+  ].join("");
+  if (transform.color.startsWith("#")) {
+    const hex = normalizedHex6(transform.color, "FormatScheme color");
+    return mods === ""
+      ? `<a:srgbClr val="${hex}"/>`
+      : `<a:srgbClr val="${hex}">${mods}</a:srgbClr>`;
+  }
+  return mods === ""
+    ? `<a:schemeClr val="${xmlEscape(transform.color)}"/>`
+    : `<a:schemeClr val="${xmlEscape(transform.color)}">${mods}</a:schemeClr>`;
+}
+
+function formatFillStyleXml(fill: FormatFillStyle): string {
+  if (fill.kind === "none") return "<a:noFill/>";
+  if (fill.kind === "solid") {
+    return `<a:solidFill>${formatColorTransformXml(fill.color)}</a:solidFill>`;
+  }
+  const rotAttr =
+    fill.rotWithShape === undefined
+      ? ""
+      : ` rotWithShape="${fill.rotWithShape ? "1" : "0"}"`;
+  const stops = fill.stops
+    .map(
+      (stop) =>
+        `<a:gs pos="${Math.round(stop.position * 100_000)}">${formatColorTransformXml(stop.color)}</a:gs>`,
+    )
+    .join("");
+  const linXml =
+    fill.linear === undefined
+      ? ""
+      : `<a:lin ang="${Math.round(fill.linear.angle * 60_000)}"${
+          fill.linear.scaled === undefined
+            ? ""
+            : ` scaled="${fill.linear.scaled ? "1" : "0"}"`
+        }/>`;
+  const pathXml =
+    fill.path === undefined
+      ? ""
+      : `<a:path path="${fill.path.shape}">${
+          fill.path.fillToRect === undefined
+            ? ""
+            : `<a:fillToRect l="${Math.round(fill.path.fillToRect.l * 100_000)}" t="${Math.round(fill.path.fillToRect.t * 100_000)}" r="${Math.round(fill.path.fillToRect.r * 100_000)}" b="${Math.round(fill.path.fillToRect.b * 100_000)}"/>`
+        }</a:path>`;
+  return `<a:gradFill${rotAttr}><a:gsLst>${stops}</a:gsLst>${linXml}${pathXml}</a:gradFill>`;
+}
+
+function formatLineStyleXml(line: FormatLineStyle): string {
+  const attrs = [
+    line.widthEmu === undefined ? "" : ` w="${line.widthEmu}"`,
+    line.cap === undefined ? "" : ` cap="${line.cap}"`,
+    line.compound === undefined ? "" : ` cmpd="${line.compound}"`,
+    line.align === undefined ? "" : ` algn="${line.align}"`,
+  ].join("");
+  const fill =
+    line.fill === undefined
+      ? `<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>`
+      : formatFillStyleXml(line.fill);
+  const dash =
+    line.dash === undefined
+      ? ""
+      : `<a:prstDash val="${xmlEscape(line.dash)}"/>`;
+  return `<a:ln${attrs}>${fill}${dash}</a:ln>`;
+}
+
+function formatEffectStyleXml(effect: FormatEffectStyle): string {
+  if (effect.shadow === undefined) {
+    return "<a:effectStyle><a:effectLst/></a:effectStyle>";
+  }
+  const blur = Math.round((effect.shadow.blur ?? 0) * 12_700);
+  const dist = Math.round((effect.shadow.distance ?? 0) * 12_700);
+  const dir = Math.round((effect.shadow.angle ?? 0) * 60_000);
+  const color =
+    typeof effect.shadow.color === "string" &&
+    effect.shadow.color.startsWith("#")
+      ? `<a:srgbClr val="${normalizedHex6(effect.shadow.color, "shadow.color")}"/>`
+      : '<a:srgbClr val="000000"><a:alpha val="38000"/></a:srgbClr>';
+  return `<a:effectStyle><a:effectLst><a:outerShdw blurRad="${blur}" dist="${dist}" dir="${dir}" rotWithShape="0">${color}</a:outerShdw></a:effectLst></a:effectStyle>`;
+}
+
+function formatSchemeXml(scheme?: FormatScheme): string {
   const fill = `<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>`;
   const line = `<a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`;
   const effect = `<a:effectStyle><a:effectLst/></a:effectStyle>`;
-  const format = `<a:fmtScheme name="Office"><a:fillStyleLst>${fill}${fill}${fill}</a:fillStyleLst><a:lnStyleLst>${line}${line}${line}</a:lnStyleLst><a:effectStyleLst>${effect}${effect}${effect}</a:effectStyleLst><a:bgFillStyleLst>${fill}${fill}${fill}</a:bgFillStyleLst></a:fmtScheme>`;
+  if (scheme === undefined) {
+    return `<a:fmtScheme name="Office"><a:fillStyleLst>${fill}${fill}${fill}</a:fillStyleLst><a:lnStyleLst>${line}${line}${line}</a:lnStyleLst><a:effectStyleLst>${effect}${effect}${effect}</a:effectStyleLst><a:bgFillStyleLst>${fill}${fill}${fill}</a:bgFillStyleLst></a:fmtScheme>`;
+  }
+  const fillList =
+    scheme.fillStyles !== undefined && scheme.fillStyles.length > 0
+      ? scheme.fillStyles.map(formatFillStyleXml).join("")
+      : `${fill}${fill}${fill}`;
+  const lnList =
+    scheme.lineStyles !== undefined && scheme.lineStyles.length > 0
+      ? scheme.lineStyles.map(formatLineStyleXml).join("")
+      : `${line}${line}${line}`;
+  const effList =
+    scheme.effectStyles !== undefined && scheme.effectStyles.length > 0
+      ? scheme.effectStyles.map(formatEffectStyleXml).join("")
+      : `${effect}${effect}${effect}`;
+  const bgList =
+    scheme.bgFillStyles !== undefined && scheme.bgFillStyles.length > 0
+      ? scheme.bgFillStyles.map(formatFillStyleXml).join("")
+      : `${fill}${fill}${fill}`;
+  return `<a:fmtScheme name="${xmlEscape(scheme.name ?? "Office")}"><a:fillStyleLst>${fillList}</a:fillStyleLst><a:lnStyleLst>${lnList}</a:lnStyleLst><a:effectStyleLst>${effList}</a:effectStyleLst><a:bgFillStyleLst>${bgList}</a:bgFillStyleLst></a:fmtScheme>`;
+}
+
+/**
+ * Serializes a resolved deck or master theme as a native theme part.
+ */
+export function themeXml(value: Theme): string {
+  const name = xmlEscape(value.name);
+  const colors = colorSchemeXml(value.name, value.colors);
+  const fonts = fontSchemeXml(value.name, value.fonts.major, value.fonts.minor);
+  const format = formatSchemeXml(value.formatScheme);
   return xmlDocument(
     `<a:theme xmlns:a="${namespaces.a}" name="${name}"><a:themeElements>${colors}${fonts}${format}</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`,
   );
+}
+
+function effectiveThemeWithOverride(
+  baseTheme: Theme,
+  override: ThemeOverride | undefined,
+): Theme {
+  if (override === undefined) return baseTheme;
+  const mergedColors = { ...baseTheme.colors };
+  if (override.colors !== undefined) {
+    for (const slot of nativeColorSlots) {
+      const value = override.colors[slot];
+      if (value !== undefined) mergedColors[slot] = value;
+    }
+  }
+  const mergedFonts = {
+    ...baseTheme.fonts,
+    ...(override.fonts?.major === undefined
+      ? {}
+      : { major: override.fonts.major }),
+    ...(override.fonts?.minor === undefined
+      ? {}
+      : { minor: override.fonts.minor }),
+  };
+  return {
+    ...baseTheme,
+    colors: mergedColors,
+    fonts: mergedFonts,
+    ...(override.formatScheme === undefined
+      ? baseTheme.formatScheme === undefined
+        ? {}
+        : { formatScheme: baseTheme.formatScheme }
+      : { formatScheme: override.formatScheme }),
+  };
+}
+
+function hasThemeOverrideContent(override: ThemeOverride | undefined): boolean {
+  if (override === undefined) return false;
+  return (
+    (override.colors !== undefined &&
+      Object.keys(override.colors).length > 0) ||
+    (override.fonts !== undefined &&
+      (override.fonts.major !== undefined ||
+        override.fonts.minor !== undefined)) ||
+    override.formatScheme !== undefined
+  );
+}
+
+export function themeOverrideXml(
+  override: ThemeOverride,
+  baseTheme: Theme,
+): string {
+  let colorsXml = "";
+  if (override.colors !== undefined) {
+    const merged = {} as Record<NativeColorSlot, string>;
+    for (const slot of nativeColorSlots) {
+      merged[slot] = override.colors[slot] ?? baseTheme.colors[slot];
+    }
+    colorsXml = colorSchemeXml(baseTheme.name, merged);
+  }
+  const fontsXml =
+    override.fonts === undefined
+      ? ""
+      : fontSchemeXml(
+          baseTheme.name,
+          override.fonts.major ?? baseTheme.fonts.major,
+          override.fonts.minor ?? baseTheme.fonts.minor,
+        );
+  const formatXml =
+    override.formatScheme === undefined
+      ? ""
+      : formatSchemeXml(override.formatScheme);
+  return xmlDocument(
+    `<a:themeOverride xmlns:a="${namespaces.a}">${colorsXml}${fontsXml}${formatXml}</a:themeOverride>`,
+  );
+}
+
+export function colorMapAttributesXml(map: ColorMap): string {
+  return schemeColorSlots.map((slot) => `${slot}="${map[slot]}"`).join(" ");
+}
+
+export function colorMapOverrideXml(override?: ColorMapOverride): string {
+  if (override === undefined || override === "master") {
+    return "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>";
+  }
+  return `<p:clrMapOvr><a:overrideClrMapping ${colorMapAttributesXml(override)}/></p:clrMapOvr>`;
 }
 
 function masterXml(
   spec: EmittedSlideMasterSpec,
   layoutIds: readonly { readonly id: number; readonly rId: string }[],
 ): string {
-  const colorMap =
-    '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
+  const colorMap = `<p:clrMap ${colorMapAttributesXml(spec.colorMap ?? defaultColorMap)}/>`;
   const preserveAttr =
     spec.preserve === undefined
       ? ""
@@ -318,7 +565,7 @@ function layoutXml(spec: EmittedSlideLayoutSpec): string {
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml()}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}</p:sldLayout>`,
   );
 }
 
@@ -328,9 +575,10 @@ function slide(
   slideXml: string,
   backgroundXml: string,
   hidden: boolean,
+  colorMapOverride?: ColorMapOverride,
 ): string {
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
   );
 }
 
@@ -366,11 +614,32 @@ function coreProperties(title: string): string {
   );
 }
 
+export function countAllocatedMasterThemeParts(
+  mastersInput: readonly EmittedSlideMasterSpec[] | undefined,
+  fallbackTheme: Theme = defaultTheme,
+): number {
+  const masters =
+    mastersInput !== undefined && mastersInput.length > 0
+      ? mastersInput
+      : defaultEmittedMasters;
+  const seen = new Set<Theme>();
+  let count = 0;
+  for (const spec of masters) {
+    const masterTheme = spec.theme ?? fallbackTheme;
+    if (masterTheme !== defaultTheme && seen.has(masterTheme)) continue;
+    if (masterTheme !== defaultTheme) seen.add(masterTheme);
+    count += 1;
+  }
+  return count;
+}
+
 export function pptxParts(
   size: { readonly width: number; readonly height: number },
   slides: readonly {
     readonly id: string;
     readonly layoutKey?: string;
+    readonly colorMapOverride?: ColorMapOverride;
+    readonly themeOverride?: ThemeOverride;
     readonly hidden?: boolean;
     readonly shapeXml: string;
     readonly backgroundXml?: string;
@@ -401,20 +670,74 @@ export function pptxParts(
   // Allocate globally unique >= 2147483648 identifiers across every master and layout.
   let nextMasterLayoutId = minimumSlideLayoutId;
   let globalLayoutNumber = 0;
+  const allocatedThemePartByTheme = new Map<
+    Theme,
+    { readonly partPath: string; readonly relTarget: string }
+  >();
+  const emittedThemeParts: {
+    readonly partPath: string;
+    readonly xml: string;
+  }[] = [];
+  const emittedThemeOverrideParts: {
+    readonly partPath: string;
+    readonly xml: string;
+  }[] = [];
+
+  const allocateThemePart = (
+    masterTheme: Theme,
+  ): { readonly partPath: string; readonly relTarget: string } => {
+    if (masterTheme !== defaultTheme) {
+      const existing = allocatedThemePartByTheme.get(masterTheme);
+      if (existing !== undefined) return existing;
+    }
+    const themeNumber = emittedThemeParts.length + 1;
+    const partPath = `ppt/theme/theme${themeNumber}.xml`;
+    const allocation = {
+      partPath,
+      relTarget: `../theme/theme${themeNumber}.xml`,
+    };
+    emittedThemeParts.push({ partPath, xml: themeXml(masterTheme) });
+    if (masterTheme !== defaultTheme) {
+      allocatedThemePartByTheme.set(masterTheme, allocation);
+    }
+    return allocation;
+  };
+
+  const allocateThemeOverridePart = (
+    override: ThemeOverride,
+    baseTheme: Theme,
+  ): string => {
+    const overrideNumber = emittedThemeOverrideParts.length + 1;
+    const partPath = `ppt/theme/themeOverride${overrideNumber}.xml`;
+    emittedThemeOverrideParts.push({
+      partPath,
+      xml: themeOverrideXml(override, baseTheme),
+    });
+    return `../theme/themeOverride${overrideNumber}.xml`;
+  };
+
   const allocatedMasters = masters.map((spec, masterIndex) => {
     const masterNumber = masterIndex + 1;
     const masterId = nextMasterLayoutId++;
     const masterPart = `ppt/slideMasters/slideMaster${masterNumber}.xml`;
+    const masterTheme = spec.theme ?? themeValue;
+    const themeAllocation = allocateThemePart(masterTheme);
     const layouts = spec.layouts.map((layoutSpec, layoutIndex) => {
       const layoutNumber = ++globalLayoutNumber;
       const layoutId = nextMasterLayoutId++;
       const layoutPart = `ppt/slideLayouts/slideLayout${layoutNumber}.xml`;
+      const themeOverrideTarget = hasThemeOverrideContent(
+        layoutSpec.themeOverride,
+      )
+        ? allocateThemeOverridePart(layoutSpec.themeOverride!, masterTheme)
+        : undefined;
       return {
         spec: layoutSpec,
         layoutNumber,
         layoutId,
         layoutPart,
         masterRelId: `rId${layoutIndex + 1}`,
+        themeOverrideTarget,
       };
     });
     return {
@@ -422,20 +745,41 @@ export function pptxParts(
       masterNumber,
       masterId,
       masterPart,
+      masterTheme,
+      themeRelTarget: themeAllocation.relTarget,
       presentationRelId: `rId${masterNumber}`,
       layouts,
     };
   });
 
   const layoutPartByKey = new Map<string, string>();
+  const masterThemeByLayoutKey = new Map<string, Theme>();
   for (const allocatedMaster of allocatedMasters) {
     for (const allocatedLayout of allocatedMaster.layouts) {
       layoutPartByKey.set(allocatedLayout.spec.key, allocatedLayout.layoutPart);
+      masterThemeByLayoutKey.set(
+        allocatedLayout.spec.key,
+        effectiveThemeWithOverride(
+          allocatedMaster.masterTheme,
+          allocatedLayout.spec.themeOverride,
+        ),
+      );
     }
   }
   const fallbackLayoutPart =
     allocatedMasters[0]?.layouts[0]?.layoutPart ??
     "ppt/slideLayouts/slideLayout1.xml";
+  const fallbackMasterTheme = allocatedMasters[0]?.masterTheme ?? themeValue;
+
+  const slideThemeOverrideTargets = slides.map((slideSpec) => {
+    if (!hasThemeOverrideContent(slideSpec.themeOverride)) return undefined;
+    const baseTheme =
+      (slideSpec.layoutKey === undefined
+        ? undefined
+        : masterThemeByLayoutKey.get(slideSpec.layoutKey)) ??
+      fallbackMasterTheme;
+    return allocateThemeOverridePart(slideSpec.themeOverride!, baseTheme);
+  });
 
   const masterRelationships: PptxRelationship[] = allocatedMasters.map(
     ({ masterNumber, presentationRelId }) => ({
@@ -479,6 +823,8 @@ export function pptxParts(
     "[Content_Types].xml": contentTypes(
       allocatedMasters.length,
       globalLayoutNumber,
+      emittedThemeParts.length,
+      emittedThemeOverrideParts.length,
       slides.length,
       resources,
       packageParts,
@@ -508,11 +854,13 @@ export function pptxParts(
     ]),
   };
 
-  const serializedTheme = themeXml(themeValue);
+  for (const themePart of emittedThemeParts) {
+    parts[themePart.partPath] = themePart.xml;
+  }
+  for (const overridePart of emittedThemeOverrideParts) {
+    parts[overridePart.partPath] = overridePart.xml;
+  }
   for (const allocatedMaster of allocatedMasters) {
-    // PowerPoint rejects presentations where multiple SlideMasters share one theme part.
-    parts[`ppt/theme/theme${allocatedMaster.masterNumber}.xml`] =
-      serializedTheme;
     parts[allocatedMaster.masterPart] = masterXml(
       allocatedMaster.spec,
       allocatedMaster.layouts.map((item) => ({
@@ -531,25 +879,45 @@ export function pptxParts(
       {
         id: `rId${allocatedMaster.layouts.length + 1}`,
         type: `${namespaces.r}/theme`,
-        target: `../theme/theme${allocatedMaster.masterNumber}.xml`,
+        target: allocatedMaster.themeRelTarget,
       },
     ]);
     for (const allocatedLayout of allocatedMaster.layouts) {
       parts[allocatedLayout.layoutPart] = layoutXml(allocatedLayout.spec);
-      parts[
-        `ppt/slideLayouts/_rels/slideLayout${allocatedLayout.layoutNumber}.xml.rels`
-      ] = relationships([
+      const layoutRels: PptxRelationship[] = [
         {
           id: "rId1",
           type: `${namespaces.r}/slideMaster`,
           target: `../slideMasters/slideMaster${allocatedMaster.masterNumber}.xml`,
         },
-      ]);
+        ...(allocatedLayout.themeOverrideTarget === undefined
+          ? []
+          : [
+              {
+                id: "rId2",
+                type: `${namespaces.r}/themeOverride`,
+                target: allocatedLayout.themeOverrideTarget,
+              },
+            ]),
+      ];
+      parts[
+        `ppt/slideLayouts/_rels/slideLayout${allocatedLayout.layoutNumber}.xml.rels`
+      ] = relationships(layoutRels);
     }
   }
 
   slides.forEach(
-    ({ shapeXml, slideXml, backgroundXml, hidden, layoutKey }, index) => {
+    (
+      {
+        shapeXml,
+        slideXml,
+        backgroundXml,
+        hidden,
+        layoutKey,
+        colorMapOverride,
+      },
+      index,
+    ) => {
       const targetLayoutPart =
         (layoutKey === undefined
           ? undefined
@@ -561,15 +929,28 @@ export function pptxParts(
         slideXml ?? "",
         backgroundXml ?? "",
         hidden ?? false,
+        colorMapOverride,
       );
-      parts[`ppt/slides/_rels/slide${index + 1}.xml.rels`] = relationships([
+      const slideOverrideTarget = slideThemeOverrideTargets[index];
+      const slideRels: PptxRelationship[] = [
         {
           id: "rId1",
           type: `${namespaces.r}/slideLayout`,
           target: targetLayoutRel,
         },
         ...slides[index]!.relationships,
-      ]);
+        ...(slideOverrideTarget === undefined
+          ? []
+          : [
+              {
+                id: `rId${slides[index]!.relationships.length + 2}`,
+                type: `${namespaces.r}/themeOverride`,
+                target: slideOverrideTarget,
+              },
+            ]),
+      ];
+      parts[`ppt/slides/_rels/slide${index + 1}.xml.rels`] =
+        relationships(slideRels);
     },
   );
   if (title !== undefined) parts["docProps/core.xml"] = coreProperties(title);

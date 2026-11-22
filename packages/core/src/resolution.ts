@@ -7,7 +7,13 @@
 import type { SlideLayoutType } from "#/masters.ts";
 import type { MorphKey } from "#/morph.ts";
 import type { QueryContentNode } from "#/query.ts";
-import type { ThemeContext } from "#/theme.ts";
+import type {
+  ColorMap,
+  ColorMapOverride,
+  Theme,
+  ThemeContext,
+  ThemeOverride,
+} from "#/theme.ts";
 import type {
   Diagnostic,
   EmitContext,
@@ -79,6 +85,8 @@ export type InternalResolvedSlideLayout = {
   readonly userDrawn?: boolean;
   readonly showMasterShapes?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
 };
 
 export type InternalResolvedSlideMaster = {
@@ -86,6 +94,8 @@ export type InternalResolvedSlideMaster = {
   readonly id: string;
   readonly name?: string;
   readonly preserve?: boolean;
+  readonly theme: Theme;
+  readonly colorMap: ColorMap;
   readonly layouts: readonly InternalResolvedSlideLayout[];
 };
 
@@ -94,6 +104,8 @@ export type InternalResolvedSlide = {
   readonly authorId?: string;
   readonly index: number;
   readonly layoutKey?: string;
+  readonly colorMapOverride?: ColorMapOverride;
+  readonly themeOverride?: ThemeOverride;
   readonly section?: string;
   readonly hidden: boolean;
   readonly content: readonly QueryContentNode[];

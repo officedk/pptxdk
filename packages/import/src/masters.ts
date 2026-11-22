@@ -1,7 +1,11 @@
 import {
   slideLayoutTypeSchema,
+  type ColorMap,
+  type ColorMapOverride,
   type SlideLayoutProps,
   type SlideMasterProps,
+  type Theme,
+  type ThemeOverride,
 } from "@pptxdk/core";
 import {
   createSlideLayoutNode,
@@ -17,6 +21,8 @@ import {
   P_NS,
   REL_SLIDE_LAYOUT,
   REL_SLIDE_MASTER,
+  REL_THEME,
+  REL_THEME_OVERRIDE,
   R_NS,
 } from "#/namespaces.ts";
 import {
@@ -24,6 +30,13 @@ import {
   type ParsedRelationshipEntry,
   type PptxPackage,
 } from "#/opc.ts";
+import {
+  isNonDefaultColorMap,
+  readColorMapElement,
+  readColorMapOverride,
+  readThemeOverridePart,
+  readThemePart,
+} from "#/themes.ts";
 import { OoxmlBoolSchema, OoxmlNonNegativeIntSchema } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
@@ -42,21 +55,6 @@ const SlideLayoutAttrsSchema = z.object({
   showMasterSp: OoxmlBoolSchema.optional(),
   showMasterPhAnim: OoxmlBoolSchema.optional(),
 });
-
-const defaultColorMap: Readonly<Record<string, string>> = {
-  bg1: "lt1",
-  tx1: "dk1",
-  bg2: "lt2",
-  tx2: "dk2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
 
 /** Allocates a deterministic unique author id within `used`, disambiguating collisions with `-2`, `-3`, ... */
 export function allocateScopedAuthorId(
@@ -177,28 +175,6 @@ function validateMasterLayoutNumericId(
   }
 }
 
-function consumeDefaultColorMapIfStandard(clrMap: XmlElementCursor): void {
-  const attrs = clrMap.element.attributes;
-  const observed = new Map<string, string>();
-  for (let i = 0; i < attrs.length; i += 1) {
-    const attr = attrs.item(i);
-    if (attr === null) continue;
-    const ns = attr.namespaceURI ?? "";
-    const local = attr.localName ?? attr.name;
-    if (ns === "" && local in defaultColorMap) {
-      observed.set(local, attr.value);
-    }
-  }
-  const matchesDefault = Object.entries(defaultColorMap).every(
-    ([slot, target]) => observed.get(slot) === target,
-  );
-  if (matchesDefault) {
-    for (const slot of Object.keys(defaultColorMap)) {
-      clrMap.consumeAttr(slot);
-    }
-  }
-}
-
 function readSlideLayoutPart(
   pkg: PptxPackage,
   layoutPartPath: string,
@@ -315,8 +291,17 @@ function readSlideLayoutPart(
     consumeIdentityShapeTreeBoilerplate(spTree);
   }
   const clrMapOvr = layoutCursor.child(P_NS, "clrMapOvr");
+  let colorMapOverride: ColorMapOverride | undefined;
   if (clrMapOvr !== undefined) {
-    clrMapOvr.ignoreEmptyChild(A_NS, "masterClrMapping");
+    const parsedOvr = readColorMapOverride(
+      clrMapOvr,
+      layoutPartPath,
+      undefined,
+      diagnostics,
+    );
+    if (parsedOvr !== undefined && parsedOvr !== "master") {
+      colorMapOverride = parsedOvr;
+    }
   }
 
   const layoutRels = pkg.readRelationships(layoutPartPath);
@@ -341,6 +326,35 @@ function readSlideLayoutPart(
     }
   }
 
+  let themeOverride: ThemeOverride | undefined;
+  const themeOverrideRel = layoutRels.entries.find(
+    (entry) =>
+      entry.Type === REL_THEME_OVERRIDE && entry.TargetMode !== "External",
+  );
+  if (themeOverrideRel !== undefined) {
+    const overridePart = resolvePartPath(
+      layoutPartPath,
+      themeOverrideRel.Target,
+    );
+    if (overridePart === undefined || !pkg.hasPart(overridePart)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part: layoutPartPath, xpath: themeOverrideRel.xpath },
+        relationshipId: themeOverrideRel.Id,
+        targetPart: overridePart ?? themeOverrideRel.Target,
+      });
+    } else {
+      themeOverride = readThemeOverridePart(
+        pkg,
+        overridePart,
+        undefined,
+        diagnostics,
+      );
+    }
+  }
+
   appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
 
   const layoutId = allocateScopedAuthorId(
@@ -359,6 +373,8 @@ function readSlideLayoutPart(
     ...(showMasterPlaceholderAnimations === undefined
       ? {}
       : { showMasterPlaceholderAnimations }),
+    ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+    ...(themeOverride === undefined ? {} : { themeOverride }),
   };
   return createSlideLayoutNode(props);
 }
@@ -368,6 +384,7 @@ function readSlideMasterPart(
   masterPartPath: string,
   masterOrder: number,
   usedDeckIds: Set<string>,
+  themesByPartPath: Map<string, Theme>,
   layoutNodeByPartPath: Map<string, SlideLayoutContainer>,
   diagnostics: ImportDiagnostic[],
 ) {
@@ -441,8 +458,17 @@ function readSlideMasterPart(
   }
 
   const clrMap = masterCursor.child(P_NS, "clrMap");
+  let colorMap: ColorMap | undefined;
   if (clrMap !== undefined) {
-    consumeDefaultColorMapIfStandard(clrMap);
+    const parsedMap = readColorMapElement(
+      clrMap,
+      masterPartPath,
+      undefined,
+      diagnostics,
+    );
+    if (isNonDefaultColorMap(parsedMap)) {
+      colorMap = parsedMap;
+    }
   }
 
   const txStyles = masterCursor.child(P_NS, "txStyles");
@@ -459,6 +485,31 @@ function readSlideMasterPart(
     masterRelById.set(rel.Id, rel);
   }
 
+  let masterTheme: Theme | undefined;
+  const themeRel = masterRels.entries.find(
+    (entry) => entry.Type === REL_THEME && entry.TargetMode !== "External",
+  );
+  if (themeRel !== undefined) {
+    const themePartPath = resolvePartPath(masterPartPath, themeRel.Target);
+    if (themePartPath === undefined || !pkg.hasPart(themePartPath)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part: masterPartPath, xpath: themeRel.xpath },
+        relationshipId: themeRel.Id,
+        targetPart: themePartPath ?? themeRel.Target,
+      });
+    } else {
+      masterTheme = readThemePart(
+        pkg,
+        themePartPath,
+        themesByPartPath,
+        diagnostics,
+      );
+    }
+  }
+
   const masterId = allocateScopedAuthorId(
     masterName,
     usedDeckIds,
@@ -468,6 +519,8 @@ function readSlideMasterPart(
     id: masterId,
     ...(masterName === undefined ? {} : { name: masterName }),
     ...(preserve === undefined ? {} : { preserve }),
+    ...(masterTheme === undefined ? {} : { theme: masterTheme }),
+    ...(colorMap === undefined ? {} : { colorMap }),
   };
   const masterNode = createSlideMasterNode(masterProps);
 
@@ -553,6 +606,7 @@ export function importMastersAndLayouts(
   diagnostics: ImportDiagnostic[],
 ): ReadonlyMap<string, SlideLayoutContainer> {
   const layoutNodeByPartPath = new Map<string, SlideLayoutContainer>();
+  const themesByPartPath = new Map<string, Theme>();
   const masterIdLst = presCursor.child(P_NS, "sldMasterIdLst");
   if (masterIdLst === undefined) {
     return layoutNodeByPartPath;
@@ -609,6 +663,7 @@ export function importMastersAndLayouts(
       masterPart,
       index + 1,
       usedDeckIds,
+      themesByPartPath,
       layoutNodeByPartPath,
       diagnostics,
     );

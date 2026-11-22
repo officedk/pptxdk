@@ -1,7 +1,8 @@
 import {
   assertValidLang,
+  schemeColorNameSchema,
   type ColorValue,
-  type NativeColorSlot,
+  type SchemeColorName,
   type Shadow,
   type TextAlignment,
   type TextStyle,
@@ -128,46 +129,8 @@ const SrgbColorSchema = z.object({
 });
 
 const SchemeColorSchema = z.object({
-  val: z.enum([
-    "tx1",
-    "bg1",
-    "tx2",
-    "bg2",
-    "dk1",
-    "lt1",
-    "dk2",
-    "lt2",
-    "accent1",
-    "accent2",
-    "accent3",
-    "accent4",
-    "accent5",
-    "accent6",
-    "hlink",
-    "folHlink",
-  ]),
+  val: schemeColorNameSchema,
 });
-
-const schemeToNativeSlot: Readonly<
-  Record<z.infer<typeof SchemeColorSchema>["val"], NativeColorSlot>
-> = {
-  tx1: "dk1",
-  bg1: "lt1",
-  tx2: "dk2",
-  bg2: "lt2",
-  dk1: "dk1",
-  lt1: "lt1",
-  dk2: "dk2",
-  lt2: "lt2",
-  accent1: "accent1",
-  accent2: "accent2",
-  accent3: "accent3",
-  accent4: "accent4",
-  accent5: "accent5",
-  accent6: "accent6",
-  hlink: "hlink",
-  folHlink: "folHlink",
-};
 
 const anchorToVerticalAlign: Readonly<
   Record<"t" | "ctr" | "b", NonNullable<TextStyle["verticalAlign"]>>
@@ -243,7 +206,7 @@ function readColorElement(
   if (colorCursor === undefined) return undefined;
 
   let baseString: string | undefined;
-  let schemeSlot: NativeColorSlot | undefined;
+  let schemeSlot: SchemeColorName | undefined;
 
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);
@@ -274,7 +237,7 @@ function readColorElement(
       });
       return undefined;
     }
-    schemeSlot = schemeToNativeSlot[parsed.data.val];
+    schemeSlot = parsed.data.val;
   }
 
   const lumMod = readColorModifier(colorCursor, "lumMod");

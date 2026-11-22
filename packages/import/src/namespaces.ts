@@ -26,6 +26,8 @@ export const REL_SLIDE_MASTER =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 export const REL_THEME =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+export const REL_THEME_OVERRIDE =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
 export const REL_FONT =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 export const REL_IMAGE =

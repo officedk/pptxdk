@@ -1,9 +1,12 @@
 export { emit, emittedBuildQuery, validateOptions } from "#/emit.ts";
 export {
   assertXml10Characters,
+  colorMapAttributesXml,
+  colorMapOverrideXml,
   pptxParts,
   pxToEmu,
   resolvedColorXml,
+  themeOverrideXml,
   themeXml,
   xmlDocument,
   xmlEscape,

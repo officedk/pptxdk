@@ -1,3 +1,4 @@
+import type { ColorMapOverride, ThemeOverride } from "@pptxdk/core";
 import type { RegisteredCapabilityModule } from "@pptxdk/core/capability";
 import {
   type CommonNode,
@@ -33,6 +34,7 @@ import {
   P_NS,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,
+  REL_THEME_OVERRIDE,
   R_NS,
   emuToPx,
 } from "#/namespaces.ts";
@@ -47,6 +49,7 @@ import {
   inspectUnsupportedGraphicFrame,
   peekShapeTreeObjectIdentity,
 } from "#/resources.ts";
+import { readColorMapOverride, readThemeOverridePart } from "#/themes.ts";
 import {
   ExtentEmuFragmentSchema,
   OoxmlBoolSchema,
@@ -323,6 +326,53 @@ function readSlidePart(
       ? undefined
       : layoutNodeByPartPath.get(resolvedLayoutPath);
 
+  const clrMapOvr = slideCursor.child(P_NS, "clrMapOvr");
+  let colorMapOverride: ColorMapOverride | undefined;
+  if (clrMapOvr !== undefined) {
+    const parsedOvr = readColorMapOverride(
+      clrMapOvr,
+      slidePartPath,
+      slideIndex,
+      diagnostics,
+    );
+    if (parsedOvr !== undefined && parsedOvr !== "master") {
+      colorMapOverride = parsedOvr;
+    }
+  }
+
+  let themeOverride: ThemeOverride | undefined;
+  const themeOverrideRel = slideRels.entries.find(
+    (entry) =>
+      entry.Type === REL_THEME_OVERRIDE && entry.TargetMode !== "External",
+  );
+  if (themeOverrideRel !== undefined) {
+    const overridePart = resolvePartPath(
+      slidePartPath,
+      themeOverrideRel.Target,
+    );
+    if (overridePart === undefined || !pkg.hasPart(overridePart)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: {
+          part: slidePartPath,
+          xpath: themeOverrideRel.xpath,
+          slideIndex,
+        },
+        relationshipId: themeOverrideRel.Id,
+        targetPart: overridePart ?? themeOverrideRel.Target,
+      });
+    } else {
+      themeOverride = readThemeOverridePart(
+        pkg,
+        overridePart,
+        slideIndex,
+        diagnostics,
+      );
+    }
+  }
+
   const rawSlideName = cSld.attr("name");
   const slideId = allocateScopedAuthorId(
     rawSlideName,
@@ -332,13 +382,10 @@ function readSlidePart(
   const slideNode = createSlideNode({
     id: slideId,
     ...(layoutNode === undefined ? {} : { layout: layoutNode }),
+    ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+    ...(themeOverride === undefined ? {} : { themeOverride }),
     ...(hidden ? { hidden: true } : {}),
   });
-
-  const clrMapOvr = slideCursor.child(P_NS, "clrMapOvr");
-  if (clrMapOvr !== undefined) {
-    clrMapOvr.ignoreEmptyChild(A_NS, "masterClrMapping");
-  }
 
   const spTree = cSld.child(P_NS, "spTree");
   if (spTree !== undefined) {

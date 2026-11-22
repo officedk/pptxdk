@@ -14,15 +14,31 @@ export type {
   PptxPackageResource,
   PptxRelationship,
 } from "#/ooxml.ts";
+export {
+  buildOptionsSchema,
+  diagnosticSchema,
+  diagnosticSeveritySchema,
+  emitOptionsSchema,
+  extensionSchema,
+  fontEmbeddingModeSchema,
+  formatBaseline,
+  formatBaselineSchema,
+  targetNameSchema,
+  targetSchema,
+  targets,
+} from "@pptxdk/core/build";
 export type {
   BuildOptions,
   BuildQuery,
   BuildReport,
   BuildResult,
   Diagnostic,
+  DiagnosticSeverity,
   EmitOptions,
   EmitResult,
   Extension,
+  FontEmbeddingMode,
   Resolution,
   Target,
+  TargetName,
 } from "@pptxdk/core/build";

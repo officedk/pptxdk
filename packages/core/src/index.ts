@@ -74,7 +74,31 @@ export {
   paddingStyleKeys,
   parseCapabilityLayoutContract,
 } from "#/layout.ts";
-export { formatBaseline, targets } from "#/types.ts";
+export {
+  buildOptionsSchema,
+  diagnosticSchema,
+  diagnosticSeveritySchema,
+  emitOptionsSchema,
+  extensionSchema,
+  fontEmbeddingModeSchema,
+  formatBaseline,
+  formatBaselineSchema,
+  resolveOptionsSchema,
+  targetNameSchema,
+  targetSchema,
+  targets,
+} from "#/stage-options.ts";
+export type {
+  BuildOptions,
+  Diagnostic,
+  DiagnosticSeverity,
+  EmitOptions,
+  Extension,
+  FontEmbeddingMode,
+  ResolveOptions,
+  Target,
+  TargetName,
+} from "#/stage-options.ts";
 export type {
   ColorValue,
   Font,
@@ -110,7 +134,6 @@ export type {
   BoundSlideCapabilityModule,
   BoundSlideContinuityCollaboration,
   BuildQuery,
-  BuildOptions,
   BuildReport,
   BuildResult,
   CapabilityLayoutContract,
@@ -130,12 +153,9 @@ export type {
   CapabilityWarning,
   ContributionResolver,
   DeckProps,
-  Diagnostic,
   EmitContext,
-  EmitOptions,
   EmitOutput,
   EmitResult,
-  Extension,
   GeometryBox,
   LayoutChildReference,
   Locator,
@@ -152,7 +172,6 @@ export type {
   PreviewWarning,
   Resolution,
   ResolutionReport,
-  ResolveOptions,
   ResolvedLink,
   ResolvedObject,
   ResolvedObjectChildren,
@@ -180,5 +199,4 @@ export type {
   SlideProps,
   SectionProps,
   TransparentCapabilityModule,
-  Target,
 } from "#/types.ts";

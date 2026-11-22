@@ -17,12 +17,20 @@ import {
   type WriteCliOutput,
 } from "@ykdz/cli-contract";
 import { isNodeBrokenPipe } from "@ykdz/cli-contract/node";
-import { BuildError, targets, type Diagnostic, type Target } from "pptxdk";
+import {
+  BuildError,
+  fontEmbeddingModeSchema,
+  targetNameSchema,
+  targets,
+  type Diagnostic,
+  type Target,
+} from "pptxdk";
 import {
   buildFromSource,
   previewFromSource,
   SourceLoadError,
 } from "pptxdk/node";
+import { PreviewPageRangeError, previewPageNumberSchema } from "pptxdk/preview";
 import { z } from "zod";
 
 /**
@@ -44,16 +52,13 @@ type CliDependencies = {
 };
 
 // Read package.json at runtime rather than statically importing it because tsconfig.build.json sets rootDir to src.
-const { version: cliVersion } = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-) as { readonly version: string };
-
-const targetChoices = [
-  targets.transitional.name,
-  ...Object.values(targets)
-    .map((target) => target.name)
-    .filter((name) => name !== targets.transitional.name),
-] as const;
+const { version: cliVersion } = z
+  .object({ version: z.string().min(1) })
+  .parse(
+    JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ),
+  );
 
 const diagnosticItemSchema = z.object({
   path: z.string(),
@@ -62,24 +67,25 @@ const diagnosticItemSchema = z.object({
 });
 
 const previewPageItemSchema = z.object({
-  page: z.number().int().positive(),
+  page: previewPageNumberSchema,
   id: z.string(),
   output: z.string(),
 });
 
 const previewDiagnosticItemSchema = z.object({
-  page: z.number().int().positive(),
+  page: previewPageNumberSchema,
   path: z.string(),
   message: z.string(),
 });
 
-const buildInputSchema = z.object({
+export const buildInputSchema = z.object({
   entry: z.string().min(1),
   out: z.string().min(1).optional(),
   export: z.string().min(1).optional(),
-  target: z.enum(targetChoices).optional(),
-  embedFonts: z.enum(["full", "subset"]).optional(),
+  target: targetNameSchema.optional(),
+  embedFonts: fontEmbeddingModeSchema.optional(),
 });
+export type BuildInput = z.infer<typeof buildInputSchema>;
 
 function parsePagesSpec(raw: string): number[] | undefined {
   const parts = raw.split(",");
@@ -89,25 +95,19 @@ function parsePagesSpec(raw: string): number[] | undefined {
   for (const part of parts) {
     // Reject empty items ("", "1,", ",1", "1,,2"), whitespace, signs, decimals, or non-digits.
     if (/^\d+$/u.test(part)) {
-      const page = Number(part);
-      if (!Number.isSafeInteger(page) || page < 1) return undefined;
-      selected.add(page);
+      const parsed = previewPageNumberSchema.safeParse(Number(part));
+      if (!parsed.success) return undefined;
+      selected.add(parsed.data);
       continue;
     }
     const rangeMatch = /^(\d+)-(\d+)$/u.exec(part);
     if (rangeMatch !== null) {
-      const start = Number(rangeMatch[1]);
-      const end = Number(rangeMatch[2]);
-      if (
-        !Number.isSafeInteger(start) ||
-        !Number.isSafeInteger(end) ||
-        start < 1 ||
-        end < 1 ||
-        start > end
-      ) {
+      const start = previewPageNumberSchema.safeParse(Number(rangeMatch[1]));
+      const end = previewPageNumberSchema.safeParse(Number(rangeMatch[2]));
+      if (!start.success || !end.success || start.data > end.data) {
         return undefined;
       }
-      for (let page = start; page <= end; page += 1) {
+      for (let page = start.data; page <= end.data; page += 1) {
         selected.add(page);
       }
       continue;
@@ -119,7 +119,7 @@ function parsePagesSpec(raw: string): number[] | undefined {
 
 const pagesOptionSchema = z.codec(
   z.string().min(1),
-  z.array(z.number().int().positive()).min(1),
+  z.array(previewPageNumberSchema).min(1),
   {
     decode(raw, ctx) {
       const parsed = parsePagesSpec(raw);
@@ -140,24 +140,27 @@ const pagesOptionSchema = z.codec(
   },
 );
 
-const previewInputSchema = z.object({
+export const previewInputSchema = z.object({
   entry: z.string().min(1),
   outDir: z.string().min(1).optional(),
   export: z.string().min(1).optional(),
   pages: pagesOptionSchema.optional(),
 });
+export type PreviewInput = z.infer<typeof previewInputSchema>;
 
-const builtSchema = z.object({
+export const builtSchema = z.object({
   output: z.string(),
   slides: z.number().int().nonnegative(),
   warnings: z.array(diagnosticItemSchema),
 });
+export type BuiltOutput = z.infer<typeof builtSchema>;
 
-const previewedSchema = z.object({
+export const previewedSchema = z.object({
   outputDir: z.string(),
   pages: z.array(previewPageItemSchema),
   warnings: z.array(diagnosticItemSchema),
 });
+export type PreviewedOutput = z.infer<typeof previewedSchema>;
 
 const invalidOutputSchema = z.object({
   entry: z.string(),
@@ -165,7 +168,7 @@ const invalidOutputSchema = z.object({
 });
 
 const pageOutOfRangeSchema = z.object({
-  requestedPages: z.array(z.number().int().positive()),
+  requestedPages: z.array(previewPageNumberSchema),
   totalSlides: z.number().int().nonnegative(),
 });
 
@@ -530,14 +533,11 @@ async function previewDeckCommand({
         diagnostics: toBuildFailureDiagnostics(error.diagnostics),
       });
     }
-    if (input.pages !== undefined && error instanceof RangeError) {
-      const { PreviewPageRangeError } = await import("pptxdk/preview");
-      if (error instanceof PreviewPageRangeError) {
-        return outcome.failure.pageOutOfRange({
-          requestedPages: input.pages,
-          totalSlides: error.totalSlides,
-        });
-      }
+    if (input.pages !== undefined && error instanceof PreviewPageRangeError) {
+      return outcome.failure.pageOutOfRange({
+        requestedPages: input.pages,
+        totalSlides: error.totalSlides,
+      });
     }
     if (error instanceof SourceLoadError) {
       return outcome.failure.sourceLoadFailed({

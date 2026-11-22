@@ -1,10 +1,46 @@
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { slideBackgroundCapability } from "@pptxdk/capabilities/slide-background";
 import { emit } from "@pptxdk/emit";
+import {
+  ImportError,
+  createImporter,
+  type CascadedOmission,
+  type EditabilityLoss,
+  type FatalImportIssue,
+  type ImportDiagnostic,
+  type ImportLocation,
+  type ImportOptions,
+  type ImportReport,
+  type ImportResult,
+} from "@pptxdk/import";
 
 import { createStagePipeline } from "./compose.ts";
 
 const pipeline = createStagePipeline(documentCapabilities);
+const importDocument = createImporter(documentCapabilities);
+
+/**
+ * Synchronously imports a Transitional PPTX archive into an editable CommonNode document
+ * and a structured `ImportReport`, detaching completely from caller-owned input bytes.
+ */
+export function importPptx(
+  input: Uint8Array,
+  options?: ImportOptions,
+): ImportResult {
+  return importDocument(input, options);
+}
+
+export { ImportError };
+export type {
+  CascadedOmission,
+  EditabilityLoss,
+  FatalImportIssue,
+  ImportDiagnostic,
+  ImportLocation,
+  ImportOptions,
+  ImportReport,
+  ImportResult,
+};
 
 /**
  * Synchronously resolves an editable CommonNode document into an immutable Resolution snapshot.
@@ -30,6 +66,7 @@ export {
   AuthorQueryError,
   BuildError,
   BuildQueryError,
+  buildOptionsSchema,
   CapabilityError,
   CommonContainer,
   CommonNode,
@@ -37,7 +74,13 @@ export {
   deckPropsSchema,
   defaultTheme,
   defineTheme,
+  diagnosticSchema,
+  diagnosticSeveritySchema,
+  emitOptionsSchema,
+  extensionSchema,
+  fontEmbeddingModeSchema,
   formatBaseline,
+  formatBaselineSchema,
   isNativeColorSlot,
   layoutLengthSchema,
   layoutSpacingSchema,
@@ -46,10 +89,13 @@ export {
   linkTargetSchema,
   nativeColorSlots,
   paddingStyleSchema,
+  resolveOptionsSchema,
   RichTextContainer,
   sectionPropsSchema,
   slideBackgroundSchema,
   slidePropsSchema,
+  targetNameSchema,
+  targetSchema,
   targets,
   textStyleSchema,
   themeInputSchema,
@@ -74,6 +120,7 @@ export type {
   ColorValue,
   DeckProps,
   Diagnostic,
+  DiagnosticSeverity,
   DocumentProps,
   DocumentStyle,
   DocumentUpdate,
@@ -86,6 +133,7 @@ export type {
   FontOptions,
   FontReference,
   FontSize,
+  FontEmbeddingMode,
   GeometryBox,
   GradientStop,
   LayoutChildReference,
@@ -121,6 +169,7 @@ export type {
   SlideQuery,
   StyleUpdate,
   Target,
+  TargetName,
   Theme,
   ThemeColor,
   ThemeInput,

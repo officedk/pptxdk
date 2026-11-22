@@ -1,3 +1,5 @@
+import type { RegisteredCapabilityModule } from "@pptxdk/core/capability";
+
 import { boxCapability } from "./box/box.ts";
 import { chartCapability } from "./chart/chart.ts";
 import { groupCapability } from "./group/group.ts";
@@ -10,8 +12,7 @@ import { tableCapability } from "./table/table.ts";
 import { textCapability } from "./text/text.ts";
 import { transitionCapability } from "./transition/transition.ts";
 
-/** Baseline capabilities enabled by the public document build; factories never register capabilities. */
-export const documentCapabilities = Object.freeze([
+const baselineCapabilities = [
   boxCapability,
   chartCapability,
   groupCapability,
@@ -23,4 +24,8 @@ export const documentCapabilities = Object.freeze([
   tableCapability,
   textCapability,
   transitionCapability,
-] as const);
+] as const satisfies readonly RegisteredCapabilityModule[];
+
+/** Baseline capabilities enabled by the public document build; factories never register capabilities. */
+export const documentCapabilities: typeof baselineCapabilities =
+  Object.freeze(baselineCapabilities);

@@ -24,7 +24,7 @@ export type ExpandDocumentOptions = {
    * Cooperative cancellation for one React expansion; no default timeout when unspecified.
    * Cancellation before or during expansion rejects with the original reason.
    */
-  readonly signal?: AbortSignal;
+  readonly signal?: AbortSignal | undefined;
 };
 
 /** Options for one JSX fragment append; cancellation covers expansion and cleanup only. */

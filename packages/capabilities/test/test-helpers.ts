@@ -10,6 +10,7 @@ import { CommonNode } from "@pptxdk/core/document";
 import { emit, emittedBuildQuery, validateOptions } from "@pptxdk/emit";
 import {
   paint,
+  validatePaintOptions,
   type PreviewOptions,
   type PreviewResult,
 } from "@pptxdk/preview";
@@ -68,18 +69,18 @@ export async function preview(
   input: ReactNode | CommonNode,
   options: PreviewOptions = {},
 ): Promise<PreviewResult> {
-  if (options.pages?.some((page) => !Number.isInteger(page) || page < 1)) {
-    throw new RangeError("Preview page numbers must be positive integers");
-  }
-  if (options.signal?.aborted) throw options.signal.reason;
+  const validatedOptions = validatePaintOptions(options);
+  if (validatedOptions.signal?.aborted) throw validatedOptions.signal.reason;
   const signalOption =
-    options.signal === undefined ? {} : { signal: options.signal };
+    validatedOptions.signal === undefined
+      ? {}
+      : { signal: validatedOptions.signal };
   const document =
     input instanceof CommonNode
       ? input
       : await expandDocument(input, signalOption);
   const resolution = resolveDefault(document, signalOption);
-  const { pages } = paint(resolution, options);
+  const { pages } = paint(resolution, validatedOptions);
   return Object.freeze({
     report: resolution.report,
     query: resolution.query,

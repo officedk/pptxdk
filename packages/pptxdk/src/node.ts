@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { extname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -7,9 +8,22 @@ import { CommonNode } from "@pptxdk/core/document";
 import { validateOptions } from "@pptxdk/emit";
 import { transformSync, type Loader } from "esbuild";
 import type { ComponentType, ReactNode } from "react";
+import { z } from "zod";
 
-import { build } from "./index.ts";
-import type { BuildOptions, BuildResult } from "./index.ts";
+import {
+  BuildError,
+  ImportError,
+  build,
+  buildOptionsSchema,
+  importPptx,
+  type BuildOptions,
+  type BuildResult,
+  type FatalImportIssue,
+  type ImportDiagnostic,
+  type ImportOptions,
+  type ImportReport,
+  type ImportResult,
+} from "./index.ts";
 import type { PreviewOptions, PreviewResult } from "./preview.ts";
 
 const sourceLoaders: Readonly<Record<string, Loader>> = {
@@ -19,17 +33,61 @@ const sourceLoaders: Readonly<Record<string, Loader>> = {
   ".jsx": "jsx",
 };
 
-export type BuildFromSourceOptions = BuildOptions & {
-  /** Use the named export of the entry module as the deck; defaults to "default". */
-  readonly exportName?: string;
-};
+export const exportNameSchema = z.string().min(1);
 
-export type PreviewFromSourceOptions = PreviewOptions & {
-  /** Use the named export of the entry module as the deck; defaults to "default". */
-  readonly exportName?: string;
-};
+export const buildFromSourceOptionsSchema = buildOptionsSchema
+  .unwrap()
+  .extend({
+    /** Use the named export of the entry module as the deck; defaults to "default". */
+    exportName: exportNameSchema.optional(),
+  })
+  .readonly();
+export type BuildFromSourceOptions = z.infer<
+  typeof buildFromSourceOptionsSchema
+>;
 
-export type { BuildOptions, BuildResult, PreviewOptions, PreviewResult };
+export const previewFromSourceOptionsSchema = z
+  .strictObject({
+    pages: z.array(z.int().positive()).readonly().optional(),
+    signal: z.instanceof(AbortSignal).optional(),
+    /** Use the named export of the entry module as the deck; defaults to "default". */
+    exportName: exportNameSchema.optional(),
+  })
+  .readonly();
+export type PreviewFromSourceOptions = z.infer<
+  typeof previewFromSourceOptionsSchema
+>;
+
+export type {
+  BuildOptions,
+  BuildResult,
+  FatalImportIssue,
+  ImportDiagnostic,
+  ImportOptions,
+  ImportReport,
+  ImportResult,
+  PreviewOptions,
+  PreviewResult,
+};
+export { ImportError };
+
+/**
+ * Reads a Transitional PPTX file from disk and imports it into an editable CommonNode document
+ * and structured `ImportReport`, detaching completely from the file buffer after import.
+ */
+export async function importPptxFile(
+  entry: string | URL,
+  options: ImportOptions = {},
+): Promise<ImportResult> {
+  if (options.signal?.aborted) {
+    throw options.signal.reason;
+  }
+  const bytes = await readFile(
+    entry,
+    options.signal === undefined ? undefined : { signal: options.signal },
+  );
+  return importPptx(new Uint8Array(bytes), options);
+}
 
 /** Error thrown when loading author deck source fails. */
 export class SourceLoadError extends Error {
@@ -212,9 +270,31 @@ export async function buildFromSource(
   entry: string | URL,
   options: BuildFromSourceOptions = {},
 ): Promise<BuildResult> {
-  const { exportName = "default", ...buildOptions } = options;
   const url = sourceUrl(entry);
-  validateOptions(buildOptions);
+  const parsed = buildFromSourceOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    if (
+      typeof options !== "object" ||
+      options === null ||
+      Array.isArray(options)
+    ) {
+      validateOptions(options as BuildOptions);
+    }
+    const { exportName: _exportName, ...buildOptions } = options as Record<
+      string,
+      unknown
+    >;
+    validateOptions(buildOptions);
+    throw new BuildError([
+      {
+        severity: "error",
+        path: "build.exportName",
+        code: "invalid-options",
+        message: "exportName must be a non-empty string",
+      },
+    ]);
+  }
+  const { exportName = "default", ...buildOptions } = parsed.data;
   if (buildOptions.signal?.aborted) throw buildOptions.signal.reason;
 
   const hooks = registerSourceLoader();
@@ -235,14 +315,38 @@ export async function previewFromSource(
   entry: string | URL,
   options: PreviewFromSourceOptions = {},
 ): Promise<PreviewResult> {
-  const { exportName = "default", ...previewOptions } = options;
   const url = sourceUrl(entry);
   if (
-    previewOptions.pages?.some((page) => !Number.isInteger(page) || page < 1)
+    typeof options === "object" &&
+    options !== null &&
+    "signal" in options &&
+    options.signal instanceof AbortSignal &&
+    options.signal.aborted
   ) {
-    throw new RangeError("Preview page numbers must be positive integers");
+    throw options.signal.reason;
   }
-  if (previewOptions.signal?.aborted) throw previewOptions.signal.reason;
+  const parsed = previewFromSourceOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue?.path[0] === "pages") {
+      throw new RangeError("Preview page numbers must be positive integers");
+    }
+    if (issue?.path[0] === "exportName") {
+      throw new TypeError(
+        "Preview options exportName must be a non-empty string",
+      );
+    }
+    if (issue?.path[0] === "signal") {
+      throw new TypeError("Preview options signal must be an AbortSignal");
+    }
+    if (issue?.path.length === 0 && issue.code === "unrecognized_keys") {
+      throw new TypeError(
+        `Preview options contain unknown parameter ${issue.keys[0]}`,
+      );
+    }
+    throw new TypeError("Preview options must be an object");
+  }
+  const { exportName = "default", ...previewOptions } = parsed.data;
 
   const { preview } = await import("./preview.ts");
   const hooks = registerSourceLoader();

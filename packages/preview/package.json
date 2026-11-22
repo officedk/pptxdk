@@ -35,7 +35,8 @@
   },
   "dependencies": {
     "@pptxdk/core": "workspace:*",
-    "@resvg/resvg-js": "catalog:"
+    "@resvg/resvg-js": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@pptxdk/tooling-config": "workspace:*",

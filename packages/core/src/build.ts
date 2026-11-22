@@ -1,21 +1,39 @@
 export { createResolver } from "#/resolve.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
-export { formatBaseline, targets } from "#/types.ts";
+export {
+  buildOptionsSchema,
+  diagnosticSchema,
+  diagnosticSeveritySchema,
+  emitOptionsSchema,
+  extensionSchema,
+  fontEmbeddingModeSchema,
+  formatBaseline,
+  formatBaselineSchema,
+  resolveOptionsSchema,
+  targetNameSchema,
+  targetSchema,
+  targets,
+} from "#/stage-options.ts";
 export type {
   BuildOptions,
+  Diagnostic,
+  DiagnosticSeverity,
+  EmitOptions,
+  Extension,
+  FontEmbeddingMode,
+  ResolveOptions,
+  Target,
+  TargetName,
+} from "#/stage-options.ts";
+export type {
   BuildQuery,
   BuildReport,
   BuildResult,
   CapabilityModule,
-  Diagnostic,
-  EmitOptions,
   EmitResult,
-  Extension,
   Resolution,
   ResolutionReport,
-  ResolveOptions,
   ResourceObservation,
-  Target,
 } from "#/types.ts";
 export type {
   DeclarationChild,

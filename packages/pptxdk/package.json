@@ -68,10 +68,12 @@
     "@pptxdk/capabilities": "workspace:*",
     "@pptxdk/core": "workspace:*",
     "@pptxdk/emit": "workspace:*",
+    "@pptxdk/import": "workspace:*",
     "@pptxdk/preview": "workspace:*",
     "@pptxdk/react": "workspace:*",
     "esbuild": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@pptxdk/tooling-config": "workspace:*",

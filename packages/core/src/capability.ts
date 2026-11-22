@@ -18,6 +18,22 @@ export {
   paddingStyleSchema,
 } from "#/layout-schemas.ts";
 export {
+  fontEmbeddingModeSchema,
+  formatBaseline,
+  targets,
+} from "#/stage-options.ts";
+export type {
+  BuildOptions,
+  Diagnostic,
+  DiagnosticSeverity,
+  EmitOptions,
+  Extension,
+  FontEmbeddingMode,
+  ResolveOptions,
+  Target,
+  TargetName,
+} from "#/stage-options.ts";
+export {
   assertValidLang,
   bcp47LangSchema,
   colorValueSchema,
@@ -55,6 +71,11 @@ export {
   visualStyleSchema,
 } from "#/theme.ts";
 export { createMorphScope, getMorphKeyLabel, isMorphKey } from "#/morph.ts";
+export type {
+  CanvasMechanismDefinition,
+  NativeMechanismDefinition,
+  ShowMechanismDefinition,
+} from "#/mechanisms.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
 export {
   layoutStyleKeys,
@@ -94,7 +115,6 @@ export type {
   BoundSlideCapability,
   BoundSlideCapabilityModule,
   BoundSlideContinuityCollaboration,
-  BuildOptions,
   BuildReport,
   BuildResult,
   CapabilityAnnotation,
@@ -117,12 +137,9 @@ export type {
   CapabilitySubPartObservation,
   CapabilityWarning,
   ContributionResolver,
-  Diagnostic,
   EmitContext,
-  EmitOptions,
   EmitOutput,
   EmitResult,
-  Extension,
   GeometryBox,
   LayoutChildReference,
   LayoutLength,
@@ -142,9 +159,9 @@ export type {
   PaintOutput,
   PreviewTransform,
   PreviewWarning,
+  RegisteredCapabilityModule,
   Resolution,
   ResolutionReport,
-  ResolveOptions,
   ResolvedLink,
   ResolvedObject,
   ResolvedObjectChildren,
@@ -159,6 +176,5 @@ export type {
   SlidePaintContext,
   SlidePaintOutput,
   SlideResolveContext,
-  Target,
   TransparentCapabilityModule,
 } from "#/types.ts";

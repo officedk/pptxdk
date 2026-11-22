@@ -277,6 +277,15 @@ importers:
       typescript-7:
         specifier: 'catalog:'
         version: typescript@7.0.2
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   apps/cli:
     dependencies:
@@ -464,6 +473,9 @@ importers:
       '@pptxdk/emit':
         specifier: workspace:*
         version: link:../emit
+      '@pptxdk/import':
+        specifier: workspace:*
+        version: link:../import
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
@@ -485,6 +497,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.3.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@pptxdk/preview':
         specifier: workspace:*
@@ -571,6 +586,9 @@ importers:
       fflate:
         specifier: 'catalog:'
         version: 0.8.3
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@pptxdk/tooling-config':
         specifier: workspace:*
@@ -591,6 +609,49 @@ importers:
         specifier: 'catalog:'
         version: typescript@7.0.2
 
+  packages/import:
+    dependencies:
+      '@pptxdk/core':
+        specifier: workspace:*
+        version: link:../core
+      '@xmldom/xmldom':
+        specifier: 'catalog:'
+        version: 0.9.12
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      '@pptxdk/tooling-config':
+        specifier: workspace:*
+        version: link:../tooling-config
+      '@pptxdk/validation':
+        specifier: workspace:*
+        version: link:../validation
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      oxfmt:
+        specifier: 'catalog:'
+        version: 0.74.0
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.90.0(oxlint-tsgolint@7.0.2005)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2005
+      typescript-7:
+        specifier: 'catalog:'
+        version: typescript@7.0.2
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
   packages/pptxdk:
     dependencies:
       '@pptxdk/capabilities':
@@ -602,6 +663,9 @@ importers:
       '@pptxdk/emit':
         specifier: workspace:*
         version: link:../emit
+      '@pptxdk/import':
+        specifier: workspace:*
+        version: link:../import
       '@pptxdk/preview':
         specifier: workspace:*
         version: link:../preview
@@ -614,6 +678,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.3.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@pptxdk/tooling-config':
         specifier: workspace:*
@@ -678,6 +745,9 @@ importers:
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@pptxdk/tooling-config':
         specifier: workspace:*

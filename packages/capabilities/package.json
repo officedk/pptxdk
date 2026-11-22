@@ -157,13 +157,15 @@
   "dependencies": {
     "@pptxdk/core": "workspace:*",
     "@pptxdk/emit": "workspace:*",
+    "@pptxdk/import": "workspace:*",
     "fflate": "catalog:",
     "fontkit": "catalog:",
     "harfbuzzjs": "catalog:",
     "jpeg-js": "catalog:",
     "linebreak": "catalog:",
     "pngjs": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@pptxdk/preview": "workspace:*",

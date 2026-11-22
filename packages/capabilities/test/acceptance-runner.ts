@@ -6,6 +6,7 @@ import { documentCapabilities } from "@pptxdk/capabilities/all";
 import type { BuildReport, CommonNode } from "@pptxdk/core";
 import { createResolver, type Resolution } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
+import { createImporter, type ImportReport } from "@pptxdk/import";
 import {
   paint,
   type PreviewPageResult,
@@ -23,6 +24,23 @@ export type AuthorKind = "jsx" | "document";
 export type ScenarioAssertContext = {
   readonly author: AuthorKind;
   readonly resolution: Resolution;
+  readonly pptx: Uint8Array;
+  readonly preview: PreviewResult;
+  readonly validation: ValidationResult;
+};
+
+export type NativeRoundtripAssertContext = {
+  readonly stage: "initial" | "roundtrip";
+  readonly pptx: Uint8Array;
+  readonly validation: ValidationResult;
+  readonly report: BuildReport;
+};
+
+export type RoundtripRunOutput = {
+  readonly importReport: ImportReport;
+  readonly importedDocument: CommonNode;
+  readonly resolution: Resolution;
+  readonly report: BuildReport;
   readonly pptx: Uint8Array;
   readonly preview: PreviewResult;
   readonly validation: ValidationResult;
@@ -62,6 +80,44 @@ export type ScenarioRunOutput = {
 };
 
 const resolveDocument = createResolver(documentCapabilities);
+const importDocument = createImporter(documentCapabilities);
+
+/** Executes the formal `import -> resolve -> emit -> paint -> validatePptx` roundtrip over an emitted PPTX. */
+export async function runScenarioRoundtrip(
+  pptx: Uint8Array,
+  options: { readonly pages?: readonly number[] } = {},
+): Promise<RoundtripRunOutput> {
+  const detachedCopy = new Uint8Array(pptx);
+  const imported = importDocument(detachedCopy);
+  // Immediately zero caller bytes to prove the imported document retains no buffer references.
+  detachedCopy.fill(0);
+
+  const previewOptions =
+    options.pages === undefined ? {} : { pages: options.pages };
+  const resolution = resolveDocument(imported.document);
+  const { pptx: reemittedPptx, report } = emit(resolution);
+  const { pages } = paint(resolution, previewOptions);
+  const preview: PreviewResult = Object.freeze({
+    report: resolution.report,
+    query: resolution.query,
+    pages,
+  });
+  const validation = await validatePptx(reemittedPptx);
+  assert.deepEqual(
+    validation.errors,
+    [],
+    "Roundtrip re-emitted PPTX validation failed",
+  );
+  return {
+    importReport: imported.report,
+    importedDocument: imported.document,
+    resolution,
+    report,
+    pptx: reemittedPptx,
+    preview,
+    validation,
+  };
+}
 
 function assertPageOutput(
   page: PreviewPageResult,

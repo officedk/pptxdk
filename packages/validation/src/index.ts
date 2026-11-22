@@ -3462,6 +3462,25 @@ function validateLineProperties(
   }
 }
 
+function readPlaceholderRef(
+  object: XmlElement,
+  nvContainerName: "nvSpPr" | "nvPicPr" | "nvGraphicFramePr",
+): FileObject["placeholder"] | undefined {
+  const nvContainer = first(object, presentationNamespace, nvContainerName);
+  const nvPr =
+    nvContainer === undefined
+      ? undefined
+      : first(nvContainer, presentationNamespace, "nvPr");
+  const ph =
+    nvPr === undefined ? undefined : first(nvPr, presentationNamespace, "ph");
+  if (ph === undefined) return undefined;
+  const phIdx = integerAttribute(ph, "idx");
+  return {
+    type: attribute(ph, "type") || "obj",
+    ...(phIdx === undefined ? {} : { idx: phIdx }),
+  };
+}
+
 function validateShape(
   shape: XmlElement,
   part: string,
@@ -3477,22 +3496,7 @@ function validateShape(
     shapeProperties === undefined
       ? undefined
       : first(shapeProperties, presentationNamespace, "cNvPr");
-  const nvPr =
-    shapeProperties === undefined
-      ? undefined
-      : first(shapeProperties, presentationNamespace, "nvPr");
-  const ph =
-    nvPr === undefined ? undefined : first(nvPr, presentationNamespace, "ph");
-  const placeholderRef =
-    ph === undefined
-      ? undefined
-      : (() => {
-          const phIdx = integerAttribute(ph, "idx");
-          return {
-            type: attribute(ph, "type") || "obj",
-            ...(phIdx === undefined ? {} : { idx: phIdx }),
-          };
-        })();
+  const placeholderRef = readPlaceholderRef(shape, "nvSpPr");
   const id = integerAttribute(drawingProperties, "id");
   const name =
     drawingProperties === undefined ? "" : attribute(drawingProperties, "name");
@@ -3656,12 +3660,17 @@ function validatePicture(
     overrides: Map<string, string>;
   },
   errors: ValidationIssue[],
+  placeholderLookup?: {
+    readonly layout?: readonly FilePlaceholderTemplate[];
+    readonly master?: readonly FilePlaceholderTemplate[];
+  },
 ): FileObject | undefined {
   const identity = objectIdentity(picture, "nvPicPr", part, "picture", errors);
   if (identity === undefined) return undefined;
+  const placeholderRef = readPlaceholderRef(picture, "nvPicPr");
   const properties = first(picture, presentationNamespace, "spPr");
   const geometryName = readGeometryName(properties);
-  if (geometryName === "") {
+  if (geometryName === "" && placeholderRef === undefined) {
     issue(
       errors,
       part,
@@ -3670,17 +3679,24 @@ function validatePicture(
     );
     return undefined;
   }
+  const effectiveGeometry =
+    geometryName !== ""
+      ? geometryName
+      : placeholderRef !== undefined
+        ? "rect"
+        : "";
   const transform =
     properties === undefined
       ? undefined
       : first(properties, drawingNamespace, "xfrm");
-  const boxEmu = transformBox(
-    transform,
-    part,
-    identity.name,
-    "picture",
-    errors,
-  );
+  const hasLocalTransform = transform !== undefined;
+  const inheritedBoxEmu =
+    transform === undefined && placeholderRef !== undefined
+      ? matchPlaceholderTemplateBox(placeholderRef, placeholderLookup)
+      : undefined;
+  const boxEmu =
+    inheritedBoxEmu ??
+    transformBox(transform, part, identity.name, "picture", errors);
   const rotation = readRotationDegrees(transform);
   const fill = first(picture, presentationNamespace, "blipFill");
   const blip =
@@ -3802,7 +3818,10 @@ function validatePicture(
     id: identity.id,
     name: identity.name,
     kind: "image",
-    geometry: geometryName,
+    ...(placeholderRef === undefined
+      ? {}
+      : { placeholder: placeholderRef, hasLocalTransform }),
+    geometry: effectiveGeometry,
     boxEmu,
     ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(image === undefined ? {} : { image }),
@@ -5479,6 +5498,10 @@ function validateChart(
     overrides: Map<string, string>;
   },
   errors: ValidationIssue[],
+  placeholderLookup?: {
+    readonly layout?: readonly FilePlaceholderTemplate[];
+    readonly master?: readonly FilePlaceholderTemplate[];
+  },
 ): FileObject | undefined {
   const identity = objectIdentity(
     frame,
@@ -5488,8 +5511,20 @@ function validateChart(
     errors,
   );
   if (identity === undefined) return undefined;
+  const placeholderRef = readPlaceholderRef(frame, "nvGraphicFramePr");
   const transform = first(frame, presentationNamespace, "xfrm");
-  const boxEmu = transformBox(transform, part, identity.name, "chart", errors);
+  const hasLocalTransform = transform !== undefined;
+  const inheritedBoxEmu =
+    transform === undefined && placeholderRef !== undefined
+      ? matchPlaceholderTemplateBox(placeholderRef, placeholderLookup)
+      : undefined;
+  const boxEmu =
+    inheritedBoxEmu ??
+    transformBox(transform, part, identity.name, "chart", errors);
+  const placeholderFields =
+    placeholderRef === undefined
+      ? {}
+      : { placeholder: placeholderRef, hasLocalTransform };
   const graphic = first(
     frame,
     "http://schemas.openxmlformats.org/drawingml/2006/main",
@@ -5519,7 +5554,13 @@ function validateChart(
     );
     return boxEmu === undefined
       ? undefined
-      : { id: identity.id, name: identity.name, kind: "chart", boxEmu };
+      : {
+          id: identity.id,
+          name: identity.name,
+          kind: "chart",
+          ...placeholderFields,
+          boxEmu,
+        };
   }
   const chartPart = relationshipTargetPath(
     part,
@@ -5541,7 +5582,13 @@ function validateChart(
     );
     return boxEmu === undefined
       ? undefined
-      : { id: identity.id, name: identity.name, kind: "chart", boxEmu };
+      : {
+          id: identity.id,
+          name: identity.name,
+          kind: "chart",
+          ...placeholderFields,
+          boxEmu,
+        };
   }
   const chartLang = first(chartXml, chartNamespace, "lang");
   if (chartLang !== undefined) {
@@ -6973,6 +7020,7 @@ function validateChart(
     id: identity.id,
     name: identity.name,
     kind: "chart",
+    ...placeholderFields,
     boxEmu,
     chart: chartObservation,
   };
@@ -7139,6 +7187,10 @@ function validateTable(
   part: string,
   errors: ValidationIssue[],
   theme: ThemeTextReader,
+  placeholderLookup?: {
+    readonly layout?: readonly FilePlaceholderTemplate[];
+    readonly master?: readonly FilePlaceholderTemplate[];
+  },
 ): FileObject | undefined {
   const identity = objectIdentity(
     frame,
@@ -7148,8 +7200,16 @@ function validateTable(
     errors,
   );
   if (identity === undefined) return undefined;
+  const placeholderRef = readPlaceholderRef(frame, "nvGraphicFramePr");
   const transform = first(frame, presentationNamespace, "xfrm");
-  const boxEmu = transformBox(transform, part, identity.name, "table", errors);
+  const hasLocalTransform = transform !== undefined;
+  const inheritedBoxEmu =
+    transform === undefined && placeholderRef !== undefined
+      ? matchPlaceholderTemplateBox(placeholderRef, placeholderLookup)
+      : undefined;
+  const boxEmu =
+    inheritedBoxEmu ??
+    transformBox(transform, part, identity.name, "table", errors);
   const graphic = first(frame, drawingNamespace, "graphic");
   const graphicData =
     graphic === undefined
@@ -7360,6 +7420,9 @@ function validateTable(
     id: identity.id,
     name: identity.name,
     kind: "table",
+    ...(placeholderRef === undefined
+      ? {}
+      : { placeholder: placeholderRef, hasLocalTransform }),
     boxEmu,
     table: {
       columnWidthsEmu,
@@ -7537,6 +7600,7 @@ function readObjects(
           relationships,
           contentTypes,
           errors,
+          placeholderLookup,
         );
         break;
       case "graphicFrame": {
@@ -7557,9 +7621,10 @@ function readObjects(
             relationships,
             contentTypes,
             errors,
+            placeholderLookup,
           );
         } else if (uri === tableUri) {
-          object = validateTable(frame, part, errors, theme);
+          object = validateTable(frame, part, errors, theme, placeholderLookup);
         }
         break;
       }

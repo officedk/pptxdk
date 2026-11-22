@@ -432,9 +432,8 @@ function resolveSlideFooterModel(args: {
       idx,
       size,
       box,
-      // When neither master nor layout owns the placeholder, keep geometry inline on the slide.
-      emitGeometry:
-        !hasExplicitGeometry(masterSpec) && !hasExplicitGeometry(layoutSpec),
+      // PowerPoint resolves slide placeholder transforms from SlideLayout (not skipping to SlideMaster); emit inline geometry unless the layout explicitly defines box geometry.
+      emitGeometry: !hasExplicitGeometry(layoutSpec),
       name: `${defaults.namePrefix} ${idx}`,
       text,
     });

@@ -3,6 +3,7 @@ export {
   assertXml10Characters,
   colorMapAttributesXml,
   colorMapOverrideXml,
+  placeholderRefXml,
   pptxParts,
   pxToEmu,
   resolvedColorXml,

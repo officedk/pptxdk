@@ -1,4 +1,4 @@
-import { textStyleKeys, type TextStyle } from "@pptxdk/core/capability";
+import { textStyleKeys } from "@pptxdk/core/capability";
 import { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import {
   A_NS,
@@ -303,7 +303,7 @@ export const speakerNotesImportHandler: SlideImportHandler = {
                     Object.keys(importedParagraphs[0]!.style).length === 0));
               if (!isEmptyPlaceholder) {
                 const notesNode = createNotesNode(
-                  hasNotesStyle ? { style: notesStyle as TextStyle } : {},
+                  hasNotesStyle ? { style: notesStyle } : {},
                 );
                 populateRichTextNode(notesNode, importedParagraphs);
                 if (slideNode instanceof CommonContainer) {

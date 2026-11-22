@@ -29,6 +29,7 @@ import { footerPlaceholderMechanismVerifications } from "./masters/footer-mechan
 import { masterSharedCanvasMechanismVerifications } from "./masters/shared-canvas-mechanisms.ts";
 import { themeMechanismVerifications } from "./masters/theme-mechanisms.ts";
 import { notesMechanismVerifications } from "./notes/mechanisms.ts";
+import { placeholderMechanismVerifications } from "./placeholder/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
 import { slideBackgroundMechanismVerifications } from "./slide-background/mechanisms.ts";
 import { tableMechanismVerifications } from "./table/mechanisms.ts";
@@ -270,6 +271,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...slideBackgroundMechanismVerifications,
     ...imageMechanismVerifications,
     ...notesMechanismVerifications,
+    ...placeholderMechanismVerifications,
     ...shapeAndGroupMechanismVerifications,
     ...tableMechanismVerifications,
     ...textMechanismVerifications,

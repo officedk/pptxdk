@@ -2,6 +2,7 @@ import { hostNodeCreator } from "@pptxdk/core/host";
 import { createElement, type ReactNode } from "react";
 
 import { motionElement } from "../motion/motion-elements.ts";
+import type { TypedElement } from "../shared/typed-element.ts";
 import {
   createCellNode,
   createRowNode,
@@ -10,6 +11,8 @@ import {
   type RowDeclarationProps,
   type TableDeclarationProps,
 } from "./table-declaration.ts";
+
+export type { TypedElement } from "../shared/typed-element.ts";
 
 export type TableProps = TableDeclarationProps & {
   readonly children?: ReactNode;
@@ -24,11 +27,11 @@ export type CellProps = CellDeclarationProps & {
 };
 
 /** Declares an editable native table in the React root handled by the table module. */
-export function Table(props: TableProps): ReactNode {
+export function Table(props: TableProps): TypedElement<"table"> {
   return motionElement("table", {
     ...props,
     [hostNodeCreator]: createTableNode,
-  });
+  }) as TypedElement<"table">;
 }
 
 /** Declares a row of a native table; calculated from actual measurement of row content when height is omitted. */

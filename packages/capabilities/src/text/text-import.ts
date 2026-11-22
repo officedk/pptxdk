@@ -1,8 +1,6 @@
 import {
   assertValidLang,
   matchLayoutPlaceholderKey,
-  nativePlaceholderRefSchema,
-  placeholderRoleSchema,
   placeholderStyleSchema,
   schemeColorNameSchema,
   type ColorValue,
@@ -41,6 +39,12 @@ import {
   consumeNonPlaceholderNvPr,
   hasPlaceholderElement,
 } from "../shared/identity.ts";
+import {
+  directElementChild,
+  directPlaceholderElement,
+  isPlaceholderSpElement,
+  readNvPrPlaceholder,
+} from "../shared/placeholder-import.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-schemas.ts";
 import {
   createParagraphNode,
@@ -163,30 +167,6 @@ const algnToTextAlign: Readonly<
   just: "justify",
 };
 
-type XmlElement = XmlElementCursor["element"];
-
-function directElementChild(
-  parent: XmlElement,
-  namespaceUri: string,
-  localName: string,
-): XmlElement | undefined {
-  for (
-    let child = parent.firstChild;
-    child !== null;
-    child = child.nextSibling
-  ) {
-    if (child.nodeType !== 1) continue;
-    const el = child as XmlElement;
-    if (
-      (el.namespaceURI ?? "") === namespaceUri &&
-      (el.localName ?? el.tagName) === localName
-    ) {
-      return el;
-    }
-  }
-  return undefined;
-}
-
 // Metadata placeholders (`dt`, `ftr`, `sldNum`) are owned by `footerPlaceholderShapeImportHandler`.
 const textCompatiblePlaceholderRoles = new Set<string>([
   "title",
@@ -208,25 +188,15 @@ function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
   return txBox === "1" || txBox === "true";
 }
 
-function directPlaceholderElement(
-  cursor: XmlElementCursor,
-): XmlElement | undefined {
-  const nvSpPr = directElementChild(cursor.element, P_NS, "nvSpPr");
-  if (nvSpPr === undefined) return undefined;
-  const nvPr = directElementChild(nvSpPr, P_NS, "nvPr");
-  if (nvPr === undefined) return undefined;
-  return directElementChild(nvPr, P_NS, "ph");
-}
+export { isPlaceholderSpElement };
 
-/** Side-effect-free predicate identifying `<p:sp>` elements bound to a placeholder (`<p:ph>`). */
-export function isPlaceholderSpElement(cursor: XmlElementCursor): boolean {
-  return directPlaceholderElement(cursor) !== undefined;
-}
-
-/** Side-effect-free predicate matching text-compatible `<p:sp>` placeholder elements. */
+/** Side-effect-free predicate matching populated text-compatible `<p:sp>` placeholder elements. */
 export function isTextPlaceholderSpElement(cursor: XmlElementCursor): boolean {
-  const ph = directPlaceholderElement(cursor);
+  const ph = directPlaceholderElement(cursor, "nvSpPr");
   if (ph === undefined) return false;
+  if (directElementChild(cursor.element, P_NS, "txBody") === undefined) {
+    return false;
+  }
   const rawType = ph.getAttribute("type");
   const role = rawType === null || rawType === "" ? "obj" : rawType;
   return textCompatiblePlaceholderRoles.has(role);
@@ -1282,8 +1252,18 @@ export function readTextPlaceholderSp(
   }
 
   const nvPr = nvSpPr.child(P_NS, "nvPr");
-  const ph = nvPr?.child(P_NS, "ph");
-  if (ph === undefined) {
+  const phResult = readNvPrPlaceholder(
+    nvPr,
+    {
+      part,
+      xpath: cursor.xpath,
+      slideIndex,
+      ...(objectId === undefined ? {} : { objectId }),
+      ...(objectName === undefined ? {} : { objectName }),
+    },
+    diagnostics,
+  );
+  if (phResult.kind === "none") {
     diagnostics.push({
       code: "corrupt-part",
       category: "corrupt-input",
@@ -1292,58 +1272,10 @@ export function readTextPlaceholderSp(
     });
     return { diagnostics };
   }
-
-  const rawPh = ph.attrsObject([
-    "type",
-    "idx",
-    "sz",
-    "orient",
-    "hasCustomPrompt",
-  ]);
-  const explicitType = rawPh["type"] !== undefined;
-  const parsedRole = placeholderRoleSchema.safeParse(rawPh["type"] ?? "obj");
-  if (!parsedRole.success) {
-    diagnostics.push({
-      code: "unsupported-mechanism",
-      category: "unsupported",
-      disposition: "omitted",
-      location: {
-        part,
-        xpath: ph.xpath,
-        slideIndex,
-        ...(objectId === undefined ? {} : { objectId }),
-        ...(objectName === undefined ? {} : { objectName }),
-      },
-      namespaceUri: P_NS,
-      localName: "ph",
-      mechanismHint: `ph:${rawPh["type"] ?? ""}`,
-    });
+  if (phResult.kind === "error") {
     return { diagnostics };
   }
-  const idxParsed = OoxmlNonNegativeIntSchema.safeParse(rawPh["idx"]);
-  const hasPromptParsed = OoxmlBoolSchema.safeParse(rawPh["hasCustomPrompt"]);
-  const parsedNativeRef = nativePlaceholderRefSchema.safeParse({
-    type: parsedRole.data,
-    explicitType,
-    ...(idxParsed.success ? { idx: idxParsed.data } : {}),
-    ...(rawPh["sz"] !== undefined ? { sz: rawPh["sz"] } : {}),
-    ...(rawPh["orient"] !== undefined ? { orient: rawPh["orient"] } : {}),
-    ...(hasPromptParsed.success && hasPromptParsed.data
-      ? { hasCustomPrompt: true }
-      : {}),
-  });
-  if (!parsedNativeRef.success) {
-    diagnostics.push({
-      code: "invalid-xml-value",
-      category: "corrupt-input",
-      disposition: "omitted",
-      location: { part, xpath: ph.xpath, slideIndex },
-      attributeOrElement: "p:ph",
-      rawValue: JSON.stringify(rawPh),
-    });
-    return { diagnostics };
-  }
-  const nativeRef: NativePlaceholderRef = parsedNativeRef.data;
+  const nativeRef: NativePlaceholderRef = phResult.nativeRef;
 
   const spPr = cursor.child(P_NS, "spPr");
   if (spPr === undefined) {

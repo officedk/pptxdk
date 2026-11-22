@@ -3,6 +3,7 @@ import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
 import type { TextStyle } from "../../shared/text-service.ts";
 import { mergeDataLabels } from "../chart-labels.ts";
 import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";
+import type { ChartTextStyle } from "../chart-schemas.ts";
 import {
   collectLegendEntries,
   measureLegend,
@@ -25,7 +26,7 @@ type EdgeSide = "top" | "bottom" | "left" | "right";
 
 function titleTextOf(title: NonNullable<ParsedChart["title"]>): {
   readonly text: string;
-  readonly style?: TextStyle;
+  readonly style?: ChartTextStyle | undefined;
 } {
   return typeof title === "string" ? { text: title } : title;
 }

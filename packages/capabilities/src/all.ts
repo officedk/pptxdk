@@ -10,6 +10,7 @@ import {
 } from "./masters/masters.ts";
 import { motionCapability } from "./motion/motion.ts";
 import { notesCapability } from "./notes/notes.ts";
+import { placeholderCapability } from "./placeholder/placeholder.ts";
 import { shapeCapability } from "./shape/shape.ts";
 import { slideBackgroundCapability } from "./slide-background/slide-background.ts";
 import { tableCapability } from "./table/table.ts";
@@ -25,6 +26,7 @@ const baselineCapabilities = [
   mastersCapability,
   motionCapability,
   notesCapability,
+  placeholderCapability,
   shapeCapability,
   slideBackgroundCapability,
   tableCapability,

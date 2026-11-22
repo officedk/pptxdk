@@ -500,7 +500,7 @@ function ooxmlAnchor(value: NonNullable<TextStyle["verticalAlign"]>): string {
   return value === "middle" ? "ctr" : value === "bottom" ? "b" : "t";
 }
 
-function placeholderRefXml(ref: NativePlaceholderRef): string {
+export function placeholderRefXml(ref: NativePlaceholderRef): string {
   const attrs: string[] = [];
   if (ref.explicitType !== false) attrs.push(`type="${xmlEscape(ref.type)}"`);
   if (ref.sz !== undefined) attrs.push(`sz="${xmlEscape(ref.sz)}"`);

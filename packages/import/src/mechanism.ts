@@ -76,11 +76,31 @@ export type DeckImportHandler = {
   read(context: DeckImportContext): DeckImportOutcome;
 };
 
+export type TextInlineImportContext = {
+  readonly cursor: XmlElementCursor;
+  readonly part: string;
+  readonly slideIndex: number;
+};
+
+export type TextInlineImportHandler = {
+  readonly target: "text-inline";
+  readonly localName: "fld";
+  matches?(cursor: XmlElementCursor): boolean;
+  read(context: TextInlineImportContext): {
+    readonly kind: "slide-number" | "unsupported";
+    readonly fieldType: string;
+    readonly rPrCursor?: XmlElementCursor;
+    readonly fallbackText: string;
+    readonly diagnostics: readonly ImportDiagnostic[];
+  };
+};
+
 /** Concrete import-direction handler bound onto production mechanism definitions. */
 export type ImportMechanismHandler =
   | ShapeTreeImportHandler
   | SlideImportHandler
-  | DeckImportHandler;
+  | DeckImportHandler
+  | TextInlineImportHandler;
 
 /** Defines a native canvas mechanism requiring production `emit`, `paint`, and `import` directions. */
 export function defineCanvasMechanism<

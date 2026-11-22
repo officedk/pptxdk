@@ -2,9 +2,12 @@ import {
   assertValidLang,
   schemeColorNameSchema,
   type ColorValue,
+  type SchemeColorName,
+  type Shadow,
   type TextAlignment,
   type TextStyle,
 } from "@pptxdk/core/capability";
+import type { CommonNode } from "@pptxdk/core/document";
 import {
   A_NS,
   ExtentEmuFragmentSchema,
@@ -22,15 +25,18 @@ import {
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
   type ShapeTreeImportOutcome,
+  type TextInlineImportContext,
+  type TextInlineImportHandler,
   type XmlElementCursor,
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import type { ParagraphStyle, TextList } from "../shared/text-schemas.ts";
 import {
   createParagraphNode,
+  createSlideNumberNode,
   createSpanNode,
   createTextNode,
-  type ParagraphDeclarationProps,
   type SpanDeclarationProps,
   type TextDeclarationProps,
 } from "./text-declaration.ts";
@@ -61,6 +67,24 @@ const BodyPrFragmentSchema = z.object({
 const ParagraphPrFragmentSchema = z.object({
   algn: z.enum(["l", "ctr", "r", "just"]).optional(),
   rtl: OoxmlBoolSchema.optional(),
+  lvl: OoxmlNonNegativeIntSchema.refine((value) => value <= 8).optional(),
+});
+
+const SpacingPointsXmlSchema = z.object({
+  val: OoxmlNonNegativeIntSchema,
+});
+
+const SpacingPercentXmlSchema = z.object({
+  val: OoxmlPositiveIntSchema,
+});
+
+const BulletCharXmlSchema = z.object({
+  char: z.string().min(1),
+});
+
+const AutoNumXmlSchema = z.object({
+  type: z.string().min(1),
+  startAt: OoxmlPositiveIntSchema.optional(),
 });
 
 const RunPrFragmentSchema = z.object({
@@ -72,13 +96,31 @@ const RunPrFragmentSchema = z.object({
   strike: z.enum(["noStrike", "sngStrike"]).optional(),
   cap: z.enum(["none", "all"]).optional(),
   spc: OoxmlIntSchema.optional(),
+  dirty: OoxmlBoolSchema.optional(),
+  smtClean: OoxmlBoolSchema.optional(),
+});
+
+const TextFieldXmlSchema = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+});
+
+const OuterShadowXmlSchema = z.object({
+  blurRad: OoxmlNonNegativeIntSchema.optional(),
+  dist: OoxmlNonNegativeIntSchema.optional(),
+  dir: OoxmlIntSchema.optional(),
+  algn: z.string().optional(),
+  rotWithShape: OoxmlBoolSchema.optional(),
 });
 
 const TypefaceFragmentSchema = z.object({
   typeface: z.string().min(1),
+  pitchFamily: z.string().optional(),
+  charset: z.string().optional(),
+  panose: z.string().optional(),
 });
 
-const AlphaModifierSchema = z.object({
+const PercentModifierSchema = z.object({
   val: OoxmlNonNegativeIntSchema,
 });
 
@@ -141,19 +183,31 @@ function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
   return txBox === "1" || txBox === "true";
 }
 
-function readSolidFillColor(
-  fillCursor: XmlElementCursor,
+function readColorModifier(
+  colorCursor: XmlElementCursor,
+  localName: "alpha" | "lumMod" | "lumOff",
+): number | undefined {
+  const mod = colorCursor.child(A_NS, localName);
+  if (mod === undefined) return undefined;
+  const parsed = PercentModifierSchema.safeParse(mod.attrsObject(["val"]));
+  return parsed.success ? parsed.data.val / 100_000 : undefined;
+}
+
+function readColorElement(
+  containerCursor: XmlElementCursor,
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
 ): ColorValue | undefined {
-  const srgb = fillCursor.child(A_NS, "srgbClr");
+  const srgb = containerCursor.child(A_NS, "srgbClr");
   const scheme =
-    srgb === undefined ? fillCursor.child(A_NS, "schemeClr") : undefined;
+    srgb === undefined ? containerCursor.child(A_NS, "schemeClr") : undefined;
   const colorCursor = srgb ?? scheme;
   if (colorCursor === undefined) return undefined;
 
-  let baseColor: string | undefined;
+  let baseString: string | undefined;
+  let schemeSlot: SchemeColorName | undefined;
+
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);
     const parsed = SrgbColorSchema.safeParse(raw);
@@ -168,7 +222,7 @@ function readSolidFillColor(
       });
       return undefined;
     }
-    baseColor = `#${parsed.data.val.toUpperCase()}`;
+    baseString = `#${parsed.data.val.toUpperCase()}`;
   } else if (scheme !== undefined) {
     const raw = scheme.attrsObject(["val"]);
     const parsed = SchemeColorSchema.safeParse(raw);
@@ -183,30 +237,98 @@ function readSolidFillColor(
       });
       return undefined;
     }
-    baseColor = parsed.data.val;
+    schemeSlot = parsed.data.val;
   }
 
-  if (baseColor === undefined) return undefined;
+  const lumMod = readColorModifier(colorCursor, "lumMod");
+  const lumOff = readColorModifier(colorCursor, "lumOff");
+  const alpha = readColorModifier(colorCursor, "alpha");
 
-  const alphaCursor = colorCursor.child(A_NS, "alpha");
-  if (alphaCursor !== undefined) {
-    const rawAlpha = alphaCursor.attrsObject(["val"]);
-    const parsedAlpha = AlphaModifierSchema.safeParse(rawAlpha);
-    if (parsedAlpha.success) {
-      return { color: baseColor, alpha: parsedAlpha.data.val / 100_000 };
-    }
+  const baseColor: ColorValue | undefined =
+    schemeSlot !== undefined && lumMod !== undefined
+      ? {
+          slot: schemeSlot,
+          lumMod: Math.min(1, lumMod),
+          ...(lumOff === undefined ? {} : { lumOff: Math.min(1, lumOff) }),
+        }
+      : (schemeSlot ?? baseString);
+
+  if (baseColor === undefined) return undefined;
+  if (alpha !== undefined) {
+    return { color: baseColor, alpha: Math.min(1, alpha) };
   }
   return baseColor;
 }
 
-type ParsedRunStyle = NonNullable<SpanDeclarationProps["style"]>;
+function readOuterShadow(
+  rPrCursor: XmlElementCursor,
+  part: string,
+  slideIndex: number,
+  diagnostics: ImportDiagnostic[],
+): Shadow | undefined {
+  const effectLst = rPrCursor.child(A_NS, "effectLst");
+  if (effectLst === undefined) return undefined;
+  const outerShdw = effectLst.child(A_NS, "outerShdw");
+  if (outerShdw === undefined) return undefined;
+
+  const raw = outerShdw.attrsObject([
+    "blurRad",
+    "dist",
+    "dir",
+    "algn",
+    "rotWithShape",
+  ]);
+  const parsed = OuterShadowXmlSchema.safeParse(raw);
+  if (!parsed.success) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { part, xpath: outerShdw.xpath, slideIndex },
+      attributeOrElement: "a:outerShdw",
+      rawValue: JSON.stringify(raw),
+    });
+    return undefined;
+  }
+
+  const color = readColorElement(outerShdw, part, slideIndex, diagnostics);
+  const blur =
+    parsed.data.blurRad === undefined
+      ? undefined
+      : emuToPx(parsed.data.blurRad);
+  const distance =
+    parsed.data.dist === undefined ? undefined : emuToPx(parsed.data.dist);
+  const angle =
+    parsed.data.dir === undefined ? undefined : parsed.data.dir / 60_000;
+
+  return {
+    ...(color === undefined ? {} : { color }),
+    ...(blur === undefined ? {} : { blur }),
+    ...(distance === undefined ? {} : { distance }),
+    ...(angle === undefined ? {} : { angle }),
+  };
+}
+
+function resolveTypefaceToken(
+  typeface: string,
+): NonNullable<TextStyle["fontFamily"]> {
+  if (typeface === "+mn-lt" || typeface === "+mn-ea" || typeface === "+mn-cs") {
+    return "minor";
+  }
+  if (typeface === "+mj-lt" || typeface === "+mj-ea" || typeface === "+mj-cs") {
+    return "major";
+  }
+  return typeface;
+}
+
+export type ParsedRunStyle = NonNullable<SpanDeclarationProps["style"]>;
 
 function readRunProperties(
   rPrCursor: XmlElementCursor,
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
-): ParsedRunStyle {
+): { readonly style: ParsedRunStyle; readonly sizePt?: number } {
   const raw = rPrCursor.attrsObject([
     "lang",
     "sz",
@@ -216,10 +338,13 @@ function readRunProperties(
     "strike",
     "cap",
     "spc",
+    "dirty",
+    "smtClean",
   ]);
   const parsed = RunPrFragmentSchema.safeParse(raw);
   let lang: string | undefined;
   let fontSize: NonNullable<TextStyle["fontSize"]> | undefined;
+  let sizePt: number | undefined;
   let fontWeight: NonNullable<TextStyle["fontWeight"]> | undefined;
   let fontStyle: NonNullable<TextStyle["fontStyle"]> | undefined;
   let textDecoration: NonNullable<TextStyle["textDecoration"]> | undefined;
@@ -252,7 +377,8 @@ function readRunProperties(
       }
     }
     if (data.sz !== undefined) {
-      fontSize = `${data.sz / 100}pt`;
+      sizePt = data.sz / 100;
+      fontSize = `${sizePt}pt`;
     }
     if (data.b !== undefined) {
       fontWeight = data.b ? "bold" : "normal";
@@ -264,6 +390,8 @@ function readRunProperties(
       textDecoration = "underline";
     } else if (data.strike === "sngStrike") {
       textDecoration = "line-through";
+    } else if (data.u === "none" && data.strike === "noStrike") {
+      textDecoration = "none";
     }
     if (data.cap === "all") {
       textTransform = "uppercase";
@@ -278,59 +406,135 @@ function readRunProperties(
   let color: NonNullable<TextStyle["color"]> | undefined;
   const solidFill = rPrCursor.child(A_NS, "solidFill");
   if (solidFill !== undefined) {
-    color = readSolidFillColor(solidFill, part, slideIndex, diagnostics);
+    color = readColorElement(solidFill, part, slideIndex, diagnostics);
   }
+
+  const textShadow = readOuterShadow(rPrCursor, part, slideIndex, diagnostics);
 
   let fontFamily: NonNullable<TextStyle["fontFamily"]> | undefined;
   const latin = rPrCursor.child(A_NS, "latin");
   const ea = rPrCursor.child(A_NS, "ea");
   const cs = rPrCursor.child(A_NS, "cs");
   const fontCursor = latin ?? ea ?? cs;
-  if (latin !== undefined) {
-    const rawLatin = latin.attrsObject(["typeface"]);
-    const parsedLatin = TypefaceFragmentSchema.safeParse(rawLatin);
-    if (
-      parsedLatin.success &&
-      !parsedLatin.data.typeface.startsWith("+mj-") &&
-      !parsedLatin.data.typeface.startsWith("+mn-")
-    ) {
-      fontFamily = parsedLatin.data.typeface;
-    }
-  } else if (fontCursor !== undefined) {
-    const rawFont = fontCursor.attrsObject(["typeface"]);
+  if (fontCursor !== undefined) {
+    const rawFont = fontCursor.attrsObject([
+      "typeface",
+      "pitchFamily",
+      "charset",
+      "panose",
+    ]);
     const parsedFont = TypefaceFragmentSchema.safeParse(rawFont);
-    if (
-      parsedFont.success &&
-      !parsedFont.data.typeface.startsWith("+mj-") &&
-      !parsedFont.data.typeface.startsWith("+mn-")
-    ) {
-      fontFamily = parsedFont.data.typeface;
+    if (parsedFont.success) {
+      fontFamily = resolveTypefaceToken(parsedFont.data.typeface);
     }
   }
-  if (ea !== undefined && ea !== fontCursor) ea.consumeAttr("typeface");
-  if (cs !== undefined && cs !== fontCursor) cs.consumeAttr("typeface");
+  for (const extraSlot of [ea, cs]) {
+    if (extraSlot !== undefined && extraSlot !== fontCursor) {
+      extraSlot.attrsObject(["typeface", "pitchFamily", "charset", "panose"]);
+    }
+  }
 
   return {
-    ...(fontFamily === undefined ? {} : { fontFamily }),
-    ...(fontSize === undefined ? {} : { fontSize }),
-    ...(fontWeight === undefined ? {} : { fontWeight }),
-    ...(fontStyle === undefined ? {} : { fontStyle }),
-    ...(color === undefined ? {} : { color }),
-    ...(letterSpacing === undefined ? {} : { letterSpacing }),
-    ...(textTransform === undefined ? {} : { textTransform }),
-    ...(textDecoration === undefined ? {} : { textDecoration }),
-    ...(lang === undefined ? {} : { lang }),
+    style: {
+      ...(fontFamily === undefined ? {} : { fontFamily }),
+      ...(fontSize === undefined ? {} : { fontSize }),
+      ...(fontWeight === undefined ? {} : { fontWeight }),
+      ...(fontStyle === undefined ? {} : { fontStyle }),
+      ...(color === undefined ? {} : { color }),
+      ...(letterSpacing === undefined ? {} : { letterSpacing }),
+      ...(textTransform === undefined ? {} : { textTransform }),
+      ...(textDecoration === undefined ? {} : { textDecoration }),
+      ...(textShadow === undefined ? {} : { textShadow }),
+      ...(lang === undefined ? {} : { lang }),
+    },
+    ...(sizePt === undefined ? {} : { sizePt }),
   };
 }
 
-type ImportedRun = {
-  readonly text: string;
-  readonly style: ParsedRunStyle;
+/**
+ * Import handler for `<a:fld type="slidenum">` inline text fields (`text-field-slidenum`).
+ */
+export const textFieldSlideNumImportHandler: TextInlineImportHandler = {
+  target: "text-inline",
+  localName: "fld",
+  matches(cursor: XmlElementCursor): boolean {
+    return cursor.element.getAttribute("type") === "slidenum";
+  },
+  read(context: TextInlineImportContext) {
+    const { cursor, part, slideIndex } = context;
+    const diagnostics: ImportDiagnostic[] = [];
+    const rawField = cursor.attrsObject(["id", "type"]);
+    const parsedField = TextFieldXmlSchema.safeParse(rawField);
+    const rPrCursor = cursor.child(A_NS, "rPr");
+    const tCursor = cursor.child(A_NS, "t");
+    if (tCursor !== undefined) {
+      tCursor.consumeAttr("space", XML_NS);
+    }
+    const fallbackText = tCursor?.textContent ?? "";
+
+    if (!parsedField.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part, xpath: cursor.xpath, slideIndex },
+        attributeOrElement: "a:fld",
+        rawValue: JSON.stringify(rawField),
+      });
+      return {
+        kind: "unsupported",
+        fieldType: rawField["type"] ?? "",
+        ...(rPrCursor === undefined ? {} : { rPrCursor }),
+        fallbackText,
+        diagnostics,
+      };
+    }
+
+    if (parsedField.data.type !== "slidenum") {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: { part, xpath: cursor.xpath, slideIndex },
+        namespaceUri: cursor.namespaceUri,
+        localName: cursor.localName,
+        mechanismHint: `text-field:${parsedField.data.type}`,
+      });
+      return {
+        kind: "unsupported",
+        fieldType: parsedField.data.type,
+        ...(rPrCursor === undefined ? {} : { rPrCursor }),
+        fallbackText,
+        diagnostics,
+      };
+    }
+
+    return {
+      kind: "slide-number",
+      fieldType: "slidenum",
+      ...(rPrCursor === undefined ? {} : { rPrCursor }),
+      fallbackText,
+      diagnostics,
+    };
+  },
 };
+
+type ImportedRun =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      readonly style: ParsedRunStyle;
+      readonly sizePt?: number;
+    }
+  | {
+      readonly kind: "slide-number";
+      readonly style: ParsedRunStyle;
+      readonly sizePt?: number;
+    };
 
 type ImportedParagraph = {
   readonly runs: readonly ImportedRun[];
-  readonly style: NonNullable<ParagraphDeclarationProps["style"]>;
+  readonly style: ParagraphStyle;
 };
 
 function readParagraph(
@@ -339,12 +543,16 @@ function readParagraph(
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
 ): ImportedParagraph {
-  const pStyle: {
-    align?: TextAlignment;
-  } = {};
   const pPr = pCursor.child(A_NS, "pPr");
+
+  let align: TextAlignment | undefined;
+  let lvl: number | undefined;
+  let list: TextList | undefined;
+  let lnSpcNode: XmlElementCursor | undefined;
+  let spcAftNode: XmlElementCursor | undefined;
+
   if (pPr !== undefined) {
-    const rawPPr = pPr.attrsObject(["algn", "rtl"]);
+    const rawPPr = pPr.attrsObject(["algn", "rtl", "lvl"]);
     const parsedPPr = ParagraphPrFragmentSchema.safeParse(rawPPr);
     if (!parsedPPr.success) {
       diagnostics.push({
@@ -355,40 +563,145 @@ function readParagraph(
         attributeOrElement: "a:pPr",
         rawValue: JSON.stringify(rawPPr),
       });
-    } else if (parsedPPr.data.algn !== undefined) {
-      pStyle.align = algnToTextAlign[parsedPPr.data.algn];
+    } else {
+      if (parsedPPr.data.algn !== undefined) {
+        align = algnToTextAlign[parsedPPr.data.algn];
+      }
+      lvl = parsedPPr.data.lvl;
+    }
+
+    lnSpcNode = pPr.child(A_NS, "lnSpc");
+    spcAftNode = pPr.child(A_NS, "spcAft");
+
+    pPr.ignoreEmptyChild(A_NS, "buNone");
+    const buChar = pPr.child(A_NS, "buChar");
+    const buAutoNum = pPr.child(A_NS, "buAutoNum");
+    if (buChar !== undefined) {
+      const rawBu = buChar.attrsObject(["char"]);
+      const parsedBu = BulletCharXmlSchema.safeParse(rawBu);
+      if (!parsedBu.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part, xpath: buChar.xpath, slideIndex },
+          attributeOrElement: "a:buChar/@char",
+          rawValue: rawBu["char"] ?? "",
+        });
+      } else {
+        list = {
+          type: "bullet",
+          character: parsedBu.data.char,
+          ...(lvl === undefined ? {} : { level: lvl }),
+        };
+      }
+    } else if (buAutoNum !== undefined) {
+      const rawNum = buAutoNum.attrsObject(["type", "startAt"]);
+      const parsedNum = AutoNumXmlSchema.safeParse(rawNum);
+      if (!parsedNum.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part, xpath: buAutoNum.xpath, slideIndex },
+          attributeOrElement: "a:buAutoNum",
+          rawValue: JSON.stringify(rawNum),
+        });
+      } else {
+        if (parsedNum.data.type !== "arabicPeriod") {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "recovered",
+            location: {
+              part,
+              xpath: `${buAutoNum.xpath}/@type`,
+              slideIndex,
+            },
+            attributeOrElement: "a:buAutoNum/@type",
+            rawValue: parsedNum.data.type,
+          });
+        }
+        list = {
+          type: "number",
+          style: "arabicPeriod",
+          ...(parsedNum.data.startAt === undefined
+            ? {}
+            : { startAt: parsedNum.data.startAt }),
+          ...(lvl === undefined ? {} : { level: lvl }),
+        };
+      }
     }
   }
 
   const runs: ImportedRun[] = [];
+  let endParaSizePt: number | undefined;
+
   for (const child of pCursor.remainingElementChildren()) {
     if (child.namespaceUri === A_NS && child.localName === "r") {
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readRunProperties(rPr, part, slideIndex, diagnostics);
       const t = child.child(A_NS, "t");
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
-        runs.push({ text: t.textContent, style: runStyle });
+        runs.push({
+          kind: "text",
+          text: t.textContent,
+          style: parsedRPr.style,
+          ...(parsedRPr.sizePt === undefined
+            ? {}
+            : { sizePt: parsedRPr.sizePt }),
+        });
       }
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "br") {
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readRunProperties(rPr, part, slideIndex, diagnostics);
-      runs.push({ text: "\n", style: runStyle });
+      runs.push({
+        kind: "text",
+        text: "\n",
+        style: parsedRPr.style,
+        ...(parsedRPr.sizePt === undefined ? {} : { sizePt: parsedRPr.sizePt }),
+      });
+      continue;
+    }
+    if (child.namespaceUri === A_NS && child.localName === "fld") {
+      const outcome = textFieldSlideNumImportHandler.read({
+        cursor: child,
+        part,
+        slideIndex,
+      });
+      diagnostics.push(...outcome.diagnostics);
+      if (outcome.kind === "slide-number") {
+        const parsedRPr =
+          outcome.rPrCursor === undefined
+            ? { style: {} }
+            : readRunProperties(
+                outcome.rPrCursor,
+                part,
+                slideIndex,
+                diagnostics,
+              );
+        runs.push({
+          kind: "slide-number",
+          style: parsedRPr.style,
+          ...(parsedRPr.sizePt === undefined
+            ? {}
+            : { sizePt: parsedRPr.sizePt }),
+        });
+      }
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "endParaRPr") {
-      child.consumeAttr("lang");
-      child.consumeAttr("sz");
-      child.consumeAttr("b");
-      child.consumeAttr("i");
+      const parsedEnd = readRunProperties(child, part, slideIndex, diagnostics);
+      endParaSizePt = parsedEnd.sizePt;
       continue;
     }
     // Any other child under `<a:p>` becomes an explicit unconsumed-xml item.
@@ -403,7 +716,200 @@ function readParagraph(
     });
   }
 
-  return { runs, style: pStyle };
+  const baseFontPt =
+    runs.find((run) => run.sizePt !== undefined)?.sizePt ?? endParaSizePt ?? 18;
+
+  let lineHeight: ParagraphStyle["lineHeight"] | undefined;
+  if (lnSpcNode !== undefined) {
+    const spcPts = lnSpcNode.child(A_NS, "spcPts");
+    const spcPct =
+      spcPts === undefined ? lnSpcNode.child(A_NS, "spcPct") : undefined;
+    if (spcPts !== undefined) {
+      const raw = spcPts.attrsObject(["val"]);
+      const parsed = SpacingPointsXmlSchema.safeParse(raw);
+      if (!parsed.success || parsed.data.val === 0) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part, xpath: spcPts.xpath, slideIndex },
+          attributeOrElement: "a:spcPts/@val",
+          rawValue: raw["val"] ?? "",
+        });
+      } else {
+        lineHeight = `${parsed.data.val / 100}pt`;
+      }
+    } else if (spcPct !== undefined) {
+      const raw = spcPct.attrsObject(["val"]);
+      const parsed = SpacingPercentXmlSchema.safeParse(raw);
+      if (!parsed.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part, xpath: spcPct.xpath, slideIndex },
+          attributeOrElement: "a:spcPct/@val",
+          rawValue: raw["val"] ?? "",
+        });
+      } else {
+        const pt = Number(
+          ((baseFontPt * parsed.data.val) / 100_000).toFixed(2),
+        );
+        if (pt > 0) {
+          lineHeight = `${pt}pt`;
+        }
+      }
+    }
+  }
+
+  let spacingAfter: number | undefined;
+  if (spcAftNode !== undefined) {
+    const spcPts = spcAftNode.child(A_NS, "spcPts");
+    const spcPct =
+      spcPts === undefined ? spcAftNode.child(A_NS, "spcPct") : undefined;
+    if (spcPts !== undefined) {
+      const raw = spcPts.attrsObject(["val"]);
+      const parsed = SpacingPointsXmlSchema.safeParse(raw);
+      if (!parsed.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part, xpath: spcPts.xpath, slideIndex },
+          attributeOrElement: "a:spcPts/@val",
+          rawValue: raw["val"] ?? "",
+        });
+      } else {
+        spacingAfter = parsed.data.val / 75;
+      }
+    } else if (spcPct !== undefined) {
+      const raw = spcPct.attrsObject(["val"]);
+      const parsed = SpacingPercentXmlSchema.safeParse(raw);
+      if (parsed.success) {
+        spacingAfter = ((baseFontPt * parsed.data.val) / 100_000) * (4 / 3);
+      }
+    }
+  }
+
+  const style: ParagraphStyle = {
+    ...(align === undefined ? {} : { align }),
+    ...(lineHeight === undefined ? {} : { lineHeight }),
+    ...(spacingAfter === undefined ? {} : { spacingAfter }),
+    ...(list === undefined ? {} : { list }),
+  };
+
+  return { runs, style };
+}
+
+export type ImportedRichTextBody = {
+  readonly boxStyle: NonNullable<TextDeclarationProps["style"]>;
+  readonly importedParagraphs: readonly ImportedParagraph[];
+};
+
+/**
+ * Shared rich-text body reader for text boxes, shapes, table cells, and speaker notes.
+ */
+export function readRichTextBody(
+  txBody: XmlElementCursor,
+  part: string,
+  slideIndex: number,
+  diagnostics: ImportDiagnostic[],
+): ImportedRichTextBody {
+  let paddingTop: number | undefined;
+  let paddingRight: number | undefined;
+  let paddingBottom: number | undefined;
+  let paddingLeft: number | undefined;
+  let verticalAlign: NonNullable<TextStyle["verticalAlign"]> | undefined;
+  let textWrap: NonNullable<TextStyle["textWrap"]> | undefined;
+
+  const bodyPr = txBody.child(A_NS, "bodyPr");
+  if (bodyPr !== undefined) {
+    const rawBodyPr = bodyPr.attrsObject([
+      "wrap",
+      "rtlCol",
+      "lIns",
+      "tIns",
+      "rIns",
+      "bIns",
+      "anchor",
+    ]);
+    const parsedBodyPr = BodyPrFragmentSchema.safeParse(rawBodyPr);
+    if (!parsedBodyPr.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: { part, xpath: bodyPr.xpath, slideIndex },
+        attributeOrElement: "a:bodyPr",
+        rawValue: JSON.stringify(rawBodyPr),
+      });
+    } else {
+      const b = parsedBodyPr.data;
+      if (b.wrap === "none") textWrap = "nowrap";
+      else if (b.wrap === "square") textWrap = "normal";
+      if (b.anchor !== undefined) {
+        verticalAlign = anchorToVerticalAlign[b.anchor];
+      }
+      if (b.lIns !== undefined && b.lIns !== 0) paddingLeft = emuToPx(b.lIns);
+      if (b.tIns !== undefined && b.tIns !== 0) paddingTop = emuToPx(b.tIns);
+      if (b.rIns !== undefined && b.rIns !== 0) paddingRight = emuToPx(b.rIns);
+      if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
+    }
+    bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
+  }
+
+  txBody.ignoreEmptyChild(A_NS, "lstStyle");
+
+  const importedParagraphs = txBody
+    .children(A_NS, "p")
+    .map((pCursor) => readParagraph(pCursor, part, slideIndex, diagnostics));
+
+  const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
+    ...(paddingTop === undefined ? {} : { paddingTop }),
+    ...(paddingRight === undefined ? {} : { paddingRight }),
+    ...(paddingBottom === undefined ? {} : { paddingBottom }),
+    ...(paddingLeft === undefined ? {} : { paddingLeft }),
+    ...(verticalAlign === undefined ? {} : { verticalAlign }),
+    ...(textWrap === undefined ? {} : { textWrap }),
+  };
+
+  return { boxStyle, importedParagraphs };
+}
+
+/** Populates a `RichTextContainer` (`TextNode`, `ShapeNode`, `CellNode`, `NotesNode`) from imported paragraphs. */
+export function populateRichTextNode(
+  target: {
+    content(...items: (string | CommonNode)[]): unknown;
+  },
+  importedParagraphs: readonly ImportedParagraph[],
+): void {
+  const paragraphNodes = importedParagraphs.map((para) => {
+    const pNode = createParagraphNode(
+      Object.keys(para.style).length === 0 ? {} : { style: para.style },
+    );
+    if (
+      para.runs.length === 1 &&
+      para.runs[0]!.kind === "text" &&
+      Object.keys(para.runs[0]!.style).length === 0
+    ) {
+      pNode.content(para.runs[0]!.text);
+    } else if (para.runs.length > 0) {
+      pNode.content(
+        ...para.runs.map((run) => {
+          if (run.kind === "slide-number") {
+            return createSlideNumberNode(
+              Object.keys(run.style).length === 0 ? {} : { style: run.style },
+            );
+          }
+          return Object.keys(run.style).length === 0
+            ? run.text
+            : createSpanNode({ style: run.style }).content(run.text);
+        }),
+      );
+    }
+    return pNode;
+  });
+  target.content(...paragraphNodes);
 }
 
 /**
@@ -545,7 +1051,7 @@ export function readTextBoxSp(
   let backgroundColor: ColorValue | undefined;
   const spSolidFill = spPr.child(A_NS, "solidFill");
   if (spSolidFill !== undefined) {
-    backgroundColor = readSolidFillColor(
+    backgroundColor = readColorElement(
       spSolidFill,
       part,
       slideIndex,
@@ -553,12 +1059,6 @@ export function readTextBoxSp(
     );
   }
 
-  let paddingTop: number | undefined;
-  let paddingRight: number | undefined;
-  let paddingBottom: number | undefined;
-  let paddingLeft: number | undefined;
-  let verticalAlign: NonNullable<TextStyle["verticalAlign"]> | undefined;
-  let textWrap: NonNullable<TextStyle["textWrap"]> | undefined;
   const rotate =
     parsedXfrm.success &&
     parsedXfrm.data.rot !== undefined &&
@@ -566,66 +1066,37 @@ export function readTextBoxSp(
       ? parsedXfrm.data.rot / 60_000
       : undefined;
 
-  const bodyPr = txBody.child(A_NS, "bodyPr");
-  if (bodyPr !== undefined) {
-    const rawBodyPr = bodyPr.attrsObject([
-      "wrap",
-      "rtlCol",
-      "lIns",
-      "tIns",
-      "rIns",
-      "bIns",
-      "anchor",
-    ]);
-    const parsedBodyPr = BodyPrFragmentSchema.safeParse(rawBodyPr);
-    if (!parsedBodyPr.success) {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "recovered",
-        location: { part, xpath: bodyPr.xpath, slideIndex },
-        attributeOrElement: "a:bodyPr",
-        rawValue: JSON.stringify(rawBodyPr),
-      });
-    } else {
-      const b = parsedBodyPr.data;
-      if (b.wrap === "none") textWrap = "nowrap";
-      else if (b.wrap === "square") textWrap = "normal";
-      if (b.anchor !== undefined) {
-        verticalAlign = anchorToVerticalAlign[b.anchor];
-      }
-      if (b.lIns !== undefined && b.lIns !== 0) paddingLeft = emuToPx(b.lIns);
-      if (b.tIns !== undefined && b.tIns !== 0) paddingTop = emuToPx(b.tIns);
-      if (b.rIns !== undefined && b.rIns !== 0) paddingRight = emuToPx(b.rIns);
-      if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
-    }
-    bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
-  }
-
-  txBody.ignoreEmptyChild(A_NS, "lstStyle");
-
-  const importedParagraphs = txBody
-    .children(A_NS, "p")
-    .map((pCursor) => readParagraph(pCursor, part, slideIndex, diagnostics));
+  const { boxStyle: bodyStyle, importedParagraphs } = readRichTextBody(
+    txBody,
+    part,
+    slideIndex,
+    diagnostics,
+  );
 
   const singleParagraph =
     importedParagraphs.length === 1 ? importedParagraphs[0] : undefined;
-  const singleRun =
-    singleParagraph !== undefined && singleParagraph.runs.length === 1
+  const singleTextRun =
+    singleParagraph !== undefined &&
+    singleParagraph.style.list === undefined &&
+    singleParagraph.runs.length === 1 &&
+    singleParagraph.runs[0]!.kind === "text"
       ? singleParagraph.runs[0]
       : undefined;
 
+  const flatParagraphStyle: Omit<ParagraphStyle, "list"> | undefined =
+    singleTextRun === undefined || singleParagraph === undefined
+      ? undefined
+      : (() => {
+          const { list: _list, ...rest } = singleParagraph.style;
+          return rest;
+        })();
+
   const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
-    ...(paddingTop === undefined ? {} : { paddingTop }),
-    ...(paddingRight === undefined ? {} : { paddingRight }),
-    ...(paddingBottom === undefined ? {} : { paddingBottom }),
-    ...(paddingLeft === undefined ? {} : { paddingLeft }),
-    ...(verticalAlign === undefined ? {} : { verticalAlign }),
-    ...(textWrap === undefined ? {} : { textWrap }),
+    ...bodyStyle,
     ...(rotate === undefined ? {} : { rotate }),
     ...(backgroundColor === undefined ? {} : { backgroundColor }),
-    ...(singleParagraph === undefined ? {} : singleParagraph.style),
-    ...(singleRun === undefined ? {} : singleRun.style),
+    ...flatParagraphStyle,
+    ...(singleTextRun === undefined ? {} : singleTextRun.style),
   };
 
   const props: TextDeclarationProps = {
@@ -638,30 +1109,10 @@ export function readTextBoxSp(
   };
 
   const node = createTextNode(props);
-  if (singleRun !== undefined) {
-    node.content(singleRun.text);
+  if (singleTextRun !== undefined) {
+    node.content(singleTextRun.text);
   } else if (importedParagraphs.length > 0) {
-    const paragraphNodes = importedParagraphs.map((para) => {
-      const pNode = createParagraphNode(
-        Object.keys(para.style).length === 0 ? {} : { style: para.style },
-      );
-      if (
-        para.runs.length === 1 &&
-        Object.keys(para.runs[0]!.style).length === 0
-      ) {
-        pNode.content(para.runs[0]!.text);
-      } else {
-        pNode.content(
-          ...para.runs.map((run) =>
-            Object.keys(run.style).length === 0
-              ? run.text
-              : createSpanNode({ style: run.style }).content(run.text),
-          ),
-        );
-      }
-      return pNode;
-    });
-    node.content(...paragraphNodes);
+    populateRichTextNode(node, importedParagraphs);
   }
 
   return { node, diagnostics };

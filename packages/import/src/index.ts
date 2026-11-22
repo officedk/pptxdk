@@ -30,6 +30,18 @@ export {
   readThemeOverridePart,
   readThemePart,
 } from "#/themes.ts";
+export {
+  readEmbeddedFontList,
+  readPresentationThemeFontScheme,
+  unpackEotFontData,
+} from "#/fonts.ts";
+export type {
+  EmbeddedFontRecord,
+  EmbeddedFontSlot,
+  EmbeddedFontSlotRecord,
+  PresentationFontSchemeInfo,
+  UnpackedEotResult,
+} from "#/fonts.ts";
 export { defineCanvasMechanism, defineShowMechanism } from "#/mechanism.ts";
 export type {
   DeckImportContext,
@@ -43,21 +55,26 @@ export type {
   SlideImportContext,
   SlideImportHandler,
   SlideImportOutcome,
+  TextInlineImportContext,
+  TextInlineImportHandler,
 } from "#/mechanism.ts";
 export {
   A_NS,
   CHART_NS,
   CONTENT_TYPES_NS,
+  C_NS,
   DIAGRAM_NS,
   EMU_PER_PX,
   MC_NS,
   OPC_REL_NS,
   P_NS,
+  REL_CHART,
   REL_DIAGRAM_COLORS,
   REL_DIAGRAM_DATA,
   REL_DIAGRAM_DRAWING,
   REL_DIAGRAM_LAYOUT,
   REL_DIAGRAM_QUICK_STYLE,
+  REL_FONT,
   REL_HYPERLINK,
   REL_IMAGE,
   REL_OFFICE_DOCUMENT,

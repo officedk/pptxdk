@@ -11,10 +11,13 @@ export const MC_NS =
 export const P_NS =
   "http://schemas.openxmlformats.org/presentationml/2006/main";
 export const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+export const C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 export const R_NS =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 export const REL_OFFICE_DOCUMENT =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
+export const REL_CHART =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
 export const REL_SLIDE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 export const REL_SLIDE_LAYOUT =
@@ -25,6 +28,8 @@ export const REL_THEME =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
 export const REL_THEME_OVERRIDE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
+export const REL_FONT =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 export const REL_IMAGE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 export const REL_HYPERLINK =
@@ -63,6 +68,7 @@ export function emuToPx(emu: number): number {
 const canonicalPrefixes: ReadonlyMap<string, string> = new Map([
   [P_NS, "p"],
   [A_NS, "a"],
+  [C_NS, "c"],
   [R_NS, "r"],
   [MC_NS, "mc"],
   [DIAGRAM_NS, "dgm"],

@@ -31,31 +31,29 @@ import {
 } from "../font/font-embedding.ts";
 import { matchesFontFamily } from "../font/font-family.ts";
 import type {} from "./emscripten.d.ts";
+import {
+  paragraphStyleSchema,
+  parseParagraphStyle,
+  parseRunStyle,
+  parseTextExtent,
+  parseTextInsets,
+  parseTextList,
+  runStyleSchema,
+  textListSchema,
+  type ParagraphStyle,
+  type RunTextStyle,
+  type TextList,
+} from "./text-schemas.ts";
 import { resolveShadow, textShadowXml, type ResolvedShadow } from "./visual.ts";
 export { requiresFontGlyph } from "../font/font-embedding.ts";
+export { paragraphStyleSchema, runStyleSchema, textListSchema };
 export type {
   FontReference,
   FontSize,
   TextAlignment,
   TextStyle,
 } from "@pptxdk/core/capability";
-
-export type TextList =
-  | {
-      readonly type: "bullet";
-      readonly character?: string;
-      readonly level?: number;
-    }
-  | {
-      readonly type: "number";
-      readonly style?: "arabicPeriod";
-      readonly startAt?: number;
-      readonly level?: number;
-    };
-
-export type ParagraphStyle = Omit<TextStyle, "verticalAlign" | "textWrap"> & {
-  readonly list?: TextList;
-};
+export type { ParagraphStyle, RunTextStyle, TextList };
 
 export type TextResourceClaim = {
   readonly kind: "font-face";
@@ -510,24 +508,7 @@ function validateRunStyle(style: RunStyle): RunStyle {
 }
 
 function readRunStyle(value: unknown): RunStyle {
-  const props = styleRecord(value, "Span.style");
-  onlyKnownKeys(
-    props,
-    [
-      "fontFamily",
-      "fontSize",
-      "fontWeight",
-      "fontStyle",
-      "color",
-      "letterSpacing",
-      "textTransform",
-      "textDecoration",
-      "textShadow",
-      "lang",
-    ],
-    "Span.style",
-  );
-  return validateRunStyle(props);
+  return parseRunStyle(value, "Span.style");
 }
 
 function mergeRunStyle(
@@ -631,95 +612,13 @@ function readTextStyle(
 }
 
 function paragraphStyle(value: unknown): ParagraphStyle {
-  const props = styleRecord(value, "P.style");
-  onlyKnownKeys(
-    props,
-    [
-      "fontFamily",
-      "fontSize",
-      "fontWeight",
-      "fontStyle",
-      "color",
-      "lineHeight",
-      "align",
-      "spacingAfter",
-      "letterSpacing",
-      "textTransform",
-      "textDecoration",
-      "textShadow",
-      "list",
-      "lang",
-    ],
-    "P.style",
-  );
-  validateTextStyle(props);
-  const style = props as ParagraphStyle;
-  if (style.list !== undefined) validateList(style.list);
-  return style;
+  return parseParagraphStyle(value, "P.style");
 }
 
 function validateList(value: TextList): void {
-  if (
-    !record(value) ||
-    (value["type"] !== "bullet" && value["type"] !== "number")
-  ) {
-    throw new CapabilityError(
-      "invalid-list",
-      "list.type must be bullet or number",
-    );
-  }
-  onlyKnownKeys(
-    value,
-    value["type"] === "bullet"
-      ? ["type", "character", "level"]
-      : ["type", "style", "startAt", "level"],
-    "list",
-  );
-  const level = value["level"] ?? 0;
-  if (!Number.isInteger(level) || level < 0 || level > 8) {
-    throw new CapabilityError(
-      "invalid-list",
-      "list.level must be an integer between 0 and 8",
-    );
-  }
-  if (value["type"] === "bullet") {
-    const character = value["character"] ?? "•";
-    const codePoint =
-      typeof character === "string" ? character.codePointAt(0) : undefined;
-    if (
-      typeof character !== "string" ||
-      codePoint === undefined ||
-      String.fromCodePoint(codePoint) !== character
-    ) {
-      throw new CapabilityError(
-        "invalid-list",
-        "Bullet must be a single Unicode character",
-      );
-    }
-    try {
-      xmlEscape(character);
-    } catch {
-      throw new CapabilityError(
-        "invalid-xml-character",
-        "Bullet contains characters not allowed in XML 1.0",
-      );
-    }
-  } else {
-    if (value["style"] !== undefined && value["style"] !== "arabicPeriod") {
-      throw new CapabilityError(
-        "invalid-list",
-        "Numbering style currently only supports arabicPeriod",
-      );
-    }
-    const startAt = value["startAt"] ?? 1;
-    if (!Number.isInteger(startAt) || startAt < 1 || startAt > 32767) {
-      throw new CapabilityError(
-        "invalid-list",
-        "Numbering start value must be an integer between 1 and 32767",
-      );
-    }
-  }
+  parseTextList(value);
 }
+void validateList;
 
 function collectRuns(
   children: readonly unknown[],
@@ -923,11 +822,25 @@ function displayedText(run: Run): string {
     : run.text;
 }
 
+/** Emits a native `<a:fld type="slidenum">` run using a fresh or preallocated field GUID. */
+export function emitSlideNumberRunXml(
+  run: Run,
+  theme: ThemeContext,
+  createFieldId?: () => string,
+): string {
+  const fieldId =
+    createFieldId !== undefined
+      ? createFieldId()
+      : (run.field?.id ?? "00000000-0000-4000-8000-000000000001");
+  const fieldType = run.field?.type ?? "slidenum";
+  return `<a:fld id="${escapedXml(fieldId)}" type="${fieldType}">${runPropertiesXml(run.style, "a:rPr", theme)}<a:t>${escapedXml(run.text)}</a:t></a:fld>`;
+}
+
 function runXml(run: Run, theme: ThemeContext): string {
-  const text = escapedXml(run.text);
   if (run.field !== undefined) {
-    return `<a:fld id="${escapedXml(run.field.id)}" type="${run.field.type}">${runPropertiesXml(run.style, "a:rPr", theme)}<a:t>${text}</a:t></a:fld>`;
+    return emitSlideNumberRunXml(run, theme);
   }
+  const text = escapedXml(run.text);
   return `<a:r>${runPropertiesXml(run.style, "a:rPr", theme)}<a:t xml:space="preserve">${text}</a:t></a:r>`;
 }
 
@@ -2846,49 +2759,7 @@ export function textInsets(value: unknown): {
   readonly bottom: number;
   readonly left: number;
 } {
-  const style = record(value) ? value : {};
-  const raw = style["padding"];
-  let edges = { top: 0, right: 0, bottom: 0, left: 0 };
-  if (typeof raw === "number") {
-    edges = { top: raw, right: raw, bottom: raw, left: raw };
-  } else if (Array.isArray(raw) && (raw.length === 2 || raw.length === 4)) {
-    const values = raw;
-    edges =
-      values.length === 2
-        ? {
-            top: values[0] as number,
-            right: values[1] as number,
-            bottom: values[0] as number,
-            left: values[1] as number,
-          }
-        : {
-            top: values[0] as number,
-            right: values[1] as number,
-            bottom: values[2] as number,
-            left: values[3] as number,
-          };
-  } else if (raw !== undefined) {
-    throw new CapabilityError(
-      "invalid-text-insets",
-      "padding must be a number, a 2-tuple, or a 4-tuple",
-    );
-  }
-  const result: { top: number; right: number; bottom: number; left: number } = {
-    top: (style["paddingTop"] ?? edges.top) as number,
-    right: (style["paddingRight"] ?? edges.right) as number,
-    bottom: (style["paddingBottom"] ?? edges.bottom) as number,
-    left: (style["paddingLeft"] ?? edges.left) as number,
-  };
-  for (const [name, amount] of Object.entries(result)) {
-    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
-      throw new CapabilityError(
-        "invalid-text-insets",
-        `${name} inset must be a finite non-negative pixel number`,
-      );
-    }
-    pxToEmu(amount);
-  }
-  return result;
+  return parseTextInsets(value);
 }
 
 /** Parses text children, validates element structure, and resolves paragraphs and text styles once. */
@@ -3222,18 +3093,5 @@ export function writeChartTitle(
 
 /** Converts fixed pixel length into DrawingML EMU. */
 export function textExtent(value: number, label: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new CapabilityError(
-      "invalid-text-box",
-      `${label} must be a finite positive pixel value`,
-    );
-  }
-  const extent = pxToEmu(value);
-  if (extent < 1 || extent > 2_147_483_647) {
-    throw new CapabilityError(
-      "invalid-text-box",
-      `${label} converted value exceeds shape dimension range`,
-    );
-  }
-  return extent;
+  return pxToEmu(parseTextExtent(value, label));
 }

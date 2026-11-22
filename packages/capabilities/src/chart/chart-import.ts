@@ -1188,7 +1188,8 @@ function readDataLabelSettingsBody(
         consumeSubtree(ext);
       } else if (
         uri === "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}" ||
-        uri === "{0b15fc19-7d7d-44ad-8c2d-2c3a37ce22c3}"
+        uri === "{0b15fc19-7d7d-44ad-8c2d-2c3a37ce22c3}" ||
+        uri === C16_UNIQUE_ID_EXT_URI
       ) {
         consumeSubtree(ext);
       } else {

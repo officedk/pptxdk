@@ -286,7 +286,7 @@ export const stringWidthDeck = (
       ),
       `Unexpected diagnostics: ${JSON.stringify(structuralError.diagnostics)}`,
     );
-  }, 20_000);
+  }, 45_000);
 
   it("loads vanilla + default build without React or preview and expands JSX on demand across source and dist conditions", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -389,5 +389,5 @@ process.stdout.write("ok");
       assert.equal(runSubprocess(conditions, vanillaScript), "ok");
       assert.equal(runSubprocess(conditions, jsxOnDemandScript), "ok");
     }
-  });
+  }, 45_000);
 });

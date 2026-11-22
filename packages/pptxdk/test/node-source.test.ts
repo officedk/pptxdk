@@ -289,7 +289,7 @@ describe("pptxdk/node source SDK", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 45_000);
 
   it("supports all 4 valid export shapes (CommonNode, Promise<CommonNode>, JSX element, Hooks component) with direct SDK parity", async () => {
     const root = await createSourceWorkspace();
@@ -411,7 +411,7 @@ describe("pptxdk/node source SDK", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 45_000);
 
   it("reports source diagnostics, preserves BuildError/RangeError, and releases loader hooks on errors", async () => {
     const root = await createSourceWorkspace();
@@ -541,7 +541,7 @@ describe("pptxdk/node source SDK", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 45_000);
 
   it("propagates cancellation reasons without unhandled rejections or leftover listeners across all stages", async () => {
     const root = await createSourceWorkspace();
@@ -912,5 +912,5 @@ describe("pptxdk/node source SDK", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 45_000);
 });

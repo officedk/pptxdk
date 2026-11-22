@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { documentCapabilities } from "@pptxdk/capabilities/all";
@@ -23,10 +24,21 @@ const jostFont = font("Jost*", [
 const importDocument = createImporter(documentCapabilities);
 const resolveDocument = createResolver(documentCapabilities);
 
+const expectedFixtureSha256: Readonly<Record<string, string>> = {
+  "ph-populated-placeholders.pptx":
+    "b08599276b4d708757951f2d45ac74cb4e81e94463d575e4d857690d0d231a60",
+  "ph-unpopulated-placeholders.pptx":
+    "4a73c52d57e944abfc3367d7521f0ae8740030309af5644f6702ded0508cca53",
+};
+
 function readFixture(name: string): Uint8Array {
-  return new Uint8Array(
+  const bytes = new Uint8Array(
     readFileSync(new URL(`../fixtures/${name}`, import.meta.url)),
   );
+  const expectedSha = expectedFixtureSha256[name];
+  expect(expectedSha).toBeDefined();
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe(expectedSha);
+  return bytes;
 }
 
 describe("Native content placeholders fixtures", () => {

@@ -26,6 +26,7 @@ import {
   XML_NS,
   emuToPx,
   type ImportDiagnostic,
+  type ImportLocation,
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
   type ShapeTreeImportOutcome,
@@ -35,6 +36,8 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import { readNonVisualCommonProperties } from "../shape/shape-import.ts";
+import type { Geometry } from "../shared/geometry.ts";
 import {
   consumeNonPlaceholderNvPr,
   hasPlaceholderElement,
@@ -47,6 +50,11 @@ import {
 } from "../shared/placeholder-import.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-schemas.ts";
 import {
+  readSpPrAppearance,
+  readSpPrVisuals,
+  type ShapeVisualStyle,
+} from "../shared/visual.ts";
+import {
   createParagraphNode,
   createSlideNumberNode,
   createSpanNode,
@@ -55,17 +63,8 @@ import {
   type TextDeclarationProps,
 } from "./text-declaration.ts";
 
-const NonVisualSpIdSchema = z.object({
-  id: OoxmlNonNegativeIntSchema,
-  name: z.string().optional(),
-});
-
 const NonVisualSpPrFlagsSchema = z.object({
   txBox: OoxmlBoolSchema.optional(),
-});
-
-const PresetGeomFragmentSchema = z.object({
-  prst: z.string().min(1),
 });
 
 const BodyPrFragmentSchema = z.object({
@@ -962,10 +961,75 @@ export function populateRichTextNode(
   target.content(...paragraphNodes);
 }
 
+function textBoxVisualStyle(
+  appearanceStyle: ShapeVisualStyle,
+  geometry: Geometry | undefined,
+  boxSize: { readonly width: number; readonly height: number } | undefined,
+  rotate: number | undefined,
+  location: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): NonNullable<TextDeclarationProps["style"]> {
+  const { startArrow, endArrow, ...supportedVisualStyle } = appearanceStyle;
+  if (startArrow !== undefined || endArrow !== undefined) {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location,
+      namespaceUri: A_NS,
+      localName: startArrow !== undefined ? "headEnd" : "tailEnd",
+      mechanismHint: "textbox-line-arrow",
+    });
+  }
+
+  let borderRadius: number | undefined;
+  if (geometry === "roundRect") {
+    if (boxSize !== undefined) {
+      borderRadius =
+        (16667 / 100_000) * Math.min(boxSize.width, boxSize.height);
+    }
+  } else if (typeof geometry === "object" && geometry.type === "preset") {
+    if (geometry.name === "roundRect") {
+      if (boxSize !== undefined) {
+        const adj = geometry.adjust?.["adj"] ?? 16667;
+        if (adj > 0) {
+          borderRadius =
+            (adj / 100_000) * Math.min(boxSize.width, boxSize.height);
+        }
+      }
+    } else if (geometry.name !== "rect") {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location,
+        namespaceUri: A_NS,
+        localName: "prstGeom",
+        mechanismHint: `textbox-preset:${geometry.name}`,
+      });
+    }
+  } else if (typeof geometry === "object" && geometry.type === "custom") {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location,
+      namespaceUri: A_NS,
+      localName: "custGeom",
+      mechanismHint: "textbox-custGeom",
+    });
+  }
+
+  return {
+    ...supportedVisualStyle,
+    ...(borderRadius === undefined ? {} : { borderRadius }),
+    ...(rotate === undefined ? {} : { rotate }),
+  };
+}
+
 function flattenImportedTextBody(
   imported: ImportedRichTextBody | undefined,
-  rotate: number | undefined,
-  backgroundColor: ColorValue | undefined,
+  visualStyle: NonNullable<TextDeclarationProps["style"]>,
 ): {
   readonly boxStyle: NonNullable<TextDeclarationProps["style"]>;
   readonly singleText?: string;
@@ -997,8 +1061,7 @@ function flattenImportedTextBody(
 
   const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
     ...imported?.boxStyle,
-    ...(rotate === undefined ? {} : { rotate }),
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+    ...visualStyle,
     ...flatParagraphStyle,
     ...(singleTextRun === undefined ? {} : singleTextRun.style),
   };
@@ -1018,7 +1081,7 @@ function flattenImportedTextBody(
 export function readTextBoxSp(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex } = context;
+  const { cursor, part, slideIndex, package: pkg } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvSpPr = cursor.child(P_NS, "nvSpPr");
@@ -1032,38 +1095,38 @@ export function readTextBoxSp(
     return { diagnostics };
   }
 
-  let objectId: number | undefined;
-  let objectName: string | undefined;
   const cNvPr = nvSpPr.child(P_NS, "cNvPr");
-  if (cNvPr !== undefined) {
-    const rawCNvPr = cNvPr.attrsObject(["id", "name"]);
-    const parsedCNvPr = NonVisualSpIdSchema.safeParse(rawCNvPr);
-    if (!parsedCNvPr.success) {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "recovered",
-        location: { part, xpath: cNvPr.xpath, slideIndex },
-        attributeOrElement: "p:cNvPr",
-        rawValue: JSON.stringify(rawCNvPr),
-      });
-    } else {
-      objectId = parsedCNvPr.data.id;
-      if (
-        parsedCNvPr.data.name !== undefined &&
-        parsedCNvPr.data.name.trim() !== ""
-      ) {
-        objectName = parsedCNvPr.data.name;
-      }
-    }
-  }
+  const { objectId, objectName, link } = readNonVisualCommonProperties(
+    cNvPr,
+    pkg,
+    part,
+    slideIndex,
+    diagnostics,
+  );
+  cNvPr?.ignoreEmptyChild(A_NS, "extLst");
 
   const cNvSpPr = nvSpPr.child(P_NS, "cNvSpPr");
   if (cNvSpPr !== undefined) {
     const rawFlags = cNvSpPr.attrsObject(["txBox"]);
     NonVisualSpPrFlagsSchema.safeParse(rawFlags);
+    const spLocks = cNvSpPr.child(A_NS, "spLocks");
+    spLocks?.attrsObject([
+      "noGrp",
+      "noRot",
+      "noChangeAspect",
+      "noMove",
+      "noResize",
+      "noSelect",
+    ]);
   }
   consumeNonPlaceholderNvPr(nvSpPr);
+
+  const location: ImportLocation = {
+    part,
+    slideIndex,
+    ...(objectId === undefined ? {} : { objectId }),
+    ...(objectName === undefined ? {} : { objectName }),
+  };
 
   const spPr = cursor.child(P_NS, "spPr");
   const txBody = cursor.child(P_NS, "txBody");
@@ -1072,110 +1135,36 @@ export function readTextBoxSp(
       code: "corrupt-part",
       category: "corrupt-input",
       disposition: "omitted",
-      location: {
-        part,
-        xpath: cursor.xpath,
-        slideIndex,
-        ...(objectId === undefined ? {} : { objectId }),
-        ...(objectName === undefined ? {} : { objectName }),
-      },
+      location: { ...location, xpath: cursor.xpath },
     });
     return { diagnostics };
   }
 
-  const xfrm = spPr.child(A_NS, "xfrm");
-  const off = xfrm?.child(A_NS, "off");
-  const ext = xfrm?.child(A_NS, "ext");
-  if (xfrm === undefined || off === undefined || ext === undefined) {
-    diagnostics.push({
-      code: "corrupt-part",
-      category: "corrupt-input",
-      disposition: "omitted",
-      location: {
-        part,
-        xpath: spPr.xpath,
-        slideIndex,
-        ...(objectId === undefined ? {} : { objectId }),
-        ...(objectName === undefined ? {} : { objectName }),
-      },
-    });
+  const visuals = readSpPrVisuals(spPr, pkg, location, diagnostics);
+  if (visuals === undefined) {
     return { diagnostics };
   }
 
-  const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
-  const parsedXfrm = TransformAttributesFragmentSchema.safeParse(rawXfrm);
-  const rawOff = off.attrsObject(["x", "y"]);
-  const parsedOff = OffsetEmuFragmentSchema.safeParse(rawOff);
-  const rawExt = ext.attrsObject(["cx", "cy"]);
-  const parsedExt = ExtentEmuFragmentSchema.safeParse(rawExt);
-
-  if (!parsedOff.success || !parsedExt.success) {
-    diagnostics.push({
-      code: "invalid-xml-value",
-      category: "corrupt-input",
-      disposition: "omitted",
-      location: {
-        part,
-        xpath: xfrm.xpath,
-        slideIndex,
-        ...(objectId === undefined ? {} : { objectId }),
-        ...(objectName === undefined ? {} : { objectName }),
-      },
-      attributeOrElement: "a:xfrm",
-    });
-    return { diagnostics };
-  }
-
-  const prstGeom = spPr.child(A_NS, "prstGeom");
-  if (prstGeom !== undefined) {
-    const rawGeom = prstGeom.attrsObject(["prst"]);
-    const parsedGeom = PresetGeomFragmentSchema.safeParse(rawGeom);
-    if (!parsedGeom.success || parsedGeom.data.prst !== "rect") {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "recovered",
-        location: { part, xpath: prstGeom.xpath, slideIndex },
-        attributeOrElement: "a:prstGeom/@prst",
-        rawValue: rawGeom["prst"] ?? "",
-      });
-    }
-    prstGeom.ignoreEmptyChild(A_NS, "avLst");
-  }
-
-  spPr.ignoreEmptyChild(A_NS, "noFill");
-  const ln = spPr.child(A_NS, "ln");
-  if (ln !== undefined) {
-    ln.ignoreEmptyChild(A_NS, "noFill");
-  }
-  let backgroundColor: ColorValue | undefined;
-  const spSolidFill = spPr.child(A_NS, "solidFill");
-  if (spSolidFill !== undefined) {
-    backgroundColor = readColorElement(
-      spSolidFill,
-      part,
-      slideIndex,
-      diagnostics,
-    );
-  }
-
-  const rotate =
-    parsedXfrm.success &&
-    parsedXfrm.data.rot !== undefined &&
-    parsedXfrm.data.rot !== 0
-      ? parsedXfrm.data.rot / 60_000
-      : undefined;
+  const visualStyle = textBoxVisualStyle(
+    visuals.style,
+    visuals.geometry,
+    { width: visuals.transform.width, height: visuals.transform.height },
+    visuals.transform.rotate,
+    location,
+    diagnostics,
+  );
 
   const imported = readRichTextBody(txBody, part, slideIndex, diagnostics);
   const { boxStyle, singleText, paragraphsToPopulate } =
-    flattenImportedTextBody(imported, rotate, backgroundColor);
+    flattenImportedTextBody(imported, visualStyle);
 
   const props: TextDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
-    x: emuToPx(parsedOff.data.x),
-    y: emuToPx(parsedOff.data.y),
-    width: emuToPx(parsedExt.data.cx),
-    height: emuToPx(parsedExt.data.cy),
+    ...(link === undefined ? {} : { link }),
+    x: visuals.transform.x,
+    y: visuals.transform.y,
+    width: visuals.transform.width,
+    height: visuals.transform.height,
     ...(Object.keys(boxStyle).length === 0 ? {} : { style: boxStyle }),
   };
 
@@ -1196,7 +1185,13 @@ export function readTextBoxSp(
 export function readTextPlaceholderSp(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, layoutPlaceholders } = context;
+  const {
+    cursor,
+    part,
+    slideIndex,
+    layoutPlaceholders,
+    package: pkg,
+  } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvSpPr = cursor.child(P_NS, "nvSpPr");
@@ -1210,32 +1205,15 @@ export function readTextPlaceholderSp(
     return { diagnostics };
   }
 
-  let objectId: number | undefined;
-  let objectName: string | undefined;
   const cNvPr = nvSpPr.child(P_NS, "cNvPr");
-  if (cNvPr !== undefined) {
-    const rawCNvPr = cNvPr.attrsObject(["id", "name"]);
-    const parsedCNvPr = NonVisualSpIdSchema.safeParse(rawCNvPr);
-    if (!parsedCNvPr.success) {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "recovered",
-        location: { part, xpath: cNvPr.xpath, slideIndex },
-        attributeOrElement: "p:cNvPr",
-        rawValue: JSON.stringify(rawCNvPr),
-      });
-    } else {
-      objectId = parsedCNvPr.data.id;
-      if (
-        parsedCNvPr.data.name !== undefined &&
-        parsedCNvPr.data.name.trim() !== ""
-      ) {
-        objectName = parsedCNvPr.data.name;
-      }
-    }
-    cNvPr.ignoreEmptyChild(A_NS, "extLst");
-  }
+  const { objectId, objectName, link } = readNonVisualCommonProperties(
+    cNvPr,
+    pkg,
+    part,
+    slideIndex,
+    diagnostics,
+  );
+  cNvPr?.ignoreEmptyChild(A_NS, "extLst");
 
   const cNvSpPr = nvSpPr.child(P_NS, "cNvSpPr");
   if (cNvSpPr !== undefined) {
@@ -1251,16 +1229,17 @@ export function readTextPlaceholderSp(
     ]);
   }
 
+  const location: ImportLocation = {
+    part,
+    slideIndex,
+    ...(objectId === undefined ? {} : { objectId }),
+    ...(objectName === undefined ? {} : { objectName }),
+  };
+
   const nvPr = nvSpPr.child(P_NS, "nvPr");
   const phResult = readNvPrPlaceholder(
     nvPr,
-    {
-      part,
-      xpath: cursor.xpath,
-      slideIndex,
-      ...(objectId === undefined ? {} : { objectId }),
-      ...(objectName === undefined ? {} : { objectName }),
-    },
+    { ...location, xpath: cursor.xpath },
     diagnostics,
   );
   if (phResult.kind === "none") {
@@ -1268,7 +1247,7 @@ export function readTextPlaceholderSp(
       code: "corrupt-part",
       category: "corrupt-input",
       disposition: "omitted",
-      location: { part, xpath: cursor.xpath, slideIndex },
+      location: { ...location, xpath: cursor.xpath },
     });
     return { diagnostics };
   }
@@ -1283,13 +1262,7 @@ export function readTextPlaceholderSp(
       code: "corrupt-part",
       category: "corrupt-input",
       disposition: "omitted",
-      location: {
-        part,
-        xpath: cursor.xpath,
-        slideIndex,
-        ...(objectId === undefined ? {} : { objectId }),
-        ...(objectName === undefined ? {} : { objectName }),
-      },
+      location: { ...location, xpath: cursor.xpath },
     });
     return { diagnostics };
   }
@@ -1303,6 +1276,7 @@ export function readTextPlaceholderSp(
       }
     | undefined;
   let rotate: number | undefined;
+  let fallbackUnits = { w: 0, h: 0 };
   const xfrm = spPr.child(A_NS, "xfrm");
   if (xfrm !== undefined) {
     const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
@@ -1328,11 +1302,12 @@ export function readTextPlaceholderSp(
           code: "invalid-xml-value",
           category: "corrupt-input",
           disposition: "omitted",
-          location: { part, xpath: xfrm.xpath, slideIndex },
+          location: { ...location, xpath: xfrm.xpath },
           attributeOrElement: "a:xfrm",
         });
         return { diagnostics };
       }
+      fallbackUnits = { w: parsedExt.data.cx, h: parsedExt.data.cy };
       localBox = {
         x: emuToPx(parsedOff.data.x),
         y: emuToPx(parsedOff.data.y),
@@ -1342,27 +1317,21 @@ export function readTextPlaceholderSp(
     }
   }
 
-  const prstGeom = spPr.child(A_NS, "prstGeom");
-  if (prstGeom !== undefined) {
-    prstGeom.consumeAttr("prst");
-    prstGeom.ignoreEmptyChild(A_NS, "avLst");
-  }
-  spPr.ignoreEmptyChild(A_NS, "noFill");
-  const ln = spPr.child(A_NS, "ln");
-  if (ln !== undefined) {
-    ln.ignoreEmptyChild(A_NS, "noFill");
-  }
-  let backgroundColor: ColorValue | undefined;
-  const spSolidFill = spPr.child(A_NS, "solidFill");
-  if (spSolidFill !== undefined) {
-    backgroundColor = readColorElement(
-      spSolidFill,
-      part,
-      slideIndex,
-      diagnostics,
-    );
-  }
-  spPr.ignoreEmptyChild(A_NS, "extLst");
+  const appearance = readSpPrAppearance(
+    spPr,
+    pkg,
+    fallbackUnits,
+    location,
+    diagnostics,
+  );
+  const visualStyle = textBoxVisualStyle(
+    appearance.style,
+    appearance.geometry,
+    localBox,
+    rotate,
+    location,
+    diagnostics,
+  );
 
   const txBody = cursor.child(P_NS, "txBody");
   const imported =
@@ -1371,7 +1340,7 @@ export function readTextPlaceholderSp(
       : readRichTextBody(txBody, part, slideIndex, diagnostics);
 
   const { boxStyle, singleText, paragraphsToPopulate } =
-    flattenImportedTextBody(imported, rotate, backgroundColor);
+    flattenImportedTextBody(imported, visualStyle);
 
   let validatedStyle: TextDeclarationProps["style"] | undefined;
   if (Object.keys(boxStyle).length > 0) {
@@ -1383,7 +1352,7 @@ export function readTextPlaceholderSp(
         code: "invalid-xml-value",
         category: "corrupt-input",
         disposition: "recovered",
-        location: { part, xpath: cursor.xpath, slideIndex },
+        location: { ...location, xpath: cursor.xpath },
         attributeOrElement: "p:sp",
         rawValue: parsedStyle.error.issues[0]?.message ?? "invalid style",
       });
@@ -1397,6 +1366,7 @@ export function readTextPlaceholderSp(
 
   const props: TextDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
+    ...(link === undefined ? {} : { link }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
     nativePlaceholder: nativeRef,
     ...localBox,

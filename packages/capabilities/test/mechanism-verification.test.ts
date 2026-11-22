@@ -10,6 +10,18 @@ import {
 
 // Compile-time directional protocol checks (never executed at runtime).
 function compileDirectionalChecks(): void {
+  // @ts-expect-error -- canvas mechanism missing emit direction
+  defineCanvasMechanism({
+    key: "bad-canvas-no-emit",
+    role: "canvas",
+    paint: (_model: unknown, _ctx: PaintContext): PaintOutput => ({ svg: "" }),
+    import: {
+      target: "shape-tree",
+      localName: "sp",
+      read: () => ({}),
+    },
+  });
+
   // @ts-expect-error -- canvas mechanism missing import direction
   defineCanvasMechanism({
     key: "bad-canvas-no-import",
@@ -26,6 +38,17 @@ function compileDirectionalChecks(): void {
     import: {
       target: "shape-tree",
       localName: "sp",
+      read: () => ({}),
+    },
+  });
+
+  // @ts-expect-error -- show mechanism missing emit direction
+  defineShowMechanism({
+    key: "bad-show-no-emit",
+    role: "show",
+    import: {
+      target: "slide",
+      slot: "transition",
       read: () => ({}),
     },
   });
@@ -112,9 +135,23 @@ function compileDirectionalChecks(): void {
       },
     };
 
+  const missingNativeAssertMap: ExhaustiveMechanismVerificationMap<SampleMechanisms> =
+    {
+      "sample-canvas": {
+        scenario: textBoxRoundtripScenario,
+        assertNative: () => {},
+        assertPaint: () => {},
+      },
+      // @ts-expect-error -- show verification entry requires assertNative
+      "sample-show": {
+        scenario: textBoxRoundtripScenario,
+      },
+    };
+
   void missingKeyMap;
   void missingPaintAssertMap;
   void invalidShowPaintMap;
+  void missingNativeAssertMap;
 }
 void compileDirectionalChecks;
 

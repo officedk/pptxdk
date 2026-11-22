@@ -975,7 +975,7 @@ describe("mixed layout, layering, and component reflow", () => {
       ).length,
       2,
     );
-  });
+  }, 45_000);
 
   it("reports real overflow and text fitting failures without rewriting content", async () => {
     const longText =

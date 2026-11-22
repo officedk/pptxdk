@@ -23,10 +23,14 @@ import type {
   Diagnostic,
   EmitContext,
   EmitOutput,
+  EmittedSlideLayoutSpec,
+  EmittedSlideMasterSpec,
   Extension,
   GeometryBox,
+  MastersEmitDriver,
   PaintContext,
   PaintOutput,
+  PptxRelationship,
   PreviewTransform,
   Resolution,
   ResolvedLink,
@@ -37,6 +41,13 @@ import type {
   SlidePaintContext,
   SlidePaintOutput,
 } from "#/types.ts";
+
+export type {
+  EmittedSlideLayoutSpec,
+  EmittedSlideMasterSpec,
+  MastersEmitDriver,
+  PptxRelationship,
+};
 
 export type ResolutionDimensions = {
   readonly width: number;
@@ -131,6 +142,9 @@ export type InternalResolvedSlide = {
   readonly layoutKey?: string;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
+  readonly effectiveThemeOverride?: ThemeOverride;
+  readonly effectiveColorMapOverride?: ColorMapOverride;
+  readonly hasCustomColorMap?: boolean;
   readonly section?: string;
   readonly hidden: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
@@ -149,7 +163,7 @@ export type InternalResolution = {
   readonly theme: ThemeContext;
   readonly masters?: readonly InternalResolvedSlideMaster[];
   readonly mastersCanvas?: NonNullable<SlideCapabilityModule["mastersCanvas"]>;
-  readonly mastersEmitDriver?: unknown;
+  readonly mastersEmitDriver?: MastersEmitDriver;
   readonly sections: readonly ResolvedSectionRecord[];
   readonly sectionsEmitter?: {
     readonly extensions: readonly Extension[];

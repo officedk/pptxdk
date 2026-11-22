@@ -2529,6 +2529,12 @@ function resolveOwnerSlideCapabilities(args: {
   return { slideCapabilities, capabilities, continuityByDeclaration };
 }
 
+function isCustomColorMap(colorMap: ColorMap): boolean {
+  return (Object.keys(defaultColorMap) as (keyof ColorMap)[]).some(
+    (slot) => colorMap[slot] !== defaultColorMap[slot],
+  );
+}
+
 function resolveSlideDeclaration(
   parsed: ParsedSlideNode,
   modules: BoundCapabilityRegistry,
@@ -2795,6 +2801,13 @@ function resolveSlideDeclaration(
     ...(Object.keys(capabilities).length > 0 && { capabilities }),
   };
 
+  const effectiveThemeOverride =
+    parsed.themeOverride ?? layoutSpec?.themeOverride;
+  const effectiveColorMapOverride =
+    parsed.colorMapOverride ?? layoutSpec?.colorMapOverride;
+  const hasCustomColorMap =
+    masterSpec !== undefined && isCustomColorMap(masterSpec.colorMap);
+
   return {
     observation,
     morphObjects: slide.morphObjects,
@@ -2813,6 +2826,13 @@ function resolveSlideDeclaration(
       ...(parsed.themeOverride === undefined
         ? {}
         : { themeOverride: parsed.themeOverride }),
+      ...(effectiveThemeOverride === undefined
+        ? {}
+        : { effectiveThemeOverride }),
+      ...(effectiveColorMapOverride === undefined
+        ? {}
+        : { effectiveColorMapOverride }),
+      ...(hasCustomColorMap ? { hasCustomColorMap: true } : {}),
       ...(section === undefined ? {} : { section }),
       hidden,
       ...(parsed.showMasterPlaceholderAnimations === undefined

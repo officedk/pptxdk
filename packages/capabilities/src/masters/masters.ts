@@ -1,4 +1,5 @@
 import {
+  defaultColorMap,
   defaultTheme,
   visualStyleSchema,
   type ColorMap,
@@ -171,10 +172,8 @@ function resolvePlaceholderVisualEntries(
   return entries;
 }
 
-function paintThemeCanvasBackdrop(model: {
-  readonly themeContext: ThemeContext;
-}): PaintOutput {
-  const bg = model.themeContext.resolveColor("bg1");
+function paintThemeCanvasBackdrop(themeContext: ThemeContext): PaintOutput {
+  const bg = themeContext.resolveColor("bg1");
   if (
     bg.hex.toUpperCase() === "FFFFFF" &&
     (bg.alpha === undefined || bg.alpha === 1)
@@ -190,43 +189,39 @@ function paintThemeCanvasBackdrop(model: {
   };
 }
 
-function paintSharedCanvasFragments(model: {
-  readonly fragments: readonly string[];
-}): PaintOutput {
-  return { svg: model.fragments.join("") };
+function paintSharedCanvasFragments(fragments: readonly string[]): PaintOutput {
+  return { svg: fragments.join("") };
 }
 
-type SlideMasterMechanismModel =
-  | {
-      readonly spec: EmittedSlideMasterSpec;
-      readonly layoutIds: readonly {
-        readonly id: number;
-        readonly rId: string;
-      }[];
-      readonly themeContext: ThemeContext;
-      readonly fragments: readonly string[];
-    }
-  | { readonly fragments: readonly string[] };
+type SlideMasterEmitContext = {
+  readonly spec: EmittedSlideMasterSpec;
+  readonly layoutIds: readonly {
+    readonly id: number;
+    readonly rId: string;
+  }[];
+  readonly themeContext: ThemeContext;
+  readonly colorMapXml: string;
+};
 
 /** Native canvas mechanism for `<p:sldMaster>` ownership, `preserve`, and master-layout relationships. */
 export const slideMasterMechanism = defineCanvasMechanism<
   "slide-master",
-  SlideMasterMechanismModel,
   void,
+  SlideMasterEmitContext,
   { readonly xml: string },
-  void
+  readonly string[]
 >({
   key: "slide-master",
   role: "canvas",
-  emit: (model) => {
-    if (!("spec" in model)) {
-      throw new Error(
-        "SlideMaster emit requires spec, layoutIds, and themeContext",
-      );
-    }
-    return { xml: masterXml(model.spec, model.layoutIds, model.themeContext) };
-  },
-  paint: paintSharedCanvasFragments,
+  emit: (_model, context) => ({
+    xml: masterXml(
+      context.spec,
+      context.layoutIds,
+      context.themeContext,
+      context.colorMapXml,
+    ),
+  }),
+  paint: (_model, fragments) => paintSharedCanvasFragments(fragments),
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -234,31 +229,26 @@ export const slideMasterMechanism = defineCanvasMechanism<
   },
 });
 
-type SlideLayoutMechanismModel =
-  | {
-      readonly spec: EmittedSlideLayoutSpec;
-      readonly themeContext: ThemeContext;
-      readonly fragments: readonly string[];
-    }
-  | { readonly fragments: readonly string[] };
+type SlideLayoutEmitContext = {
+  readonly spec: EmittedSlideLayoutSpec;
+  readonly themeContext: ThemeContext;
+  readonly colorMapOvrXml: string;
+};
 
 /** Native canvas mechanism for `<p:sldLayout>` ownership, `type`, `preserve`, and idle layout retention. */
 export const slideLayoutMechanism = defineCanvasMechanism<
   "slide-layout",
-  SlideLayoutMechanismModel,
   void,
+  SlideLayoutEmitContext,
   { readonly xml: string },
-  void
+  readonly string[]
 >({
   key: "slide-layout",
   role: "canvas",
-  emit: (model) => {
-    if (!("spec" in model)) {
-      throw new Error("SlideLayout emit requires spec and themeContext");
-    }
-    return { xml: layoutXml(model.spec, model.themeContext) };
-  },
-  paint: paintSharedCanvasFragments,
+  emit: (_model, context) => ({
+    xml: layoutXml(context.spec, context.themeContext, context.colorMapOvrXml),
+  }),
+  paint: (_model, fragments) => paintSharedCanvasFragments(fragments),
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -278,7 +268,6 @@ function serializeColorMapModel(model: {
 
 type NativeThemeMechanismModel = {
   readonly theme: Theme;
-  readonly themeContext: ThemeContext;
 };
 
 /** Native canvas mechanism for `<a:theme>` (`clrScheme`, `fontScheme`, `fmtScheme`) part identity and mutation. */
@@ -287,12 +276,12 @@ export const nativeThemeMechanism = defineCanvasMechanism<
   NativeThemeMechanismModel,
   void,
   { readonly xml: string },
-  void
+  ThemeContext
 >({
   key: "native-theme",
   role: "canvas",
   emit: (model) => ({ xml: themeXml(model.theme) }),
-  paint: paintThemeCanvasBackdrop,
+  paint: (_model, themeContext) => paintThemeCanvasBackdrop(themeContext),
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -303,7 +292,6 @@ export const nativeThemeMechanism = defineCanvasMechanism<
 type ColorMapMechanismModel = {
   readonly colorMap?: ColorMap;
   readonly colorMapOverride?: ColorMapOverride;
-  readonly themeContext: ThemeContext;
 };
 
 /** Native canvas mechanism for master `<p:clrMap>` and layout/slide `<p:clrMapOvr>` color-slot mapping. */
@@ -312,14 +300,14 @@ export const colorMapMechanism = defineCanvasMechanism<
   ColorMapMechanismModel,
   void,
   { readonly xml: string },
-  void
+  ThemeContext
 >({
   key: "color-map",
   role: "canvas",
   emit: (model) => ({
     xml: serializeColorMapModel(model),
   }),
-  paint: paintThemeCanvasBackdrop,
+  paint: (_model, themeContext) => paintThemeCanvasBackdrop(themeContext),
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -330,7 +318,6 @@ export const colorMapMechanism = defineCanvasMechanism<
 type ThemeOverrideMechanismModel = {
   readonly override: ThemeOverride;
   readonly baseTheme?: Theme;
-  readonly themeContext: ThemeContext;
 };
 
 /** Native canvas mechanism for `<a:themeOverride>` layout and slide palette/font/format overrides. */
@@ -339,14 +326,14 @@ export const themeOverrideMechanism = defineCanvasMechanism<
   ThemeOverrideMechanismModel,
   void,
   { readonly xml: string },
-  void
+  ThemeContext
 >({
   key: "theme-override",
   role: "canvas",
   emit: (model) => ({
     xml: themeOverrideXml(model.override, model.baseTheme ?? defaultTheme),
   }),
-  paint: paintThemeCanvasBackdrop,
+  paint: (_model, themeContext) => paintThemeCanvasBackdrop(themeContext),
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -371,7 +358,7 @@ export const masterSharedCanvasMechanism = defineCanvasMechanism<
   emit: (model) => ({
     xml: model.fragments.join(""),
   }),
-  paint: paintSharedCanvasFragments,
+  paint: (model) => paintSharedCanvasFragments(model.fragments),
   import: {
     target: "deck",
     stage: "pre-slides",
@@ -387,33 +374,38 @@ export {
 
 const mastersEmitDriver: MastersEmitDriver = {
   emitMaster(spec, layoutIds, themeContext) {
-    return slideMasterMechanism.emit({
+    const colorMapXml = colorMapMechanism.emit({
+      colorMap: spec.colorMap ?? defaultColorMap,
+    }).xml;
+    return slideMasterMechanism.emit(undefined, {
       spec,
       layoutIds,
       themeContext,
-      fragments: [],
+      colorMapXml,
     }).xml;
   },
   emitLayout(spec, themeContext) {
-    return slideLayoutMechanism.emit({ spec, themeContext, fragments: [] }).xml;
+    const colorMapOvrXml = colorMapMechanism.emit(
+      spec.colorMapOverride === undefined
+        ? {}
+        : { colorMapOverride: spec.colorMapOverride },
+    ).xml;
+    return slideLayoutMechanism.emit(undefined, {
+      spec,
+      themeContext,
+      colorMapOvrXml,
+    }).xml;
   },
   emitTheme(theme) {
-    return nativeThemeMechanism.emit({
-      theme,
-      themeContext: undefined as never,
-    }).xml;
+    return nativeThemeMechanism.emit({ theme }).xml;
   },
   emitColorMap(model) {
-    return colorMapMechanism.emit({
-      ...model,
-      themeContext: undefined as never,
-    }).xml;
+    return colorMapMechanism.emit(model).xml;
   },
   emitThemeOverride(override, baseTheme) {
     return themeOverrideMechanism.emit({
       override,
       ...(baseTheme === undefined ? {} : { baseTheme }),
-      themeContext: undefined as never,
     }).xml;
   },
   emitSharedCanvas(fragments) {
@@ -445,14 +437,34 @@ export const mastersCapability: SlideCapabilityModule & {
     masterSharedCanvasMechanism,
   ] as const,
   mastersCanvas: {
-    paintBackdrop(themeContext) {
-      return colorMapMechanism.paint({ themeContext });
+    paintBackdrop(input) {
+      if (input.themeOverride !== undefined) {
+        return themeOverrideMechanism.paint(
+          { override: input.themeOverride },
+          input.theme,
+        );
+      }
+      if (
+        input.colorMapOverride !== undefined ||
+        input.hasCustomColorMap === true
+      ) {
+        return colorMapMechanism.paint(
+          input.colorMapOverride === undefined
+            ? {}
+            : { colorMapOverride: input.colorMapOverride },
+          input.theme,
+        );
+      }
+      return nativeThemeMechanism.paint(
+        { theme: input.theme.theme },
+        input.theme,
+      );
     },
     paintMasterLayers(fragments) {
-      return slideMasterMechanism.paint({ fragments });
+      return slideMasterMechanism.paint(undefined, fragments);
     },
     paintLayoutLayers(fragments) {
-      return slideLayoutMechanism.paint({ fragments });
+      return slideLayoutMechanism.paint(undefined, fragments);
     },
     paintSharedObject(svg) {
       return masterSharedCanvasMechanism.paint({ fragments: [svg] });

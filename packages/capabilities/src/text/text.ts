@@ -13,6 +13,7 @@ import {
   type EmitContext,
   type EmitOutput,
   type GeometryBox,
+  type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintContext,
@@ -21,7 +22,7 @@ import {
   type ResolvedObject,
   type SlideEmitOutput,
 } from "@pptxdk/core/capability";
-import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
+import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism, defineShowMechanism } from "@pptxdk/import";
 
 import {
@@ -37,6 +38,11 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
+import {
+  hasLocalDeclaration,
+  resolvePlaceholderGeometry,
+  resolvePlaceholderVisualStyle,
+} from "../shared/style-inheritance.ts";
 import { layoutStyleValue } from "../shared/style-parse.ts";
 import {
   parseTextCoordinate,
@@ -65,6 +71,7 @@ import {
 import {
   textBoxImportHandler,
   textFieldSlideNumImportHandler,
+  textPlaceholderImportHandler,
 } from "./text-import.ts";
 import { textBoxXml } from "./text-xml.ts";
 
@@ -139,7 +146,24 @@ type ResolvedTextModel = {
   readonly visual: ResolvedVisualModel;
   readonly text: ResolvedTextBody;
   readonly insets: TextInsets;
+  readonly placeholder?: {
+    readonly nativeRef: NativePlaceholderRef;
+    readonly hasLocalBoxOverride: boolean;
+    readonly hasLocalVisualOverride: boolean;
+  };
 };
+
+const textCompatiblePlaceholderRoles = new Set<string>([
+  "title",
+  "ctrTitle",
+  "subTitle",
+  "body",
+  "dt",
+  "ftr",
+  "hdr",
+  "obj",
+  "sldNum",
+]);
 
 function emitTextModel(
   model: ResolvedTextModel,
@@ -150,17 +174,57 @@ function emitTextModel(
     createFieldId: emitContext.createTextFieldId,
     ...(embedFonts === undefined ? {} : { embedFonts }),
   });
-  const emittedProperties = emitVisualModel(model.visual, (resource) =>
-    emitContext.registerResource(resource),
-  );
+  let placeholderEmit:
+    | { readonly nativeRef: NativePlaceholderRef; readonly spPrXml?: string }
+    | undefined;
+  let propertiesXml = "";
+  if (model.placeholder !== undefined) {
+    if (
+      !model.placeholder.hasLocalBoxOverride &&
+      !model.placeholder.hasLocalVisualOverride &&
+      !model.visual.hasVisibleStyle &&
+      (model.visual.rotationUnits === undefined ||
+        model.visual.rotationUnits === 0)
+    ) {
+      placeholderEmit = {
+        nativeRef: model.placeholder.nativeRef,
+        spPrXml: "<p:spPr/>",
+      };
+    } else if (
+      !model.placeholder.hasLocalVisualOverride &&
+      !model.visual.hasVisibleStyle
+    ) {
+      const rotAttr =
+        model.visual.rotationUnits === undefined ||
+        model.visual.rotationUnits === 0
+          ? ""
+          : ` rot="${model.visual.rotationUnits}"`;
+      placeholderEmit = {
+        nativeRef: model.placeholder.nativeRef,
+        spPrXml: `<p:spPr><a:xfrm${rotAttr}><a:off x="${pxToEmu(model.box.x)}" y="${pxToEmu(model.box.y)}"/><a:ext cx="${pxToEmu(model.box.width)}" cy="${pxToEmu(model.box.height)}"/></a:xfrm></p:spPr>`,
+      };
+    } else {
+      propertiesXml = emitVisualModel(model.visual, (resource) =>
+        emitContext.registerResource(resource),
+      ).xml;
+      placeholderEmit = {
+        nativeRef: model.placeholder.nativeRef,
+      };
+    }
+  } else {
+    propertiesXml = emitVisualModel(model.visual, (resource) =>
+      emitContext.registerResource(resource),
+    ).xml;
+  }
   return {
     xml: textBoxXml(
       emitContext.id,
       model.escapedName,
       model.box,
       emittedBody.xml,
-      emittedProperties.xml,
+      propertiesXml,
       nativeLinkXml(emitContext.nativeLink),
+      placeholderEmit,
     ),
     ...(emittedBody.presentationContributions.length === 0
       ? {}
@@ -207,6 +271,15 @@ export const textBoxMechanism = defineCanvasMechanism({
   emit: emitTextModel,
   paint: paintTextModel,
   import: textBoxImportHandler,
+});
+
+/** Typed native canvas mechanism connecting emit, paint, and import for `text-placeholder`. */
+export const textPlaceholderMechanism = defineCanvasMechanism({
+  key: "text-placeholder",
+  role: "canvas",
+  emit: emitTextModel,
+  paint: paintTextModel,
+  import: textPlaceholderImportHandler,
 });
 
 type ResolvedSlideNumberFieldModel = {
@@ -279,6 +352,7 @@ export const textCapability = {
   declaration: "text",
   mechanisms: [
     textBoxMechanism,
+    textPlaceholderMechanism,
     textFieldSlideNumMechanism,
     embeddedFontMechanism,
   ] as const,
@@ -296,13 +370,29 @@ export const textCapability = {
         `Text contains unsupported parameter ${unknown}`,
       );
     }
+    const placeholder = context.placeholder;
+    if (placeholder !== undefined) {
+      const role =
+        placeholder.layoutPlaceholder?.type ?? placeholder.nativeRef.type;
+      if (!textCompatiblePlaceholderRoles.has(role)) {
+        throw new CapabilityError(
+          "incompatible-placeholder-content",
+          `Text cannot be bound to ${role} placeholder`,
+        );
+      }
+    }
+
     const requestedName = parseOptionalName(input.props["name"]);
     const morphKey = parseMorphKey(input.props["morphKey"]);
     const link = parseLinkTarget(input.props["link"]);
 
-    const declaredX = input.props["x"];
-    const declaredY = input.props["y"];
-    const declaredWidth = input.props["width"];
+    const placeholderGeometry =
+      placeholder === undefined
+        ? undefined
+        : resolvePlaceholderGeometry(placeholder, input.props);
+    const declaredX = placeholderGeometry?.x ?? input.props["x"];
+    const declaredY = placeholderGeometry?.y ?? input.props["y"];
+    const declaredWidth = placeholderGeometry?.width ?? input.props["width"];
     if (declaredX !== undefined) coordinate(declaredX, "x");
     if (declaredY !== undefined) coordinate(declaredY, "y");
     if (declaredWidth !== undefined && typeof declaredWidth === "number") {
@@ -324,24 +414,42 @@ export const textCapability = {
       path: context.path,
     });
 
-    const insets = textInsets(input.props["style"]);
+    const insets = textInsets(input.props["style"], placeholder);
     const styleHeight = layoutStyleValue(input, "height");
-    const requestedHeight = height(styleHeight ?? input.props["height"]);
+    const requestedHeight = height(
+      styleHeight ?? input.props["height"] ?? placeholderGeometry?.height,
+    );
 
-    const { paragraphs, style: parsedTextStyle } = parseTextContent(
+    const {
+      paragraphs,
+      style: parsedTextStyle,
+      localBodyDeclared,
+    } = parseTextContent(
       input.children,
       textStyle(input.props["style"]),
-      context.theme,
+      placeholder?.masterTheme ?? context.theme,
       {
         slideNumber: context.slideNumber,
       },
+      "Text.style",
+      placeholder,
+      input.props["style"],
     );
 
-    const visualStyle = record(input.props["style"])
-      ? { ...input.props["style"] }
-      : {};
+    const rawSlideStyle = record(input.props["style"])
+      ? input.props["style"]
+      : undefined;
+    const hasLocalVisualOverride =
+      rawSlideStyle !== undefined &&
+      visualStyleKeys.some((key) => hasLocalDeclaration(rawSlideStyle, key));
+    const visualStyle =
+      placeholder !== undefined
+        ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
+        : rawSlideStyle !== undefined
+          ? { ...rawSlideStyle }
+          : {};
     resolveVisualModel({
-      theme: context.theme,
+      theme: placeholder?.masterTheme ?? context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
     });
@@ -438,7 +546,7 @@ export const textCapability = {
         const resolvedText = resolveTextBody(
           paragraphs,
           parsedTextStyle,
-          resolveContext.theme,
+          placeholder?.masterTheme ?? resolveContext.theme,
           parsedTextStyle.verticalAlign ?? "top",
           {
             width: innerWidth,
@@ -447,6 +555,14 @@ export const textCapability = {
             insets,
           },
           "text-box",
+          placeholder === undefined
+            ? undefined
+            : {
+                isPlaceholder: true,
+                ...(localBodyDeclared === undefined
+                  ? {}
+                  : { localBodyDeclared }),
+              },
         );
         const box: GeometryBox = {
           ...dimensions,
@@ -461,13 +577,14 @@ export const textCapability = {
           ),
         };
         const visual = resolveVisualModel({
-          theme: resolveContext.theme,
+          theme: placeholder?.masterTheme ?? resolveContext.theme,
           style: visualStyle,
           box,
         });
         const name =
           resolveContext.morphName ??
           requestedName ??
+          placeholder?.layoutPlaceholder?.name ??
           `Text ${resolveContext.id - 1}`;
         let escapedName: string;
         try {
@@ -510,6 +627,16 @@ export const textCapability = {
           visual,
           text: resolvedText,
           insets,
+          ...(placeholder === undefined
+            ? {}
+            : {
+                placeholder: {
+                  nativeRef: placeholder.nativeRef,
+                  hasLocalBoxOverride:
+                    placeholderGeometry?.hasLocalBoxOverride === true,
+                  hasLocalVisualOverride,
+                },
+              }),
         };
         return {
           observation: {
@@ -525,10 +652,14 @@ export const textCapability = {
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: resolvedText.resourceClaims,
           emit(emitContext: EmitContext): EmitOutput {
-            return textBoxMechanism.emit(model, emitContext);
+            return placeholder !== undefined
+              ? textPlaceholderMechanism.emit(model, emitContext)
+              : textBoxMechanism.emit(model, emitContext);
           },
           paint(paintContext: PaintContext): PaintOutput {
-            return textBoxMechanism.paint(model, paintContext);
+            return placeholder !== undefined
+              ? textPlaceholderMechanism.paint(model, paintContext)
+              : textBoxMechanism.paint(model, paintContext);
           },
         };
       },

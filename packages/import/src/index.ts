@@ -31,6 +31,13 @@ export {
 export { inspectNotesAndHandoutMasters } from "#/notes-masters.ts";
 export { importPresentationSections } from "#/sections.ts";
 export {
+  isNonDefaultColorMap,
+  readColorMapElement,
+  readColorMapOverride,
+  readThemeOverridePart,
+  readThemePart,
+} from "#/themes.ts";
+export {
   readEmbeddedFontList,
   readPresentationThemeFontScheme,
   unpackEotFontData,
@@ -70,6 +77,7 @@ export {
   P14_CREATION_ID_EXT_URI,
   P14_NS,
   P14_SECTION_LIST_EXT_URI,
+  P159_NS,
   P_NS,
   REL_CHART,
   REL_DIAGRAM_COLORS,
@@ -88,6 +96,7 @@ export {
   REL_SLIDE_LAYOUT,
   REL_SLIDE_MASTER,
   REL_THEME,
+  REL_THEME_OVERRIDE,
   R_NS,
   STRICT_NS_PREFIX,
   STRICT_P_NS,

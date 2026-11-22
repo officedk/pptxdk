@@ -1,6 +1,7 @@
 import type {
   LayoutStyle,
   LinkTarget,
+  NativePlaceholderRef,
   PaddingStyle,
   VisualStyle,
 } from "@pptxdk/core/capability";
@@ -19,6 +20,8 @@ export type TextDeclarationProps = MotionProps &
   MorphProps & {
     readonly id?: string;
     readonly name?: string;
+    readonly placeholder?: string;
+    readonly nativePlaceholder?: NativePlaceholderRef;
     readonly link?: LinkTarget;
     readonly x?: number;
     readonly y?: number;

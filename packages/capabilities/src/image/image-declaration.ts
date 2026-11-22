@@ -1,6 +1,7 @@
 import type {
   LayoutStyle,
   LinkTarget,
+  NativePlaceholderRef,
   VisualStyle,
 } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
@@ -43,6 +44,8 @@ export type ImageDeclarationProps = MotionProps &
   MorphProps & {
     readonly id?: string;
     readonly name?: string;
+    readonly placeholder?: string;
+    readonly nativePlaceholder?: NativePlaceholderRef;
     readonly link?: LinkTarget;
     readonly src: ImageSource;
     /** Alternative text for the image. */

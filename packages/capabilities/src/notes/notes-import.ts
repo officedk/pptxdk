@@ -1,3 +1,4 @@
+import { textStyleKeys, type TextStyle } from "@pptxdk/core/capability";
 import { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import {
   A_NS,
@@ -145,6 +146,9 @@ export const speakerNotesImportHandler: SlideImportHandler = {
   slot: "notes",
   read(context: SlideImportContext): SlideImportOutcome {
     const { slideNode, part, slideIndex, package: pkg } = context;
+    if (slideIndex === undefined) {
+      return {};
+    }
     const diagnostics: ImportDiagnostic[] = [];
 
     const slideRels = pkg.readRelationships(part);
@@ -280,15 +284,26 @@ export const speakerNotesImportHandler: SlideImportHandler = {
                 slideIndex,
                 diagnostics,
               );
+              const notesStyle: Record<string, unknown> = {};
+              const boxRecord = boxStyle as Record<string, unknown>;
+              for (const key of textStyleKeys) {
+                if (
+                  Object.hasOwn(boxRecord, key) &&
+                  boxRecord[key] !== undefined
+                ) {
+                  notesStyle[key] = boxRecord[key];
+                }
+              }
+              const hasNotesStyle = Object.keys(notesStyle).length > 0;
               const isEmptyPlaceholder =
-                Object.keys(boxStyle).length === 0 &&
+                !hasNotesStyle &&
                 (importedParagraphs.length === 0 ||
                   (importedParagraphs.length === 1 &&
                     importedParagraphs[0]!.runs.length === 0 &&
                     Object.keys(importedParagraphs[0]!.style).length === 0));
               if (!isEmptyPlaceholder) {
                 const notesNode = createNotesNode(
-                  Object.keys(boxStyle).length === 0 ? {} : { style: boxStyle },
+                  hasNotesStyle ? { style: notesStyle as TextStyle } : {},
                 );
                 populateRichTextNode(notesNode, importedParagraphs);
                 if (slideNode instanceof CommonContainer) {

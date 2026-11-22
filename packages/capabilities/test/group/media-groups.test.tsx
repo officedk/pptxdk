@@ -522,7 +522,9 @@ describe("images and native groups", () => {
   });
 
   it("rejects invalid fit values, missing files, and unrecognizable image content", async () => {
-    const invalidFit = Image as ComponentType<Record<string, unknown>>;
+    const invalidFit = Image as unknown as ComponentType<
+      Record<string, unknown>
+    >;
     for (const [props, code] of [
       [
         { id: "bad-fit", src: png, width: 120, height: 72, fit: "stretch" },

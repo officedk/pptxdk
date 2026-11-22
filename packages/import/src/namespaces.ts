@@ -10,6 +10,10 @@ export const MC_NS =
 // Transitional OOXML (Supported Baseline)
 export const P_NS =
   "http://schemas.openxmlformats.org/presentationml/2006/main";
+export const P14_NS =
+  "http://schemas.microsoft.com/office/powerpoint/2010/main";
+export const P159_NS =
+  "http://schemas.microsoft.com/office/powerpoint/2015/09/main";
 export const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
 export const C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 export const R_NS =
@@ -32,6 +36,8 @@ export const REL_NOTES_SLIDE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
 export const REL_HANDOUT_MASTER =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/handoutMaster";
+export const REL_THEME_OVERRIDE =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
 export const REL_FONT =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 export const REL_IMAGE =
@@ -55,8 +61,6 @@ export const CHART_NS =
   "http://schemas.openxmlformats.org/drawingml/2006/chart";
 export const TABLE_NS_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/table";
-export const P14_NS =
-  "http://schemas.microsoft.com/office/powerpoint/2010/main";
 export const P14_SECTION_LIST_EXT_URI =
   "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
 export const P14_CREATION_ID_EXT_URI = "{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}";
@@ -76,13 +80,14 @@ export function emuToPx(emu: number): number {
 
 const canonicalPrefixes: ReadonlyMap<string, string> = new Map([
   [P_NS, "p"],
+  [P14_NS, "p14"],
+  [P159_NS, "p159"],
   [A_NS, "a"],
   [C_NS, "c"],
   [R_NS, "r"],
   [MC_NS, "mc"],
   [DIAGRAM_NS, "dgm"],
   [CHART_NS, "c"],
-  [P14_NS, "p14"],
   [XML_NS, "xml"],
 ]);
 

@@ -1,4 +1,9 @@
-import type { RegisteredCapabilityModule } from "@pptxdk/core/capability";
+import type { ColorMapOverride, ThemeOverride } from "@pptxdk/core";
+import type {
+  NativeColorSlot,
+  PlaceholderMap,
+  RegisteredCapabilityModule,
+} from "@pptxdk/core/capability";
 import {
   type CommonNode,
   type SlideLayoutContainer,
@@ -33,6 +38,7 @@ import {
   P_NS,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,
+  REL_THEME_OVERRIDE,
   R_NS,
   emuToPx,
 } from "#/namespaces.ts";
@@ -49,6 +55,7 @@ import {
   peekShapeTreeObjectIdentity,
 } from "#/resources.ts";
 import { importPresentationSections } from "#/sections.ts";
+import { readColorMapOverride, readThemeOverridePart } from "#/themes.ts";
 import {
   ExtentEmuFragmentSchema,
   OoxmlBoolSchema,
@@ -170,6 +177,8 @@ function readSingleShapeTreeItem(
   handlers: RegisteredImportHandlers,
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
+  layoutPlaceholders?: PlaceholderMap,
+  clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): CommonNode | undefined {
   const match = handlers.shapeTree.find(
     (handler) =>
@@ -218,6 +227,8 @@ function readSingleShapeTreeItem(
     package: pkg,
     relationships: relIndex.byId,
     registerDeferredSlideLink,
+    ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
+    ...(clrMap === undefined ? {} : { clrMap }),
   });
   if (outcome.diagnostics !== undefined) {
     diagnostics.push(...outcome.diagnostics);
@@ -234,6 +245,10 @@ function readSlidePart(
   slideIndex: number,
   usedSlideIds: Set<string>,
   layoutNodeByPartPath: ReadonlyMap<string, SlideLayoutContainer>,
+  clrMapByLayoutPartPath: ReadonlyMap<
+    string,
+    Readonly<Record<string, NativeColorSlot>>
+  >,
   handlers: RegisteredImportHandlers,
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
@@ -324,6 +339,60 @@ function readSlidePart(
     resolvedLayoutPath === undefined
       ? undefined
       : layoutNodeByPartPath.get(resolvedLayoutPath);
+  const layoutPlaceholders = layoutNode?.props["placeholders"] as
+    | PlaceholderMap
+    | undefined;
+  const layoutClrMap =
+    resolvedLayoutPath === undefined
+      ? undefined
+      : clrMapByLayoutPartPath.get(resolvedLayoutPath);
+
+  const clrMapOvr = slideCursor.child(P_NS, "clrMapOvr");
+  let colorMapOverride: ColorMapOverride | undefined;
+  if (clrMapOvr !== undefined) {
+    const parsedOvr = readColorMapOverride(
+      clrMapOvr,
+      slidePartPath,
+      slideIndex,
+      diagnostics,
+    );
+    if (parsedOvr !== undefined && parsedOvr !== "master") {
+      colorMapOverride = parsedOvr;
+    }
+  }
+
+  let themeOverride: ThemeOverride | undefined;
+  const themeOverrideRel = slideRels.entries.find(
+    (entry) =>
+      entry.Type === REL_THEME_OVERRIDE && entry.TargetMode !== "External",
+  );
+  if (themeOverrideRel !== undefined) {
+    const overridePart = resolvePartPath(
+      slidePartPath,
+      themeOverrideRel.Target,
+    );
+    if (overridePart === undefined || !pkg.hasPart(overridePart)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: {
+          part: slidePartPath,
+          xpath: themeOverrideRel.xpath,
+          slideIndex,
+        },
+        relationshipId: themeOverrideRel.Id,
+        targetPart: overridePart ?? themeOverrideRel.Target,
+      });
+    } else {
+      themeOverride = readThemeOverridePart(
+        pkg,
+        overridePart,
+        slideIndex,
+        diagnostics,
+      );
+    }
+  }
 
   const rawSlideName = cSld.attr("name");
   const slideId = allocateScopedAuthorId(
@@ -334,13 +403,10 @@ function readSlidePart(
   const slideNode = createSlideNode({
     id: slideId,
     ...(layoutNode === undefined ? {} : { layout: layoutNode }),
+    ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+    ...(themeOverride === undefined ? {} : { themeOverride }),
     ...(hidden ? { hidden: true } : {}),
   });
-
-  const clrMapOvr = slideCursor.child(P_NS, "clrMapOvr");
-  if (clrMapOvr !== undefined) {
-    clrMapOvr.ignoreEmptyChild(A_NS, "masterClrMapping");
-  }
 
   const spTree = cSld.child(P_NS, "spTree");
   if (spTree !== undefined) {
@@ -364,6 +430,8 @@ function readSlidePart(
               handlers,
               registerDeferredSlideLink,
               diagnostics,
+              layoutPlaceholders,
+              layoutClrMap,
             );
             if (node !== undefined) {
               slideNode.append(node);
@@ -382,6 +450,8 @@ function readSlidePart(
               handlers,
               registerDeferredSlideLink,
               diagnostics,
+              layoutPlaceholders,
+              layoutClrMap,
             );
             if (node !== undefined) {
               adoptedFallback = true;
@@ -436,6 +506,8 @@ function readSlidePart(
         handlers,
         registerDeferredSlideLink,
         diagnostics,
+        layoutPlaceholders,
+        layoutClrMap,
       );
       if (node !== undefined) {
         slideNode.append(node);
@@ -444,6 +516,12 @@ function readSlidePart(
   }
 
   for (const slideHandler of handlers.slide) {
+    if (
+      slideHandler.matches !== undefined &&
+      !slideHandler.matches(slideCursor)
+    ) {
+      continue;
+    }
     const outcome = slideHandler.read({
       slideCursor,
       slideNode,
@@ -497,6 +575,10 @@ export function createImporter(
     }
 
     const usedDeckIds = new Set<string>();
+    const clrMapByLayoutPartPath = new Map<
+      string,
+      Readonly<Record<string, NativeColorSlot>>
+    >();
     const layoutNodeByPartPath = importMastersAndLayouts(
       presCursor,
       pkg,
@@ -504,6 +586,8 @@ export function createImporter(
       deckNode,
       usedDeckIds,
       diagnostics,
+      clrMapByLayoutPartPath,
+      handlers.slide,
     );
 
     const slideIdByPartPath = new Map<string, string>();
@@ -595,6 +679,7 @@ export function createImporter(
           index,
           usedDeckIds,
           layoutNodeByPartPath,
+          clrMapByLayoutPartPath,
           handlers,
           registerDeferredSlideLink,
           diagnostics,

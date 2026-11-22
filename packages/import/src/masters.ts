@@ -1,7 +1,33 @@
 import {
+  allocatePlaceholderAuthorKeys,
+  assertValidLang,
+  layoutPlaceholderSpecSchema,
+  masterPlaceholderSpecSchema,
+  masterTextStylesSchema,
+  placeholderOrientSchema,
+  placeholderRoleSchema,
+  placeholderSzSchema,
   slideLayoutTypeSchema,
+  type ColorMap,
+  type ColorMapOverride,
+  type ColorValue,
+  type ContentPlaceholderRole,
+  type LayoutPlaceholderSpec,
+  type MasterPlaceholderMap,
+  type MasterPlaceholderSpec,
+  type MasterTextStyles,
+  type NativeColorSlot,
+  type PlaceholderLevelStyle,
+  type PlaceholderListStyles,
+  type PlaceholderMap,
+  type PlaceholderStyle,
   type SlideLayoutProps,
   type SlideMasterProps,
+  type TextAlignment,
+  type TextList,
+  type Theme,
+  type ThemeColor,
+  type ThemeOverride,
 } from "@pptxdk/core";
 import {
   createSlideLayoutNode,
@@ -12,19 +38,39 @@ import {
 import { z } from "zod";
 
 import type { ImportDiagnostic } from "#/diagnostics.ts";
+import type { SlideImportHandler } from "#/mechanism.ts";
 import {
   A_NS,
   P_NS,
   REL_SLIDE_LAYOUT,
   REL_SLIDE_MASTER,
+  REL_THEME,
+  REL_THEME_OVERRIDE,
   R_NS,
+  XML_NS,
+  emuToPx,
 } from "#/namespaces.ts";
 import {
   resolvePartPath,
   type ParsedRelationshipEntry,
   type PptxPackage,
 } from "#/opc.ts";
-import { OoxmlBoolSchema, OoxmlNonNegativeIntSchema } from "#/xml-fragments.ts";
+import {
+  isNonDefaultColorMap,
+  readColorMapElement,
+  readColorMapOverride,
+  readThemeOverridePart,
+  readThemePart,
+} from "#/themes.ts";
+import {
+  ExtentEmuFragmentSchema,
+  HexRgb6Schema,
+  OffsetEmuFragmentSchema,
+  OoxmlBoolSchema,
+  OoxmlIntSchema,
+  OoxmlNonNegativeIntSchema,
+  OoxmlPositiveIntSchema,
+} from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
 const minimumMasterLayoutId = 2_147_483_648;
@@ -43,7 +89,7 @@ const SlideLayoutAttrsSchema = z.object({
   showMasterPhAnim: OoxmlBoolSchema.optional(),
 });
 
-const defaultColorMap: Readonly<Record<string, string>> = {
+const defaultColorMap: Readonly<Record<string, NativeColorSlot>> = {
   bg1: "lt1",
   tx1: "dk1",
   bg2: "lt2",
@@ -57,6 +103,566 @@ const defaultColorMap: Readonly<Record<string, string>> = {
   hlink: "hlink",
   folHlink: "folHlink",
 };
+
+const directSchemeToSlot: Readonly<Record<string, NativeColorSlot>> = {
+  dk1: "dk1",
+  lt1: "lt1",
+  dk2: "dk2",
+  lt2: "lt2",
+  accent1: "accent1",
+  accent2: "accent2",
+  accent3: "accent3",
+  accent4: "accent4",
+  accent5: "accent5",
+  accent6: "accent6",
+  hlink: "hlink",
+  folHlink: "folHlink",
+};
+
+function readColorModifierVal(
+  colorCursor: XmlElementCursor,
+  localName: "alpha" | "lumMod" | "lumOff",
+): number | undefined {
+  const mod = colorCursor.child(A_NS, localName);
+  if (mod === undefined) return undefined;
+  const parsed = OoxmlNonNegativeIntSchema.safeParse(mod.attr("val"));
+  return parsed.success ? Math.min(1, parsed.data / 100_000) : undefined;
+}
+
+function readStyleColor(
+  containerCursor: XmlElementCursor,
+  clrMap: Readonly<Record<string, NativeColorSlot>>,
+): ColorValue | undefined {
+  const srgb = containerCursor.child(A_NS, "srgbClr");
+  const scheme =
+    srgb === undefined ? containerCursor.child(A_NS, "schemeClr") : undefined;
+  const colorCursor = srgb ?? scheme;
+  if (colorCursor === undefined) return undefined;
+
+  let baseColor: ThemeColor | undefined;
+  if (srgb !== undefined) {
+    const parsed = HexRgb6Schema.safeParse(srgb.attr("val"));
+    if (!parsed.success) return undefined;
+    baseColor = `#${parsed.data.toUpperCase()}`;
+  } else if (scheme !== undefined) {
+    const val = scheme.attr("val");
+    const slot =
+      val === undefined ? undefined : (clrMap[val] ?? directSchemeToSlot[val]);
+    if (slot === undefined) return undefined;
+    const lumMod = readColorModifierVal(colorCursor, "lumMod");
+    const lumOff = readColorModifierVal(colorCursor, "lumOff");
+    baseColor =
+      lumMod !== undefined
+        ? {
+            slot,
+            lumMod,
+            ...(lumOff === undefined ? {} : { lumOff }),
+          }
+        : slot;
+  }
+  if (baseColor === undefined) return undefined;
+  const alpha = readColorModifierVal(colorCursor, "alpha");
+  return alpha !== undefined ? { color: baseColor, alpha } : baseColor;
+}
+
+function readDefRPr(
+  rPr: XmlElementCursor,
+  clrMap: Readonly<Record<string, NativeColorSlot>>,
+): Partial<PlaceholderLevelStyle> {
+  const raw = rPr.attrsObject([
+    "lang",
+    "sz",
+    "b",
+    "i",
+    "u",
+    "strike",
+    "cap",
+    "spc",
+    "kern",
+    "dirty",
+    "smtClean",
+    "baseline",
+  ]);
+  let lang: string | undefined;
+  if (raw["lang"] !== undefined) {
+    try {
+      lang = assertValidLang(raw["lang"]);
+    } catch {
+      lang = undefined;
+    }
+  }
+  const szParsed = OoxmlPositiveIntSchema.safeParse(raw["sz"]);
+  const fontSize = szParsed.success
+    ? (`${szParsed.data / 100}pt` as const)
+    : undefined;
+  const bParsed = OoxmlBoolSchema.safeParse(raw["b"]);
+  const fontWeight = bParsed.success
+    ? bParsed.data
+      ? ("bold" as const)
+      : ("normal" as const)
+    : undefined;
+  const iParsed = OoxmlBoolSchema.safeParse(raw["i"]);
+  const fontStyle = iParsed.success
+    ? iParsed.data
+      ? ("italic" as const)
+      : ("normal" as const)
+    : undefined;
+  const textDecoration =
+    raw["u"] === "sng"
+      ? ("underline" as const)
+      : raw["strike"] === "sngStrike"
+        ? ("line-through" as const)
+        : raw["u"] === "none" && raw["strike"] === "noStrike"
+          ? ("none" as const)
+          : undefined;
+  const textTransform =
+    raw["cap"] === "all"
+      ? ("uppercase" as const)
+      : raw["cap"] === "none"
+        ? ("none" as const)
+        : undefined;
+  const spcParsed = OoxmlIntSchema.safeParse(raw["spc"]);
+  const letterSpacing = spcParsed.success ? spcParsed.data / 75 : undefined;
+
+  const solidFill = rPr.child(A_NS, "solidFill");
+  const color =
+    solidFill === undefined ? undefined : readStyleColor(solidFill, clrMap);
+  rPr.ignoreEmptyChild(A_NS, "noFill");
+
+  const latin = rPr.child(A_NS, "latin");
+  const ea = rPr.child(A_NS, "ea");
+  const cs = rPr.child(A_NS, "cs");
+  const fontCursor = latin ?? ea ?? cs;
+  let fontFamily: string | undefined;
+  if (fontCursor !== undefined) {
+    const typeface = fontCursor.attr("typeface");
+    fontCursor.consumeAttr("pitchFamily");
+    fontCursor.consumeAttr("charset");
+    fontCursor.consumeAttr("panose");
+    if (typeface !== undefined && typeface.trim() !== "") {
+      if (
+        typeface === "+mj-lt" ||
+        typeface === "+mj-ea" ||
+        typeface === "+mj-cs"
+      ) {
+        fontFamily = "major";
+      } else if (
+        typeface === "+mn-lt" ||
+        typeface === "+mn-ea" ||
+        typeface === "+mn-cs"
+      ) {
+        fontFamily = "minor";
+      } else {
+        fontFamily = typeface;
+      }
+    }
+  }
+  for (const extra of [ea, cs]) {
+    if (extra !== undefined && extra !== fontCursor) {
+      extra.consumeAttr("typeface");
+      extra.consumeAttr("pitchFamily");
+      extra.consumeAttr("charset");
+      extra.consumeAttr("panose");
+    }
+  }
+  return {
+    ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(fontSize === undefined ? {} : { fontSize }),
+    ...(fontWeight === undefined ? {} : { fontWeight }),
+    ...(fontStyle === undefined ? {} : { fontStyle }),
+    ...(color === undefined ? {} : { color }),
+    ...(letterSpacing === undefined ? {} : { letterSpacing }),
+    ...(textTransform === undefined ? {} : { textTransform }),
+    ...(textDecoration === undefined ? {} : { textDecoration }),
+    ...(lang === undefined ? {} : { lang }),
+  };
+}
+
+function readLevelParagraphProperties(
+  pPr: XmlElementCursor,
+  levelIndex0: number,
+  clrMap: Readonly<Record<string, NativeColorSlot>>,
+): PlaceholderLevelStyle {
+  const rawAttrs = pPr.attrsObject([
+    "marL",
+    "indent",
+    "algn",
+    "defTabSz",
+    "rtl",
+    "eaLnBrk",
+    "latinLnBrk",
+    "hangingPunct",
+    "fontAlgn",
+  ]);
+  const marLParsed = OoxmlNonNegativeIntSchema.safeParse(rawAttrs["marL"]);
+  const marginLeft = marLParsed.success ? emuToPx(marLParsed.data) : undefined;
+  const indentParsed = OoxmlIntSchema.safeParse(rawAttrs["indent"]);
+  const indent = indentParsed.success ? emuToPx(indentParsed.data) : undefined;
+  const algnMap: Readonly<Record<string, TextAlignment>> = {
+    l: "left",
+    ctr: "center",
+    r: "right",
+    just: "justify",
+  };
+  const align =
+    rawAttrs["algn"] === undefined ? undefined : algnMap[rawAttrs["algn"]];
+
+  const spcBef = pPr.child(A_NS, "spcBef");
+  const spcBefPts = spcBef?.child(A_NS, "spcPts");
+  const spcBefPct = spcBef?.child(A_NS, "spcPct");
+  spcBefPct?.consumeAttr("val");
+  const spcBefVal = OoxmlNonNegativeIntSchema.safeParse(spcBefPts?.attr("val"));
+  const spacingBefore = spcBefVal.success ? spcBefVal.data / 75 : undefined;
+
+  const spcAft = pPr.child(A_NS, "spcAft");
+  const spcAftPts = spcAft?.child(A_NS, "spcPts");
+  const spcAftPct = spcAft?.child(A_NS, "spcPct");
+  spcAftPct?.consumeAttr("val");
+  const spcAftVal = OoxmlNonNegativeIntSchema.safeParse(spcAftPts?.attr("val"));
+  const spacingAfter = spcAftVal.success ? spcAftVal.data / 75 : undefined;
+
+  const lnSpc = pPr.child(A_NS, "lnSpc");
+  const lnSpcPts = lnSpc?.child(A_NS, "spcPts");
+  const lnSpcPct = lnSpc?.child(A_NS, "spcPct");
+  lnSpcPct?.consumeAttr("val");
+  const lnSpcVal = OoxmlPositiveIntSchema.safeParse(lnSpcPts?.attr("val"));
+  const lineHeight = lnSpcVal.success
+    ? (`${lnSpcVal.data / 100}pt` as const)
+    : undefined;
+
+  pPr.ignoreEmptyChild(A_NS, "buNone");
+  const buFont = pPr.child(A_NS, "buFont");
+  if (buFont !== undefined) {
+    buFont.consumeAttr("typeface");
+    buFont.consumeAttr("pitchFamily");
+    buFont.consumeAttr("charset");
+    buFont.consumeAttr("panose");
+  }
+  const buChar = pPr.child(A_NS, "buChar");
+  const buAutoNum = pPr.child(A_NS, "buAutoNum");
+  let list: TextList | undefined;
+  if (buChar !== undefined) {
+    const ch = buChar.attr("char");
+    if (ch !== undefined && ch.length > 0) {
+      list = {
+        type: "bullet",
+        character: ch,
+        ...(levelIndex0 > 0 ? { level: levelIndex0 } : {}),
+      };
+    }
+  } else if (buAutoNum !== undefined) {
+    buAutoNum.consumeAttr("type");
+    const startParsed = OoxmlPositiveIntSchema.safeParse(
+      buAutoNum.attr("startAt"),
+    );
+    list = {
+      type: "number",
+      style: "arabicPeriod",
+      ...(startParsed.success ? { startAt: startParsed.data } : {}),
+      ...(levelIndex0 > 0 ? { level: levelIndex0 } : {}),
+    };
+  }
+
+  const defRPr = pPr.child(A_NS, "defRPr");
+  const defStyle = defRPr === undefined ? {} : readDefRPr(defRPr, clrMap);
+
+  return {
+    ...defStyle,
+    ...(list === undefined ? {} : { list }),
+    ...(marginLeft === undefined ? {} : { marginLeft }),
+    ...(indent === undefined ? {} : { indent }),
+    ...(spacingBefore === undefined ? {} : { spacingBefore }),
+    ...(align === undefined ? {} : { align }),
+    ...(lineHeight === undefined ? {} : { lineHeight }),
+    ...(spacingAfter === undefined ? {} : { spacingAfter }),
+  };
+}
+
+function readPlaceholderListStyles(
+  container: XmlElementCursor | undefined,
+  clrMap: Readonly<Record<string, NativeColorSlot>>,
+): PlaceholderListStyles | undefined {
+  if (container === undefined) return undefined;
+  const levels: Record<number, PlaceholderLevelStyle> = {};
+  let count = 0;
+  for (const levelNum of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
+    const pPr = container.child(A_NS, `lvl${levelNum}pPr`);
+    if (pPr === undefined) continue;
+    const style = readLevelParagraphProperties(pPr, levelNum - 1, clrMap);
+    levels[levelNum] = style;
+    count += 1;
+  }
+  return count === 0 ? undefined : levels;
+}
+
+function readMasterTextStyles(
+  txStyles: XmlElementCursor | undefined,
+  clrMap: Readonly<Record<string, NativeColorSlot>>,
+): MasterTextStyles | undefined {
+  if (txStyles === undefined) return undefined;
+  const titleStyleCursor = txStyles.child(P_NS, "titleStyle");
+  const bodyStyleCursor = txStyles.child(P_NS, "bodyStyle");
+  const otherStyleCursor = txStyles.child(P_NS, "otherStyle");
+  const titleStyle = readPlaceholderListStyles(titleStyleCursor, clrMap);
+  const bodyStyle = readPlaceholderListStyles(bodyStyleCursor, clrMap);
+  const otherStyle = readPlaceholderListStyles(otherStyleCursor, clrMap);
+  const candidate: MasterTextStyles = {
+    ...(titleStyle === undefined ? {} : { titleStyle }),
+    ...(bodyStyle === undefined ? {} : { bodyStyle }),
+    ...(otherStyle === undefined ? {} : { otherStyle }),
+  };
+  if (Object.keys(candidate).length === 0) return undefined;
+  const parsed = masterTextStylesSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function directPlaceholderChild(el: XmlElementCursor["element"]): boolean {
+  for (let child = el.firstChild; child !== null; child = child.nextSibling) {
+    if (child.nodeType !== 1) continue;
+    const childEl = child as XmlElementCursor["element"];
+    if (
+      (childEl.namespaceURI ?? "") === P_NS &&
+      (childEl.localName ?? childEl.tagName) === "nvSpPr"
+    ) {
+      for (let nv = childEl.firstChild; nv !== null; nv = nv.nextSibling) {
+        if (nv.nodeType !== 1) continue;
+        const nvEl = nv as XmlElementCursor["element"];
+        if (
+          (nvEl.namespaceURI ?? "") === P_NS &&
+          (nvEl.localName ?? nvEl.tagName) === "nvPr"
+        ) {
+          for (let ph = nvEl.firstChild; ph !== null; ph = ph.nextSibling) {
+            if (ph.nodeType !== 1) continue;
+            const phEl = ph as XmlElementCursor["element"];
+            if (
+              (phEl.namespaceURI ?? "") === P_NS &&
+              (phEl.localName ?? phEl.tagName) === "ph"
+            ) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function readPlaceholderSpList(
+  spTree: XmlElementCursor | undefined,
+  clrMap: Readonly<Record<string, NativeColorSlot>>,
+  isMaster: boolean,
+): PlaceholderMap | MasterPlaceholderMap | undefined {
+  if (spTree === undefined) return undefined;
+  const rawSpecs: LayoutPlaceholderSpec[] = [];
+  for (const sp of spTree.children(P_NS, "sp")) {
+    if (!directPlaceholderChild(sp.element)) continue;
+    const nvSpPr = sp.child(P_NS, "nvSpPr");
+    const cNvPr = nvSpPr?.child(P_NS, "cNvPr");
+    cNvPr?.consumeAttr("id");
+    const rawName = cNvPr?.attr("name");
+    const name =
+      rawName !== undefined && rawName.trim() !== "" ? rawName : undefined;
+    const cNvSpPr = nvSpPr?.child(P_NS, "cNvSpPr");
+    if (cNvSpPr !== undefined) {
+      cNvSpPr.consumeAttr("txBox");
+      const spLocks = cNvSpPr.child(A_NS, "spLocks");
+      spLocks?.consumeAttr("noGrp");
+    }
+    const nvPr = nvSpPr?.child(P_NS, "nvPr");
+    const ph = nvPr?.child(P_NS, "ph");
+    if (ph === undefined) continue;
+
+    const rawType = ph.attr("type");
+    const explicitType = rawType !== undefined;
+    const typeRes = placeholderRoleSchema.safeParse(rawType ?? "obj");
+    const phType: ContentPlaceholderRole = typeRes.success
+      ? typeRes.data
+      : "obj";
+    const idxParsed = OoxmlNonNegativeIntSchema.safeParse(ph.attr("idx"));
+    const idx = idxParsed.success ? idxParsed.data : undefined;
+    const szParsed = placeholderSzSchema.safeParse(ph.attr("sz"));
+    const orientParsed = placeholderOrientSchema.safeParse(ph.attr("orient"));
+    const customPromptParsed = OoxmlBoolSchema.safeParse(
+      ph.attr("hasCustomPrompt"),
+    );
+
+    let x: number | undefined;
+    let y: number | undefined;
+    let width: number | undefined;
+    let height: number | undefined;
+    let backgroundColor: ColorValue | undefined;
+    const spPr = sp.child(P_NS, "spPr");
+    if (spPr !== undefined) {
+      const xfrm = spPr.child(A_NS, "xfrm");
+      if (xfrm !== undefined) {
+        xfrm.consumeAttr("rot");
+        xfrm.consumeAttr("flipH");
+        xfrm.consumeAttr("flipV");
+        const off = xfrm.child(A_NS, "off");
+        const ext = xfrm.child(A_NS, "ext");
+        const parsedOff =
+          off === undefined
+            ? { success: false as const }
+            : OffsetEmuFragmentSchema.safeParse(off.attrsObject(["x", "y"]));
+        const parsedExt =
+          ext === undefined
+            ? { success: false as const }
+            : ExtentEmuFragmentSchema.safeParse(ext.attrsObject(["cx", "cy"]));
+        if (parsedOff.success && parsedExt.success) {
+          x = emuToPx(parsedOff.data.x);
+          y = emuToPx(parsedOff.data.y);
+          width = emuToPx(parsedExt.data.cx);
+          height = emuToPx(parsedExt.data.cy);
+        }
+      }
+      const prstGeom = spPr.child(A_NS, "prstGeom");
+      prstGeom?.consumeAttr("prst");
+      prstGeom?.ignoreEmptyChild(A_NS, "avLst");
+      spPr.ignoreEmptyChild(A_NS, "noFill");
+      const solidFill = spPr.child(A_NS, "solidFill");
+      if (solidFill !== undefined) {
+        backgroundColor = readStyleColor(solidFill, clrMap);
+      }
+    }
+
+    const styleProps: Record<string, unknown> =
+      backgroundColor === undefined ? {} : { backgroundColor };
+    let listStyles: PlaceholderListStyles | undefined;
+    let promptText: string | undefined;
+    const txBody = sp.child(P_NS, "txBody");
+    if (txBody !== undefined) {
+      const bodyPr = txBody.child(A_NS, "bodyPr");
+      if (bodyPr !== undefined) {
+        const b = bodyPr.attrsObject([
+          "wrap",
+          "rtlCol",
+          "lIns",
+          "tIns",
+          "rIns",
+          "bIns",
+          "anchor",
+          "anchorCtr",
+          "numCol",
+          "spcCol",
+        ]);
+        if (b["wrap"] === "none") styleProps["textWrap"] = "nowrap";
+        else if (b["wrap"] === "square") styleProps["textWrap"] = "normal";
+        if (b["anchor"] === "t") styleProps["verticalAlign"] = "top";
+        else if (b["anchor"] === "ctr") styleProps["verticalAlign"] = "middle";
+        else if (b["anchor"] === "b") styleProps["verticalAlign"] = "bottom";
+        const lIns = OoxmlNonNegativeIntSchema.safeParse(b["lIns"]);
+        const tIns = OoxmlNonNegativeIntSchema.safeParse(b["tIns"]);
+        const rIns = OoxmlNonNegativeIntSchema.safeParse(b["rIns"]);
+        const bIns = OoxmlNonNegativeIntSchema.safeParse(b["bIns"]);
+        if (lIns.success && lIns.data !== 0)
+          styleProps["paddingLeft"] = emuToPx(lIns.data);
+        if (tIns.success && tIns.data !== 0)
+          styleProps["paddingTop"] = emuToPx(tIns.data);
+        if (rIns.success && rIns.data !== 0)
+          styleProps["paddingRight"] = emuToPx(rIns.data);
+        if (bIns.success && bIns.data !== 0)
+          styleProps["paddingBottom"] = emuToPx(bIns.data);
+        bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
+        bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
+        const normAutofit = bodyPr.child(A_NS, "normAutofit");
+        normAutofit?.consumeAttr("fontScale");
+        normAutofit?.consumeAttr("lnSpcReduction");
+      }
+
+      const lstStyle = txBody.child(A_NS, "lstStyle");
+      listStyles = readPlaceholderListStyles(lstStyle, clrMap);
+
+      const promptParagraphs: string[] = [];
+      let promptLvl1Fallback: Partial<PlaceholderLevelStyle> | undefined;
+      for (const p of txBody.children(A_NS, "p")) {
+        const pPr = p.child(A_NS, "pPr");
+        const pStyle =
+          pPr === undefined
+            ? undefined
+            : readLevelParagraphProperties(pPr, 0, clrMap);
+        const runTexts: string[] = [];
+        for (const r of p.children(A_NS, "r")) {
+          const rPr = r.child(A_NS, "rPr");
+          const rStyle =
+            rPr === undefined ? undefined : readDefRPr(rPr, clrMap);
+          if (
+            promptLvl1Fallback === undefined &&
+            (pStyle !== undefined || rStyle !== undefined)
+          ) {
+            promptLvl1Fallback = { ...pStyle, ...rStyle };
+          }
+          const t = r.child(A_NS, "t");
+          if (t !== undefined) {
+            t.consumeAttr("space", XML_NS);
+            runTexts.push(t.textContent);
+          }
+        }
+        const fld = p.child(A_NS, "fld");
+        if (fld !== undefined) {
+          fld.consumeAttr("id");
+          fld.consumeAttr("type");
+          const rPr = fld.child(A_NS, "rPr");
+          if (rPr !== undefined) readDefRPr(rPr, clrMap);
+          fld.ignoreEmptyChild(A_NS, "pPr");
+          const t = fld.child(A_NS, "t");
+          if (t !== undefined) {
+            t.consumeAttr("space", XML_NS);
+            runTexts.push(t.textContent);
+          }
+        }
+        const endPara = p.child(A_NS, "endParaRPr");
+        if (endPara !== undefined) readDefRPr(endPara, clrMap);
+        if (runTexts.length > 0) promptParagraphs.push(runTexts.join(""));
+      }
+      if (promptParagraphs.length > 0) {
+        promptText = promptParagraphs.join("\n");
+      }
+      if (
+        listStyles === undefined &&
+        promptLvl1Fallback !== undefined &&
+        Object.keys(promptLvl1Fallback).length > 0
+      ) {
+        listStyles = { 1: promptLvl1Fallback };
+      }
+    }
+
+    const style =
+      Object.keys(styleProps).length === 0
+        ? undefined
+        : (styleProps as PlaceholderStyle);
+    const candidate: LayoutPlaceholderSpec = {
+      type: phType,
+      ...(explicitType ? {} : { explicitType: false }),
+      ...(idx === undefined ? {} : { idx }),
+      ...(szParsed.success ? { sz: szParsed.data } : {}),
+      ...(orientParsed.success ? { orient: orientParsed.data } : {}),
+      ...(customPromptParsed.success && customPromptParsed.data
+        ? { hasCustomPrompt: true }
+        : {}),
+      ...(name === undefined ? {} : { name }),
+      ...(x === undefined ? {} : { x }),
+      ...(y === undefined ? {} : { y }),
+      ...(width === undefined ? {} : { width }),
+      ...(height === undefined ? {} : { height }),
+      ...(style === undefined ? {} : { style }),
+      ...(listStyles === undefined ? {} : { listStyles }),
+      ...(promptText === undefined ? {} : { promptText }),
+    };
+    const schema = isMaster
+      ? masterPlaceholderSpecSchema
+      : layoutPlaceholderSpecSchema;
+    const validated = schema.safeParse(candidate);
+    rawSpecs.push(validated.success ? validated.data : candidate);
+  }
+  if (rawSpecs.length === 0) return undefined;
+  const keys = allocatePlaceholderAuthorKeys(rawSpecs);
+  const map: Record<string, LayoutPlaceholderSpec | MasterPlaceholderSpec> = {};
+  for (let i = 0; i < rawSpecs.length; i += 1) {
+    map[keys[i]!] = rawSpecs[i]!;
+  }
+  return Object.freeze(map);
+}
 
 /** Allocates a deterministic unique author id within `used`, disambiguating collisions with `-2`, `-3`, ... */
 export function allocateScopedAuthorId(
@@ -177,34 +783,14 @@ function validateMasterLayoutNumericId(
   }
 }
 
-function consumeDefaultColorMapIfStandard(clrMap: XmlElementCursor): void {
-  const attrs = clrMap.element.attributes;
-  const observed = new Map<string, string>();
-  for (let i = 0; i < attrs.length; i += 1) {
-    const attr = attrs.item(i);
-    if (attr === null) continue;
-    const ns = attr.namespaceURI ?? "";
-    const local = attr.localName ?? attr.name;
-    if (ns === "" && local in defaultColorMap) {
-      observed.set(local, attr.value);
-    }
-  }
-  const matchesDefault = Object.entries(defaultColorMap).every(
-    ([slot, target]) => observed.get(slot) === target,
-  );
-  if (matchesDefault) {
-    for (const slot of Object.keys(defaultColorMap)) {
-      clrMap.consumeAttr(slot);
-    }
-  }
-}
-
 function readSlideLayoutPart(
   pkg: PptxPackage,
   layoutPartPath: string,
   ownerMasterPartPath: string,
   layoutOrder: number,
   usedLayoutIds: Set<string>,
+  masterClrMap: Readonly<Record<string, NativeColorSlot>>,
+  slideHandlers: readonly SlideImportHandler[],
   diagnostics: ImportDiagnostic[],
 ): SlideLayoutContainer | undefined {
   const xmlText = pkg.readTextPart(layoutPartPath);
@@ -311,12 +897,23 @@ function readSlideLayoutPart(
   }
   layoutName = cSld.attr("name");
   const spTree = cSld.child(P_NS, "spTree");
+  let placeholders: PlaceholderMap | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
+    placeholders = readPlaceholderSpList(spTree, masterClrMap, false);
   }
   const clrMapOvr = layoutCursor.child(P_NS, "clrMapOvr");
+  let colorMapOverride: ColorMapOverride | undefined;
   if (clrMapOvr !== undefined) {
-    clrMapOvr.ignoreEmptyChild(A_NS, "masterClrMapping");
+    const parsedOvr = readColorMapOverride(
+      clrMapOvr,
+      layoutPartPath,
+      undefined,
+      diagnostics,
+    );
+    if (parsedOvr !== undefined && parsedOvr !== "master") {
+      colorMapOverride = parsedOvr;
+    }
   }
 
   const layoutRels = pkg.readRelationships(layoutPartPath);
@@ -341,7 +938,34 @@ function readSlideLayoutPart(
     }
   }
 
-  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
+  let themeOverride: ThemeOverride | undefined;
+  const themeOverrideRel = layoutRels.entries.find(
+    (entry) =>
+      entry.Type === REL_THEME_OVERRIDE && entry.TargetMode !== "External",
+  );
+  if (themeOverrideRel !== undefined) {
+    const overridePart = resolvePartPath(
+      layoutPartPath,
+      themeOverrideRel.Target,
+    );
+    if (overridePart === undefined || !pkg.hasPart(overridePart)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part: layoutPartPath, xpath: themeOverrideRel.xpath },
+        relationshipId: themeOverrideRel.Id,
+        targetPart: overridePart ?? themeOverrideRel.Target,
+      });
+    } else {
+      themeOverride = readThemeOverridePart(
+        pkg,
+        overridePart,
+        undefined,
+        diagnostics,
+      );
+    }
+  }
 
   const layoutId = allocateScopedAuthorId(
     layoutName,
@@ -359,8 +983,33 @@ function readSlideLayoutPart(
     ...(showMasterPlaceholderAnimations === undefined
       ? {}
       : { showMasterPlaceholderAnimations }),
+    ...(placeholders === undefined ? {} : { placeholders }),
+    ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
+    ...(themeOverride === undefined ? {} : { themeOverride }),
   };
-  return createSlideLayoutNode(props);
+  const layoutNode = createSlideLayoutNode(props);
+
+  for (const slideHandler of slideHandlers) {
+    if (
+      slideHandler.slot !== "transition" ||
+      (slideHandler.matches !== undefined &&
+        !slideHandler.matches(layoutCursor))
+    ) {
+      continue;
+    }
+    const outcome = slideHandler.read({
+      slideCursor: layoutCursor,
+      slideNode: layoutNode,
+      part: layoutPartPath,
+      package: pkg,
+    });
+    if (outcome.diagnostics !== undefined) {
+      diagnostics.push(...outcome.diagnostics);
+    }
+  }
+
+  appendUnconsumedDiagnostics(layoutCursor, undefined, diagnostics);
+  return layoutNode;
 }
 
 function readSlideMasterPart(
@@ -368,7 +1017,13 @@ function readSlideMasterPart(
   masterPartPath: string,
   masterOrder: number,
   usedDeckIds: Set<string>,
+  themesByPartPath: Map<string, Theme>,
   layoutNodeByPartPath: Map<string, SlideLayoutContainer>,
+  clrMapByLayoutPartPath: Map<
+    string,
+    Readonly<Record<string, NativeColorSlot>>
+  >,
+  slideHandlers: readonly SlideImportHandler[],
   diagnostics: ImportDiagnostic[],
 ) {
   const xmlText = pkg.readTextPart(masterPartPath);
@@ -435,21 +1090,36 @@ function readSlideMasterPart(
     return undefined;
   }
   const masterName = cSld.attr("name");
+  const clrMap = masterCursor.child(P_NS, "clrMap");
+  let colorMap: ColorMap | undefined;
+  let masterClrMap: Readonly<Record<string, NativeColorSlot>> = defaultColorMap;
+  if (clrMap !== undefined) {
+    const parsedMap = readColorMapElement(
+      clrMap,
+      masterPartPath,
+      undefined,
+      diagnostics,
+    );
+    masterClrMap = parsedMap;
+    if (isNonDefaultColorMap(parsedMap)) {
+      colorMap = parsedMap;
+    }
+  }
+
   const spTree = cSld.child(P_NS, "spTree");
+  let masterPlaceholders: MasterPlaceholderMap | undefined;
   if (spTree !== undefined) {
     consumeIdentityShapeTreeBoilerplate(spTree);
+    masterPlaceholders = readPlaceholderSpList(spTree, masterClrMap, true);
   }
 
-  const clrMap = masterCursor.child(P_NS, "clrMap");
-  if (clrMap !== undefined) {
-    consumeDefaultColorMapIfStandard(clrMap);
-  }
-
-  const txStyles = masterCursor.child(P_NS, "txStyles");
-  if (txStyles !== undefined) {
-    txStyles.ignoreEmptyChild(P_NS, "titleStyle");
-    txStyles.ignoreEmptyChild(P_NS, "bodyStyle");
-    txStyles.ignoreEmptyChild(P_NS, "otherStyle");
+  const txStylesCursor = masterCursor.child(P_NS, "txStyles");
+  let textStyles: MasterTextStyles | undefined;
+  if (txStylesCursor !== undefined) {
+    txStylesCursor.ignoreEmptyChild(P_NS, "titleStyle");
+    txStylesCursor.ignoreEmptyChild(P_NS, "bodyStyle");
+    txStylesCursor.ignoreEmptyChild(P_NS, "otherStyle");
+    textStyles = readMasterTextStyles(txStylesCursor, masterClrMap);
   }
 
   const masterRels = pkg.readRelationships(masterPartPath);
@@ -457,6 +1127,31 @@ function readSlideMasterPart(
   const masterRelById = new Map<string, ParsedRelationshipEntry>();
   for (const rel of masterRels.entries) {
     masterRelById.set(rel.Id, rel);
+  }
+
+  let masterTheme: Theme | undefined;
+  const themeRel = masterRels.entries.find(
+    (entry) => entry.Type === REL_THEME && entry.TargetMode !== "External",
+  );
+  if (themeRel !== undefined) {
+    const themePartPath = resolvePartPath(masterPartPath, themeRel.Target);
+    if (themePartPath === undefined || !pkg.hasPart(themePartPath)) {
+      diagnostics.push({
+        code: "missing-target-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part: masterPartPath, xpath: themeRel.xpath },
+        relationshipId: themeRel.Id,
+        targetPart: themePartPath ?? themeRel.Target,
+      });
+    } else {
+      masterTheme = readThemePart(
+        pkg,
+        themePartPath,
+        themesByPartPath,
+        diagnostics,
+      );
+    }
   }
 
   const masterId = allocateScopedAuthorId(
@@ -468,6 +1163,12 @@ function readSlideMasterPart(
     id: masterId,
     ...(masterName === undefined ? {} : { name: masterName }),
     ...(preserve === undefined ? {} : { preserve }),
+    ...(masterPlaceholders === undefined
+      ? {}
+      : { placeholders: masterPlaceholders }),
+    ...(textStyles === undefined ? {} : { textStyles }),
+    ...(masterTheme === undefined ? {} : { theme: masterTheme }),
+    ...(colorMap === undefined ? {} : { colorMap }),
   };
   const masterNode = createSlideMasterNode(masterProps);
 
@@ -527,12 +1228,34 @@ function readSlideMasterPart(
         masterPartPath,
         index + 1,
         usedLayoutIds,
+        masterClrMap,
+        slideHandlers,
         diagnostics,
       );
       if (layoutNode !== undefined) {
         masterNode.append(layoutNode);
         layoutNodeByPartPath.set(layoutPart, layoutNode);
+        clrMapByLayoutPartPath.set(layoutPart, masterClrMap);
       }
+    }
+  }
+
+  for (const slideHandler of slideHandlers) {
+    if (
+      slideHandler.slot !== "transition" ||
+      (slideHandler.matches !== undefined &&
+        !slideHandler.matches(masterCursor))
+    ) {
+      continue;
+    }
+    const outcome = slideHandler.read({
+      slideCursor: masterCursor,
+      slideNode: masterNode,
+      part: masterPartPath,
+      package: pkg,
+    });
+    if (outcome.diagnostics !== undefined) {
+      diagnostics.push(...outcome.diagnostics);
     }
   }
 
@@ -551,8 +1274,14 @@ export function importMastersAndLayouts(
   deckNode: DeckContainer,
   usedDeckIds: Set<string>,
   diagnostics: ImportDiagnostic[],
+  clrMapByLayoutPartPath: Map<
+    string,
+    Readonly<Record<string, NativeColorSlot>>
+  > = new Map(),
+  slideHandlers: readonly SlideImportHandler[] = [],
 ): ReadonlyMap<string, SlideLayoutContainer> {
   const layoutNodeByPartPath = new Map<string, SlideLayoutContainer>();
+  const themesByPartPath = new Map<string, Theme>();
   const masterIdLst = presCursor.child(P_NS, "sldMasterIdLst");
   if (masterIdLst === undefined) {
     return layoutNodeByPartPath;
@@ -609,7 +1338,10 @@ export function importMastersAndLayouts(
       masterPart,
       index + 1,
       usedDeckIds,
+      themesByPartPath,
       layoutNodeByPartPath,
+      clrMapByLayoutPartPath,
+      slideHandlers,
       diagnostics,
     );
     if (masterNode !== undefined) {

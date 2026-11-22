@@ -373,6 +373,8 @@ function imagePlacement(
 const allowedParameters = [
   "id",
   "name",
+  "placeholder",
+  "nativePlaceholder",
   "morphKey",
   "link",
   "src",
@@ -391,6 +393,11 @@ const allowedParameters = [
   "emphasis",
   "motion",
 ] as const;
+const imageCompatiblePlaceholderRoles = new Set<string>([
+  "pic",
+  "clipArt",
+  "obj",
+]);
 const maximumShapeExtentEmu = 2_147_483_647;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -507,6 +514,17 @@ export const imageCapability = {
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
+    if (context.placeholder !== undefined) {
+      const role =
+        context.placeholder.layoutPlaceholder?.type ??
+        context.placeholder.nativeRef.type;
+      if (!imageCompatiblePlaceholderRoles.has(role)) {
+        throw new CapabilityError(
+          "incompatible-placeholder-content",
+          `Image cannot be bound to ${role} placeholder`,
+        );
+      }
+    }
     const unknown = Object.keys(input.props).find(
       (key) => !(allowedParameters as readonly string[]).includes(key),
     );

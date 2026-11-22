@@ -29,6 +29,10 @@ import {
   type SlideMasterObservation,
 } from "#/masters.ts";
 import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
+import {
+  matchMasterPlaceholderSpec,
+  nativePlaceholderRefSchema,
+} from "#/placeholders.ts";
 import { createBuildQuery, type QueryContentNode } from "#/query.ts";
 import {
   registerInternalResolution,
@@ -71,6 +75,7 @@ import type {
   ObjectCapabilityModule,
   ObjectObservation,
   ObjectResolveContext,
+  PlaceholderResolutionContext,
   RegisteredCapabilityModule,
   Resolution,
   ResolutionReport,
@@ -89,6 +94,7 @@ type ParsedSlideNode = {
   readonly authorId?: string;
   readonly index: number;
   readonly layoutKey?: string;
+  readonly hasExplicitLayout: boolean;
   readonly section?: string;
   readonly hidden?: boolean;
 };
@@ -96,6 +102,8 @@ type ParsedSlideNode = {
 type ParsedDocument = {
   readonly masters: readonly InternalResolvedSlideMaster[];
   readonly masterObservations: readonly SlideMasterObservation[];
+  readonly masterByKey: ReadonlyMap<string, InternalResolvedSlideMaster>;
+  readonly layoutByKey: ReadonlyMap<string, InternalResolvedSlideLayout>;
   readonly layoutIdByKey: ReadonlyMap<string, string>;
   readonly slides: readonly ParsedSlideNode[];
   readonly sections: readonly ResolvedSectionRecord[];
@@ -150,6 +158,10 @@ type ResolvePassContext = {
   readonly theme: ThemeContext;
   readonly layout: LayoutPassResult;
   readonly slideNumber: number;
+  readonly placeholderContexts: WeakMap<
+    CapabilityElement,
+    PlaceholderResolutionContext
+  >;
 };
 
 type ResolvedLayerEntry = {
@@ -425,6 +437,8 @@ function resolveSlides(
   const authorIds = new Set<string>();
   const masters: InternalResolvedSlideMaster[] = [];
   const masterObservations: SlideMasterObservation[] = [];
+  const masterByKey = new Map<string, InternalResolvedSlideMaster>();
+  const layoutByKey = new Map<string, InternalResolvedSlideLayout>();
   const layoutKeyByNode = new Map<DeclarationNode, string>();
   const layoutKeysByDefinition = new Map<SlideLayoutDefinition, string[]>();
   const layoutIdByKey = new Map<string, string>();
@@ -435,7 +449,8 @@ function resolveSlides(
   for (const [masterIndex, masterNode] of masterNodes.entries()) {
     const rawMasterPath = `deck/slide-master[${masterIndex + 1}]`;
     const masterAuthorId = readAuthorId(masterNode.props["id"], rawMasterPath);
-    const masterId = masterAuthorId ?? `master-${masterIndex + 1}`;
+    const masterKey = `master-${masterIndex + 1}`;
+    const masterId = masterAuthorId ?? masterKey;
     const masterPath = `deck/slide-master[${masterAuthorId ?? masterIndex + 1}]`;
     const unknownMasterProp = unknownPropertyKey(masterNode.props, [
       "id",
@@ -443,6 +458,8 @@ function resolveSlides(
       "preserve",
       "theme",
       "style",
+      "placeholders",
+      "textStyles",
     ]);
     if (unknownMasterProp !== undefined) {
       throw new BuildError([
@@ -454,7 +471,13 @@ function resolveSlides(
       ]);
     }
     const masterDataInput: Record<string, unknown> = {};
-    for (const key of ["id", "name", "preserve"] as const) {
+    for (const key of [
+      "id",
+      "name",
+      "preserve",
+      "placeholders",
+      "textStyles",
+    ] as const) {
       if (Object.hasOwn(masterNode.props, key)) {
         masterDataInput[key] = masterNode.props[key];
       }
@@ -469,6 +492,17 @@ function resolveSlides(
             "Invalid SlideMaster declaration",
         ),
       ]);
+    }
+    let masterTheme: ThemeContext;
+    try {
+      masterTheme = createThemeContext(
+        (masterNode.props["theme"] as ThemeInput | undefined) ??
+          (deck.props["theme"] as ThemeInput | undefined),
+        masterNode.props["style"] as Record<string, unknown> | undefined,
+      );
+    } catch (error) {
+      if (!(error instanceof CapabilityError)) throw error;
+      throw new BuildError([diagnostic(masterPath, error.code, error.message)]);
     }
     if (masterAuthorId !== undefined) {
       if (!xml10StringSchema.safeParse(masterAuthorId).success) {
@@ -502,6 +536,20 @@ function resolveSlides(
           "SlideMaster.name contains characters not allowed in XML 1.0",
         ),
       ]);
+    }
+    for (const phSpec of Object.values(parsedMaster.data.placeholders ?? {})) {
+      for (const phText of [phSpec.name, phSpec.promptText]) {
+        if (phText === undefined) continue;
+        if (!xml10StringSchema.safeParse(phText).success) {
+          throw new BuildError([
+            diagnostic(
+              masterPath,
+              "invalid-xml-character",
+              "SlideMaster placeholder text contains characters not allowed in XML 1.0",
+            ),
+          ]);
+        }
+      }
     }
     if (nonWhitespaceText(masterNode.children)) {
       throw new BuildError([
@@ -572,6 +620,7 @@ function resolveSlides(
         "userDrawn",
         "showMasterShapes",
         "showMasterPlaceholderAnimations",
+        "placeholders",
       ]);
       if (unknownLayoutProp !== undefined) {
         throw new BuildError([
@@ -625,6 +674,22 @@ function resolveSlides(
           ]);
         }
       }
+      for (const phSpec of Object.values(
+        parsedLayout.data.placeholders ?? {},
+      )) {
+        for (const phText of [phSpec.name, phSpec.promptText]) {
+          if (phText === undefined) continue;
+          if (!xml10StringSchema.safeParse(phText).success) {
+            throw new BuildError([
+              diagnostic(
+                layoutPath,
+                "invalid-xml-character",
+                "SlideLayout placeholder text contains characters not allowed in XML 1.0",
+              ),
+            ]);
+          }
+        }
+      }
       validateAuthorIdScopes(layoutNode, layoutPath, new Set());
       if (nonWhitespaceText(layoutNode.children)) {
         throw new BuildError([
@@ -662,7 +727,10 @@ function resolveSlides(
         defaultBlankLayoutKey = layoutKey;
       }
 
-      const layoutData: Omit<InternalResolvedSlideLayout, "key"> = {
+      const layoutData: Omit<
+        InternalResolvedSlideLayout,
+        "key" | "masterKey" | "placeholders"
+      > = {
         id: layoutId,
         ...(parsedLayout.data.name === undefined
           ? {}
@@ -689,12 +757,21 @@ function resolveSlides(
                 parsedLayout.data.showMasterPlaceholderAnimations,
             }),
       };
-      resolvedLayouts.push({ key: layoutKey, ...layoutData });
+      const resolvedLayout: InternalResolvedSlideLayout = {
+        key: layoutKey,
+        masterKey,
+        ...layoutData,
+        ...(parsedLayout.data.placeholders === undefined
+          ? {}
+          : { placeholders: parsedLayout.data.placeholders }),
+      };
+      layoutByKey.set(layoutKey, resolvedLayout);
+      resolvedLayouts.push(resolvedLayout);
       observedLayouts.push(layoutData);
     }
 
-    masters.push({
-      key: `master-${masterIndex + 1}`,
+    const resolvedMaster: InternalResolvedSlideMaster = {
+      key: masterKey,
       id: masterId,
       ...(parsedMaster.data.name === undefined
         ? {}
@@ -702,8 +779,17 @@ function resolveSlides(
       ...(parsedMaster.data.preserve === undefined
         ? {}
         : { preserve: parsedMaster.data.preserve }),
+      theme: masterTheme,
+      ...(parsedMaster.data.placeholders === undefined
+        ? {}
+        : { placeholders: parsedMaster.data.placeholders }),
+      ...(parsedMaster.data.textStyles === undefined
+        ? {}
+        : { textStyles: parsedMaster.data.textStyles }),
       layouts: resolvedLayouts,
-    });
+    };
+    masterByKey.set(masterKey, resolvedMaster);
+    masters.push(resolvedMaster);
     masterObservations.push({
       id: masterId,
       ...(parsedMaster.data.name === undefined
@@ -869,6 +955,7 @@ function resolveSlides(
       ...(authorId === undefined ? {} : { authorId }),
       index: index + 1,
       ...(layoutKey === undefined ? {} : { layoutKey }),
+      hasExplicitLayout: rawLayout !== undefined,
       ...(section === undefined ? {} : { section }),
       ...(hidden === undefined ? {} : { hidden }),
     };
@@ -880,6 +967,8 @@ function resolveSlides(
   return {
     masters,
     masterObservations,
+    masterByKey,
+    layoutByKey,
     layoutIdByKey,
     slides,
     sections: sections.map(({ name, slideIndexes }) => ({
@@ -1056,6 +1145,7 @@ function createObjectResolveContext(args: {
   readonly path: string;
   readonly layoutBox: GeometryBox | undefined;
   readonly theme: ThemeContext;
+  readonly placeholder: PlaceholderResolutionContext | undefined;
   readonly insideGroup: boolean;
   readonly restrictsMemberContinuity: boolean;
   readonly morphName: string | undefined;
@@ -1068,6 +1158,7 @@ function createObjectResolveContext(args: {
     path,
     layoutBox,
     theme,
+    placeholder,
     insideGroup,
     restrictsMemberContinuity,
     morphName,
@@ -1081,6 +1172,7 @@ function createObjectResolveContext(args: {
     options: resolveContext.options,
     slideNumber: resolveContext.slideNumber,
     ...(layoutBox === undefined ? {} : { layoutBox }),
+    ...(placeholder === undefined ? {} : { placeholder }),
     ...(morphName === undefined ? {} : { morphName }),
     ...(link === undefined ? {} : { link }),
     resolveChildren(nested): ResolvedObjectChildren {
@@ -1201,7 +1293,11 @@ function resolveChildrenPass(
       return;
     }
     const layoutBox = context.layout.boxes.get(child);
-    const theme = context.layout.themes.get(child) ?? context.theme;
+    const placeholder = context.placeholderContexts.get(child);
+    const theme =
+      placeholder !== undefined
+        ? placeholder.masterTheme
+        : (context.layout.themes.get(child) ?? context.theme);
     try {
       const bound =
         context.layout.bound.get(child) ??
@@ -1211,6 +1307,7 @@ function resolveChildrenPass(
             theme,
             options: context.options,
             slideNumber: context.slideNumber,
+            ...(placeholder === undefined ? {} : { placeholder }),
           }),
         );
       if (bound.container !== undefined) {
@@ -1306,6 +1403,7 @@ function resolveChildrenPass(
           path,
           layoutBox,
           theme,
+          placeholder,
           insideGroup,
           restrictsMemberContinuity: bound.contract.nativeKind === "grpSp",
           morphName,
@@ -1345,6 +1443,11 @@ function resolveChildrenPass(
         ...resolvedObj.observation,
         id,
         ...(authorId === undefined ? {} : { authorId }),
+        ...(placeholder?.key === undefined
+          ? {}
+          : resolvedObj.observation.placeholder === undefined
+            ? { placeholder: placeholder.key }
+            : {}),
         ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
       };
       if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
@@ -1552,6 +1655,7 @@ function resolveBoundContainer(args: {
         path,
         layoutBox: box,
         theme,
+        placeholder: undefined,
         insideGroup,
         restrictsMemberContinuity,
         morphName,
@@ -1900,6 +2004,224 @@ function collectOwnedContributions(
   });
 }
 
+function collectNestedPlaceholders(
+  children: readonly CapabilityChild[],
+  modules: BoundCapabilityRegistry,
+  parentPath: string,
+  allowDirect: boolean,
+  diagnostics: Diagnostic[],
+  onDirect?: (element: CapabilityElement, path: string) => void,
+): void {
+  children.forEach((child, index) => {
+    if (!("props" in child)) return;
+    const childPath = `${parentPath}/${capabilityLabel(child, index)}`;
+    const module = modules.declarations.get(child.type);
+    if (module !== undefined && "compileDeclaration" in module) {
+      if (module.children === "owned") return;
+      collectNestedPlaceholders(
+        child.children,
+        modules,
+        childPath,
+        allowDirect,
+        diagnostics,
+        onDirect,
+      );
+      return;
+    }
+    const hasPhProp =
+      child.props["placeholder"] !== undefined ||
+      child.props["nativePlaceholder"] !== undefined;
+    if (hasPhProp) {
+      if (allowDirect) {
+        onDirect?.(child, childPath);
+      } else {
+        diagnostics.push(
+          diagnostic(
+            childPath,
+            "placeholder-inside-container",
+            "Placeholders can only be bound directly on Slide",
+          ),
+        );
+      }
+    }
+    collectNestedPlaceholders(
+      child.children,
+      modules,
+      childPath,
+      false,
+      diagnostics,
+    );
+  });
+}
+
+function buildSlidePlaceholderContexts(args: {
+  readonly slideId: string;
+  readonly slidePath: string;
+  readonly hasExplicitLayout: boolean;
+  readonly layoutSpec: InternalResolvedSlideLayout | undefined;
+  readonly masterSpec: InternalResolvedSlideMaster | undefined;
+  readonly children: readonly CapabilityChild[];
+  readonly rawPlaceholdersProp: unknown;
+  readonly modules: BoundCapabilityRegistry;
+  readonly diagnostics: Diagnostic[];
+}): WeakMap<CapabilityElement, PlaceholderResolutionContext> {
+  const {
+    slideId,
+    slidePath,
+    hasExplicitLayout,
+    layoutSpec,
+    masterSpec,
+    children,
+    rawPlaceholdersProp,
+    modules,
+    diagnostics,
+  } = args;
+  const contexts = new WeakMap<
+    CapabilityElement,
+    PlaceholderResolutionContext
+  >();
+  const seenKeys = new Set<string>();
+
+  if (rawPlaceholdersProp !== undefined && !hasExplicitLayout) {
+    diagnostics.push(
+      diagnostic(
+        slidePath,
+        "placeholder-requires-layout",
+        `Slide ${JSON.stringify(slideId)} declares placeholders without a bound SlideLayout`,
+      ),
+    );
+  }
+
+  collectNestedPlaceholders(
+    children,
+    modules,
+    slidePath,
+    true,
+    diagnostics,
+    (child, childPath) => {
+      const rawKey = child.props["placeholder"];
+      const rawNativePh = child.props["nativePlaceholder"];
+      let parsedNativePh:
+        | ReturnType<typeof nativePlaceholderRefSchema.parse>
+        | undefined;
+      if (rawNativePh !== undefined) {
+        const parsed = nativePlaceholderRefSchema.safeParse(rawNativePh);
+        if (!parsed.success) {
+          diagnostics.push(
+            diagnostic(
+              childPath,
+              "invalid-slide-placeholder",
+              parsed.error.issues[0]?.message ??
+                "Invalid nativePlaceholder specification",
+            ),
+          );
+          return;
+        }
+        parsedNativePh = parsed.data;
+      }
+
+      if (rawKey !== undefined) {
+        if (typeof rawKey !== "string" || rawKey.trim() === "") {
+          diagnostics.push(
+            diagnostic(
+              childPath,
+              "invalid-slide-placeholder",
+              "placeholder key must be a non-empty string",
+            ),
+          );
+          return;
+        }
+        if (seenKeys.has(rawKey)) {
+          diagnostics.push(
+            diagnostic(
+              childPath,
+              "duplicate-slide-placeholder",
+              `Placeholder ${JSON.stringify(rawKey)} can only be bound once per slide`,
+            ),
+          );
+          return;
+        }
+        seenKeys.add(rawKey);
+      }
+
+      if (!hasExplicitLayout && parsedNativePh === undefined) {
+        diagnostics.push(
+          diagnostic(
+            childPath,
+            "placeholder-requires-layout",
+            `Placeholder ${JSON.stringify(rawKey)} requires a bound SlideLayout`,
+          ),
+        );
+        return;
+      }
+
+      const layoutPlaceholder =
+        typeof rawKey === "string"
+          ? layoutSpec?.placeholders?.[rawKey]
+          : undefined;
+      if (layoutPlaceholder === undefined && parsedNativePh === undefined) {
+        const layoutLabel = layoutSpec?.id ?? layoutSpec?.name ?? "<unnamed>";
+        diagnostics.push(
+          diagnostic(
+            childPath,
+            "unknown-slide-placeholder",
+            `SlideLayout ${JSON.stringify(layoutLabel)} does not define placeholder ${JSON.stringify(rawKey)}`,
+          ),
+        );
+        return;
+      }
+
+      if (masterSpec === undefined) {
+        diagnostics.push(
+          diagnostic(
+            childPath,
+            "placeholder-requires-layout",
+            `Placeholder ${JSON.stringify(rawKey)} requires a SlideLayout owned by a SlideMaster`,
+          ),
+        );
+        return;
+      }
+
+      const nativeRef =
+        parsedNativePh ??
+        ({
+          type: layoutPlaceholder!.type,
+          ...(layoutPlaceholder!.explicitType === undefined
+            ? {}
+            : { explicitType: layoutPlaceholder!.explicitType }),
+          ...(layoutPlaceholder!.idx === undefined
+            ? {}
+            : { idx: layoutPlaceholder!.idx }),
+          ...(layoutPlaceholder!.sz === undefined
+            ? {}
+            : { sz: layoutPlaceholder!.sz }),
+          ...(layoutPlaceholder!.orient === undefined
+            ? {}
+            : { orient: layoutPlaceholder!.orient }),
+          ...(layoutPlaceholder!.hasCustomPrompt === undefined
+            ? {}
+            : { hasCustomPrompt: layoutPlaceholder!.hasCustomPrompt }),
+        } as const);
+      const role = layoutPlaceholder?.type ?? nativeRef.type;
+      const masterPlaceholder = matchMasterPlaceholderSpec(
+        masterSpec.placeholders,
+        role,
+      );
+      contexts.set(child, {
+        ...(typeof rawKey === "string" ? { key: rawKey } : {}),
+        nativeRef,
+        masterTheme: masterSpec.theme,
+        ...(masterSpec.textStyles === undefined
+          ? {}
+          : { masterTextStyles: masterSpec.textStyles }),
+        ...(masterPlaceholder === undefined ? {} : { masterPlaceholder }),
+        ...(layoutPlaceholder === undefined ? {} : { layoutPlaceholder }),
+      });
+    },
+  );
+  return contexts;
+}
+
 function resolveSlideDeclaration(
   parsed: ParsedSlideNode,
   modules: BoundCapabilityRegistry,
@@ -1908,6 +2230,8 @@ function resolveSlideDeclaration(
   options: ResolveOptions,
   documentTheme: ThemeContext,
   layoutIdByKey: ReadonlyMap<string, string>,
+  layoutByKey: ReadonlyMap<string, InternalResolvedSlideLayout>,
+  masterByKey: ReadonlyMap<string, InternalResolvedSlideMaster>,
 ): ResolvedSlideResult {
   const {
     node,
@@ -1915,6 +2239,7 @@ function resolveSlideDeclaration(
     authorId,
     index,
     layoutKey,
+    hasExplicitLayout,
     section,
     hidden = false,
   } = parsed;
@@ -1937,6 +2262,26 @@ function resolveSlideDeclaration(
     );
   }
   const children = node.children.map(capabilityChild);
+  const layoutSpec =
+    layoutKey === undefined ? undefined : layoutByKey.get(layoutKey);
+  const masterSpec =
+    layoutSpec === undefined
+      ? undefined
+      : masterByKey.get(layoutSpec.masterKey);
+  const placeholderContexts = buildSlidePlaceholderContexts({
+    slideId: id,
+    slidePath: path,
+    hasExplicitLayout,
+    layoutSpec,
+    masterSpec,
+    children,
+    rawPlaceholdersProp: node.props["placeholders"],
+    modules,
+    diagnostics: slide.diagnostics,
+  });
+  if (slide.diagnostics.length > 0) {
+    throw new BuildError(slide.diagnostics);
+  }
   let theme: ThemeContext;
   try {
     theme = documentTheme.with(
@@ -1952,7 +2297,9 @@ function resolveSlideDeclaration(
     dimensions,
     index,
     options,
-  ).run(children, path, theme, node.props["style"]);
+  ).run(children, path, theme, node.props["style"], (element) =>
+    placeholderContexts.get(element),
+  );
   document.warnings.push(...layout.warnings);
   const ownedOrder = { value: 0 };
   collectOwnedContributions(
@@ -1976,6 +2323,7 @@ function resolveSlideDeclaration(
       theme,
       layout,
       slideNumber: index,
+      placeholderContexts,
     },
     path,
   );
@@ -2138,8 +2486,15 @@ function resolveDocument(
   options: ResolveOptions,
 ): Resolution {
   const parsed = resolveSlides(container, modules);
-  const { masters, masterObservations, layoutIdByKey, slides, sections } =
-    parsed;
+  const {
+    masters,
+    masterObservations,
+    masterByKey,
+    layoutByKey,
+    layoutIdByKey,
+    slides,
+    sections,
+  } = parsed;
   const deck = childNodes(container.children)[0];
   if (deck === undefined)
     throw new BuildError([
@@ -2182,6 +2537,8 @@ function resolveDocument(
       options,
       theme,
       layoutIdByKey,
+      layoutByKey,
+      masterByKey,
     ),
   );
 

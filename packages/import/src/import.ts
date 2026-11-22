@@ -1,4 +1,8 @@
-import type { RegisteredCapabilityModule } from "@pptxdk/core/capability";
+import type {
+  NativeColorSlot,
+  PlaceholderMap,
+  RegisteredCapabilityModule,
+} from "@pptxdk/core/capability";
 import {
   type CommonNode,
   type SlideLayoutContainer,
@@ -168,6 +172,8 @@ function readSingleShapeTreeItem(
   handlers: RegisteredImportHandlers,
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
+  layoutPlaceholders?: PlaceholderMap,
+  clrMap?: Readonly<Record<string, NativeColorSlot>>,
 ): CommonNode | undefined {
   const match = handlers.shapeTree.find(
     (handler) =>
@@ -216,6 +222,8 @@ function readSingleShapeTreeItem(
     package: pkg,
     relationships: relIndex.byId,
     registerDeferredSlideLink,
+    ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
+    ...(clrMap === undefined ? {} : { clrMap }),
   });
   if (outcome.diagnostics !== undefined) {
     diagnostics.push(...outcome.diagnostics);
@@ -232,6 +240,10 @@ function readSlidePart(
   slideIndex: number,
   usedSlideIds: Set<string>,
   layoutNodeByPartPath: ReadonlyMap<string, SlideLayoutContainer>,
+  clrMapByLayoutPartPath: ReadonlyMap<
+    string,
+    Readonly<Record<string, NativeColorSlot>>
+  >,
   handlers: RegisteredImportHandlers,
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   diagnostics: ImportDiagnostic[],
@@ -322,6 +334,13 @@ function readSlidePart(
     resolvedLayoutPath === undefined
       ? undefined
       : layoutNodeByPartPath.get(resolvedLayoutPath);
+  const layoutPlaceholders = layoutNode?.props["placeholders"] as
+    | PlaceholderMap
+    | undefined;
+  const layoutClrMap =
+    resolvedLayoutPath === undefined
+      ? undefined
+      : clrMapByLayoutPartPath.get(resolvedLayoutPath);
 
   const rawSlideName = cSld.attr("name");
   const slideId = allocateScopedAuthorId(
@@ -362,6 +381,8 @@ function readSlidePart(
               handlers,
               registerDeferredSlideLink,
               diagnostics,
+              layoutPlaceholders,
+              layoutClrMap,
             );
             if (node !== undefined) {
               slideNode.append(node);
@@ -380,6 +401,8 @@ function readSlidePart(
               handlers,
               registerDeferredSlideLink,
               diagnostics,
+              layoutPlaceholders,
+              layoutClrMap,
             );
             if (node !== undefined) {
               adoptedFallback = true;
@@ -434,6 +457,8 @@ function readSlidePart(
         handlers,
         registerDeferredSlideLink,
         diagnostics,
+        layoutPlaceholders,
+        layoutClrMap,
       );
       if (node !== undefined) {
         slideNode.append(node);
@@ -495,6 +520,10 @@ export function createImporter(
     }
 
     const usedDeckIds = new Set<string>();
+    const clrMapByLayoutPartPath = new Map<
+      string,
+      Readonly<Record<string, NativeColorSlot>>
+    >();
     const layoutNodeByPartPath = importMastersAndLayouts(
       presCursor,
       pkg,
@@ -502,6 +531,7 @@ export function createImporter(
       deckNode,
       usedDeckIds,
       diagnostics,
+      clrMapByLayoutPartPath,
     );
 
     const slideIdByPartPath = new Map<string, string>();
@@ -590,6 +620,7 @@ export function createImporter(
           index,
           usedDeckIds,
           layoutNodeByPartPath,
+          clrMapByLayoutPartPath,
           handlers,
           registerDeferredSlideLink,
           diagnostics,

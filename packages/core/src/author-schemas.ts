@@ -288,6 +288,7 @@ export function parseSlideCoreProps(
   const allowed = new Set([
     "id",
     "layout",
+    "placeholders",
     "theme",
     "style",
     "hidden",

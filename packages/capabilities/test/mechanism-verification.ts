@@ -15,6 +15,7 @@ import {
   type CapabilityScenario,
   type NativeRoundtripAssertContext,
 } from "./acceptance-runner.ts";
+import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
@@ -210,6 +211,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
         assert.equal(roundtrip.pages.length, 1);
       },
     },
+    ...shapeAndGroupMechanismVerifications,
   };
 
 /** Runs every mechanism verification entry, deduplicating shared scenarios across initial and roundtrip artifacts. */

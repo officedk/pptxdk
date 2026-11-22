@@ -36,6 +36,10 @@ import {
 import { z } from "zod";
 
 import {
+  consumeNonPlaceholderNvPr,
+  hasPlaceholderElement,
+} from "../shared/identity.ts";
+import {
   directElementChild,
   directPlaceholderElement,
   isPlaceholderSpElement,
@@ -163,20 +167,19 @@ const algnToTextAlign: Readonly<
   just: "justify",
 };
 
+// Metadata placeholders (`dt`, `ftr`, `sldNum`) are owned by `footerPlaceholderShapeImportHandler`.
 const textCompatiblePlaceholderRoles = new Set<string>([
   "title",
   "ctrTitle",
   "subTitle",
   "body",
-  "dt",
-  "ftr",
   "hdr",
   "obj",
-  "sldNum",
 ]);
 
-/** Side-effect-free predicate distinguishing `<p:sp>` text boxes (`txBox="1"`) from shapes. */
+/** Side-effect-free predicate distinguishing `<p:sp>` text boxes (`txBox="1"`) from shapes and placeholders. */
 function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
+  if (hasPlaceholderElement(cursor)) return false;
   const nvSpPr = directElementChild(cursor.element, P_NS, "nvSpPr");
   if (nvSpPr === undefined) return false;
   const cNvSpPr = directElementChild(nvSpPr, P_NS, "cNvSpPr");
@@ -1060,7 +1063,7 @@ export function readTextBoxSp(
     const rawFlags = cNvSpPr.attrsObject(["txBox"]);
     NonVisualSpPrFlagsSchema.safeParse(rawFlags);
   }
-  nvSpPr.ignoreEmptyChild(P_NS, "nvPr");
+  consumeNonPlaceholderNvPr(nvSpPr);
 
   const spPr = cursor.child(P_NS, "spPr");
   const txBody = cursor.child(P_NS, "txBody");

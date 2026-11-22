@@ -737,9 +737,12 @@ describe("typed text placeholders and style inheritance", () => {
       false,
     );
     assert.equal(
-      layoutsValidated.slides[9]?.objects[4]?.text?.paragraphs[0]?.runs[0]
-        ?.field,
-      "slidenum",
+      layoutsValidated.slides[9]?.footerPlaceholders?.[2]?.kind,
+      "sldNum",
+    );
+    assert.equal(
+      layoutsValidated.slides[9]?.footerPlaceholders?.[2]?.hasSlideNumberField,
+      true,
     );
     const layoutsReimported = importPptx(layoutsReemitted.pptx);
     assert.deepEqual(layoutsReimported.report.diagnostics, []);

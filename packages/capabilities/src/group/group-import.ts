@@ -19,6 +19,7 @@ import {
   readShapeSp,
   type BoxCoordinateMapper,
 } from "../shape/shape-import.ts";
+import { consumeNonPlaceholderNvPr } from "../shared/identity.ts";
 import { textBoxImportHandler } from "../text/text-import.ts";
 import {
   createGroupNode,
@@ -85,7 +86,7 @@ export function readGroupSp(
     diagnostics,
   );
   nvGrpSpPr.ignoreEmptyChild(P_NS, "cNvGrpSpPr");
-  nvGrpSpPr.ignoreEmptyChild(P_NS, "nvPr");
+  consumeNonPlaceholderNvPr(nvGrpSpPr);
 
   const location: ImportLocation = {
     part,

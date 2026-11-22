@@ -4,7 +4,10 @@ import { boxCapability } from "./box/box.ts";
 import { chartCapability } from "./chart/chart.ts";
 import { groupCapability } from "./group/group.ts";
 import { imageCapability } from "./image/image.ts";
-import { mastersCapability } from "./masters/masters.ts";
+import {
+  footerPlaceholderCapability,
+  mastersCapability,
+} from "./masters/masters.ts";
 import { motionCapability } from "./motion/motion.ts";
 import { notesCapability } from "./notes/notes.ts";
 import { placeholderCapability } from "./placeholder/placeholder.ts";
@@ -17,6 +20,7 @@ import { transitionCapability } from "./transition/transition.ts";
 const baselineCapabilities = [
   boxCapability,
   chartCapability,
+  footerPlaceholderCapability,
   groupCapability,
   imageCapability,
   mastersCapability,

@@ -125,23 +125,14 @@ function attachEmbeddedFontsToSubtree(
   node: CommonNode,
   fontsByKey: ReadonlyMap<string, Font>,
 ): void {
-  const style = node.props["style"];
-  if (typeof style === "object" && style !== null && !Array.isArray(style)) {
-    const matched = upgradeFontToken(
-      (style as Readonly<Record<string, unknown>>)["fontFamily"],
-      fontsByKey,
-    );
-    if (matched !== undefined) {
-      (
-        node as CommonNode<
-          string,
-          Record<string, unknown>,
-          Record<string, unknown>
-        >
-      ).style({
-        fontFamily: matched,
-      });
-    }
+  const mutableNode = node as CommonNode<
+    string,
+    Record<string, unknown>,
+    Record<string, unknown>
+  >;
+  const styleUp = upgradeStyleRecordFont(node.props["style"], fontsByKey);
+  if (styleUp.changed && styleUp.value !== undefined) {
+    mutableNode.style({ fontFamily: styleUp.value["fontFamily"] });
   }
   if (node.type === "slide-master" || node.type === "slide-layout") {
     const rawPlaceholders = node.props["placeholders"] as
@@ -149,7 +140,7 @@ function attachEmbeddedFontsToSubtree(
       | undefined;
     const upgradedPh = upgradePlaceholdersFont(rawPlaceholders, fontsByKey);
     if (upgradedPh.changed && upgradedPh.value !== undefined) {
-      node.set({ placeholders: upgradedPh.value });
+      mutableNode.set({ placeholders: upgradedPh.value });
     }
     if (node.type === "slide-master") {
       const rawTextStyles = node.props["textStyles"] as
@@ -173,7 +164,7 @@ function attachEmbeddedFontsToSubtree(
           fontsByKey,
         );
         if (titleUp.changed || bodyUp.changed || otherUp.changed) {
-          node.set({
+          mutableNode.set({
             textStyles: {
               ...(titleUp.value === undefined
                 ? {}
@@ -188,6 +179,58 @@ function attachEmbeddedFontsToSubtree(
           });
         }
       }
+    }
+  }
+  const rawFooterPlaceholders = node.props["footerPlaceholders"];
+  if (
+    typeof rawFooterPlaceholders === "object" &&
+    rawFooterPlaceholders !== null &&
+    !Array.isArray(rawFooterPlaceholders)
+  ) {
+    let changed = false;
+    const nextPlaceholders: Record<string, unknown> = {
+      ...(rawFooterPlaceholders as Readonly<Record<string, unknown>>),
+    };
+    for (const [slot, spec] of Object.entries(nextPlaceholders)) {
+      if (typeof spec !== "object" || spec === null || Array.isArray(spec)) {
+        continue;
+      }
+      const nextStyle = upgradeStyleRecordFont(
+        (spec as Readonly<Record<string, unknown>>)["style"],
+        fontsByKey,
+      );
+      if (nextStyle.changed && nextStyle.value !== undefined) {
+        nextPlaceholders[slot] = {
+          ...(spec as Readonly<Record<string, unknown>>),
+          style: nextStyle.value,
+        };
+        changed = true;
+      }
+    }
+    if (changed) {
+      mutableNode.set({ footerPlaceholders: nextPlaceholders });
+    }
+  }
+  for (const slideSlot of ["dateTime", "footer", "slideNumber"] as const) {
+    const rawSlot = node.props[slideSlot];
+    if (
+      typeof rawSlot !== "object" ||
+      rawSlot === null ||
+      Array.isArray(rawSlot)
+    ) {
+      continue;
+    }
+    const nextStyle = upgradeStyleRecordFont(
+      (rawSlot as Readonly<Record<string, unknown>>)["style"],
+      fontsByKey,
+    );
+    if (nextStyle.changed && nextStyle.value !== undefined) {
+      mutableNode.set({
+        [slideSlot]: {
+          ...(rawSlot as Readonly<Record<string, unknown>>),
+          style: nextStyle.value,
+        },
+      });
     }
   }
   for (const child of node.children) {

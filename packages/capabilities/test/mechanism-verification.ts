@@ -25,10 +25,13 @@ import {
 } from "./acceptance-runner.ts";
 import { chartMechanismVerifications } from "./chart/mechanisms.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
+import { footerPlaceholderMechanismVerifications } from "./masters/footer-mechanisms.ts";
+import { masterSharedCanvasMechanismVerifications } from "./masters/shared-canvas-mechanisms.ts";
 import { themeMechanismVerifications } from "./masters/theme-mechanisms.ts";
 import { notesMechanismVerifications } from "./notes/mechanisms.ts";
 import { placeholderMechanismVerifications } from "./placeholder/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
+import { slideBackgroundMechanismVerifications } from "./slide-background/mechanisms.ts";
 import { tableMechanismVerifications } from "./table/mechanisms.ts";
 import {
   textBoxRoundtripScenario,
@@ -263,6 +266,9 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
       },
     },
     ...themeMechanismVerifications,
+    ...masterSharedCanvasMechanismVerifications,
+    ...footerPlaceholderMechanismVerifications,
+    ...slideBackgroundMechanismVerifications,
     ...imageMechanismVerifications,
     ...notesMechanismVerifications,
     ...placeholderMechanismVerifications,

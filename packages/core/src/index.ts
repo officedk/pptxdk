@@ -1,11 +1,15 @@
 export { authorIdSchema } from "#/author-ids.ts";
 export type { AuthorId } from "#/author-ids.ts";
 export {
+  backgroundRefSchema,
   deckPropsSchema,
   linkTargetSchema,
+  placeholderSizeSchema,
   sectionPropsSchema,
   slideBackgroundSchema,
   slideCorePropsSchema,
+  slideFooterValueSchema,
+  slideNumberValueSchema,
   slidePropsSchema,
   slideStyleSchema,
 } from "#/author-schemas.ts";
@@ -29,6 +33,9 @@ export {
 } from "#/document.ts";
 export {
   defineSlideLayout,
+  footerPlaceholderSpecSchema,
+  footerPlaceholdersSchema,
+  headerFooterSchema,
   isSlideLayoutDefinition,
   slideLayoutDataPropsSchema,
   slideLayoutObservationSchema,
@@ -274,6 +281,13 @@ export type {
   SlideEmitContext,
   SlideEmitOutput,
   SlideBackground,
+  BackgroundRef,
+  FooterPlaceholderSpec,
+  FooterPlaceholders,
+  HeaderFooter,
+  PlaceholderSize,
+  SlideFooterValue,
+  SlideNumberValue,
   SlideLayoutDataProps,
   SlideLayoutDefinition,
   SlideLayoutObservation,

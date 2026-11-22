@@ -4,7 +4,7 @@
  * Solely for internal stage backend packages (`@pptxdk/emit` and `@pptxdk/preview`);
  * this subpath is not an author API and must never be re-exported from `.` or `./document`.
  */
-import type { SlideLayoutType } from "#/masters.ts";
+import type { HeaderFooter, SlideLayoutType } from "#/masters.ts";
 import type { MorphKey } from "#/morph.ts";
 import type {
   MasterPlaceholderMap,
@@ -94,6 +94,10 @@ export type InternalResolvedSlideLayout = {
   readonly placeholders?: PlaceholderMap;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
+  readonly headerFooter?: HeaderFooter;
+  readonly background?: ResolvedSlideCapabilityRecord;
+  readonly footerPlaceholders?: ResolvedSlideCapabilityRecord;
+  readonly layers?: readonly ResolvedObjectLayer[];
   readonly slideCapabilities?: readonly ResolvedSlideCapabilityRecord[];
 };
 
@@ -105,6 +109,10 @@ export type InternalResolvedSlideMaster = {
   readonly theme: Theme;
   readonly themeContext: ThemeContext;
   readonly colorMap: ColorMap;
+  readonly headerFooter?: HeaderFooter;
+  readonly background?: ResolvedSlideCapabilityRecord;
+  readonly footerPlaceholders?: ResolvedSlideCapabilityRecord;
+  readonly layers?: readonly ResolvedObjectLayer[];
   readonly placeholders?: MasterPlaceholderMap;
   readonly textStyles?: MasterTextStyles;
   readonly layouts: readonly InternalResolvedSlideLayout[];
@@ -121,6 +129,10 @@ export type InternalResolvedSlide = {
   readonly section?: string;
   readonly hidden: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly showMasterShapes?: boolean;
+  readonly inheritedBackground?: ResolvedSlideCapabilityRecord;
+  readonly masterLayers?: readonly ResolvedObjectLayer[];
+  readonly layoutLayers?: readonly ResolvedObjectLayer[];
   readonly content: readonly QueryContentNode[];
   readonly layers: readonly ResolvedObjectLayer[];
   readonly slideCapabilities: readonly ResolvedSlideCapabilityRecord[];

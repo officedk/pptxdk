@@ -45,7 +45,9 @@ import type { z } from "zod";
 import {
   assertXml10Characters,
   countAllocatedMasterThemeParts,
+  hasThemeOverrideContent,
   pptxParts,
+  type EmittedSlideMasterSpec,
   type PptxPackagePart,
   type PptxPackageRelationshipSet,
   type PptxPackageResource,
@@ -62,7 +64,7 @@ type StoredPresentationItem = {
   readonly relationshipType: string;
   readonly contentType: string;
   readonly path: string;
-  readonly resourceOwners: Map<SlidePackageState, Set<number>>;
+  readonly resourceOwners: Map<PartPackageState, Set<number>>;
   readonly bytes?: Uint8Array;
   readonly resourceClaim?: Pick<CapabilityResourceClaim, "kind" | "key">;
   readonly resolveBytes?: (characters: string) => Uint8Array;
@@ -92,7 +94,9 @@ type DocumentPackageState = {
   nextTextFieldId: number;
 };
 
-type SlidePackageState = {
+type PartPackageState = {
+  readonly partPath: string;
+  readonly baseRelationshipCount: number;
   readonly index: number;
   readonly relationships: PptxRelationship[];
   readonly relationshipIds: Map<string, string>;
@@ -101,7 +105,7 @@ type SlidePackageState = {
 
 type PackageContext = {
   readonly document: DocumentPackageState;
-  readonly slide: SlidePackageState;
+  readonly slide: PartPackageState;
 };
 
 type DocumentEmitState = DocumentPackageState & {
@@ -133,7 +137,7 @@ type DocumentEmitState = DocumentPackageState & {
   >;
 };
 
-type SlideEmitState = SlidePackageState & {
+type SlideEmitState = PartPackageState & {
   readonly diagnostics: Diagnostic[];
 };
 
@@ -281,7 +285,7 @@ function addResource(
     const existingRelationship =
       context.slide.relationshipIds.get(relationshipKey);
     if (existingRelationship !== undefined) return existingRelationship;
-    const id = `rId${context.slide.relationships.length + 2}`;
+    const id = `rId${context.slide.relationships.length + context.slide.baseRelationshipCount + 1}`;
     context.slide.relationshipIds.set(relationshipKey, id);
     context.slide.relationships.push({
       id,
@@ -363,12 +367,15 @@ function addResource(
   const existingRelationship =
     context.slide.relationshipIds.get(relationshipKey);
   if (existingRelationship !== undefined) return existingRelationship;
-  const id = `rId${context.slide.relationships.length + 2}`;
+  const id = `rId${context.slide.relationships.length + context.slide.baseRelationshipCount + 1}`;
   context.slide.relationshipIds.set(relationshipKey, id);
   context.slide.relationships.push({
     id,
     type: resource.relationshipType,
-    target: `../media/${asset.name}`,
+    target: relationshipTarget(
+      context.slide.partPath,
+      `ppt/media/${asset.name}`,
+    ),
   });
   return id;
 }
@@ -388,7 +395,7 @@ function relationshipTarget(sourcePath: string, targetPath: string): string {
 }
 
 function recordResourceObservation(
-  slide: SlidePackageState,
+  slide: PartPackageState,
   objectId: number,
   resource: ResourceObservation,
 ): void {
@@ -557,11 +564,11 @@ function addPackagePart(
     );
   }
 
-  const relationshipId = `rId${context.slide.relationships.length + 2}`;
+  const relationshipId = `rId${context.slide.relationships.length + context.slide.baseRelationshipCount + 1}`;
   context.slide.relationships.push({
     id: relationshipId,
     type: packagePart.relationshipType,
-    target: relationshipTarget("ppt/slides/slide.xml", partPath),
+    target: relationshipTarget(context.slide.partPath, partPath),
   });
   return relationshipId;
 }
@@ -734,14 +741,11 @@ function addSlidePackagePart(
   if (relationships.length > 0) {
     context.document.packageRelationships.set(partPath, relationships);
   }
-  const relationshipId = `rId${context.slide.relationships.length + 2}`;
+  const relationshipId = `rId${context.slide.relationships.length + context.slide.baseRelationshipCount + 1}`;
   context.slide.relationships.push({
     id: relationshipId,
     type: slideRelationshipType,
-    target: relationshipTarget(
-      `ppt/slides/slide${context.slide.index}.xml`,
-      partPath,
-    ),
+    target: relationshipTarget(context.slide.partPath, partPath),
   });
   return relationshipId;
 }
@@ -1190,7 +1194,7 @@ function presentationContent(document: DocumentEmitState): {
 function registerLinkRelationship(
   link: ResolvedLink,
   slideIndexById: ReadonlyMap<string, number>,
-  slide: SlidePackageState,
+  slide: PartPackageState,
 ): NativeLink {
   const { target } = link;
   if ("id" in target) {
@@ -1203,12 +1207,15 @@ function registerLinkRelationship(
     const relationshipKey = `link:slide:${target.id}`;
     let relationshipId = slide.relationshipIds.get(relationshipKey);
     if (relationshipId === undefined) {
-      relationshipId = `rId${slide.relationships.length + 2}`;
+      relationshipId = `rId${slide.relationships.length + slide.baseRelationshipCount + 1}`;
       slide.relationshipIds.set(relationshipKey, relationshipId);
       slide.relationships.push({
         id: relationshipId,
         type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-        target: `slide${targetIndex}.xml`,
+        target: relationshipTarget(
+          slide.partPath,
+          `ppt/slides/slide${targetIndex}.xml`,
+        ),
       });
     }
     return { relationshipId, action: "ppaction://hlinksldjump" };
@@ -1217,7 +1224,7 @@ function registerLinkRelationship(
     const relationshipKey = `link:url:${target.url}`;
     let relationshipId = slide.relationshipIds.get(relationshipKey);
     if (relationshipId === undefined) {
-      relationshipId = `rId${slide.relationships.length + 2}`;
+      relationshipId = `rId${slide.relationships.length + slide.baseRelationshipCount + 1}`;
       slide.relationshipIds.set(relationshipKey, relationshipId);
       slide.relationships.push({
         id: relationshipId,
@@ -1405,6 +1412,18 @@ function emitLayer(
 
 const emittedQueries = new WeakMap<BuildReport, BuildQuery>();
 
+function maxResolvedObjectId(layers: readonly ResolvedObjectLayer[]): number {
+  let maxId = 1;
+  for (const layer of layers) {
+    if (layer.objectId > maxId) maxId = layer.objectId;
+    const memberMax = maxResolvedObjectId(layer.memberLayers);
+    if (memberMax > maxId) maxId = memberMax;
+    const siblingMax = maxResolvedObjectId(layer.siblingLayers);
+    if (siblingMax > maxId) maxId = siblingMax;
+  }
+  return maxId;
+}
+
 /**
  * Returns the BuildQuery enriched with emitted package resources for a BuildReport produced by `emit()`.
  */
@@ -1419,21 +1438,14 @@ function emitMasterOrLayoutCapabilities(
   capabilities: readonly ResolvedSlideCapabilityRecord[] | undefined,
   internal: InternalResolution,
   docEmit: DocumentEmitState,
+  partEmit: SlideEmitState,
   target: Target,
   options: EmitOptions,
 ): { readonly transitionXml: string; readonly timingXml: string } {
   if (capabilities === undefined || capabilities.length === 0) {
     return { transitionXml: "", timingXml: "" };
   }
-  const diagnostics: Diagnostic[] = [];
-  const slideEmit: SlideEmitState = {
-    index: 0,
-    diagnostics,
-    relationships: [],
-    relationshipIds: new Map(),
-    resourceObservations: [],
-  };
-  const packageCtx: PackageContext = { document: docEmit, slide: slideEmit };
+  const packageCtx: PackageContext = { document: docEmit, slide: partEmit };
   const transitionParts: string[] = [];
   const timingParts: string[] = [];
 
@@ -1442,7 +1454,7 @@ function emitMasterOrLayoutCapabilities(
       cap.extensions,
       target,
       docEmit.usedExtensions,
-      diagnostics,
+      partEmit.diagnostics,
       cap.path,
     );
     try {
@@ -1464,7 +1476,7 @@ function emitMasterOrLayoutCapabilities(
         timingParts.push(output.xml);
       }
     } catch (error) {
-      diagnostics.push(
+      partEmit.diagnostics.push(
         error instanceof CapabilityError
           ? diagnostic(error.path ?? cap.path, error.code, error.message)
           : diagnostic(
@@ -1474,9 +1486,6 @@ function emitMasterOrLayoutCapabilities(
             ),
       );
     }
-  }
-  if (diagnostics.length > 0) {
-    throw new BuildError(diagnostics);
   }
   return {
     transitionXml: transitionParts.join(""),
@@ -1510,84 +1519,291 @@ export function emit(
     internal.slides.map((slide) => [slide.id, slide.index] as const),
   );
 
-  const emittedMasters = internal.masters?.map((master) => {
-    const masterCapXml = emitMasterOrLayoutCapabilities(
-      master.slideCapabilities,
-      internal,
-      docEmit,
-      target,
-      options,
-    );
-    const layouts = master.layouts.map((layout) => {
-      const layoutCapXml = emitMasterOrLayoutCapabilities(
-        layout.slideCapabilities,
+  let globalLayoutNumber = 0;
+  const emittedMasters: EmittedSlideMasterSpec[] | undefined =
+    internal.masters?.map((master, masterIndex) => {
+      const masterPartPath = `ppt/slideMasters/slideMaster${masterIndex + 1}.xml`;
+      const masterEmit: SlideEmitState = {
+        partPath: masterPartPath,
+        baseRelationshipCount: master.layouts.length + 1,
+        index: 1,
+        diagnostics: [],
+        relationships: [],
+        relationshipIds: new Map(),
+        resourceObservations: [],
+      };
+      const masterCtx: PackageContext = {
+        document: docEmit,
+        slide: masterEmit,
+      };
+      const masterCapXml = emitMasterOrLayoutCapabilities(
+        master.slideCapabilities,
         internal,
         docEmit,
+        masterEmit,
         target,
         options,
       );
+      let masterBackgroundXml = "";
+      if (master.background !== undefined) {
+        checkExtensions(
+          master.background.extensions,
+          target,
+          docEmit.usedExtensions,
+          masterEmit.diagnostics,
+          master.background.path,
+        );
+        const bgOut = master.background.emit({
+          path: master.background.path,
+          dimensions: internal.dimensions,
+          theme: master.background.theme,
+          options,
+          slideNumber: 1,
+          createTextFieldId: () => allocateTextFieldId(docEmit),
+          registerResource: (resource) => addResource(resource, masterCtx),
+          registerPackagePart: (part) => addSlidePackagePart(part, masterCtx),
+          registerSharedPart: (key, part) =>
+            addSharedPackagePart(key, part, masterCtx),
+        });
+        masterBackgroundXml = bgOut.xml;
+      }
+      let nextMasterObjectId =
+        Math.max(
+          maxResolvedObjectId(master.layers ?? []),
+          1 + Object.keys(master.placeholders ?? {}).length,
+        ) + 1;
+      let masterShapeXml = (master.layers ?? [])
+        .map((layer) =>
+          emitLayer(
+            layer,
+            slideIndexById,
+            docEmit,
+            masterEmit,
+            target,
+            options,
+          ),
+        )
+        .join("");
+      if (master.footerPlaceholders !== undefined) {
+        checkExtensions(
+          master.footerPlaceholders.extensions,
+          target,
+          docEmit.usedExtensions,
+          masterEmit.diagnostics,
+          master.footerPlaceholders.path,
+        );
+        const fpOut = master.footerPlaceholders.emit({
+          path: master.footerPlaceholders.path,
+          dimensions: internal.dimensions,
+          theme: master.footerPlaceholders.theme,
+          options,
+          slideNumber: 1,
+          createTextFieldId: () => allocateTextFieldId(docEmit),
+          allocateObjectId: () => nextMasterObjectId++,
+          registerResource: (resource) => addResource(resource, masterCtx),
+          registerPackagePart: (part) => addSlidePackagePart(part, masterCtx),
+          registerSharedPart: (key, part) =>
+            addSharedPackagePart(key, part, masterCtx),
+        });
+        masterShapeXml += fpOut.xml;
+        for (const contribution of fpOut.presentationContributions ?? []) {
+          addPresentationContribution(
+            contribution,
+            { document: docEmit, slide: masterEmit },
+            master.footerPlaceholders.path,
+          );
+        }
+      }
+      if (masterEmit.diagnostics.length > 0) {
+        throw new BuildError(masterEmit.diagnostics);
+      }
+
+      const emittedLayouts = master.layouts.map((layout) => {
+        const layoutNumber = ++globalLayoutNumber;
+        const layoutPartPath = `ppt/slideLayouts/slideLayout${layoutNumber}.xml`;
+        const layoutEmit: SlideEmitState = {
+          partPath: layoutPartPath,
+          baseRelationshipCount: hasThemeOverrideContent(layout.themeOverride)
+            ? 2
+            : 1,
+          index: 1,
+          diagnostics: [],
+          relationships: [],
+          relationshipIds: new Map(),
+          resourceObservations: [],
+        };
+        const layoutCtx: PackageContext = {
+          document: docEmit,
+          slide: layoutEmit,
+        };
+        const layoutCapXml = emitMasterOrLayoutCapabilities(
+          layout.slideCapabilities,
+          internal,
+          docEmit,
+          layoutEmit,
+          target,
+          options,
+        );
+        let layoutBackgroundXml = "";
+        if (layout.background !== undefined) {
+          checkExtensions(
+            layout.background.extensions,
+            target,
+            docEmit.usedExtensions,
+            layoutEmit.diagnostics,
+            layout.background.path,
+          );
+          const bgOut = layout.background.emit({
+            path: layout.background.path,
+            dimensions: internal.dimensions,
+            theme: layout.background.theme,
+            options,
+            slideNumber: 1,
+            createTextFieldId: () => allocateTextFieldId(docEmit),
+            registerResource: (resource) => addResource(resource, layoutCtx),
+            registerPackagePart: (part) => addSlidePackagePart(part, layoutCtx),
+            registerSharedPart: (key, part) =>
+              addSharedPackagePart(key, part, layoutCtx),
+          });
+          layoutBackgroundXml = bgOut.xml;
+        }
+        let nextLayoutObjectId =
+          Math.max(
+            maxResolvedObjectId(layout.layers ?? []),
+            1 + Object.keys(layout.placeholders ?? {}).length,
+          ) + 1;
+        let layoutShapeXml = (layout.layers ?? [])
+          .map((layer) =>
+            emitLayer(
+              layer,
+              slideIndexById,
+              docEmit,
+              layoutEmit,
+              target,
+              options,
+            ),
+          )
+          .join("");
+        if (layout.footerPlaceholders !== undefined) {
+          checkExtensions(
+            layout.footerPlaceholders.extensions,
+            target,
+            docEmit.usedExtensions,
+            layoutEmit.diagnostics,
+            layout.footerPlaceholders.path,
+          );
+          const fpOut = layout.footerPlaceholders.emit({
+            path: layout.footerPlaceholders.path,
+            dimensions: internal.dimensions,
+            theme: layout.footerPlaceholders.theme,
+            options,
+            slideNumber: 1,
+            createTextFieldId: () => allocateTextFieldId(docEmit),
+            allocateObjectId: () => nextLayoutObjectId++,
+            registerResource: (resource) => addResource(resource, layoutCtx),
+            registerPackagePart: (part) => addSlidePackagePart(part, layoutCtx),
+            registerSharedPart: (key, part) =>
+              addSharedPackagePart(key, part, layoutCtx),
+          });
+          layoutShapeXml += fpOut.xml;
+          for (const contribution of fpOut.presentationContributions ?? []) {
+            addPresentationContribution(
+              contribution,
+              { document: docEmit, slide: layoutEmit },
+              layout.footerPlaceholders.path,
+            );
+          }
+        }
+        if (layoutEmit.diagnostics.length > 0) {
+          throw new BuildError(layoutEmit.diagnostics);
+        }
+        return {
+          key: layout.key,
+          ...(layout.name === undefined ? {} : { name: layout.name }),
+          ...(layout.type === undefined ? {} : { type: layout.type }),
+          ...(layout.preserve === undefined
+            ? {}
+            : { preserve: layout.preserve }),
+          ...(layout.matchingName === undefined
+            ? {}
+            : { matchingName: layout.matchingName }),
+          ...(layout.userDrawn === undefined
+            ? {}
+            : { userDrawn: layout.userDrawn }),
+          ...(layout.showMasterShapes === undefined
+            ? {}
+            : { showMasterShapes: layout.showMasterShapes }),
+          ...(layout.showMasterPlaceholderAnimations === undefined
+            ? {}
+            : {
+                showMasterPlaceholderAnimations:
+                  layout.showMasterPlaceholderAnimations,
+              }),
+          ...(layout.placeholders === undefined
+            ? {}
+            : { placeholders: layout.placeholders }),
+          ...(layout.colorMapOverride === undefined
+            ? {}
+            : { colorMapOverride: layout.colorMapOverride }),
+          ...(layout.themeOverride === undefined
+            ? {}
+            : { themeOverride: layout.themeOverride }),
+          ...(layout.headerFooter === undefined
+            ? {}
+            : { headerFooter: layout.headerFooter }),
+          ...(layoutBackgroundXml === ""
+            ? {}
+            : { backgroundXml: layoutBackgroundXml }),
+          ...(layoutShapeXml === "" ? {} : { shapeXml: layoutShapeXml }),
+          ...(layoutEmit.relationships.length === 0
+            ? {}
+            : { extraRelationships: layoutEmit.relationships }),
+          ...(layoutCapXml.transitionXml === ""
+            ? {}
+            : { transitionXml: layoutCapXml.transitionXml }),
+          ...(layoutCapXml.timingXml === ""
+            ? {}
+            : { timingXml: layoutCapXml.timingXml }),
+        };
+      });
+
       return {
-        key: layout.key,
-        ...(layout.name === undefined ? {} : { name: layout.name }),
-        ...(layout.type === undefined ? {} : { type: layout.type }),
-        ...(layout.preserve === undefined ? {} : { preserve: layout.preserve }),
-        ...(layout.matchingName === undefined
+        key: master.key,
+        ...(master.name === undefined ? {} : { name: master.name }),
+        ...(master.preserve === undefined ? {} : { preserve: master.preserve }),
+        theme: master.theme,
+        themeContext: master.themeContext,
+        colorMap: master.colorMap,
+        ...(master.placeholders === undefined
           ? {}
-          : { matchingName: layout.matchingName }),
-        ...(layout.userDrawn === undefined
+          : { placeholders: master.placeholders }),
+        ...(master.textStyles === undefined
           ? {}
-          : { userDrawn: layout.userDrawn }),
-        ...(layout.showMasterShapes === undefined
+          : { textStyles: master.textStyles }),
+        ...(master.headerFooter === undefined
           ? {}
-          : { showMasterShapes: layout.showMasterShapes }),
-        ...(layout.showMasterPlaceholderAnimations === undefined
+          : { headerFooter: master.headerFooter }),
+        ...(masterBackgroundXml === ""
           ? {}
-          : {
-              showMasterPlaceholderAnimations:
-                layout.showMasterPlaceholderAnimations,
-            }),
-        ...(layout.placeholders === undefined
+          : { backgroundXml: masterBackgroundXml }),
+        ...(masterShapeXml === "" ? {} : { shapeXml: masterShapeXml }),
+        ...(masterEmit.relationships.length === 0
           ? {}
-          : { placeholders: layout.placeholders }),
-        ...(layout.colorMapOverride === undefined
+          : { extraRelationships: masterEmit.relationships }),
+        ...(masterCapXml.transitionXml === ""
           ? {}
-          : { colorMapOverride: layout.colorMapOverride }),
-        ...(layout.themeOverride === undefined
+          : { transitionXml: masterCapXml.transitionXml }),
+        ...(masterCapXml.timingXml === ""
           ? {}
-          : { themeOverride: layout.themeOverride }),
-        ...(layoutCapXml.transitionXml === ""
-          ? {}
-          : { transitionXml: layoutCapXml.transitionXml }),
-        ...(layoutCapXml.timingXml === ""
-          ? {}
-          : { timingXml: layoutCapXml.timingXml }),
+          : { timingXml: masterCapXml.timingXml }),
+        layouts: emittedLayouts,
       };
     });
-    return {
-      key: master.key,
-      ...(master.name === undefined ? {} : { name: master.name }),
-      ...(master.preserve === undefined ? {} : { preserve: master.preserve }),
-      theme: master.theme,
-      themeContext: master.themeContext,
-      colorMap: master.colorMap,
-      ...(master.placeholders === undefined
-        ? {}
-        : { placeholders: master.placeholders }),
-      ...(master.textStyles === undefined
-        ? {}
-        : { textStyles: master.textStyles }),
-      ...(masterCapXml.transitionXml === ""
-        ? {}
-        : { transitionXml: masterCapXml.transitionXml }),
-      ...(masterCapXml.timingXml === ""
-        ? {}
-        : { timingXml: masterCapXml.timingXml }),
-      layouts,
-    };
-  });
 
   const emittedSlides = internal.slides.map((resolvedSlide) => {
     const slideEmit: SlideEmitState = {
+      partPath: `ppt/slides/slide${resolvedSlide.index}.xml`,
+      baseRelationshipCount: 1,
       index: resolvedSlide.index,
       diagnostics: [],
       relationships: [],
@@ -1596,7 +1812,8 @@ export function emit(
     };
     const packageCtx: PackageContext = { document: docEmit, slide: slideEmit };
 
-    const shapeXml = resolvedSlide.layers
+    let nextSlideObjectId = maxResolvedObjectId(resolvedSlide.layers) + 1;
+    let shapeXml = resolvedSlide.layers
       .map((layer) =>
         emitLayer(layer, slideIndexById, docEmit, slideEmit, target, options),
       )
@@ -1624,6 +1841,7 @@ export function emit(
           options,
           slideNumber: resolvedSlide.index,
           createTextFieldId: () => allocateTextFieldId(docEmit),
+          allocateObjectId: () => nextSlideObjectId++,
           registerResource: (resource) => addResource(resource, packageCtx),
           registerPackagePart: (part) => addSlidePackagePart(part, packageCtx),
           registerSharedPart: (key, part) =>
@@ -1631,6 +1849,7 @@ export function emit(
         };
         const output = slideCap.emit(slideEmitContext);
         if (slideCap.slot === "background") backgroundXml += output.xml;
+        else if (slideCap.slot === "shape-tree") shapeXml += output.xml;
         else slideXmlParts.push({ slot: slideCap.slot, xml: output.xml });
         for (const contribution of output.presentationContributions ?? []) {
           addPresentationContribution(
@@ -1674,6 +1893,9 @@ export function emit(
             showMasterPlaceholderAnimations:
               resolvedSlide.showMasterPlaceholderAnimations,
           }),
+      ...(resolvedSlide.showMasterShapes === undefined
+        ? {}
+        : { showMasterShapes: resolvedSlide.showMasterShapes }),
       shapeXml,
       backgroundXml,
       slideXml: slideXmlParts
@@ -1702,6 +1924,7 @@ export function emit(
         themeOverride,
         hidden,
         showMasterPlaceholderAnimations,
+        showMasterShapes,
         shapeXml,
         backgroundXml,
         slideXml,
@@ -1715,6 +1938,7 @@ export function emit(
         ...(showMasterPlaceholderAnimations === undefined
           ? {}
           : { showMasterPlaceholderAnimations }),
+        ...(showMasterShapes === undefined ? {} : { showMasterShapes }),
         shapeXml,
         backgroundXml,
         slideXml,

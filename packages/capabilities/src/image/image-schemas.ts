@@ -1,9 +1,20 @@
 import {
+  isMorphKey,
+  layoutStyleSchema,
+  linkTargetSchema,
+  nativePlaceholderRefSchema,
+  visualStyleSchema,
+  type MorphKey,
+} from "@pptxdk/core/capability";
+import {
   OoxmlIntSchema,
   OoxmlNonNegativeIntSchema,
   OoxmlPositiveIntSchema,
 } from "@pptxdk/import";
 import { z } from "zod";
+
+import type { Geometry } from "../shared/geometry.ts";
+import { OptionalNameSchema } from "../shared/identity.ts";
 
 export const ImageFitSchema = z.enum(["fill", "cover", "contain"]);
 export type ImageFit = z.infer<typeof ImageFitSchema>;
@@ -55,6 +66,68 @@ export const ImageCoordinateValueSchema = z
   .max(1_000_000);
 
 export const ImageExtentValueSchema = z.number().finite().positive();
+
+const coreVisualShape = visualStyleSchema.unwrap().shape;
+
+const imageVisualStyleObjectSchema = z.strictObject({
+  borderColor: coreVisualShape.borderColor,
+  borderWidth: coreVisualShape.borderWidth,
+  borderStyle: coreVisualShape.borderStyle,
+  opacity: coreVisualShape.opacity,
+  boxShadow: coreVisualShape.boxShadow,
+  softEdge: coreVisualShape.softEdge,
+  rotate: coreVisualShape.rotate,
+});
+
+/** Visual styling supported on Image objects. */
+export const imageVisualStyleSchema = imageVisualStyleObjectSchema.readonly();
+export type ImageVisualStyle = z.infer<typeof imageVisualStyleSchema>;
+
+export const imageVisualStyleKeys = new Set(
+  Object.keys(imageVisualStyleObjectSchema.shape),
+);
+
+export const imageStyleSchema = z
+  .strictObject({
+    ...layoutStyleSchema.unwrap().shape,
+    ...imageVisualStyleObjectSchema.shape,
+  })
+  .readonly();
+
+const imageDeclarationPropsObjectSchema = z.strictObject({
+  id: z.string().optional(),
+  name: OptionalNameSchema.optional(),
+  placeholder: z.string().optional(),
+  nativePlaceholder: nativePlaceholderRefSchema.optional(),
+  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  link: linkTargetSchema.optional(),
+  src: ImageSourceSchema,
+  /** Alternative text for the image. */
+  alt: z.string().optional(),
+  /** Position and bounds in px; position defaults to 0, width and height default to original image dimensions. */
+  x: ImageCoordinateValueSchema.optional(),
+  y: ImageCoordinateValueSchema.optional(),
+  width: ImageExtentValueSchema.optional(),
+  height: ImageExtentValueSchema.optional(),
+  geometry: z.custom<Geometry>().optional(),
+  flipH: z.boolean().optional(),
+  flipV: z.boolean().optional(),
+  style: imageStyleSchema.optional(),
+  /** `fill` stretches, `cover` crops centered, `contain` preserves aspect ratio; defaults to `fill`. */
+  fit: ImageFitSchema.optional(),
+  /** Explicit crop fraction for each side of the original image; takes precedence over `fit` when provided. */
+  crop: ImageCropInputSchema.optional(),
+  enter: z.unknown().optional(),
+  emphasis: z.unknown().optional(),
+  motion: z.unknown().optional(),
+});
+
+export const imageDeclarationPropsSchema =
+  imageDeclarationPropsObjectSchema.readonly();
+
+export const imageAllowedParameters: readonly string[] = Object.keys(
+  imageDeclarationPropsObjectSchema.shape,
+);
 
 export const NonVisualPicIdSchema = z.object({
   id: OoxmlNonNegativeIntSchema,

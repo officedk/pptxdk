@@ -1,6 +1,10 @@
 import type { LinkTarget } from "#/author-schemas.ts";
 import type { LayoutStyle } from "#/layout-schemas.ts";
-import type { SlideMasterObservation } from "#/masters.ts";
+import type {
+  FooterPlaceholders,
+  HeaderFooter,
+  SlideMasterObservation,
+} from "#/masters.ts";
 import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
 import type { PlaceholderResolutionContext } from "#/placeholders.ts";
@@ -21,10 +25,14 @@ import type { ThemeContext } from "#/theme.ts";
 
 export type { AuthorId } from "#/author-ids.ts";
 export type {
+  BackgroundRef,
   DeckProps,
   LinkTarget,
+  PlaceholderSize,
   SectionProps,
   SlideBackground,
+  SlideFooterValue,
+  SlideNumberValue,
   SlideProps,
   SlideStyle,
 } from "#/author-schemas.ts";
@@ -63,6 +71,9 @@ export type {
 } from "#/theme.ts";
 
 export type {
+  FooterPlaceholderSpec,
+  FooterPlaceholders,
+  HeaderFooter,
   SlideLayoutDataProps,
   SlideLayoutDefinition,
   SlideLayoutObservation,
@@ -703,7 +714,22 @@ export type TransparentCapabilityModule = {
   ): readonly CapabilityAnnotation[];
 };
 
-export type SlideCapabilitySlot = "background" | "transition" | "timing";
+export type SlideCapabilitySlot =
+  | "background"
+  | "shape-tree"
+  | "transition"
+  | "timing";
+
+export type SlideMasterInheritanceContext = {
+  readonly master?: {
+    readonly headerFooter?: HeaderFooter;
+    readonly footerPlaceholders?: FooterPlaceholders;
+  };
+  readonly layout?: {
+    readonly headerFooter?: HeaderFooter;
+    readonly footerPlaceholders?: FooterPlaceholders;
+  };
+};
 
 export type SlideCapabilityParseContext = {
   readonly path: string;
@@ -712,6 +738,7 @@ export type SlideCapabilityParseContext = {
   readonly options: ResolveOptions;
   readonly slideNumber: number;
   readonly contributions: readonly CapabilityContribution[];
+  readonly inheritance?: SlideMasterInheritanceContext;
 };
 
 /**
@@ -733,6 +760,7 @@ export type SlideResolveContext = {
   readonly theme: ThemeContext;
   readonly options: ResolveOptions;
   readonly slideNumber: number;
+  readonly inheritance?: SlideMasterInheritanceContext;
 };
 
 export type SlideEmitContext = {
@@ -742,6 +770,7 @@ export type SlideEmitContext = {
   readonly options: EmitOptions;
   readonly slideNumber: number;
   readonly createTextFieldId: () => string;
+  readonly allocateObjectId?: () => number;
   readonly registerResource: (resource: CapabilityResource) => string;
   readonly registerPackagePart: (part: CapabilitySlidePackagePart) => string;
   readonly registerSharedPart: (

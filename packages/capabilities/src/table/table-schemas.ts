@@ -4,6 +4,7 @@ import {
   isMorphKey,
   layoutStyleSchema,
   linkTargetSchema,
+  nativePlaceholderRefSchema,
   textStyleSchema,
   type MorphKey,
   type ResolvedColor,
@@ -145,6 +146,8 @@ export const tableMergeSpanSchema = z.number().int().min(1);
 const tableDeclarationPropsObjectSchema = z.strictObject({
   id: OptionalNameSchema.optional(),
   name: OptionalNameSchema.optional(),
+  placeholder: z.string().optional(),
+  nativePlaceholder: nativePlaceholderRefSchema.optional(),
   morphKey: z.custom<MorphKey>(isMorphKey).optional(),
   link: linkTargetSchema.optional(),
   x: textCoordinateSchema.optional(),

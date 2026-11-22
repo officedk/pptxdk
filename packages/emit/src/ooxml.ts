@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type {
+  HeaderFooter,
   LayoutPlaceholderSpec,
   MasterPlaceholderSpec,
   MasterTextStyles,
@@ -177,6 +178,10 @@ export type EmittedSlideLayoutSpec = {
   readonly placeholders?: Readonly<Record<string, LayoutPlaceholderSpec>>;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
+  readonly headerFooter?: HeaderFooter;
+  readonly backgroundXml?: string;
+  readonly shapeXml?: string;
+  readonly extraRelationships?: readonly PptxRelationship[];
   readonly transitionXml?: string;
   readonly timingXml?: string;
 };
@@ -188,6 +193,10 @@ export type EmittedSlideMasterSpec = {
   readonly theme?: Theme;
   readonly themeContext?: ThemeContext;
   readonly colorMap?: ColorMap;
+  readonly headerFooter?: HeaderFooter;
+  readonly backgroundXml?: string;
+  readonly shapeXml?: string;
+  readonly extraRelationships?: readonly PptxRelationship[];
   readonly placeholders?: Readonly<Record<string, MasterPlaceholderSpec>>;
   readonly textStyles?: MasterTextStyles;
   readonly transitionXml?: string;
@@ -493,7 +502,7 @@ function ooxmlAnchor(value: NonNullable<TextStyle["verticalAlign"]>): string {
   return value === "middle" ? "ctr" : value === "bottom" ? "b" : "t";
 }
 
-function placeholderRefXml(ref: NativePlaceholderRef): string {
+export function placeholderRefXml(ref: NativePlaceholderRef): string {
   const attrs: string[] = [];
   if (ref.explicitType !== false) attrs.push(`type="${xmlEscape(ref.type)}"`);
   if (ref.sz !== undefined) attrs.push(`sz="${xmlEscape(ref.sz)}"`);
@@ -819,7 +828,9 @@ function effectiveThemeWithOverride(
   };
 }
 
-function hasThemeOverrideContent(override: ThemeOverride | undefined): boolean {
+export function hasThemeOverrideContent(
+  override: ThemeOverride | undefined,
+): boolean {
   if (override === undefined) return false;
   return (
     (override.colors !== undefined &&
@@ -871,6 +882,19 @@ export function colorMapOverrideXml(override?: ColorMapOverride): string {
   return `<p:clrMapOvr><a:overrideClrMapping ${colorMapAttributesXml(override)}/></p:clrMapOvr>`;
 }
 
+function headerFooterXml(hf?: HeaderFooter): string {
+  if (hf === undefined) return "";
+  const attrs = [
+    hf.slideNumber === undefined
+      ? ""
+      : ` sldNum="${hf.slideNumber ? "1" : "0"}"`,
+    hf.header === undefined ? "" : ` hdr="${hf.header ? "1" : "0"}"`,
+    hf.footer === undefined ? "" : ` ftr="${hf.footer ? "1" : "0"}"`,
+    hf.dateTime === undefined ? "" : ` dt="${hf.dateTime ? "1" : "0"}"`,
+  ].join("");
+  return `<p:hf${attrs}/>`;
+}
+
 function masterXml(
   spec: EmittedSlideMasterSpec,
   layoutIds: readonly { readonly id: number; readonly rId: string }[],
@@ -888,10 +912,10 @@ function masterXml(
       ({ id, rId }) => `<p:sldLayoutId id="${id}" r:id="${xmlEscape(rId)}"/>`,
     )
     .join("");
-  const shapes = placeholderShapesXml(spec.placeholders, themeContext);
+  const shapes = `${placeholderShapesXml(spec.placeholders, themeContext)}${spec.shapeXml ?? ""}`;
   const txStyles = masterTextStylesXml(spec.textStyles, themeContext);
   return xmlDocument(
-    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${txStyles}</p:sldMaster>`,
+    `<p:sldMaster xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${preserveAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMap}<p:sldLayoutIdLst>${layoutIdList}</p:sldLayoutIdLst>${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}${txStyles}</p:sldMaster>`,
   );
 }
 
@@ -921,9 +945,9 @@ function layoutXml(
       : ` showMasterPhAnim="${spec.showMasterPlaceholderAnimations ? "1" : "0"}"`;
   const nameAttr =
     spec.name === undefined ? "" : ` name="${xmlEscape(spec.name)}"`;
-  const shapes = placeholderShapesXml(spec.placeholders, themeContext);
+  const shapes = `${placeholderShapesXml(spec.placeholders, themeContext)}${spec.shapeXml ?? ""}`;
   return xmlDocument(
-    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}${spec.timingXml ?? ""}</p:sldLayout>`,
+    `<p:sldLayout xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${typeAttr}${preserveAttr}${matchingNameAttr}${userDrawnAttr}${showMasterSpAttr}${showMasterPhAnimAttr}><p:cSld${nameAttr}>${spec.backgroundXml ?? ""}${shapeTreeXml(shapes)}</p:cSld>${colorMapOverrideXml(spec.colorMapOverride)}${spec.transitionXml ?? ""}${spec.timingXml ?? ""}${headerFooterXml(spec.headerFooter)}</p:sldLayout>`,
   );
 }
 
@@ -935,13 +959,16 @@ function slide(
   hidden: boolean,
   showMasterPlaceholderAnimations?: boolean,
   colorMapOverride?: ColorMapOverride,
+  showMasterShapes?: boolean,
 ): string {
+  const showMasterSpAttr =
+    showMasterShapes === false ? ' showMasterSp="0"' : "";
   const showMasterPhAnimAttr =
     showMasterPlaceholderAnimations === undefined
       ? ""
       : ` showMasterPhAnim="${showMasterPlaceholderAnimations ? "1" : "0"}"`;
   return xmlDocument(
-    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${hidden ? ' show="false"' : ""}${showMasterPhAnimAttr}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
+    `<p:sld xmlns:a="${namespaces.a}" xmlns:r="${namespaces.r}" xmlns:p="${namespaces.p}"${showMasterSpAttr}${showMasterPhAnimAttr}${hidden ? ' show="false"' : ""}><p:cSld name="${xmlEscape(slideId)}">${backgroundXml}${shapeTreeXml(shapeXml)}</p:cSld>${colorMapOverrideXml(colorMapOverride)}${slideXml}</p:sld>`,
   );
 }
 
@@ -1005,6 +1032,7 @@ export function pptxParts(
     readonly themeOverride?: ThemeOverride;
     readonly hidden?: boolean;
     readonly showMasterPlaceholderAnimations?: boolean;
+    readonly showMasterShapes?: boolean;
     readonly shapeXml: string;
     readonly backgroundXml?: string;
     readonly slideXml?: string;
@@ -1258,6 +1286,7 @@ export function pptxParts(
         type: `${namespaces.r}/theme`,
         target: allocatedMaster.themeRelTarget,
       },
+      ...(allocatedMaster.spec.extraRelationships ?? []),
     ]);
     for (const allocatedLayout of allocatedMaster.layouts) {
       const layoutThemeCtx =
@@ -1287,6 +1316,7 @@ export function pptxParts(
                 target: allocatedLayout.themeOverrideTarget,
               },
             ]),
+        ...(allocatedLayout.spec.extraRelationships ?? []),
       ];
       parts[
         `ppt/slideLayouts/_rels/slideLayout${allocatedLayout.layoutNumber}.xml.rels`
@@ -1302,6 +1332,7 @@ export function pptxParts(
         backgroundXml,
         hidden,
         showMasterPlaceholderAnimations,
+        showMasterShapes,
         layoutKey,
         colorMapOverride,
       },
@@ -1320,6 +1351,7 @@ export function pptxParts(
         hidden ?? false,
         showMasterPlaceholderAnimations,
         colorMapOverride,
+        showMasterShapes,
       );
       const slideOverrideTarget = slideThemeOverrideTargets[index];
       const slideRels: PptxRelationship[] = [

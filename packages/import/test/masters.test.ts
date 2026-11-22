@@ -274,4 +274,27 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(second?.props["name"], "Shared Name");
     assert.equal(second?.props["preserve"], true);
   });
+
+  it("imports placeholder-layout-color.pptx headerFooter flags on SlideMaster", () => {
+    const bytes = new Uint8Array(
+      readFileSync(
+        new URL("./fixtures/placeholder-layout-color.pptx", import.meta.url),
+      ),
+    );
+    const importer = createImporter([]);
+    const result = importer(bytes);
+    bytes.fill(0);
+
+    assert.ok(result.document instanceof DeckContainer);
+    const master = result.document.masters[0]!;
+    assert.deepEqual(
+      { ...(master.props["headerFooter"] as Record<string, unknown>) },
+      {
+        dateTime: false,
+        footer: false,
+        header: false,
+        slideNumber: false,
+      },
+    );
+  });
 });

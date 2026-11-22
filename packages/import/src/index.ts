@@ -22,7 +22,14 @@ export type {
 } from "#/diagnostics.ts";
 export { createImporter, MalformedXmlPartError } from "#/import.ts";
 export type { ImportResult } from "#/import.ts";
-export { allocateScopedAuthorId, importMastersAndLayouts } from "#/masters.ts";
+export {
+  allocateScopedAuthorId,
+  appendUnconsumedDiagnostics,
+  consumeIdentityShapeTreeBoilerplate,
+  importMastersAndLayouts,
+} from "#/masters.ts";
+export { inspectNotesAndHandoutMasters } from "#/notes-masters.ts";
+export { importPresentationSections } from "#/sections.ts";
 export {
   isNonDefaultColorMap,
   readColorMapElement,
@@ -68,7 +75,9 @@ export {
   EMU_PER_PX,
   MC_NS,
   OPC_REL_NS,
+  P14_CREATION_ID_EXT_URI,
   P14_NS,
+  P14_SECTION_LIST_EXT_URI,
   P159_NS,
   P_NS,
   REL_CHART,
@@ -78,8 +87,11 @@ export {
   REL_DIAGRAM_LAYOUT,
   REL_DIAGRAM_QUICK_STYLE,
   REL_FONT,
+  REL_HANDOUT_MASTER,
   REL_HYPERLINK,
   REL_IMAGE,
+  REL_NOTES_MASTER,
+  REL_NOTES_SLIDE,
   REL_OFFICE_DOCUMENT,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,

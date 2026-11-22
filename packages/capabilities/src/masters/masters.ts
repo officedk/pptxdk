@@ -144,7 +144,29 @@ export const themeOverrideMechanism = defineCanvasMechanism({
   },
 });
 
-/** Capability declaration wiring native slide master, layout, theme, color-map, and theme-override mechanisms into builds. */
+/** Native canvas mechanism for non-placeholder shared canvas objects (`sp`/`pic`/`grpSp`) on SlideMaster and SlideLayout. */
+export const masterSharedCanvasMechanism = defineCanvasMechanism({
+  key: "master-shared-canvas",
+  role: "canvas",
+  emit: (model: { readonly shapeXml: string; readonly svg: string }) => ({
+    xml: model.shapeXml,
+  }),
+  paint: (model: { readonly shapeXml: string; readonly svg: string }) => ({
+    svg: model.svg,
+  }),
+  import: {
+    target: "deck",
+    read: importDeckMastersIfUnpopulated,
+  },
+});
+
+export {
+  footerPlaceholderCapability,
+  footerPlaceholderMechanism,
+  footerPlaceholderShapeImportHandler,
+} from "./footer-placeholder.ts";
+
+/** Capability declaration wiring native slide master, layout, theme, color-map, theme-override, and shared-canvas mechanisms into builds. */
 export const mastersCapability = {
   declaration: "slide-masters",
   slideProp: "slideMasters",
@@ -157,6 +179,7 @@ export const mastersCapability = {
     nativeThemeMechanism,
     colorMapMechanism,
     themeOverrideMechanism,
+    masterSharedCanvasMechanism,
   ] as const,
   bindSlide() {
     return {

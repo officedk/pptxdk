@@ -26,6 +26,12 @@ const jostFont = font("Jost*", [
       new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
     ),
   },
+  {
+    weight: 700,
+    data: readFileSync(
+      new URL("../assets/fonts/Jost-700-Bold.ttf", import.meta.url),
+    ),
+  },
 ]);
 
 const resolveDocument = createResolver(documentCapabilities);
@@ -451,34 +457,74 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
         }
       }
 
+      const bindChartFont = (props: ChartProps) => {
+        const mapStyle = (style: ChartProps["style"] | undefined) =>
+          style === undefined ? undefined : { ...style, fontFamily: jostFont };
+        const mapTitle = (title: ChartProps["title"]) => {
+          if (title === undefined || typeof title === "string") return title;
+          const nextStyle = mapStyle(title.style);
+          return nextStyle === undefined
+            ? { text: title.text }
+            : { ...title, style: nextStyle };
+        };
+        const mapAxes = (axes: ChartProps["axes"]) => {
+          if (axes === undefined) return undefined;
+          const entries = Object.entries(axes).map(([key, ax]) => {
+            const nextStyle = mapStyle(ax.style);
+            const nextTitle = mapTitle(ax.title);
+            return [
+              key,
+              {
+                ...ax,
+                ...(nextStyle === undefined ? {} : { style: nextStyle }),
+                ...(nextTitle === undefined ? {} : { title: nextTitle }),
+              },
+            ];
+          });
+          return Object.fromEntries(entries) as NonNullable<ChartProps["axes"]>;
+        };
+        const nextTitle = mapTitle(props.title);
+        const nextAxes = mapAxes(props.axes);
+        return {
+          ...(nextTitle === undefined ? {} : { title: nextTitle }),
+          ...(nextAxes === undefined ? {} : { axes: nextAxes }),
+        };
+      };
+
       const { node: colChart, props: colProps } = chartAt(imported.document, 0);
       const colGroup = colProps.groups[0]!;
       assert.ok(colGroup.kind === "column");
-      colChart.set({
-        groups: [
-          {
-            ...colGroup,
-            data: {
-              kind: "shared-categories",
-              categories: ["Jan", "Jan", "Mar"],
+      colChart
+        .set({
+          ...bindChartFont(colProps),
+          groups: [
+            {
+              ...colGroup,
+              data: {
+                kind: "shared-categories",
+                categories: ["Jan", "Jan", "Mar"],
+              },
+              series: [{ ...colGroup.series[0]!, values: [10, null, 25] }],
             },
-            series: [{ ...colGroup.series[0]!, values: [10, null, 25] }],
-          },
-        ],
-      });
+          ],
+        })
+        .style({ ...colProps.style, fontFamily: jostFont });
 
       const { node: pieChart, props: pieProps } = chartAt(imported.document, 4);
       const pieGroup = pieProps.groups[0]!;
       assert.ok(pieGroup.kind === "pie");
-      pieChart.set({
-        groups: [
-          {
-            ...pieGroup,
-            data: { kind: "shared-categories", categories: ["A", "B"] },
-            series: [{ ...pieGroup.series[0]!, values: [60, 40] }],
-          },
-        ],
-      });
+      pieChart
+        .set({
+          ...bindChartFont(pieProps),
+          groups: [
+            {
+              ...pieGroup,
+              data: { kind: "shared-categories", categories: ["A", "B"] },
+              series: [{ ...pieGroup.series[0]!, values: [60, 40] }],
+            },
+          ],
+        })
+        .style({ ...pieProps.style, fontFamily: jostFont });
 
       const { node: scatterChart, props: scatterProps } = chartAt(
         imported.document,
@@ -486,20 +532,23 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
       );
       const scatterGroup = scatterProps.groups[0]!;
       assert.ok(scatterGroup.kind === "scatter");
-      scatterChart.set({
-        groups: [
-          {
-            ...scatterGroup,
-            series: [
-              {
-                ...scatterGroup.series[0]!,
-                x: [1, null, 3],
-                y: [2, 4, null],
-              },
-            ],
-          },
-        ],
-      });
+      scatterChart
+        .set({
+          ...bindChartFont(scatterProps),
+          groups: [
+            {
+              ...scatterGroup,
+              series: [
+                {
+                  ...scatterGroup.series[0]!,
+                  x: [1, null, 3],
+                  y: [2, 4, null],
+                },
+              ],
+            },
+          ],
+        })
+        .style({ ...scatterProps.style, fontFamily: jostFont });
 
       const resolution = resolveDocument(imported.document);
       const { pptx } = emit(resolution);
@@ -638,5 +687,357 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
           ({ code }) => code === "chart-category-domain-mismatch",
         ),
     );
+  });
+
+  it("roundtrips chart presentation, 3-level labels, point overrides, trendlines, error bars, and axis crossings without leakage", async () => {
+    const initialDoc = deck({
+      width: 640,
+      height: 360,
+      theme: defineTheme({
+        colors: { accent1: "#2563EB", accent2: "#F59E0B", dk1: "#0F172A" },
+        fonts: { major: jostFont, minor: jostFont },
+      }),
+    }).append(
+      slide({ id: "presentation-cartesian" }).append(
+        chart({
+          id: "col-line-rich",
+          x: 20,
+          y: 20,
+          width: 600,
+          height: 320,
+          title: {
+            text: "Rich Presentation",
+            style: { fontSize: 16, fontWeight: "bold", color: "#1D4ED8" },
+          },
+          legend: "topRight",
+          displayBlanksAs: "gap",
+          style: { fontFamily: jostFont, fontSize: 11, color: "#0F172A" },
+          axes: {
+            cat: {
+              kind: "category",
+              position: "top",
+              reversed: true,
+              majorTickMark: "out",
+              tickLabelPosition: "high",
+              title: { text: "Period", style: { color: "#334155" } },
+              line: { color: "#475569", width: 1.5, dash: "dashDot" },
+            },
+            val: {
+              kind: "value",
+              position: "left",
+              reversed: true,
+              min: 0,
+              max: 100,
+              majorUnit: 25,
+              minorUnit: 5,
+              numberFormat: "$#,##0",
+              crosses: "min",
+              gridlines: { color: "#CBD5E1", width: 1, dash: "dash" },
+              minorGridlines: true,
+              style: { fontSize: 10, color: "#334155" },
+              title: "Amount",
+            },
+            cat2: {
+              kind: "category",
+              visible: false,
+            },
+            val2: {
+              kind: "value",
+              position: "right",
+              min: 0,
+              max: 50,
+              crossesAt: 2,
+              numberFormat: "0.0",
+            },
+          },
+          groups: [
+            {
+              kind: "column",
+              axes: { category: "cat", value: "val" },
+              gapWidth: 80,
+              overlap: -15,
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3", "Q4"],
+              },
+              dataLabels: {
+                value: true,
+                position: "outsideEnd",
+                numberFormat: "#,##0",
+                style: { color: "#0F172A", textDecoration: "underline" },
+              },
+              series: [
+                {
+                  name: "Primary",
+                  color: "#2563EB",
+                  values: [20, 45, 65, 80],
+                  points: {
+                    1: {
+                      color: "#DC2626",
+                      labelColor: "#FFFFFF",
+                      dataLabels: { position: "insideEnd" },
+                    },
+                    3: { dataLabels: false },
+                  },
+                  trendlines: [
+                    {
+                      type: "polynomial",
+                      order: 2,
+                      intercept: 5,
+                      forward: 1,
+                      backward: 0.5,
+                      displayEquation: true,
+                      displayRSquared: true,
+                      line: { color: "#EF4444", width: 2, dash: "dash" },
+                    },
+                  ],
+                  errorBars: {
+                    type: "fixed",
+                    value: 4,
+                    include: "plus",
+                    endCap: false,
+                    line: { color: "#111827", width: 1.5 },
+                  },
+                },
+                {
+                  name: "Muted",
+                  color: "#94A3B8",
+                  values: [15, 30, 40, 50],
+                  dataLabels: false,
+                },
+              ],
+            },
+            {
+              kind: "line",
+              axes: { category: "cat2", value: "val2" },
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2", "Q3", "Q4"],
+              },
+              series: [
+                {
+                  name: "Signal",
+                  color: "#10B981",
+                  line: { width: 2, dash: "longDash" },
+                  smooth: true,
+                  marker: {
+                    symbol: "diamond",
+                    size: 7,
+                    fill: "#10B981",
+                    line: { color: "#064E3B", width: 1 },
+                  },
+                  values: [10, 20, 30, 40],
+                  points: {
+                    2: {
+                      marker: { symbol: "star", size: 10, fill: "#F59E0B" },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+      slide({ id: "presentation-scatter-pie" }).append(
+        chart({
+          id: "scatter-rich",
+          x: 16,
+          y: 16,
+          width: 300,
+          height: 300,
+          plotArea: { left: 48, top: 36, width: 220, height: 220 },
+          style: { fontFamily: jostFont, fontSize: 10 },
+          axes: {
+            x: { kind: "value", min: 0, max: 10, crossesAt: 5 },
+            y: { kind: "value", min: -10, max: 10, crosses: "autoZero" },
+          },
+          groups: [
+            {
+              kind: "scatter",
+              axes: { x: "x", y: "y" },
+              data: { kind: "xy" },
+              line: "straight",
+              markers: true,
+              series: [
+                {
+                  name: "XY",
+                  color: "#6366F1",
+                  x: [1, 2, 4, 8],
+                  y: [2, 4, 6, 9],
+                  trendlines: [
+                    { type: "exponential", line: { color: "#EC4899" } },
+                    { type: "logarithmic" },
+                    { type: "power" },
+                    { type: "movingAverage", period: 2 },
+                  ],
+                  errorBars: {
+                    x: {
+                      type: "custom",
+                      include: "both",
+                      plus: [0.5, 0.5, 0.5, 0.5],
+                      minus: [0.2, 0.2, 0.2, 0.2],
+                    },
+                    y: { type: "standardError", include: "both" },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        chart({
+          id: "pie-rich",
+          x: 324,
+          y: 16,
+          width: 300,
+          height: 300,
+          style: { fontFamily: jostFont, fontSize: 10 },
+          groups: [
+            {
+              kind: "pie",
+              firstSliceAngle: 45,
+              explosion: 12,
+              data: {
+                kind: "shared-categories",
+                categories: ["Alpha", "Beta", "Gamma"],
+              },
+              dataLabels: {
+                value: true,
+                percent: true,
+                separator: " | ",
+                position: "outsideEnd",
+                leaderLines: { color: "#1E293B", width: 1.5, dash: "dot" },
+              },
+              series: [
+                {
+                  name: "Share",
+                  values: [50, 30, 20],
+                  points: {
+                    0: {
+                      color: "#2563EB",
+                      explosion: 18,
+                      labelColor: "#1E3A8A",
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const initialEmit = emit(resolveDocument(initialDoc), {
+      embedFonts: "subset",
+    });
+    const inputCopy = new Uint8Array(initialEmit.pptx);
+    const imported = importPptx(inputCopy);
+    inputCopy.fill(0);
+
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    // Chart 1 (cartesian combo): verify presentation options, labels, trendlines, error bars, and crossing survived import
+    const { node: colLineNode, props: colLineProps } = chartAt(
+      imported.document,
+      0,
+    );
+    assert.equal(colLineProps.legend, "topRight");
+    assert.equal(colLineProps.plotArea, undefined);
+    assert.ok(typeof colLineProps.title === "object");
+    assert.equal(colLineProps.title.text, "Rich Presentation");
+    assert.equal(colLineProps.title.style?.color, "#1D4ED8");
+    assert.equal(colLineProps.title.style?.fontWeight, "bold");
+
+    const valAxis = colLineProps.axes?.["value"];
+    assert.ok(valAxis?.kind === "value");
+    assert.equal(valAxis.reversed, true);
+    assert.equal(valAxis.crosses, "min");
+    assert.equal(valAxis.numberFormat, "$#,##0");
+    assert.equal(valAxis.minorUnit, 5);
+
+    const colGroup = colLineProps.groups[0]!;
+    assert.ok(colGroup.kind === "column");
+    assert.equal(colGroup.gapWidth, 80);
+    assert.equal(colGroup.overlap, -15);
+    assert.ok(
+      typeof colGroup.dataLabels === "object" &&
+        colGroup.dataLabels.style?.textDecoration === "underline",
+    );
+    const primarySeries = colGroup.series[0]!;
+    assert.equal(primarySeries.points?.[1]?.color, "#DC2626");
+    assert.equal(primarySeries.points?.[1]?.labelColor, "#FFFFFF");
+    assert.equal(primarySeries.points?.[3]?.dataLabels, false);
+    assert.equal(primarySeries.trendlines?.length, 1);
+    assert.equal(primarySeries.trendlines?.[0]?.type, "polynomial");
+    assert.equal(primarySeries.errorBars?.type, "fixed");
+    assert.equal(primarySeries.errorBars?.endCap, false);
+    assert.equal(colGroup.series[1]?.dataLabels, false);
+
+    // Edit one point override on Primary series and verify sibling series/group stay intact
+    colLineNode.set({
+      groups: [
+        {
+          ...colGroup,
+          series: [
+            {
+              ...primarySeries,
+              points: {
+                ...primarySeries.points,
+                1: {
+                  ...primarySeries.points?.[1],
+                  color: "#16A34A",
+                },
+              },
+            },
+            colGroup.series[1],
+          ],
+        },
+        colLineProps.groups[1]!,
+      ],
+    });
+
+    // Chart 2 (scatter): verify manualLayout, interior crossesAt & autoZero, trendlines, and XY error bars
+    const { props: scatterProps } = chartAt(imported.document, 1);
+    assert.ok(scatterProps.plotArea !== undefined);
+    const scatterGroup = scatterProps.groups[0]!;
+    assert.ok(scatterGroup.kind === "scatter");
+    assert.equal(scatterGroup.series[0]?.trendlines?.length, 4);
+    assert.equal(scatterGroup.series[0]?.errorBars?.x?.type, "custom");
+    assert.equal(scatterGroup.series[0]?.errorBars?.y?.type, "standardError");
+
+    const resolution = resolveDocument(imported.document);
+    const reemitted = emit(resolution, { embedFonts: "subset" });
+    const painted = paint(resolution);
+    for (const page of painted.pages) {
+      assert.deepEqual(page.diagnostics, []);
+      assert.ok(page.png instanceof Uint8Array);
+    }
+
+    const validation = await validatePptx(reemitted.pptx);
+    assert.deepEqual(validation.errors, []);
+
+    const chart1Xml = strFromU8(
+      unzipSync(reemitted.pptx)["ppt/charts/chart1.xml"]!,
+    );
+    assert.ok(chart1Xml.includes("<c:layout/>"));
+    assert.ok(!chart1Xml.includes("<c:manualLayout>"));
+
+    const fileColLine = validation.slides[0]?.objects[0]?.chart;
+    assert.ok(fileColLine);
+    assert.equal(fileColLine.series[0]?.trendlines?.length, 1);
+    assert.equal(fileColLine.series[0]?.trendlines?.[0]?.type, "polynomial");
+    assert.equal(fileColLine.series[0]?.errorBars?.[0]?.type, "fixed");
+    assert.equal(fileColLine.series[0]?.errorBars?.[0]?.endCap, false);
+    assert.equal(fileColLine.series[1]?.trendlines, undefined);
+    assert.equal(fileColLine.series[1]?.errorBars, undefined);
+    assert.equal(
+      fileColLine.seriesDataLabels?.find((entry) => entry.seriesIndex === 1)
+        ?.dataLabels,
+      false,
+    );
+
+    const fileScatter = validation.slides[1]?.objects[0]?.chart;
+    assert.ok(fileScatter);
+    assert.equal(fileScatter.series[0]?.trendlines?.length, 4);
+    assert.equal(fileScatter.series[0]?.errorBars?.length, 2);
   });
 });

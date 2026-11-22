@@ -5,6 +5,7 @@ import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import {
   BuildError,
+  CommonNode,
   DeckContainer,
   SlideMasterContainer,
   build,
@@ -269,6 +270,106 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
     assert.deepEqual(reimported.report.diagnostics, []);
     assert.ok(reimported.document instanceof DeckContainer);
     assert.equal(reimported.document.masters[0]?.layouts.length, 11);
+
+    const slides = imported.document.children.filter(
+      (child): child is CommonNode =>
+        child instanceof CommonNode && child.kind === "slide",
+    );
+    // Only slide 10 declares dt/ftr/sldNum in layouts.pptx.
+    assert.equal(slides[0]?.props["footer"], undefined);
+    assert.equal(slides[0]?.props["slideNumber"], undefined);
+    assert.equal(
+      (slides[9]?.props["dateTime"] as { readonly text?: string } | undefined)
+        ?.text,
+      "Friday, October 21, 2011",
+    );
+    assert.equal(
+      (slides[9]?.props["footer"] as { readonly text?: string } | undefined)
+        ?.text,
+      "Apache Software Foundation",
+    );
+    assert.ok(slides[9]?.props["slideNumber"] !== undefined);
+
+    assert.equal(validated.slides[0]?.footerPlaceholders, undefined);
+    assert.deepEqual(
+      validated.slides[9]?.footerPlaceholders?.map((p) => p.kind),
+      ["dt", "ftr", "sldNum"],
+    );
+    assert.equal(
+      validated.slides[9]?.footerPlaceholders?.[2]?.hasSlideNumberField,
+      true,
+    );
+  });
+
+  it("imports WithMaster.pptx preserving bgRef, layout shared TextBox, and slide2 footer across edit & re-emit", async () => {
+    const raw = new Uint8Array(
+      readFileSync(new URL("./fixtures/WithMaster.pptx", import.meta.url)),
+    );
+    const imported = importPptx(raw);
+    raw.fill(0);
+
+    assert.equal(imported.report.slideCount, 2);
+    assert.ok(imported.document instanceof DeckContainer);
+    const master = imported.document.masters[0]!;
+    assert.deepEqual(
+      { ...(master.props["background"] as Record<string, unknown>) },
+      { ref: 1001, color: "bg1" },
+    );
+
+    const titleLayout = master.layouts[0]!;
+    assert.equal(titleLayout.children.length, 1);
+    const sharedText = titleLayout.children[0] as CommonNode;
+    assert.equal(sharedText.props["name"], "TextBox 6");
+
+    const slides = imported.document.children.filter(
+      (child): child is CommonNode =>
+        child instanceof CommonNode && child.kind === "slide",
+    );
+    assert.equal(slides[0]?.props["footer"], undefined);
+    assert.equal(
+      (slides[1]?.props["footer"] as { readonly text?: string } | undefined)
+        ?.text,
+      "Footer from the master slide",
+    );
+
+    // Edit the shared TextBox position once on SlideLayout and re-emit.
+    const nextX = 80;
+    sharedText.set({ x: nextX });
+
+    const reemitted = emit(resolve(imported.document));
+    const validated = await validatePptx(reemitted.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const validatedLayout1 = validated.masters?.[0]?.layouts[0];
+    assert.equal(validatedLayout1?.objects?.length, 1);
+    assert.equal(validatedLayout1?.objects?.[0]?.name, "TextBox 6");
+    assert.equal(validatedLayout1?.objects?.[0]?.boxEmu.x, nextX * 9525);
+    // Shared layout object stays in slideLayout1.xml, not flattened into slides (slides only hold their own placeholders).
+    assert.equal(
+      validated.slides[0]?.objects.some((o) => o.name === "TextBox 6"),
+      false,
+    );
+    assert.equal(
+      validated.slides[1]?.objects.some((o) => o.name === "TextBox 6"),
+      false,
+    );
+    assert.equal(
+      validated.slides[0]?.objects.every((o) => o.placeholder !== undefined),
+      true,
+    );
+    assert.equal(
+      validated.slides[1]?.objects.every((o) => o.placeholder !== undefined),
+      true,
+    );
+    assert.equal(validated.slides[0]?.footerPlaceholders, undefined);
+    assert.deepEqual(
+      validated.slides[1]?.footerPlaceholders?.map((p) => p.kind),
+      ["ftr"],
+    );
+    assert.equal(
+      validated.slides[1]?.footerPlaceholders?.[0]?.text,
+      "Footer from the master slide",
+    );
   });
 
   it("matches JSX and vanilla output when a Slide binds to an explicit SlideLayout alongside Text content", async () => {

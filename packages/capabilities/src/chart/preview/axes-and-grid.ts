@@ -2,6 +2,7 @@ import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";
+import type { ChartTextStyle } from "../chart-schemas.ts";
 import type { ChartLine, ChartTickMark } from "../chart-types.ts";
 import { resolveAxisLabelSide, type ComputedChartLayout } from "./layout.ts";
 import { formatChartNumber } from "./number-format.ts";
@@ -166,7 +167,9 @@ function renderTickMarks(options: {
 
 function axisTitleParts(
   axis: ParsedChartAxis,
-): { readonly text: string; readonly style?: TextStyle } | undefined {
+):
+  | { readonly text: string; readonly style?: ChartTextStyle | undefined }
+  | undefined {
   if (axis.spec.title === undefined) return undefined;
   return typeof axis.spec.title === "string"
     ? { text: axis.spec.title }

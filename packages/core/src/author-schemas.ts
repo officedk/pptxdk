@@ -55,7 +55,16 @@ export const slideDimensionSchema = z
     },
   );
 
-/** Slide background can use theme colors, gradients supported by the shared visual writer, or formal image resource inputs. */
+/** DrawingML `<p:bgRef idx="1001..1003">` reference resolved against `Theme.formatScheme.bgFillStyles`. */
+export const backgroundRefSchema = z
+  .strictObject({
+    ref: z.union([z.literal(1001), z.literal(1002), z.literal(1003)]),
+    color: colorValueSchema.optional(),
+  })
+  .readonly();
+export type BackgroundRef = z.infer<typeof backgroundRefSchema>;
+
+/** Slide background can use theme colors, gradients supported by the shared visual writer, formal image resource inputs, or theme background fill references (`p:bgRef`). */
 export const slideBackgroundSchema = z.union([
   colorValueSchema,
   linearGradientSchema,
@@ -65,6 +74,7 @@ export const slideBackgroundSchema = z.union([
       image: z.union([z.string(), z.instanceof(URL), uint8ArraySchema]),
     })
     .readonly(),
+  backgroundRefSchema,
 ]);
 export type SlideBackground = z.infer<typeof slideBackgroundSchema>;
 
@@ -96,14 +106,52 @@ const slideCorePropsObjectSchema = z.strictObject({
   style: slideStyleSchema.optional(),
   hidden: z.boolean().optional(),
   showMasterPlaceholderAnimations: z.boolean().optional(),
+  showMasterShapes: z.boolean().optional(),
 });
 export const slideCorePropsSchema = slideCorePropsObjectSchema.readonly();
+
+/** Official OOXML ST_PlaceholderSize values for date, footer, and slide-number slots. */
+export const placeholderSizeSchema = z.enum(["full", "half", "quarter"]);
+export type PlaceholderSize = z.infer<typeof placeholderSizeSchema>;
+
+/** Per-slide dateTime/footer override declaration (`false` hides; string sets text; object overrides text/style/slot). */
+export const slideFooterValueSchema = z.union([
+  z.boolean(),
+  xml10StringSchema,
+  z
+    .strictObject({
+      text: xml10StringSchema.optional(),
+      style: textStyleSchema.optional(),
+      idx: z.number().int().nonnegative().optional(),
+      size: placeholderSizeSchema.optional(),
+      visible: z.boolean().optional(),
+    })
+    .readonly(),
+]);
+export type SlideFooterValue = z.infer<typeof slideFooterValueSchema>;
+
+/** Per-slide slide-number override declaration (`false` hides; `true` enables; object overrides style/slot). */
+export const slideNumberValueSchema = z.union([
+  z.boolean(),
+  z
+    .strictObject({
+      style: textStyleSchema.optional(),
+      idx: z.number().int().nonnegative().optional(),
+      size: placeholderSizeSchema.optional(),
+      visible: z.boolean().optional(),
+    })
+    .readonly(),
+]);
+export type SlideNumberValue = z.infer<typeof slideNumberValueSchema>;
 
 export const slidePropsSchema = slideCorePropsObjectSchema
   .extend({
     transition: z.unknown().optional(),
     advanceAfter: z.number().optional(),
     background: slideBackgroundSchema.optional(),
+    dateTime: slideFooterValueSchema.optional(),
+    footer: slideFooterValueSchema.optional(),
+    slideNumber: slideNumberValueSchema.optional(),
   })
   .readonly();
 export type SlideProps = z.infer<typeof slidePropsSchema>;
@@ -295,6 +343,7 @@ export function parseSlideCoreProps(
   readonly id: AuthorId;
   readonly hidden?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
+  readonly showMasterShapes?: boolean;
   readonly colorMapOverride?: ColorMapOverride;
   readonly themeOverride?: ThemeOverride;
 } {
@@ -308,6 +357,7 @@ export function parseSlideCoreProps(
     "style",
     "hidden",
     "showMasterPlaceholderAnimations",
+    "showMasterShapes",
     ...registeredSlideProps,
   ]);
   const unknown = Object.keys(props).find((key) => !allowed.has(key));
@@ -354,6 +404,22 @@ export function parseSlideCoreProps(
         path: `deck/slide[${authorId}]`,
         code: "invalid-hidden-slide",
         message: "Slide.hidden must be a boolean",
+      },
+    ]);
+  }
+  const showMasterShapes = props["showMasterShapes"];
+  if (
+    showMasterShapes !== undefined &&
+    !slideCorePropsObjectSchema.shape.showMasterShapes.safeParse(
+      showMasterShapes,
+    ).success
+  ) {
+    throw new BuildError([
+      {
+        severity: "error",
+        path: `deck/slide[${authorId}]`,
+        code: "invalid-show-master-shapes",
+        message: "Slide.showMasterShapes must be a boolean",
       },
     ]);
   }
@@ -436,6 +502,9 @@ export function parseSlideCoreProps(
           showMasterPlaceholderAnimations:
             showMasterPlaceholderAnimations as boolean,
         }),
+    ...(showMasterShapes === undefined
+      ? {}
+      : { showMasterShapes: showMasterShapes as boolean }),
     ...(colorMapOverride === undefined ? {} : { colorMapOverride }),
     ...(themeOverride === undefined ? {} : { themeOverride }),
   };

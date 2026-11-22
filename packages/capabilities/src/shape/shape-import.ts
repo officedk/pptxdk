@@ -27,6 +27,8 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import { consumeNonPlaceholderNvPr } from "../shared/identity.ts";
+import { isPlaceholderSpElement } from "../shared/placeholder-import.ts";
 import type { ParagraphStyle, TextList } from "../shared/text-service.ts";
 import {
   readDrawingColor,
@@ -40,7 +42,6 @@ import {
   type ParagraphDeclarationProps,
   type SpanDeclarationProps,
 } from "../text/text-declaration.ts";
-import { isPlaceholderSpElement } from "../text/text-import.ts";
 import {
   createShapeNode,
   type ShapeDeclarationProps,
@@ -731,6 +732,7 @@ function readShapeTxBody(
       if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
     }
     bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
+    bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
   }
 
   txBodyCursor.ignoreEmptyChild(A_NS, "lstStyle");
@@ -797,7 +799,7 @@ export function readShapeSp(
   if (cNvSpPr !== undefined) {
     cNvSpPr.consumeAttr("txBox");
   }
-  nvSpPr.ignoreEmptyChild(P_NS, "nvPr");
+  consumeNonPlaceholderNvPr(nvSpPr);
 
   const location: ImportLocation = {
     part,

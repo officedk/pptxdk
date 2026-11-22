@@ -146,24 +146,54 @@ function getResvg(): typeof ResvgClass {
   return cachedResvg;
 }
 
+function maxPaintObjectId(layers: readonly ResolvedObjectLayer[]): number {
+  let maxId = 0;
+  for (const layer of layers) {
+    if (layer.paintObjectId > maxId) maxId = layer.paintObjectId;
+    const memberMax = maxPaintObjectId(layer.memberLayers);
+    if (memberMax > maxId) maxId = memberMax;
+    const siblingMax = maxPaintObjectId(layer.siblingLayers);
+    if (siblingMax > maxId) maxId = siblingMax;
+  }
+  return maxId;
+}
+
 function paintLayer(
   layer: ResolvedObjectLayer,
   pageNumber: number,
   diagnostics: PreviewDiagnostic[],
   nodePaths: Map<number, string>,
   transforms: Map<number, PreviewTransform>,
+  paintIdOffset = 0,
+  recordNodes = true,
 ): string {
   const childrenSvg =
     layer.childComposition === "members"
       ? layer.memberLayers
           .map((child) =>
-            paintLayer(child, pageNumber, diagnostics, nodePaths, transforms),
+            paintLayer(
+              child,
+              pageNumber,
+              diagnostics,
+              nodePaths,
+              transforms,
+              paintIdOffset,
+              recordNodes,
+            ),
           )
           .join("")
       : layer.childComposition === "siblings"
         ? layer.siblingLayers
             .map((child) =>
-              paintLayer(child, pageNumber, diagnostics, nodePaths, transforms),
+              paintLayer(
+                child,
+                pageNumber,
+                diagnostics,
+                nodePaths,
+                transforms,
+                paintIdOffset,
+                recordNodes,
+              ),
             )
             .join("")
         : undefined;
@@ -177,7 +207,7 @@ function paintLayer(
   }
 
   const recordNodeIdentity = (): void => {
-    if (!layer.hasObservation) return;
+    if (!recordNodes || !layer.hasObservation) return;
     nodePaths.set(layer.objectId, layer.path);
     if (layer.transform !== undefined) {
       transforms.set(layer.objectId, layer.transform);
@@ -189,7 +219,7 @@ function paintLayer(
       const output = layer.paint({
         path: layer.path,
         slideNumber: pageNumber,
-        objectId: layer.paintObjectId,
+        objectId: layer.paintObjectId + paintIdOffset,
         ...(layer.box === undefined ? {} : { box: layer.box }),
         theme: layer.theme,
         ...(childrenSvg === undefined ? {} : { childrenSvg }),
@@ -267,6 +297,36 @@ export function paint(
     const nodePaths = new Map<number, string>();
     const transforms = new Map<number, PreviewTransform>();
 
+    const masterOffset = maxPaintObjectId(slide.layers) + 1000;
+    const masterLayersSvg = (slide.masterLayers ?? [])
+      .map((layer) =>
+        paintLayer(
+          layer,
+          pageNumber,
+          diagnostics,
+          nodePaths,
+          transforms,
+          masterOffset,
+          false,
+        ),
+      )
+      .join("");
+    const layoutOffset =
+      masterOffset + maxPaintObjectId(slide.masterLayers ?? []) + 1000;
+    const layoutLayersSvg = (slide.layoutLayers ?? [])
+      .map((layer) =>
+        paintLayer(
+          layer,
+          pageNumber,
+          diagnostics,
+          nodePaths,
+          transforms,
+          layoutOffset,
+          false,
+        ),
+      )
+      .join("");
+
     const layers = slide.layers
       .map((layer) =>
         paintLayer(layer, pageNumber, diagnostics, nodePaths, transforms),
@@ -274,7 +334,12 @@ export function paint(
       .join("");
 
     let background: string | undefined;
+    let shapeTreeCapSvg = "";
+    let hasExplicitSlideBackground = false;
     for (const slideCap of slide.slideCapabilities) {
+      if (slideCap.slot === "background" && slideCap.hasSlideProps) {
+        hasExplicitSlideBackground = true;
+      }
       const runSlidePaint = slideCap.paint;
       if (runSlidePaint !== undefined) {
         try {
@@ -284,8 +349,13 @@ export function paint(
             theme: slideCap.theme,
             slideNumber: pageNumber,
           });
-          if (slideCap.slot === "background") {
+          if (slideCap.slot === "background" && previewOutput.svg !== "") {
             background = previewOutput.svg;
+          } else if (
+            slideCap.slot === "shape-tree" &&
+            previewOutput.svg !== ""
+          ) {
+            shapeTreeCapSvg += previewOutput.svg;
           }
           for (const warning of previewOutput.warnings ?? []) {
             diagnostics.push(
@@ -320,6 +390,34 @@ export function paint(
             page: pageNumber,
             path: slideCap.path,
             message: `Preview does not support ${slideCap.declaration}`,
+          }),
+        );
+      }
+    }
+    if (
+      !hasExplicitSlideBackground &&
+      slide.inheritedBackground?.paint !== undefined
+    ) {
+      try {
+        const inheritedOutput = slide.inheritedBackground.paint({
+          path: slide.inheritedBackground.path,
+          dimensions: internal.dimensions,
+          theme: slide.inheritedBackground.theme,
+          slideNumber: pageNumber,
+        });
+        if (inheritedOutput.svg !== "") {
+          background = inheritedOutput.svg;
+        }
+      } catch (error) {
+        diagnostics.push(
+          Object.freeze({
+            severity: "error",
+            page: pageNumber,
+            path:
+              error instanceof CapabilityError && error.path !== undefined
+                ? error.path
+                : slide.inheritedBackground.path,
+            message: error instanceof Error ? error.message : String(error),
           }),
         );
       }
@@ -361,7 +459,7 @@ export function paint(
       continue;
     }
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? defaultCanvasBackground}${layers}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? defaultCanvasBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
     const Resvg = getResvg();
     const png = new Uint8Array(
       new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng(),

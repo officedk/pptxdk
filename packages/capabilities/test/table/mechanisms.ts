@@ -4,21 +4,27 @@ import { readFileSync } from "node:fs";
 import {
   cell,
   deck,
+  defineSlideLayout,
   font,
   paragraph,
   row,
   slide,
+  slideLayout,
+  slideMaster,
   slideNumber,
   span,
   table,
 } from "@pptxdk/capabilities/document";
 import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
 import { P, SlideNumber, Span } from "@pptxdk/capabilities/text-elements";
-import { Deck, Slide } from "@pptxdk/react";
+import { Deck, Slide, SlideLayout, SlideMaster } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 
-import type { tableMechanism } from "../../src/table/table.ts";
+import type {
+  tableMechanism,
+  tablePlaceholderMechanism,
+} from "../../src/table/table.ts";
 import type { CapabilityScenario } from "../acceptance-runner.ts";
 import type {
   ExhaustiveMechanismVerificationMap,
@@ -393,6 +399,99 @@ export const tableRoundtripScenario: CapabilityScenario = {
   },
 };
 
+const tableHolderLayout = defineSlideLayout({
+  id: "table-holder-layout",
+  name: "Table Holder",
+  placeholders: {
+    grid: {
+      type: "tbl",
+      explicitType: true,
+      idx: 11,
+      x: 40,
+      y: 60,
+      width: 300,
+      height: 140,
+      name: "Grid Slot",
+    },
+  },
+});
+
+export const tablePlaceholderRoundtripScenario: CapabilityScenario = {
+  id: "mechanism-table-placeholder-roundtrip",
+  capability: "table",
+  description:
+    "Dual-author table-placeholder mechanism scenario verifying inherited bounds for 1fr columns and <p:ph> binding roundtrip.",
+  visualCheckpoints: [
+    "Page 1 paints a 2x2 table sized to inherited layout width (300px) at (40, 60).",
+  ],
+  nativeCheckpoints: [
+    "Both initial and roundtrip PPTX retain <p:nvPr><p:ph type='tbl' idx='11'/></p:nvPr> and <p:xfrm> with x=40px, y=60px, width=300px.",
+  ],
+  emitOptions: { embedFonts: "full" },
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        SlideMaster,
+        { id: "tbl-master", name: "Table Master" },
+        createElement(SlideLayout, { layout: tableHolderLayout }),
+      ),
+      createElement(Slide, {
+        id: "tbl-ph-slide",
+        layout: tableHolderLayout,
+        placeholders: {
+          grid: createElement(
+            Table,
+            {
+              id: "ph-table",
+              columns: ["1fr", "1fr"],
+              style: { fontFamily: jostFont, fontSize: 12, color: "#0F172A" },
+            },
+            createElement(
+              Row,
+              null,
+              createElement(Cell, null, "Item"),
+              createElement(Cell, null, "Amount"),
+            ),
+            createElement(
+              Row,
+              null,
+              createElement(Cell, null, "Seats"),
+              createElement(Cell, null, "42"),
+            ),
+          ),
+        },
+      }),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slideMaster({ id: "tbl-master", name: "Table Master" }).append(
+        slideLayout(tableHolderLayout),
+      ),
+      slide({
+        id: "tbl-ph-slide",
+        layout: tableHolderLayout,
+        placeholders: {
+          grid: table({
+            id: "ph-table",
+            columns: ["1fr", "1fr"],
+            style: { fontFamily: jostFont, fontSize: 12, color: "#0F172A" },
+          }).append(
+            row().append(cell().content("Item"), cell().content("Amount")),
+            row().append(cell().content("Seats"), cell().content("42")),
+          ),
+        },
+      }),
+    );
+  },
+  assert({ validation }) {
+    assert.equal(validation.slides.length, 1);
+    assert.equal(validation.slides[0]?.objects[0]?.kind, "table");
+  },
+};
+
 export const tableMechanismVerifications = {
   table: {
     scenario: tableRoundtripScenario,
@@ -459,4 +558,29 @@ export const tableMechanismVerifications = {
       }
     },
   } satisfies MechanismVerificationEntry<typeof tableMechanism>,
-} satisfies ExhaustiveMechanismVerificationMap<typeof tableMechanism>;
+  "table-placeholder": {
+    scenario: tablePlaceholderRoundtripScenario,
+    assertNative({ stage, pptx, validation }) {
+      assert.equal(validation.errors.length, 0, `${stage} validation errors`);
+      const tbl = validation.slides[0]?.objects[0];
+      assert.equal(tbl?.kind, "table", `${stage} table kind`);
+      assert.deepEqual(tbl?.placeholder, { type: "tbl", idx: 11 });
+      assert.equal(tbl?.hasLocalTransform, true);
+      assert.equal(tbl?.boxEmu.x, 40 * 9525);
+      assert.equal(tbl?.boxEmu.y, 60 * 9525);
+      assert.equal(tbl?.boxEmu.width, 300 * 9525);
+      assert.deepEqual(tbl?.table?.columnWidthsEmu, [150 * 9525, 150 * 9525]);
+      const slideXml = strFromU8(unzipSync(pptx)["ppt/slides/slide1.xml"]!);
+      assert.match(slideXml, /<p:ph type="tbl" idx="11"\/>/u);
+    },
+    assertPaint({ initial, roundtrip }) {
+      for (const preview of [initial, roundtrip]) {
+        assert.equal(preview.pages.length, 1);
+        assert.deepEqual(preview.pages[0]?.diagnostics, []);
+        assert.ok(preview.pages[0]?.png instanceof Uint8Array);
+      }
+    },
+  } satisfies MechanismVerificationEntry<typeof tablePlaceholderMechanism>,
+} satisfies ExhaustiveMechanismVerificationMap<
+  typeof tableMechanism | typeof tablePlaceholderMechanism
+>;

@@ -15,26 +15,34 @@ import {
 import { preview } from "pptxdk/preview";
 import {
   Box,
+  Cell,
+  Chart,
   Deck,
   Image,
   P,
+  Row,
   Slide,
   SlideLayout,
   SlideMaster,
   Span,
+  Table,
   Text,
 } from "pptxdk/react";
 import {
   DeckContainer,
   SlideContainer,
   box,
+  cell,
+  chart,
   deck,
   image,
   paragraph,
+  row,
   slide,
   slideLayout,
   slideMaster,
   span,
+  table,
   text,
   type PlaceholderMap,
   type TextNode,
@@ -107,6 +115,41 @@ const heroPictureLayout = defineSlideLayout({
     },
   },
 });
+
+const contentMatrixLayout = defineSlideLayout({
+  id: "content-matrix",
+  name: "Content Matrix",
+  type: "cust",
+  placeholders: {
+    picSlot: { type: "pic", idx: 10, x: 40, y: 40, width: 200, height: 140 },
+    tableSlot: { type: "tbl", idx: 11, x: 260, y: 40, width: 300, height: 140 },
+    chartSlot: {
+      type: "chart",
+      idx: 12,
+      x: 580,
+      y: 40,
+      width: 320,
+      height: 180,
+    },
+    genericSlot: {
+      type: "obj",
+      explicitType: false,
+      idx: 13,
+      x: 40,
+      y: 220,
+      width: 400,
+      height: 220,
+    },
+  },
+});
+
+const sampleChartGroups = [
+  {
+    kind: "column" as const,
+    data: { kind: "shared-categories" as const, categories: ["Q1", "Q2"] },
+    series: [{ name: "Sales", values: [12, 18] }],
+  },
+];
 
 function SectionSlide(props: {
   readonly id: string;
@@ -264,6 +307,54 @@ describe("typed text placeholders and style inheritance", () => {
       );
       void (
         <Slide
+          id="bad-tbl-key-jsx"
+          layout={contentMatrixLayout}
+          // @ts-expect-error -- misspelled table placeholder key must fail tsc
+          placeholders={{ tablSlot: <Table columns={[100]} /> }}
+        />
+      );
+      void (
+        <Slide
+          id="bad-tbl-text-jsx"
+          layout={contentMatrixLayout}
+          // @ts-expect-error -- string text content is invalid in tbl placeholder
+          placeholders={{ tableSlot: "Not a table" }}
+        />
+      );
+      void (
+        <Slide
+          id="bad-tbl-textnode-jsx"
+          layout={contentMatrixLayout}
+          // @ts-expect-error -- TextNode is invalid in tbl placeholder
+          placeholders={{ tableSlot: text("Not a table") }}
+        />
+      );
+      void (
+        <Slide
+          id="bad-chart-img-jsx"
+          layout={contentMatrixLayout}
+          // @ts-expect-error -- ImageNode is invalid in chart placeholder
+          placeholders={{ chartSlot: image({ src: tinyPng }) }}
+        />
+      );
+      void (
+        <Slide
+          id="bad-chart-text-jsx"
+          layout={contentMatrixLayout}
+          // @ts-expect-error -- string text content is invalid in chart placeholder
+          placeholders={{ chartSlot: "Not a chart" }}
+        />
+      );
+      void (
+        <Slide
+          id="bad-title-chart-jsx"
+          layout={sectionLayout}
+          // @ts-expect-error -- ChartNode is invalid in title placeholder
+          placeholders={{ title: chart({ groups: sampleChartGroups }) }}
+        />
+      );
+      void (
+        <Slide
           id="missing-layout-jsx"
           // @ts-expect-error -- placeholders cannot be supplied without layout
           placeholders={{ title: "No layout" }}
@@ -289,10 +380,29 @@ describe("typed text placeholders and style inheritance", () => {
         placeholders: { hero: "Not an image" },
       });
       slide({
+        id: "bad-pic-textnode-vanilla",
+        layout: heroPictureLayout,
+        // @ts-expect-error -- TextNode is invalid in pic placeholder
+        placeholders: { hero: text("Not an image") },
+      });
+      slide({
+        id: "bad-tbl-vanilla",
+        layout: contentMatrixLayout,
+        // @ts-expect-error -- ImageNode is invalid in tbl placeholder
+        placeholders: { tableSlot: image({ src: tinyPng }) },
+      });
+      slide({
+        id: "bad-chart-vanilla",
+        layout: contentMatrixLayout,
+        // @ts-expect-error -- TableNode is invalid in chart placeholder
+        placeholders: { chartSlot: table({ columns: [100] }) },
+      });
+      slide({
         id: "missing-layout-vanilla",
         // @ts-expect-error -- placeholders cannot be supplied without layout
         placeholders: { title: "No layout" },
       });
+      void sampleChartGroups;
     };
     void checkTypeErrors;
     assert.ok(true);
@@ -627,9 +737,12 @@ describe("typed text placeholders and style inheritance", () => {
       false,
     );
     assert.equal(
-      layoutsValidated.slides[9]?.objects[4]?.text?.paragraphs[0]?.runs[0]
-        ?.field,
-      "slidenum",
+      layoutsValidated.slides[9]?.footerPlaceholders?.[2]?.kind,
+      "sldNum",
+    );
+    assert.equal(
+      layoutsValidated.slides[9]?.footerPlaceholders?.[2]?.hasSlideNumberField,
+      true,
     );
     const layoutsReimported = importPptx(layoutsReemitted.pptx);
     assert.deepEqual(layoutsReimported.report.diagnostics, []);
@@ -768,5 +881,280 @@ describe("typed text placeholders and style inheritance", () => {
 
     // Unused helper check in case box isn't referenced directly.
     void box;
+  });
+
+  it("fills pic, tbl, chart, and generic obj placeholders in TSX and vanilla without narrowing obj across slides", async () => {
+    const jsxDoc = (
+      <Deck width={960} height={540}>
+        <SlideMaster id="m-content" name="Content Master" preserve>
+          <SlideLayout layout={contentMatrixLayout} />
+        </SlideMaster>
+        <Slide
+          id="s-content-1"
+          layout={contentMatrixLayout}
+          placeholders={{
+            picSlot: <Image src={tinyPng} />,
+            tableSlot: (
+              <Table columns={["1fr", "1fr"]}>
+                <Row style={{ height: 40 }}>
+                  <Cell>Metric</Cell>
+                  <Cell>Value</Cell>
+                </Row>
+                <Row style={{ height: 40 }}>
+                  <Cell>ARR</Cell>
+                  <Cell>$12M</Cell>
+                </Row>
+              </Table>
+            ),
+            chartSlot: <Chart groups={sampleChartGroups} />,
+            genericSlot: <Image src={tinyPng} />,
+          }}
+        />
+        <Slide
+          id="s-content-2"
+          layout={contentMatrixLayout}
+          placeholders={{
+            genericSlot: (
+              <Table columns={["1fr", "1fr"]}>
+                <Row style={{ height: 36 }}>
+                  <Cell>Quarter</Cell>
+                  <Cell>Growth</Cell>
+                </Row>
+              </Table>
+            ),
+          }}
+        />
+        <Slide
+          id="s-content-3"
+          layout={contentMatrixLayout}
+          placeholders={{
+            genericSlot: <Chart groups={sampleChartGroups} />,
+          }}
+        />
+        <Slide
+          id="s-content-4"
+          layout={contentMatrixLayout}
+          placeholders={{
+            genericSlot: "Generic text on slide 4",
+          }}
+        />
+      </Deck>
+    );
+
+    const vanillaDoc = deck({ width: 960, height: 540 }).append(
+      slideMaster({
+        id: "m-content",
+        name: "Content Master",
+        preserve: true,
+      }).append(slideLayout(contentMatrixLayout)),
+      slide({
+        id: "s-content-1",
+        layout: contentMatrixLayout,
+        placeholders: {
+          picSlot: image({ src: tinyPng }),
+          tableSlot: table({ columns: ["1fr", "1fr"] }).append(
+            row({ style: { height: 40 } }).append(
+              cell("Metric"),
+              cell("Value"),
+            ),
+            row({ style: { height: 40 } }).append(cell("ARR"), cell("$12M")),
+          ),
+          chartSlot: chart({ groups: sampleChartGroups }),
+          genericSlot: image({ src: tinyPng }),
+        },
+      }),
+      slide({
+        id: "s-content-2",
+        layout: contentMatrixLayout,
+        placeholders: {
+          genericSlot: table({ columns: ["1fr", "1fr"] }).append(
+            row({ style: { height: 36 } }).append(
+              cell("Quarter"),
+              cell("Growth"),
+            ),
+          ),
+        },
+      }),
+      slide({
+        id: "s-content-3",
+        layout: contentMatrixLayout,
+        placeholders: {
+          genericSlot: chart({ groups: sampleChartGroups }),
+        },
+      }),
+      slide({
+        id: "s-content-4",
+        layout: contentMatrixLayout,
+        placeholders: {
+          genericSlot: "Generic text on slide 4",
+        },
+      }),
+    );
+
+    const jsxBuilt = await build(jsxDoc);
+    const vanillaBuilt = await build(vanillaDoc);
+    assert.deepEqual(jsxBuilt.report, vanillaBuilt.report);
+
+    const validated = await validatePptx(vanillaBuilt.pptx);
+    assert.deepEqual(validated.errors, []);
+    assert.equal(validated.slides.length, 4);
+
+    // Slide 1: pic, tbl, chart, and generic obj filled with Image; pic/obj-img inherit bounds without local <a:xfrm>.
+    const s1 = validated.slides[0]!;
+    assert.equal(s1.objects.length, 4);
+    assert.equal(s1.objects[0]?.kind, "image");
+    assert.equal(s1.objects[0]?.placeholder?.type, "pic");
+    assert.equal(s1.objects[0]?.placeholder?.idx, 10);
+    assert.equal(s1.objects[0]?.hasLocalTransform, false);
+    assert.deepEqual(s1.objects[0]?.boxEmu, {
+      x: 40 * 9525,
+      y: 40 * 9525,
+      width: 200 * 9525,
+      height: 140 * 9525,
+    });
+    assert.equal(s1.objects[1]?.kind, "table");
+    assert.equal(s1.objects[1]?.placeholder?.type, "tbl");
+    assert.equal(s1.objects[1]?.placeholder?.idx, 11);
+    assert.equal(s1.objects[1]?.boxEmu.x, 260 * 9525);
+    assert.equal(s1.objects[1]?.boxEmu.width, 300 * 9525);
+    assert.equal(s1.objects[2]?.kind, "chart");
+    assert.equal(s1.objects[2]?.placeholder?.type, "chart");
+    assert.equal(s1.objects[2]?.placeholder?.idx, 12);
+    assert.deepEqual(s1.objects[2]?.boxEmu, {
+      x: 580 * 9525,
+      y: 40 * 9525,
+      width: 320 * 9525,
+      height: 180 * 9525,
+    });
+    assert.equal(s1.objects[3]?.kind, "image");
+    assert.equal(s1.objects[3]?.placeholder?.idx, 13);
+    assert.equal(s1.objects[3]?.hasLocalTransform, false);
+
+    // Slides 2, 3, 4 reuse the exact same obj slot with Table, Chart, and Text.
+    assert.equal(validated.slides[1]?.objects[0]?.kind, "table");
+    assert.equal(validated.slides[1]?.objects[0]?.placeholder?.idx, 13);
+    assert.equal(validated.slides[2]?.objects[0]?.kind, "chart");
+    assert.equal(validated.slides[2]?.objects[0]?.placeholder?.idx, 13);
+    assert.equal(validated.slides[3]?.objects[0]?.kind, "shape");
+    assert.equal(validated.slides[3]?.objects[0]?.placeholder?.idx, 13);
+
+    const zip = unzipSync(vanillaBuilt.pptx);
+    const s1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
+    assert.match(
+      s1Xml,
+      /<p:pic>[\s\S]*?<p:ph type="pic" idx="10"\/>[\s\S]*?<p:spPr\/>/u,
+    );
+    assert.match(
+      s1Xml,
+      /<p:graphicFrame>[\s\S]*?<p:ph type="tbl" idx="11"\/>/u,
+    );
+    assert.match(
+      s1Xml,
+      /<p:graphicFrame>[\s\S]*?<p:ph type="chart" idx="12"\/>/u,
+    );
+
+    // Import and reuse the same imported layout's genericSlot across object types.
+    const reimported = importPptx(vanillaBuilt.pptx);
+    assert.deepEqual(reimported.report.diagnostics, []);
+    assert.ok(reimported.document instanceof DeckContainer);
+    const importedLayout = reimported.document.masters[0]!.layouts[0]!;
+    const importedPlaceholders = importedLayout.props[
+      "placeholders"
+    ] as PlaceholderMap;
+    const reimportedGeneric = Object.values(importedPlaceholders).find(
+      (spec) => spec.idx === 13,
+    );
+    assert.equal(reimportedGeneric?.type, "obj");
+
+    const reimportedPicKey = Object.entries(importedPlaceholders).find(
+      ([, spec]) => spec.idx === 10,
+    )?.[0];
+    assert.ok(reimportedPicKey !== undefined);
+
+    // Local override on pic placeholder emits <a:xfrm>.
+    const importedS1 = reimported.document.children.filter(
+      (child): child is SlideContainer =>
+        child instanceof SlideContainer && child.kind === "slide",
+    )[0]!;
+    importedS1.placeholder(reimportedPicKey)?.set({ x: 55 });
+    const overriddenEmit = emit(resolve(reimported.document));
+    const overriddenValidated = await validatePptx(overriddenEmit.pptx);
+    assert.deepEqual(overriddenValidated.errors, []);
+    assert.equal(
+      overriddenValidated.slides[0]?.objects[0]?.hasLocalTransform,
+      true,
+    );
+    assert.equal(
+      overriddenValidated.slides[0]?.objects[0]?.boxEmu.x,
+      55 * 9525,
+    );
+  });
+
+  it("rejects incompatible content types in pic, tbl, and chart placeholders at runtime", async () => {
+    const jsxTextInPic = (
+      <Deck>
+        <SlideMaster id="m-err">
+          <SlideLayout layout={contentMatrixLayout} />
+        </SlideMaster>
+        <Slide
+          id="s-err-jsx"
+          layout={contentMatrixLayout}
+          placeholders={{
+            // Cast mimics runtime bypass across JSX boundaries.
+            picSlot: <Text>Wrong</Text>,
+          }}
+        />
+      </Deck>
+    );
+    await assert.rejects(
+      () => build(jsxTextInPic),
+      (err: unknown) =>
+        err instanceof BuildError &&
+        err.diagnostics.some(
+          (d) => d.code === "incompatible-placeholder-content",
+        ),
+    );
+
+    const tblInPic = deck().append(
+      slideMaster({ id: "m-err2" }).append(slideLayout(contentMatrixLayout)),
+      slide({
+        id: "s-err-tbl",
+        layout: contentMatrixLayout,
+        placeholders: {
+          picSlot: table({ columns: [100] }).append(
+            row().append(cell("No")),
+          ) as unknown as ReturnType<typeof image>,
+        },
+      }),
+    );
+    await assert.rejects(
+      () => build(tblInPic),
+      (err: unknown) =>
+        err instanceof BuildError &&
+        err.diagnostics.some(
+          (d) => d.code === "incompatible-placeholder-content",
+        ),
+    );
+
+    const chartInTbl = deck().append(
+      slideMaster({ id: "m-err3" }).append(slideLayout(contentMatrixLayout)),
+      slide({
+        id: "s-err-chart",
+        layout: contentMatrixLayout,
+        placeholders: {
+          tableSlot: chart({
+            groups: sampleChartGroups,
+          }) as unknown as ReturnType<typeof table>,
+        },
+      }),
+    );
+    await assert.rejects(
+      () => build(chartInTbl),
+      (err: unknown) =>
+        err instanceof BuildError &&
+        err.diagnostics.some(
+          (d) => d.code === "incompatible-placeholder-content",
+        ),
+    );
   });
 });

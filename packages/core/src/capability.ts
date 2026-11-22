@@ -1,16 +1,58 @@
+export { authorIdSchema, readAuthorId } from "#/author-ids.ts";
+export type { AuthorId } from "#/author-ids.ts";
+export {
+  deckPropsSchema,
+  linkTargetSchema,
+  parseLinkTarget,
+  sectionPropsSchema,
+  slideBackgroundSchema,
+  slideCorePropsSchema,
+  slidePropsSchema,
+  slideStyleSchema,
+} from "#/author-schemas.ts";
 export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export {
+  layoutLengthSchema,
+  layoutSpacingSchema,
+  layoutStyleSchema,
+  paddingStyleSchema,
+} from "#/layout-schemas.ts";
+export {
   assertValidLang,
+  bcp47LangSchema,
+  colorValueSchema,
   darker,
   defaultTheme,
   defineTheme,
+  fontFaceSchema,
+  fontFaceStyleSchema,
+  fontOptionsSchema,
+  fontReferenceSchema,
+  fontSchema,
+  fontSizeSchema,
+  fontTokenSchema,
+  gradientStopSchema,
   isFont,
   isNativeColorSlot,
   lighter,
+  linearGradientSchema,
   nativeColorSlots,
+  nativeColorSlotSchema,
+  radialGradientSchema,
+  resolvedColorSchema,
+  resolvedThemeFontSchema,
+  shadowSchema,
+  textAlignmentSchema,
   textStyleFrom,
   textStyleKeys,
+  textStyleSchema,
+  themeColorSchema,
+  themeInputSchema,
+  themeSchema,
+  themeScopeSchema,
+  themeShadeSchema,
   validateTextStyle,
+  visualStyleSchema,
 } from "#/theme.ts";
 export { createMorphScope, getMorphKeyLabel, isMorphKey } from "#/morph.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";

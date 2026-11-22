@@ -1,4 +1,9 @@
-import type { Font, FontFace, FontOptions } from "@pptxdk/core/capability";
+import {
+  fontOptionsSchema,
+  type Font,
+  type FontFace,
+  type FontOptions,
+} from "@pptxdk/core/capability";
 
 export type {
   Font,
@@ -13,16 +18,11 @@ export function font(
   faces: readonly FontFace[] = [],
   options: FontOptions = {},
 ): Font {
-  if (
-    options === null ||
-    typeof options !== "object" ||
-    (options.substitute !== undefined &&
-      typeof options.substitute !== "boolean") ||
-    (options.embeddable !== undefined &&
-      typeof options.embeddable !== "boolean")
-  ) {
+  const parsedOptions = fontOptionsSchema.safeParse(options);
+  if (!parsedOptions.success) {
     throw new TypeError("Font options.substitute must be a boolean");
   }
+  const validOptions = parsedOptions.data;
   return Object.freeze({
     family,
     faces: Object.freeze(
@@ -35,7 +35,7 @@ export function font(
         }),
       ),
     ),
-    ...(options.substitute === true ? { substitute: true } : {}),
-    ...(options.embeddable === false ? { embeddable: false } : {}),
+    ...(validOptions.substitute === true ? { substitute: true } : {}),
+    ...(validOptions.embeddable === false ? { embeddable: false } : {}),
   });
 }

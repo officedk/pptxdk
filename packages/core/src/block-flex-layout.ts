@@ -15,10 +15,8 @@ import Yoga, {
 
 import { BuildError } from "#/diagnostics.ts";
 import {
-  describeStyleValue,
   expandedSpacing,
   parseLayoutNumber,
-  parseLayoutSpacing,
   type CustomContainerMode,
   type CustomContainerSolver,
   type LayoutNodeMeasure,
@@ -91,27 +89,6 @@ export const blockFlexLayoutProperties = [
   "flexBasis",
   "aspectRatio",
   "zIndex",
-] as const;
-
-const alignItemsValues = [
-  "start",
-  "end",
-  "center",
-  "stretch",
-  "flex-start",
-  "flex-end",
-  "baseline",
-] as const;
-
-const contentAlignmentValues = [
-  "start",
-  "end",
-  "center",
-  "flex-start",
-  "flex-end",
-  "space-between",
-  "space-around",
-  "space-evenly",
 ] as const;
 
 function fail(path: string, code: string, message: string): never {
@@ -245,52 +222,7 @@ export function validateBlockFlexContainerProperties(
   }
 }
 
-export function validateBlockFlexEnumValues(
-  value: Record<string, unknown>,
-  path: string,
-): void {
-  const allowedValue = (
-    name: string,
-    candidate: unknown,
-    values: readonly string[],
-  ) => {
-    if (
-      candidate !== undefined &&
-      !values.includes(typeof candidate === "string" ? candidate : "")
-    ) {
-      fail(
-        path,
-        "unsupported-layout-value",
-        `${name} does not support value ${describeStyleValue(candidate)}`,
-      );
-    }
-  };
-  allowedValue("flexDirection", value["flexDirection"], [
-    "row",
-    "column",
-    "row-reverse",
-    "column-reverse",
-  ]);
-  allowedValue("flexWrap", value["flexWrap"], ["nowrap", "wrap"]);
-  allowedValue(
-    "justifyContent",
-    value["justifyContent"],
-    contentAlignmentValues,
-  );
-  allowedValue("alignItems", value["alignItems"], alignItemsValues);
-  allowedValue("alignSelf", value["alignSelf"], ["auto", ...alignItemsValues]);
-  allowedValue("alignContent", value["alignContent"], [
-    ...contentAlignmentValues,
-    "stretch",
-  ]);
-  allowedValue("position", value["position"], [
-    "static",
-    "relative",
-    "absolute",
-  ]);
-}
-
-export function validateBlockFlexDimensionsAndOffsets(
+export function validateBlockFlexLayoutContextBounds(
   value: Record<string, unknown>,
   allowsPadding: boolean,
   path: string,
@@ -309,96 +241,6 @@ export function validateBlockFlexDimensionsAndOffsets(
       "Position offsets are only applicable to relative or absolute elements",
     );
   }
-  for (const key of ["flex", "flexGrow", "flexShrink"] as const) {
-    const candidate = value[key];
-    if (
-      candidate !== undefined &&
-      parseLayoutNumber(candidate, key, path) < 0
-    ) {
-      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
-    }
-  }
-  for (const key of ["gap", "rowGap", "columnGap"] as const) {
-    const candidate = value[key];
-    if (
-      candidate !== undefined &&
-      parseLayoutNumber(candidate, key, path) < 0
-    ) {
-      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
-    }
-  }
-  for (const key of [
-    "width",
-    "height",
-    "minWidth",
-    "minHeight",
-    "maxWidth",
-    "maxHeight",
-    "flexBasis",
-  ] as const) {
-    parseLayoutLength(value[key], key, path);
-  }
-  const ratio = value["aspectRatio"];
-  if (
-    ratio !== undefined &&
-    (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0)
-  ) {
-    fail(
-      path,
-      "invalid-layout-style",
-      "aspectRatio must be a finite positive number",
-    );
-  }
-  const zIndex = value["zIndex"];
-  if (
-    zIndex !== undefined &&
-    (typeof zIndex !== "number" || !Number.isFinite(zIndex))
-  ) {
-    fail(path, "invalid-layout-style", "zIndex must be a finite number");
-  }
-  for (const key of ["inset", "left", "top", "right", "bottom"] as const) {
-    const candidate = value[key];
-    if (candidate !== undefined) parseLayoutLength(candidate, key, path, false);
-  }
-}
-
-export function validateBlockFlexSpacingAndBounds(
-  value: Record<string, unknown>,
-  allowsPadding: boolean,
-  path: string,
-): void {
-  const padding = value["padding"];
-  if (padding !== undefined) {
-    const values = parseLayoutSpacing(padding, "padding", path);
-    if (Object.values(values).some((item) => item < 0)) {
-      fail(path, "invalid-layout-style", "padding cannot be less than 0");
-    }
-  }
-  for (const key of [
-    "paddingTop",
-    "paddingRight",
-    "paddingBottom",
-    "paddingLeft",
-  ] as const) {
-    const candidate = value[key];
-    if (
-      candidate !== undefined &&
-      parseLayoutNumber(candidate, key, path) < 0
-    ) {
-      fail(path, "invalid-layout-style", `${key} cannot be less than 0`);
-    }
-  }
-  for (const key of [
-    "marginTop",
-    "marginRight",
-    "marginBottom",
-    "marginLeft",
-  ] as const) {
-    if (value[key] !== undefined) parseLayoutNumber(value[key], key, path);
-  }
-  if (value["margin"] !== undefined) {
-    parseLayoutSpacing(value["margin"], "margin", path);
-  }
   if (
     !allowsPadding &&
     paddingStyleKeys.some((key) => value[key] !== undefined)
@@ -409,15 +251,11 @@ export function validateBlockFlexSpacingAndBounds(
       "padding is only applicable to layout containers",
     );
   }
-  const minWidth = parseLayoutLength(value["minWidth"], "minWidth", path);
-  const maxWidth = parseLayoutLength(value["maxWidth"], "maxWidth", path);
-  const minHeight = parseLayoutLength(value["minHeight"], "minHeight", path);
-  const maxHeight = parseLayoutLength(value["maxHeight"], "maxHeight", path);
+  const minWidth = value["minWidth"];
+  const maxWidth = value["maxWidth"];
   if (
-    typeof value["minWidth"] === "number" &&
-    typeof value["maxWidth"] === "number" &&
-    minWidth !== undefined &&
-    maxWidth !== undefined &&
+    typeof minWidth === "number" &&
+    typeof maxWidth === "number" &&
     minWidth > maxWidth
   ) {
     fail(
@@ -426,11 +264,11 @@ export function validateBlockFlexSpacingAndBounds(
       "minWidth cannot be greater than maxWidth",
     );
   }
+  const minHeight = value["minHeight"];
+  const maxHeight = value["maxHeight"];
   if (
-    typeof value["minHeight"] === "number" &&
-    typeof value["maxHeight"] === "number" &&
-    minHeight !== undefined &&
-    maxHeight !== undefined &&
+    typeof minHeight === "number" &&
+    typeof maxHeight === "number" &&
     minHeight > maxHeight
   ) {
     fail(

@@ -25,6 +25,7 @@ export const build = pipeline.build;
 export { documentCapabilities, slideBackgroundCapability };
 
 export {
+  authorIdSchema,
   AuthorQuery,
   AuthorQueryError,
   BuildError,
@@ -33,14 +34,27 @@ export {
   CommonContainer,
   CommonNode,
   darker,
+  deckPropsSchema,
   defaultTheme,
   defineTheme,
   formatBaseline,
   isNativeColorSlot,
+  layoutLengthSchema,
+  layoutSpacingSchema,
+  layoutStyleSchema,
   lighter,
+  linkTargetSchema,
   nativeColorSlots,
+  paddingStyleSchema,
   RichTextContainer,
+  sectionPropsSchema,
+  slideBackgroundSchema,
+  slidePropsSchema,
   targets,
+  textStyleSchema,
+  themeInputSchema,
+  themeSchema,
+  themeScopeSchema,
 } from "@pptxdk/core";
 export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
 export type {
@@ -50,6 +64,7 @@ export type {
   DeclarationText,
 } from "@pptxdk/core/build";
 export type {
+  AuthorId,
   AuthorNodeGuard,
   BuildOptions,
   BuildQuery,
@@ -57,6 +72,7 @@ export type {
   BuildResult,
   CapabilityModule,
   ColorValue,
+  DeckProps,
   Diagnostic,
   DocumentProps,
   DocumentStyle,
@@ -88,6 +104,7 @@ export type {
   NativeTableObservation,
   NativeTablePartObservation,
   ObjectObservation,
+  PaddingStyle,
   PreviewTransform,
   PreviewWarning,
   RadialGradient,
@@ -96,9 +113,11 @@ export type {
   ResolveOptions,
   ResourceObservation,
   RichTextItem,
+  SectionProps,
   Shadow,
   SlideBackground,
   SlideObservation,
+  SlideProps,
   SlideQuery,
   StyleUpdate,
   Target,

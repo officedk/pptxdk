@@ -36,10 +36,13 @@ export type {
 export {
   A_NS,
   CONTENT_TYPES_NS,
+  C_NS,
   EMU_PER_PX,
   MC_NS,
   OPC_REL_NS,
   P_NS,
+  REL_CHART,
+  REL_HYPERLINK,
   REL_OFFICE_DOCUMENT,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,

@@ -1,10 +1,11 @@
 import {
   CapabilityError,
+  colorValueSchema,
   isMorphKey,
+  layoutStyleSchema,
+  linkTargetSchema,
   nativePlaceholderRefSchema,
-  type ColorValue,
-  type LayoutStyle,
-  type LinkTarget,
+  textStyleSchema,
   type MorphKey,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
@@ -12,13 +13,11 @@ import { z } from "zod";
 
 import type { MotionProps } from "../motion/motion-api.ts";
 import type { MorphProps } from "../shared/morph-api.ts";
-import type { TextStyle } from "../shared/text-service.ts";
 import { chartDataLabelPositions } from "./chart-labels.ts";
-import { chartTextStyleKeys } from "./chart-model.ts";
 
 const maximumLineWidthEmu = 20_116_800;
+const maximumShapeExtentEmu = 2_147_483_647;
 const maximumExplosionForCurrentValidationProfile = 2_147_483_647;
-const chartTextStyleKeySet = new Set<string>(chartTextStyleKeys);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -128,21 +127,22 @@ export const ChartKindSchema = z.enum([
 ]);
 export type ChartKind = z.infer<typeof ChartKindSchema>;
 
-export type ChartTextStyle = Omit<TextStyle, "textWrap">;
+export const ColorValueSchema = colorValueSchema;
 
-export const ColorValueSchema = z.custom<ColorValue>(
-  (value) =>
-    typeof value === "string" ||
-    (isPlainRecord(value) && ("slot" in value || "color" in value)),
-  { message: "must be a color value or theme token" },
-);
+const textStyleBaseSchema = textStyleSchema.unwrap();
+export const ChartTextStyleSchema = textStyleBaseSchema
+  .omit({ textWrap: true })
+  .readonly();
+export type ChartTextStyle = z.infer<typeof ChartTextStyleSchema>;
 
-export const ChartTextStyleSchema = z.custom<ChartTextStyle>((value) => {
-  if (!isPlainRecord(value)) return false;
-  return Object.keys(value).every((key) => chartTextStyleKeySet.has(key));
-});
+export const ChartStyleSchema = z
+  .strictObject({
+    ...ChartTextStyleSchema.unwrap().shape,
+    ...layoutStyleSchema.unwrap().shape,
+  })
+  .readonly();
 
-const ChartTitleRawSchema = z.union([
+export const ChartTitleSchema = z.union([
   nonEmptyXmlStringSchema("invalid-parameter", "title"),
   z
     .strictObject({
@@ -151,14 +151,7 @@ const ChartTitleRawSchema = z.union([
     })
     .readonly(),
 ]);
-export type ChartTitle =
-  | string
-  | {
-      readonly text: string;
-      readonly style?: ChartTextStyle;
-    };
-export const ChartTitleSchema =
-  ChartTitleRawSchema as unknown as z.ZodType<ChartTitle>;
+export type ChartTitle = z.infer<typeof ChartTitleSchema>;
 
 export const ChartLineDashSchema = z.enum([
   "solid",
@@ -212,6 +205,11 @@ export const ChartMarkerSchema = z
   .readonly();
 export type ChartMarker = z.infer<typeof ChartMarkerSchema>;
 
+export const ChartMarkerOptionSchema = z.union([
+  z.boolean(),
+  ChartMarkerSchema,
+]);
+
 export const ChartPointValueSchema = z.number().finite().nullable();
 export const ChartSeriesValuesSchema = z
   .array(ChartPointValueSchema)
@@ -235,32 +233,37 @@ export type ChartDataLabelPosition = z.infer<
   typeof ChartDataLabelPositionSchema
 >;
 
-const chartDataLabelsObjectSchema = z.strictObject({
+const separatorStringSchema = z
+  .string()
+  .min(1)
+  .superRefine((value, ctx) => {
+    if (!isValidXml10String(value)) {
+      addChartIssue(
+        ctx,
+        "invalid-xml-character",
+        "separator contains characters not allowed in XML 1.0",
+      );
+    }
+  });
+
+const dataLabelCommonFields = {
   value: z.boolean().optional(),
   percent: z.boolean().optional(),
   category: z.boolean().optional(),
   seriesName: z.boolean().optional(),
   xValue: z.boolean().optional(),
-  separator: z
-    .string()
-    .min(1)
-    .superRefine((value, ctx) => {
-      if (!isValidXml10String(value)) {
-        addChartIssue(
-          ctx,
-          "invalid-xml-character",
-          "separator contains characters not allowed in XML 1.0",
-        );
-      }
-    })
-    .optional(),
-  position: ChartDataLabelPositionSchema.optional(),
+  separator: separatorStringSchema.optional(),
   numberFormat: nonEmptyXmlStringSchema(
     "invalid-data-labels",
     "numberFormat",
   ).optional(),
   leaderLines: z.union([z.boolean(), ChartLineSchema]).optional(),
   style: ChartTextStyleSchema.optional(),
+};
+
+const chartDataLabelsObjectSchema = z.strictObject({
+  ...dataLabelCommonFields,
+  position: ChartDataLabelPositionSchema.optional(),
 });
 
 export const ChartDataLabelsBaseSchema = chartDataLabelsObjectSchema.readonly();
@@ -299,31 +302,8 @@ export type ChartDataLabelSettings = z.infer<
 >;
 
 const scatterDataLabelsObjectSchema = z.strictObject({
-  value: z.boolean().optional(),
-  xValue: z.boolean().optional(),
-  percent: z.boolean().optional(),
-  category: z.boolean().optional(),
-  seriesName: z.boolean().optional(),
-  separator: z
-    .string()
-    .min(1)
-    .superRefine((value, ctx) => {
-      if (!isValidXml10String(value)) {
-        addChartIssue(
-          ctx,
-          "invalid-xml-character",
-          "separator contains characters not allowed in XML 1.0",
-        );
-      }
-    })
-    .optional(),
+  ...dataLabelCommonFields,
   position: z.enum(["left", "right", "bottom", "top", "center"]).optional(),
-  numberFormat: nonEmptyXmlStringSchema(
-    "invalid-data-labels",
-    "numberFormat",
-  ).optional(),
-  leaderLines: z.union([z.boolean(), ChartLineSchema]).optional(),
-  style: ChartTextStyleSchema.optional(),
 });
 
 export const ScatterDataLabelsBaseSchema = scatterDataLabelsObjectSchema
@@ -357,19 +337,14 @@ const ChartPointRawSchema = z
     }).optional(),
     labelColor: ColorValueSchema.optional(),
     dataLabels: z
-      .union([
-        z.literal(false),
-        chartDataLabelsObjectSchema
-          .omit({ style: true, leaderLines: true })
-          .readonly(),
-      ])
+      .union([z.literal(false), ChartDataLabelOverrideSchema])
       .optional(),
   })
   .readonly();
 
 export type ChartPoint = Omit<
   z.infer<typeof ChartPointRawSchema>,
-  "marker" | "dataLabels"
+  "dataLabels" | "marker"
 > & {
   readonly marker?: boolean | ChartMarker | undefined;
   readonly dataLabels?: false | ChartDataLabelOverride | undefined;
@@ -381,7 +356,7 @@ export const ScatterChartPointSchema = z
   .strictObject({
     color: ColorValueSchema.optional(),
     line: ChartLineSchema.optional(),
-    marker: z.union([z.boolean(), ChartMarkerSchema]).optional(),
+    marker: ChartMarkerOptionSchema.optional(),
     labelColor: ColorValueSchema.optional(),
     dataLabels: z
       .union([z.literal(false), ScatterDataLabelOverrideSchema])
@@ -598,10 +573,10 @@ const ChartSeriesRawSchema = z
 
 export type ChartSeries = Omit<
   z.infer<typeof ChartSeriesRawSchema>,
-  "points" | "marker" | "dataLabels"
+  "points" | "dataLabels" | "marker"
 > & {
-  readonly dataLabels?: false | ChartSeriesDataLabelOverride | undefined;
   readonly marker?: boolean | ChartMarker | undefined;
+  readonly dataLabels?: false | ChartSeriesDataLabelOverride | undefined;
   readonly points?: Readonly<Record<number, ChartPoint>> | undefined;
 };
 
@@ -620,10 +595,10 @@ const IndependentCategorySeriesRawSchema = z
 
 export type IndependentCategorySeries = Omit<
   z.infer<typeof IndependentCategorySeriesRawSchema>,
-  "points" | "marker" | "dataLabels"
+  "points" | "dataLabels" | "marker"
 > & {
-  readonly dataLabels?: false | ChartSeriesDataLabelOverride | undefined;
   readonly marker?: boolean | ChartMarker | undefined;
+  readonly dataLabels?: false | ChartSeriesDataLabelOverride | undefined;
   readonly points?: Readonly<Record<number, ChartPoint>> | undefined;
 };
 
@@ -643,7 +618,7 @@ const ScatterChartSeriesRawSchema = z
     dataLabels: z
       .union([z.literal(false), ScatterDataLabelOverrideSchema])
       .optional(),
-    marker: z.union([z.boolean(), ChartMarkerSchema]).optional(),
+    marker: ChartMarkerOptionSchema.optional(),
     points: z.record(z.string(), ScatterChartPointSchema).readonly().optional(),
     trendlines: z.array(ChartTrendlineSchema).readonly().optional(),
     errorBars: ScatterErrorBarsSchema.optional(),
@@ -1253,16 +1228,14 @@ function validateCategoryGroupSeries(
           [...seriesPath, "marker"],
         );
       } else {
-        const parsedMarker = z
-          .union([z.boolean(), ChartMarkerSchema])
-          .safeParse(item.marker);
+        const parsedMarker = ChartMarkerOptionSchema.safeParse(item.marker);
         if (!parsedMarker.success) {
-          addChartIssue(
-            ctx,
-            "invalid-marker",
-            `Series "${item.name}".marker must be a boolean or marker object`,
-            [...seriesPath, "marker"],
-          );
+          for (const issue of parsedMarker.error.issues) {
+            ctx.addIssue({
+              ...issue,
+              path: [...seriesPath, "marker", ...issue.path],
+            });
+          }
         }
       }
     }
@@ -1310,16 +1283,22 @@ function validateCategoryGroupSeries(
               [...seriesPath, "points", rawIndex, "marker"],
             );
           } else {
-            const parsedPointMarker = z
-              .union([z.boolean(), ChartMarkerSchema])
-              .safeParse(point.marker);
-            if (!parsedPointMarker.success) {
-              addChartIssue(
-                ctx,
-                "invalid-marker",
-                `Series "${item.name}" data point ${rawIndex}.marker must be a boolean or marker object`,
-                [...seriesPath, "points", rawIndex, "marker"],
-              );
+            const parsedMarker = ChartMarkerOptionSchema.safeParse(
+              point.marker,
+            );
+            if (!parsedMarker.success) {
+              for (const issue of parsedMarker.error.issues) {
+                ctx.addIssue({
+                  ...issue,
+                  path: [
+                    ...seriesPath,
+                    "points",
+                    rawIndex,
+                    "marker",
+                    ...issue.path,
+                  ],
+                });
+              }
             }
           }
         }
@@ -1730,30 +1709,55 @@ export const ChartPlotAreaSchema = z
   .readonly();
 export type ChartPlotArea = z.infer<typeof ChartPlotAreaSchema>;
 
-export const ChartPropsSchema = z
-  .strictObject({
-    id: z.string().optional(),
-    name: xmlStringSchema("Chart.name").optional(),
-    placeholder: z.string().optional(),
-    nativePlaceholder: nativePlaceholderRefSchema.optional(),
-    morphKey: z.custom<MorphKey>(isMorphKey).optional(),
-    link: z.custom<LinkTarget>().optional(),
-    x: z.number().finite().min(-1_000_000).max(1_000_000).optional(),
-    y: z.number().finite().min(-1_000_000).max(1_000_000).optional(),
-    width: z.number().finite().positive().optional(),
-    height: z.number().finite().positive().optional(),
-    axes: ChartAxesSchema.optional(),
-    groups: z.array(ChartGroupSchema).min(1).readonly(),
-    title: ChartTitleSchema.optional(),
-    displayBlanksAs: ChartDisplayBlanksAsSchema.optional(),
-    legend: ChartLegendSchema.optional(),
-    plotArea: ChartPlotAreaSchema.optional(),
-    style: z.custom<ChartTextStyle & LayoutStyle>().optional(),
-    enter: z.unknown().optional(),
-    emphasis: z.unknown().optional(),
-    motion: z.unknown().optional(),
-  })
-  .readonly();
+export const ChartCoordinateSchema = z
+  .number()
+  .finite()
+  .min(-1_000_000)
+  .max(1_000_000);
+
+export const ChartExtentSchema = z
+  .number()
+  .finite()
+  .positive()
+  .superRefine((value, ctx) => {
+    const emu = pxToEmu(value);
+    if (emu < 1 || emu > maximumShapeExtentEmu) {
+      addChartIssue(
+        ctx,
+        "invalid-coordinate",
+        `converted value must be within closed interval of 1 to ${maximumShapeExtentEmu} EMU`,
+      );
+    }
+  });
+
+const chartPropsObjectSchema = z.strictObject({
+  id: z.string().optional(),
+  name: xmlStringSchema("Chart.name").optional(),
+  placeholder: z.string().optional(),
+  nativePlaceholder: nativePlaceholderRefSchema.optional(),
+  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
+  link: linkTargetSchema.optional(),
+  x: ChartCoordinateSchema.optional(),
+  y: ChartCoordinateSchema.optional(),
+  width: ChartExtentSchema.optional(),
+  height: ChartExtentSchema.optional(),
+  axes: ChartAxesSchema.optional(),
+  groups: z.array(ChartGroupSchema).min(1).readonly(),
+  title: ChartTitleSchema.optional(),
+  displayBlanksAs: ChartDisplayBlanksAsSchema.optional(),
+  legend: ChartLegendSchema.optional(),
+  plotArea: ChartPlotAreaSchema.optional(),
+  style: ChartStyleSchema.optional(),
+  enter: z.unknown().optional(),
+  emphasis: z.unknown().optional(),
+  motion: z.unknown().optional(),
+});
+
+export const ChartPropsSchema = chartPropsObjectSchema.readonly();
+
+export const chartAllowedPropKeys: readonly string[] = Object.keys(
+  chartPropsObjectSchema.shape,
+);
 
 export type ChartBase = MotionProps &
   MorphProps &
@@ -1801,6 +1805,12 @@ export function resolveChartZodError(
     };
   }
   const pathStr = path.map(String).join(".");
+  if (pathStr === "fontSize" || pathStr.endsWith(".fontSize")) {
+    return {
+      code: "invalid-font-size",
+      message: `${pathStr}: ${issue.message}`,
+    };
+  }
   if (
     pathStr.endsWith(".color") ||
     pathStr.endsWith(".fill") ||
@@ -1813,7 +1823,9 @@ export function resolveChartZodError(
     pathStr.startsWith("gridlines.") ||
     pathStr.startsWith("minorGridlines.") ||
     pathStr.includes(".line.") ||
-    pathStr.includes(".leaderLines.")
+    pathStr.includes(".leaderLines.") ||
+    pathStr.includes(".style.") ||
+    pathStr.startsWith("style.")
   ) {
     return { code: "invalid-style", message: `${pathStr}: ${issue.message}` };
   }
@@ -2119,6 +2131,67 @@ export function parseChartLegendBySchema(
       "invalid-legend",
       "Chart.legend must be false, top, bottom, left, right, or topRight",
     );
+  }
+  return parsed.data;
+}
+
+/** Validates and parses a chart coordinate (`x` or `y`) via `ChartCoordinateSchema`. */
+export function parseChartCoordinateBySchema(
+  value: unknown,
+  label: "x" | "y",
+): number {
+  if (value === undefined) return 0;
+  const parsed = ChartCoordinateSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new CapabilityError(
+      "invalid-coordinate",
+      `${label} must be a finite pixel value between -1000000 and 1000000`,
+    );
+  }
+  return parsed.data;
+}
+
+/** Validates and parses a chart extent (`width` or `height`) via `ChartExtentSchema`. */
+export function parseChartExtentBySchema(
+  value: unknown,
+  label: "width" | "height",
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new CapabilityError(
+      "invalid-coordinate",
+      `${label} must be a finite positive pixel value`,
+    );
+  }
+  const parsed = ChartExtentSchema.safeParse(value);
+  if (!parsed.success) {
+    throwChartZodError(parsed.error, "invalid-coordinate", `Chart.${label}`);
+  }
+  return parsed.data;
+}
+
+/** Validates and parses `Chart.displayBlanksAs` via `ChartDisplayBlanksAsSchema`. */
+export function parseChartDisplayBlanksAsBySchema(
+  value: unknown,
+): ChartDisplayBlanksAs | undefined {
+  if (value === undefined) return undefined;
+  const parsed = ChartDisplayBlanksAsSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new CapabilityError(
+      "invalid-chart-missing-values",
+      "Chart.displayBlanksAs must be gap, zero, or span",
+    );
+  }
+  return parsed.data;
+}
+
+/** Validates an XML 1.0 string via `xmlStringSchema`. */
+export function parseChartXmlTextBySchema(
+  value: string,
+  label: string,
+): string {
+  const parsed = xmlStringSchema(label).safeParse(value);
+  if (!parsed.success) {
+    throwChartZodError(parsed.error, "invalid-xml-character", label);
   }
   return parsed.data;
 }

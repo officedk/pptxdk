@@ -1,9 +1,15 @@
 import type {
   ColorValue,
   NativeLink,
+  NativePlaceholderRef,
   ThemeContext,
 } from "@pptxdk/core/capability";
-import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
+import {
+  placeholderRefXml,
+  pxToEmu,
+  resolvedColorXml,
+  xmlEscape,
+} from "@pptxdk/emit";
 import { strToU8, zipSync } from "fflate";
 
 import {
@@ -1766,6 +1772,7 @@ export function chartFrameXml(
   },
   relationshipId: string,
   link: NativeLink | undefined,
+  placeholder?: NativePlaceholderRef,
 ): string {
   const linkAttributes = {
     ...(link?.relationshipId === undefined
@@ -1785,8 +1792,16 @@ export function chartFrameXml(
           { id, name },
           link === undefined ? undefined : el("a:hlinkClick", linkAttributes),
         ),
-        el("p:cNvGraphicFramePr"),
-        el("p:nvPr"),
+        placeholder === undefined
+          ? el("p:cNvGraphicFramePr")
+          : el(
+              "p:cNvGraphicFramePr",
+              null,
+              el("a:graphicFrameLocks", { noGrp: "1" }),
+            ),
+        placeholder === undefined
+          ? el("p:nvPr")
+          : el("p:nvPr", null, raw(placeholderRefXml(placeholder))),
       ),
       el(
         "p:xfrm",

@@ -4,9 +4,8 @@ import {
   isMorphKey,
   layoutStyleSchema,
   linkTargetSchema,
+  nativePlaceholderRefSchema,
   textStyleSchema,
-  type LayoutStyle,
-  type LinkTarget,
   type MorphKey,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
@@ -1734,6 +1733,8 @@ export const ChartExtentSchema = z
 const chartPropsObjectSchema = z.strictObject({
   id: z.string().optional(),
   name: xmlStringSchema("Chart.name").optional(),
+  placeholder: z.string().optional(),
+  nativePlaceholder: nativePlaceholderRefSchema.optional(),
   morphKey: z.custom<MorphKey>(isMorphKey).optional(),
   link: linkTargetSchema.optional(),
   x: ChartCoordinateSchema.optional(),
@@ -1759,22 +1760,11 @@ export const chartAllowedPropKeys: readonly string[] = Object.keys(
 );
 
 export type ChartBase = MotionProps &
-  MorphProps & {
-    readonly id?: string;
-    readonly name?: string;
-    readonly link?: LinkTarget;
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number;
-    readonly axes?: ChartAxes;
-    readonly groups: readonly ChartGroup[];
-    readonly title?: ChartTitle;
-    readonly displayBlanksAs?: ChartDisplayBlanksAs;
-    readonly legend?: ChartLegend;
-    readonly plotArea?: ChartPlotArea;
-    readonly style?: ChartTextStyle & LayoutStyle;
-  };
+  MorphProps &
+  Omit<
+    z.infer<typeof ChartPropsSchema>,
+    "enter" | "emphasis" | "motion" | "morphKey"
+  >;
 
 export type ChartProps = ChartBase;
 

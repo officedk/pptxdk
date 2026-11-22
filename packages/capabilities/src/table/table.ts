@@ -16,6 +16,7 @@ import {
   type EmitContext,
   type EmitOutput,
   type GeometryBox,
+  type NativePlaceholderRef,
   type NativeTableObservation,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
@@ -39,6 +40,7 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
+import { resolvePlaceholderGeometry } from "../shared/style-inheritance.ts";
 import {
   emitTextBody,
   parseTextParagraphs,
@@ -49,7 +51,10 @@ import {
   type ResolvedTextStyle,
 } from "../shared/text-service.ts";
 import type { TableVerticalAlign } from "./table-declaration.ts";
-import { tableImportHandler } from "./table-import.ts";
+import {
+  tableImportHandler,
+  tablePlaceholderImportHandler,
+} from "./table-import.ts";
 import {
   assertAllowedTableKeys,
   assertTableEmuExtent,
@@ -493,6 +498,7 @@ type ResolvedTableModel = {
   readonly owners: ReadonlyMap<string, ParsedCell>;
   readonly name: string;
   readonly fontUses: readonly FontEmbeddingUse[];
+  readonly placeholder?: NativePlaceholderRef;
 };
 
 function roundSvgNumber(value: number): string {
@@ -607,6 +613,7 @@ function emitTableModel(
       heights,
       rowsXml,
       nativeLinkXml(emitContext.nativeLink),
+      model.placeholder,
     ),
     ...(presentationContributions.length === 0
       ? {}
@@ -884,6 +891,8 @@ function tableLayoutModel(
   };
 }
 
+const tableCompatiblePlaceholderRoles = new Set<string>(["tbl", "obj"]);
+
 /** Typed native canvas mechanism connecting emit, paint, and import for `table`. */
 export const tableMechanism = defineCanvasMechanism({
   key: "table",
@@ -893,15 +902,35 @@ export const tableMechanism = defineCanvasMechanism({
   import: tableImportHandler,
 });
 
+/** Typed native canvas mechanism connecting emit, paint, and import for `table-placeholder`. */
+export const tablePlaceholderMechanism = defineCanvasMechanism({
+  key: "table-placeholder",
+  role: "canvas",
+  emit: emitTableModel,
+  paint: paintTableModel,
+  import: tablePlaceholderImportHandler,
+});
+
 /** Table module independently validates row and column structure, resolving layout/cells once for emit and paint. */
 export const tableCapability = {
   declaration: "table",
-  mechanisms: [tableMechanism] as const,
+  mechanisms: [tableMechanism, tablePlaceholderMechanism] as const,
 
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
+    const placeholder = context.placeholder;
+    if (placeholder !== undefined) {
+      const role =
+        placeholder.layoutPlaceholder?.type ?? placeholder.nativeRef.type;
+      if (!tableCompatiblePlaceholderRoles.has(role)) {
+        fail(
+          "incompatible-placeholder-content",
+          `Table cannot be bound to ${role} placeholder`,
+        );
+      }
+    }
     assertAllowedTableKeys(input.props, tableAllowedParameters, "Table");
     const requestedName = parseOptionalName(input.props["name"]);
     const morphKey = parseMorphKey(input.props["morphKey"]);
@@ -933,6 +962,10 @@ export const tableCapability = {
       context.slideNumber,
     );
 
+    const placeholderGeometry =
+      placeholder === undefined
+        ? undefined
+        : resolvePlaceholderGeometry(placeholder, input.props);
     const parsed: ParsedTable = {
       columns,
       tableStyle,
@@ -940,9 +973,12 @@ export const tableCapability = {
       rows,
       cells,
       contract,
-      declaredX: input.props["x"],
-      declaredY: input.props["y"],
-      declaredWidth: contract.layoutStyle.width ?? input.props["width"],
+      declaredX: placeholderGeometry?.x ?? input.props["x"],
+      declaredY: placeholderGeometry?.y ?? input.props["y"],
+      declaredWidth:
+        contract.layoutStyle.width ??
+        input.props["width"] ??
+        placeholderGeometry?.width,
     };
 
     const authorId =
@@ -1191,6 +1227,7 @@ export const tableCapability = {
         const name =
           resolveContext.morphName ??
           requestedName ??
+          placeholder?.layoutPlaceholder?.name ??
           `Table ${resolveContext.id - 1}`;
         try {
           assertXml10Characters(name);
@@ -1289,7 +1326,14 @@ export const tableCapability = {
           owners,
           name,
           fontUses,
+          ...(placeholder === undefined
+            ? {}
+            : { placeholder: placeholder.nativeRef }),
         };
+        const mechanism =
+          placeholder === undefined
+            ? tableMechanism
+            : tablePlaceholderMechanism;
         return {
           observation: {
             id: resolveContext.id,
@@ -1305,11 +1349,11 @@ export const tableCapability = {
           ...(warnings.length === 0 ? {} : { warnings }),
 
           emit(emitContext: EmitContext): EmitOutput {
-            return tableMechanism.emit(resolvedModel, emitContext);
+            return mechanism.emit(resolvedModel, emitContext);
           },
 
           paint(paintContext: PaintContext): PaintOutput {
-            return tableMechanism.paint(resolvedModel, paintContext);
+            return mechanism.paint(resolvedModel, paintContext);
           },
         };
       },

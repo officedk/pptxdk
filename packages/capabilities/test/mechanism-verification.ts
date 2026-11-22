@@ -27,6 +27,7 @@ import { chartMechanismVerifications } from "./chart/mechanisms.ts";
 import { imageMechanismVerifications } from "./image/mechanisms.ts";
 import { themeMechanismVerifications } from "./masters/theme-mechanisms.ts";
 import { notesMechanismVerifications } from "./notes/mechanisms.ts";
+import { placeholderMechanismVerifications } from "./placeholder/mechanisms.ts";
 import { shapeAndGroupMechanismVerifications } from "./shape/mechanisms.ts";
 import { tableMechanismVerifications } from "./table/mechanisms.ts";
 import {
@@ -264,6 +265,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...themeMechanismVerifications,
     ...imageMechanismVerifications,
     ...notesMechanismVerifications,
+    ...placeholderMechanismVerifications,
     ...shapeAndGroupMechanismVerifications,
     ...tableMechanismVerifications,
     ...textMechanismVerifications,

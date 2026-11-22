@@ -13,6 +13,7 @@ import {
   type EmitOutput,
   type GeometryBox,
   type LayoutStyle,
+  type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintContext,
@@ -32,13 +33,17 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
+import { resolvePlaceholderGeometry } from "../shared/style-inheritance.ts";
 import {
   writeChartTextProperties,
   writeChartTitle,
   type TextResourceClaim,
 } from "../shared/text-service.ts";
 import type { TextStyle } from "../shared/text-service.ts";
-import { chartImportHandler } from "./chart-import.ts";
+import {
+  chartImportHandler,
+  chartPlaceholderImportHandler,
+} from "./chart-import.ts";
 import { mergeDataLabels } from "./chart-labels.ts";
 import {
   chartTextStyleKeys,
@@ -907,6 +912,7 @@ type ResolvedChartModel = {
   readonly textStyles: ChartTextStyleXml;
   readonly fontUses: readonly FontEmbeddingUse[];
   readonly missingGlyphErrors: readonly string[];
+  readonly placeholder?: NativePlaceholderRef;
 };
 
 function emitChartModel(
@@ -966,6 +972,7 @@ function emitChartModel(
       model.box,
       relationshipId,
       emitContext.nativeLink,
+      model.placeholder,
     ),
     ...(presentationContributions.length === 0
       ? {}
@@ -1000,6 +1007,17 @@ export const chartDoughnutMechanism =
   defineChartCanvasMechanism("chart-doughnut");
 export const chartScatterMechanism =
   defineChartCanvasMechanism("chart-scatter");
+/** Typed native canvas mechanism connecting emit, paint, and import for `chart-placeholder`. */
+export const chartPlaceholderMechanism = defineCanvasMechanism({
+  key: "chart-placeholder",
+  role: "canvas",
+  emit: emitChartModel,
+  paint: paintChartModel,
+  import: chartPlaceholderImportHandler,
+});
+
+const chartCompatiblePlaceholderRoles = new Set<string>(["chart", "obj"]);
+
 export const chartDataLabelsMechanism =
   defineChartCanvasMechanism("chart-data-labels");
 export const chartTrendlineMechanism =
@@ -1031,6 +1049,7 @@ export const chartCapability = {
     chartPieMechanism,
     chartDoughnutMechanism,
     chartScatterMechanism,
+    chartPlaceholderMechanism,
     chartDataLabelsMechanism,
     chartTrendlineMechanism,
     chartErrorBarsMechanism,
@@ -1041,6 +1060,17 @@ export const chartCapability = {
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
+    const placeholder = context.placeholder;
+    if (placeholder !== undefined) {
+      const role =
+        placeholder.layoutPlaceholder?.type ?? placeholder.nativeRef.type;
+      if (!chartCompatiblePlaceholderRoles.has(role)) {
+        fail(
+          "incompatible-placeholder-content",
+          `Chart cannot be bound to ${role} placeholder`,
+        );
+      }
+    }
     if (input.children.length > 0) {
       fail(
         "unsupported-children",
@@ -1211,12 +1241,18 @@ export const chartCapability = {
       ...categorySeries.map((item) => item.categories.length),
     );
 
+    const placeholderGeometry =
+      placeholder === undefined
+        ? undefined
+        : resolvePlaceholderGeometry(placeholder, input.props);
     const rawWidth =
       contract.layoutStyle.width ??
-      (input.props["width"] as number | undefined);
+      (input.props["width"] as number | undefined) ??
+      placeholderGeometry?.width;
     const rawHeight =
       contract.layoutStyle.height ??
-      (input.props["height"] as number | undefined);
+      (input.props["height"] as number | undefined) ??
+      placeholderGeometry?.height;
     const declaredWidth =
       rawWidth !== undefined
         ? parseChartExtentBySchema(rawWidth, "width")
@@ -1225,14 +1261,12 @@ export const chartCapability = {
       rawHeight !== undefined
         ? parseChartExtentBySchema(rawHeight, "height")
         : undefined;
+    const rawX = placeholderGeometry?.x ?? input.props["x"];
+    const rawY = placeholderGeometry?.y ?? input.props["y"];
     const declaredX =
-      input.props["x"] !== undefined
-        ? parseChartCoordinateBySchema(input.props["x"], "x")
-        : undefined;
+      rawX !== undefined ? parseChartCoordinateBySchema(rawX, "x") : undefined;
     const declaredY =
-      input.props["y"] !== undefined
-        ? parseChartCoordinateBySchema(input.props["y"], "y")
-        : undefined;
+      rawY !== undefined ? parseChartCoordinateBySchema(rawY, "y") : undefined;
 
     const legend = parseChartLegendBySchema(input.props["legend"]);
     const checkedPlotArea = parseChartPlotAreaBySchema(
@@ -1342,6 +1376,7 @@ export const chartCapability = {
         const name =
           resolveContext.morphName ??
           requestedName ??
+          placeholder?.layoutPlaceholder?.name ??
           `Chart ${resolveContext.id - 1}`;
         parseChartXmlTextBySchema(name, "Chart.name");
 
@@ -1369,7 +1404,9 @@ export const chartCapability = {
         const usesCategoryLabelRange = chartUsesCategoryLabelRange(parsed);
 
         const primaryMechanism =
-          chartMechanismsByKind[parsed.groups[0]?.kind ?? "column"];
+          placeholder !== undefined
+            ? chartPlaceholderMechanism
+            : chartMechanismsByKind[parsed.groups[0]?.kind ?? "column"];
         const resolvedModel: ResolvedChartModel = {
           parsed,
           box,
@@ -1377,6 +1414,9 @@ export const chartCapability = {
           textStyles,
           fontUses,
           missingGlyphErrors,
+          ...(placeholder === undefined
+            ? {}
+            : { placeholder: placeholder.nativeRef }),
         };
 
         return {

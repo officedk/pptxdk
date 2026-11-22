@@ -1,16 +1,7 @@
 import type { NativePlaceholderRef } from "@pptxdk/core/capability";
+import { placeholderRefXml } from "@pptxdk/emit";
 
-/** Serializes a `<p:ph .../>` native placeholder reference inside `<p:nvPr>`. */
-export function placeholderRefXml(nativeRef: NativePlaceholderRef): string {
-  const attrs: string[] = [];
-  if (nativeRef.explicitType !== false) attrs.push(`type="${nativeRef.type}"`);
-  if (nativeRef.sz !== undefined) attrs.push(`sz="${nativeRef.sz}"`);
-  if (nativeRef.orient !== undefined)
-    attrs.push(`orient="${nativeRef.orient}"`);
-  if (nativeRef.idx !== undefined) attrs.push(`idx="${nativeRef.idx}"`);
-  if (nativeRef.hasCustomPrompt === true) attrs.push('hasCustomPrompt="1"');
-  return `<p:ph${attrs.length === 0 ? "" : ` ${attrs.join(" ")}`}/>`;
-}
+export { placeholderRefXml };
 
 /** Internal PresentationML text box / text placeholder wrapper for the text capability. */
 export function textBoxXml(

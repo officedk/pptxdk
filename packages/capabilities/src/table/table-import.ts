@@ -1,4 +1,8 @@
-import type { ColorValue } from "@pptxdk/core/capability";
+import {
+  matchLayoutPlaceholderKey,
+  type ColorValue,
+  type NativePlaceholderRef,
+} from "@pptxdk/core/capability";
 import {
   A_NS,
   P_NS,
@@ -13,6 +17,10 @@ import {
 } from "@pptxdk/import";
 
 import { readClickLink, type ClickLinkReadResult } from "../shared/identity.ts";
+import {
+  isPlaceholderGraphicFrameElement,
+  readNvPrPlaceholder,
+} from "../shared/placeholder-import.ts";
 import {
   readDrawingColor,
   readLineBorder,
@@ -309,7 +317,7 @@ function readAnchorCell(
 export function readTableGraphicFrame(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex } = context;
+  const { cursor, part, slideIndex, layoutPlaceholders } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvGraphicFramePr = cursor.child(P_NS, "nvGraphicFramePr");
@@ -375,8 +383,6 @@ export function readTableGraphicFrame(
       graphicFrameLocksXmlSchema.safeParse(rawLocks);
     }
   }
-  nvGraphicFramePr.ignoreEmptyChild(P_NS, "nvPr");
-
   const tableLocation: ImportLocation = {
     part,
     xpath: cursor.xpath,
@@ -384,6 +390,21 @@ export function readTableGraphicFrame(
     ...(objectId === undefined ? {} : { objectId }),
     ...(objectName === undefined ? {} : { objectName }),
   };
+
+  const nvPr = nvGraphicFramePr.child(P_NS, "nvPr");
+  const phResult = readNvPrPlaceholder(nvPr, tableLocation, diagnostics);
+  if (phResult.kind === "error") {
+    return { diagnostics };
+  }
+  const nativeRef: NativePlaceholderRef | undefined =
+    phResult.kind === "ok" ? phResult.nativeRef : undefined;
+  const matchedKey =
+    nativeRef === undefined
+      ? undefined
+      : matchLayoutPlaceholderKey(layoutPlaceholders, {
+          type: nativeRef.type,
+          idx: nativeRef.idx,
+        });
 
   const xfrmCursor = cursor.child(P_NS, "xfrm") ?? cursor.child(A_NS, "xfrm");
   if (xfrmCursor === undefined) {
@@ -662,6 +683,8 @@ export function readTableGraphicFrame(
   const columns = columnWidths as unknown as readonly [number, ...number[]];
   const tableProps: TableDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
+    ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
+    ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
     x: transform.x,
     y: transform.y,
@@ -686,10 +709,20 @@ export function readTableGraphicFrame(
   return { node: tableNode, diagnostics };
 }
 
-/** Shape-tree import handler wired into `tableMechanism` for DrawingML `<a:tbl>` graphicFrames. */
+/** Shape-tree import handler wired into `tableMechanism` for free DrawingML `<a:tbl>` graphicFrames. */
 export const tableImportHandler: ShapeTreeImportHandler = {
   target: "shape-tree",
   localName: "graphicFrame",
-  matches: isTableGraphicFrame,
+  matches: (cursor) =>
+    isTableGraphicFrame(cursor) && !isPlaceholderGraphicFrameElement(cursor),
+  read: readTableGraphicFrame,
+};
+
+/** Shape-tree import handler wired into `tablePlaceholderMechanism` for placeholder-bound `<a:tbl>` graphicFrames. */
+export const tablePlaceholderImportHandler: ShapeTreeImportHandler = {
+  target: "shape-tree",
+  localName: "graphicFrame",
+  matches: (cursor) =>
+    isTableGraphicFrame(cursor) && isPlaceholderGraphicFrameElement(cursor),
   read: readTableGraphicFrame,
 };

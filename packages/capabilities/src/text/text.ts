@@ -19,10 +19,17 @@ import {
   type PaintOutput,
   type PreviewTransform,
   type ResolvedObject,
+  type SlideEmitOutput,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
-import { defineCanvasMechanism } from "@pptxdk/import";
+import { defineCanvasMechanism, defineShowMechanism } from "@pptxdk/import";
 
+import {
+  fontPresentationContributions,
+  type FontEmbeddingMode,
+  type FontEmbeddingUse,
+} from "../font/font-embedding.ts";
+import { embeddedFontImportHandler } from "../font/font-import.ts";
 import { motionAnnotations } from "../motion/motion-api.ts";
 import {
   nativeLinkXml,
@@ -32,14 +39,20 @@ import {
 } from "../shared/identity.ts";
 import { layoutStyleValue } from "../shared/style-parse.ts";
 import {
+  parseTextCoordinate,
+  parseTextExtent,
+  textBoxAllowedParamKeys,
+} from "../shared/text-schemas.ts";
+import {
+  emitSlideNumberRunXml,
   emitTextBody,
   measureTextLayoutFromParagraphs,
   parseTextContent,
   renderTextOutlinesSvg,
   resolveTextBody,
-  textExtent,
   textInsets,
   type ResolvedTextBody,
+  type Run,
 } from "../shared/text-service.ts";
 import {
   emitVisualModel,
@@ -49,7 +62,10 @@ import {
   visualSvgTransform,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
-import { textBoxImportHandler } from "./text-import.ts";
+import {
+  textBoxImportHandler,
+  textFieldSlideNumImportHandler,
+} from "./text-import.ts";
 import { textBoxXml } from "./text-xml.ts";
 
 export type {
@@ -75,40 +91,12 @@ export type {
   TextStyle,
 } from "../shared/text-service.ts";
 
-const allowedParameters = [
-  "id",
-  "name",
-  "morphKey",
-  "link",
-  "x",
-  "y",
-  "width",
-  "height",
-  "style",
-  "children",
-  "enter",
-  "emphasis",
-  "motion",
-] as const;
-
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function coordinate(value: unknown, label: "x" | "y", path?: string): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    value < -1_000_000 ||
-    value > 1_000_000
-  ) {
-    throw new CapabilityError(
-      "invalid-text-box",
-      `${label} must be a finite pixel number between -1000000 and 1000000`,
-      path,
-    );
-  }
-  return value;
+  return parseTextCoordinate(value, label, path);
 }
 
 function size(
@@ -116,15 +104,7 @@ function size(
   label: "width" | "height",
   path?: string,
 ): number {
-  if (typeof value !== "number") {
-    throw new CapabilityError(
-      "invalid-text-box",
-      `${label} must be a finite positive pixel number`,
-      path,
-    );
-  }
-  textExtent(value, label);
-  return value;
+  return parseTextExtent(value, label, path);
 }
 
 function height(
@@ -229,17 +209,86 @@ export const textBoxMechanism = defineCanvasMechanism({
   import: textBoxImportHandler,
 });
 
+type ResolvedSlideNumberFieldModel = {
+  readonly run: Run;
+  readonly box: GeometryBox;
+  readonly idPrefix: string;
+};
+
+/** Typed native canvas mechanism connecting emit, paint, and import for `text-field-slidenum`. */
+export const textFieldSlideNumMechanism = defineCanvasMechanism({
+  key: "text-field-slidenum",
+  role: "canvas",
+  emit(
+    model: ResolvedSlideNumberFieldModel,
+    emitContext: EmitContext,
+  ): EmitOutput {
+    return {
+      xml: emitSlideNumberRunXml(
+        model.run,
+        emitContext.theme,
+        emitContext.createTextFieldId,
+      ),
+    };
+  },
+  paint(
+    model: ResolvedSlideNumberFieldModel,
+    paintContext: PaintContext,
+  ): PaintOutput {
+    const svg = renderTextOutlinesSvg({
+      paragraphs: [
+        {
+          runs: [model.run],
+          style: {},
+          endStyle: model.run.style,
+          wrap: "normal",
+        },
+      ],
+      box: paintContext.box ?? model.box,
+      theme: paintContext.theme,
+      idPrefix: model.idPrefix,
+    });
+    return { svg };
+  },
+  import: textFieldSlideNumImportHandler,
+});
+
+type ResolvedEmbeddedFontModel = {
+  readonly uses: readonly FontEmbeddingUse[];
+  readonly mode?: FontEmbeddingMode;
+};
+
+/** Typed native show mechanism connecting emit and import for presentation `embedded-font`. */
+export const embeddedFontMechanism = defineShowMechanism({
+  key: "embedded-font",
+  role: "show",
+  emit(model: ResolvedEmbeddedFontModel): SlideEmitOutput {
+    return {
+      xml: "",
+      presentationContributions: fontPresentationContributions(
+        model.uses,
+        model.mode,
+      ),
+    };
+  },
+  import: embeddedFontImportHandler,
+});
+
 /** Fixed-region and content-sized text box capability bound per formal build. */
 export const textCapability = {
   declaration: "text",
-  mechanisms: [textBoxMechanism] as const,
+  mechanisms: [
+    textBoxMechanism,
+    textFieldSlideNumMechanism,
+    embeddedFontMechanism,
+  ] as const,
 
   bind(
     input: CapabilityInput,
     context: CapabilityParseContext,
   ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
-      (key) => !(allowedParameters as readonly string[]).includes(key),
+      (key) => !textBoxAllowedParamKeys.has(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(

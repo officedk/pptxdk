@@ -17,7 +17,8 @@ export const sources: readonly Source[] = [
   {
     id: 2,
     short: "Weizenbaum, 1966",
-    title: "ELIZA — A Computer Program for the Study of Natural Language Communication between Man and Machine",
+    title:
+      "ELIZA — A Computer Program for the Study of Natural Language Communication between Man and Machine",
     detail: "Joseph Weizenbaum · Communications of the ACM 9 (1) · 1966",
     url: "https://dl.acm.org/doi/10.1145/365153.365168",
   },
@@ -73,7 +74,8 @@ export const sources: readonly Source[] = [
   {
     id: 10,
     short: "Radford et al., 2021",
-    title: "Learning Transferable Visual Models From Natural Language Supervision",
+    title:
+      "Learning Transferable Visual Models From Natural Language Supervision",
     detail: "Alec Radford et al. · ICML 2021",
     url: "https://arxiv.org/abs/2103.00020",
   },
@@ -87,7 +89,8 @@ export const sources: readonly Source[] = [
   {
     id: 12,
     short: "Ouyang et al., 2022",
-    title: "Training Language Models to Follow Instructions with Human Feedback",
+    title:
+      "Training Language Models to Follow Instructions with Human Feedback",
     detail: "Long Ouyang et al. · NeurIPS 2022",
     url: "https://arxiv.org/abs/2203.02155",
   },

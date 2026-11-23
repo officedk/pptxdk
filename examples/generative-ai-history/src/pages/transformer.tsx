@@ -1,8 +1,8 @@
-import { path, Shape, Text } from "pptxdk/react";
+import { Slide, path, Shape, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors, transparent } from "../theme.ts";
 
 const tokens = ["生", "成", "式", "人", "工", "智", "能"];
@@ -12,12 +12,14 @@ export function TransformerPage() {
   const queryX = 490;
   const queryY = 238;
   return (
-    <SlideFrame
+    <Slide
       id="transformer"
-      chapter="架构｜Attention Is All You Need"
-      title="2017｜注意力重写了序列建模"
-      number={5}
-      source="[5] Vaswani et al., 2017 · 注意力连线粗细仅为原理示意"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "架构｜Attention Is All You Need",
+        title: "2017｜注意力重写了序列建模",
+        source: "[5] Vaswani et al., 2017 · 注意力连线粗细仅为原理示意",
+      }}
     >
       <Text
         x={64}
@@ -171,6 +173,6 @@ export function TransformerPage() {
       >
         最初为机器翻译提出，随后成为通用生成模型的主干。
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

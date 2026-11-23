@@ -1,11 +1,20 @@
 import { P, Slide, Text } from "pptxdk/react";
 
 import { SamplingField } from "../components/sampling-field.tsx";
+import { coverLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 export function OpeningPage() {
   return (
-    <Slide id="opening" background={colors.indigo}>
+    <Slide
+      id="opening"
+      layout={coverLayout}
+      showMasterShapes={false}
+      placeholders={{
+        title: [<P key="first">机器如何</P>, <P key="second">学会创造</P>],
+        subtitle: "生成式人工智能简史",
+      }}
+    >
       <Text
         x={72}
         y={64}
@@ -14,30 +23,6 @@ export function OpeningPage() {
         style={{ fontSize: 16, color: colors.cyan, letterSpacing: 2 }}
       >
         1950—2024 · 技术、媒介与人的意图
-      </Text>
-      <Text
-        x={68}
-        y={154}
-        width={650}
-        height={206}
-        style={{
-          fontFamily: "display",
-          fontSize: 76,
-          lineHeight: 98,
-          color: colors.paperBright,
-        }}
-      >
-        <P>机器如何</P>
-        <P>学会创造</P>
-      </Text>
-      <Text
-        x={72}
-        y={390}
-        width={540}
-        height={48}
-        style={{ fontSize: 27, color: colors.sun }}
-      >
-        生成式人工智能简史
       </Text>
       <Text
         x={72}

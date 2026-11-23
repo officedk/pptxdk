@@ -1,7 +1,15 @@
-import { P, path, preset, Shape, Text, type ColorValue } from "pptxdk/react";
+import {
+  Slide,
+  P,
+  path,
+  preset,
+  Shape,
+  Text,
+  type ColorValue,
+} from "pptxdk/react";
 
 import { Circle, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors, transparent } from "../theme.ts";
 
 function FlowLabel({
@@ -65,12 +73,14 @@ function FlowArrow({
 
 export function VaeGanPage() {
   return (
-    <SlideFrame
+    <Slide
       id="vae-gan"
-      chapter="架构｜两条不同的生成路线"
-      title="2013–2014｜生成有了自己的模型"
-      number={4}
-      source="[3] Kingma & Welling, 2013 · [4] Goodfellow et al., 2014"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "架构｜两条不同的生成路线",
+        title: "2013–2014｜生成有了自己的模型",
+        source: "[3] Kingma & Welling, 2013 · [4] Goodfellow et al., 2014",
+      }}
     >
       <Rule x={640} y={174} width={1} color={colors.line} thickness={454} />
       <Text
@@ -204,6 +214,6 @@ export function VaeGanPage() {
         <P>判别结果回传给生成器，</P>
         <P>成为下一轮对抗的训练信号。</P>
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

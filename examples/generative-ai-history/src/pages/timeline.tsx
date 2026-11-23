@@ -1,8 +1,8 @@
-import { Text } from "pptxdk/react";
+import { Slide, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { Circle, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 const moments = [
@@ -59,12 +59,14 @@ const eras = [
 
 export function TimelinePage() {
   return (
-    <SlideFrame
+    <Slide
       id="timeline"
-      chapter="导览｜七十四年的四次转向"
-      title="这不是一次突然的降临"
-      number={2}
-      source="关键节点对应原始论文与官方发布；完整出处见第 13–14 页"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "导览｜七十四年的四次转向",
+        title: "这不是一次突然的降临",
+        source: "关键节点对应原始论文与官方发布；完整出处见文末参考资料",
+      }}
     >
       <Rule x={96} y={384} width={1080} color={colors.cobalt} thickness={2} />
       {moments.map((moment, index) => {
@@ -153,6 +155,6 @@ export function TimelinePage() {
           </Text>
         </Fragment>
       ))}
-    </SlideFrame>
+    </Slide>
   );
 }

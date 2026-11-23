@@ -1,8 +1,8 @@
-import { Text } from "pptxdk/react";
+import { Slide, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 const questions = [
@@ -28,12 +28,14 @@ const questions = [
 
 export function QuestionsPage() {
   return (
-    <SlideFrame
+    <Slide
       id="questions"
-      chapter="开放问题｜历史仍在书写"
-      title="下一章，由约束共同写成"
-      number={12}
-      source="本页为基于前述历史的观察与开放问题"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "开放问题｜历史仍在书写",
+        title: "下一章，由约束共同写成",
+        source: "本页为基于前述历史的观察与开放问题",
+      }}
     >
       <Text
         x={64}
@@ -113,6 +115,6 @@ export function QuestionsPage() {
       >
         技术史的下一次转折，也会是一场关于使用方式的抉择。
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

@@ -1,8 +1,8 @@
-import { path, preset, Shape, Text } from "pptxdk/react";
+import { Slide, path, preset, Shape, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors, transparent } from "../theme.ts";
 
 const nodes = [
@@ -38,12 +38,15 @@ const nodes = [
 
 export function SystemsPage() {
   return (
-    <SlideFrame
+    <Slide
       id="systems"
-      chapter="系统｜模型与外部环境协同"
-      title="2023｜从单个模型，到协同系统"
-      number={9}
-      source="[14] Yao et al., 2022 / ICLR 2023 · [15] OpenAI, GPT-4 Technical Report, 2023"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "系统｜模型与外部环境协同",
+        title: "2023｜从单个模型，到协同系统",
+        source:
+          "[14] Yao et al., 2022 / ICLR 2023 · [15] OpenAI, GPT-4 Technical Report, 2023",
+      }}
     >
       {nodes.map((node) => (
         <Shape
@@ -168,6 +171,6 @@ export function SystemsPage() {
       >
         GPT-4 技术报告进一步描述了图像与文本输入、文本输出的多模态能力。
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

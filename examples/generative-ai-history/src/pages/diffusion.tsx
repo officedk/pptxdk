@@ -1,8 +1,8 @@
-import { path, preset, Shape, Text } from "pptxdk/react";
+import { Slide, path, preset, Shape, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 function random(index: number, salt: number) {
@@ -114,12 +114,15 @@ const milestones = [
 
 export function DiffusionPage() {
   return (
-    <SlideFrame
+    <Slide
       id="diffusion"
-      chapter="媒介｜文字成为图像的条件"
-      title="2020–2022｜图像从噪声中显影"
-      number={7}
-      source="[9] Ho et al., 2020 · [10] Radford et al., 2021 · [11] Rombach et al., 2022 · 图像为原理示意"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "媒介｜文字成为图像的条件",
+        title: "2020–2022｜图像从噪声中显影",
+        source:
+          "[9] Ho et al., 2020 · [10] Radford et al., 2021 · [11] Rombach et al., 2022 · 图像为原理示意",
+      }}
     >
       <Text
         x={64}
@@ -199,6 +202,6 @@ export function DiffusionPage() {
           </Fragment>
         );
       })}
-    </SlideFrame>
+    </Slide>
   );
 }

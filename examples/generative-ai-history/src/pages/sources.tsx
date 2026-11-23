@@ -1,22 +1,25 @@
-import { Text } from "pptxdk/react";
+import { Slide, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { Rule } from "../components/primitives.tsx";
 import { sources } from "../data/sources.ts";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 export function SourcesPage({ page }: { readonly page: 1 | 2 }) {
   const items = sources.slice(page === 1 ? 0 : 9, page === 1 ? 9 : 18);
   return (
-    <SlideFrame
+    <Slide
       id={`sources-${page}`}
-      chapter="附录｜原始论文与官方发布"
-      title={
-        page === 1 ? "史料与延伸阅读｜基础与架构" : "史料与延伸阅读｜系统与前沿"
-      }
-      number={page === 1 ? 13 : 14}
-      source="标题与网址均可点击；所有条目均为原始论文或官方页面"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "附录｜原始论文与官方发布",
+        title:
+          page === 1
+            ? "史料与延伸阅读｜基础与架构"
+            : "史料与延伸阅读｜系统与前沿",
+        source: "标题与网址均可点击；所有条目均为原始论文或官方页面",
+      }}
     >
       {items.map((source, index) => {
         const y = 152 + index * 56;
@@ -75,6 +78,6 @@ export function SourcesPage({ page }: { readonly page: 1 | 2 }) {
           </Fragment>
         );
       })}
-    </SlideFrame>
+    </Slide>
   );
 }

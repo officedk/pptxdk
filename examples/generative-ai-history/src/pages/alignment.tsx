@@ -1,8 +1,8 @@
-import { Text } from "pptxdk/react";
+import { Slide, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { Arrow, OutlineBox, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 const steps = [
@@ -14,12 +14,14 @@ const steps = [
 
 export function AlignmentPage() {
   return (
-    <SlideFrame
+    <Slide
       id="alignment"
-      chapter="对齐｜InstructGPT 与 ChatGPT"
-      title="2022｜从会补全，到听得懂指令"
-      number={8}
-      source="[12] Ouyang et al., 2022 · [13] OpenAI, 2022-11-30"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "对齐｜InstructGPT 与 ChatGPT",
+        title: "2022｜从会补全，到听得懂指令",
+        source: "[12] Ouyang et al., 2022 · [13] OpenAI, 2022-11-30",
+      }}
     >
       <Text
         x={64}
@@ -131,6 +133,6 @@ export function AlignmentPage() {
         1 月 27 日：OpenAI 发布 InstructGPT　·　11 月 30 日：ChatGPT
         研究预览推出
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

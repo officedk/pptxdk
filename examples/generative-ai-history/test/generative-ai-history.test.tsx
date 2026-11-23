@@ -62,6 +62,34 @@ it("full deck preserves 14 slides, zero-diagnostic static preview, editable char
     ],
   );
 
+  assert.equal(file.masters?.length, 1);
+  const master = file.masters![0]!;
+  assert.deepEqual(
+    master.layouts.map((layout) => layout.name),
+    ["封面", "浅色正文", "深色总结"],
+  );
+  assert.equal(master.objects?.length, 2);
+  assert.equal(master.layouts[0]?.showMasterShapes, false);
+  assert.ok(
+    master.layouts[1]?.placeholders?.some(({ type }) => type === "obj"),
+  );
+  assert.deepEqual(file.slides[0]?.footerPlaceholders ?? [], []);
+  for (const [index, slide] of file.slides.entries()) {
+    assert.equal(
+      slide.layoutPart,
+      master.layouts[index === 0 ? 0 : index === 10 ? 2 : 1]?.part,
+    );
+    if (index === 0) continue;
+    assert.ok(
+      slide.objects.some((object) => object.placeholder?.type === "title"),
+    );
+    const pageNumber = slide.footerPlaceholders?.find(
+      ({ kind }) => kind === "sldNum",
+    );
+    assert.equal(pageNumber?.hasSlideNumberField, true);
+    assert.equal(pageNumber?.text, String(index + 1));
+  }
+
   for (const slide of file.slides) {
     for (const object of slide.objects) {
       if (object.boxEmu === undefined) continue;

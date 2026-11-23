@@ -1,17 +1,20 @@
-import { Chart, Text } from "pptxdk/react";
+import { Slide, Chart, Text } from "pptxdk/react";
 
 import { Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 export function ScalePage() {
   return (
-    <SlideFrame
+    <Slide
       id="scale"
-      chapter="规模｜GPT 系列的三次跨越"
-      title="2018–2020｜规模成为方法"
-      number={6}
-      source="[6] Radford et al., 2018 · [7] Radford et al., 2019 · [8] Brown et al., 2020"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "规模｜GPT 系列的三次跨越",
+        title: "2018–2020｜规模成为方法",
+        source:
+          "[6] Radford et al., 2018 · [7] Radford et al., 2019 · [8] Brown et al., 2020",
+      }}
     >
       <Text
         x={64}
@@ -125,6 +128,6 @@ export function ScalePage() {
       >
         GPT-3 展示了上下文内学习：不更新参数，也能依照提示中的示例完成新任务。
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

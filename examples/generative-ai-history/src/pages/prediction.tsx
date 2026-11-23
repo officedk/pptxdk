@@ -1,8 +1,8 @@
-import { Text } from "pptxdk/react";
+import { Slide, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 const candidates = [
@@ -13,12 +13,15 @@ const candidates = [
 
 export function PredictionPage() {
   return (
-    <SlideFrame
+    <Slide
       id="prediction"
-      chapter="起点｜把创造改写为概率问题"
-      title="先学会预测，再谈创造"
-      number={3}
-      source="[1] Turing, 1950 · [2] Weizenbaum, 1966 · 候选概率仅为原理示意"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "起点｜把创造改写为概率问题",
+        title: "先学会预测，再谈创造",
+        source:
+          "[1] Turing, 1950 · [2] Weizenbaum, 1966 · 候选概率仅为原理示意",
+      }}
     >
       <Text
         x={64}
@@ -171,6 +174,6 @@ export function PredictionPage() {
       >
         生成的第一课：估计下一个符号的分布。
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

@@ -1,18 +1,21 @@
-import { P, path, preset, Shape, Text } from "pptxdk/react";
+import { Slide, P, path, preset, Shape, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { Circle, OutlineBox, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { contentLayout } from "../templates/layouts.ts";
 import { colors, transparent } from "../theme.ts";
 
 export function FrontierPage() {
   return (
-    <SlideFrame
+    <Slide
       id="frontier"
-      chapter="前沿｜视频、实时交互与推理"
-      title="2024｜生成的边界继续外移"
-      number={10}
-      source="[18] OpenAI, 2024-02-15 · [16] OpenAI, 2024-05-13 · [17] OpenAI, 2024-09-12"
+      layout={contentLayout}
+      placeholders={{
+        chapter: "前沿｜视频、实时交互与推理",
+        title: "2024｜生成的边界继续外移",
+        source:
+          "[18] OpenAI, 2024-02-15 · [16] OpenAI, 2024-05-13 · [17] OpenAI, 2024-09-12",
+      }}
     >
       <Rule x={416} y={174} width={1} color={colors.line} thickness={446} />
       <Rule x={802} y={174} width={1} color={colors.line} thickness={446} />
@@ -192,6 +195,6 @@ export function FrontierPage() {
         <P>扩展的对象从参数与数据，</P>
         <P>进一步延伸到推理时间。</P>
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

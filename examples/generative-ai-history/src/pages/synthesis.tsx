@@ -1,8 +1,8 @@
-import { Text } from "pptxdk/react";
+import { Slide, Text } from "pptxdk/react";
 import { Fragment } from "react";
 
 import { Arrow, Rule } from "../components/primitives.tsx";
-import { SlideFrame } from "../templates/slide-frame.tsx";
+import { summaryLayout } from "../templates/layouts.ts";
 import { colors } from "../theme.ts";
 
 const rows = [
@@ -31,13 +31,15 @@ const rows = [
 
 export function SynthesisPage() {
   return (
-    <SlideFrame
+    <Slide
       id="synthesis"
-      chapter="收束｜技术不同，问题相通"
-      title="七十四年，一条未变的主线"
-      number={11}
-      dark
-      source="概念归纳：各方法的训练目标与采样机制并不相同，此处强调共同的分布视角"
+      layout={summaryLayout}
+      placeholders={{
+        chapter: "收束｜技术不同，问题相通",
+        title: "七十四年，一条未变的主线",
+        source:
+          "概念归纳：各方法的训练目标与采样机制并不相同，此处强调共同的分布视角",
+      }}
     >
       <Text
         x={64}
@@ -134,6 +136,6 @@ export function SynthesisPage() {
       >
         媒介一直在变：从符号序列，到像素、声音与行动轨迹。
       </Text>
-    </SlideFrame>
+    </Slide>
   );
 }

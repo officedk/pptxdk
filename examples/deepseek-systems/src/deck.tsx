@@ -1,11 +1,13 @@
 import { createMorphScope, Deck, Section } from "pptxdk/react";
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 
+import { fetchGitHubProjects } from "./github-projects.ts";
 import { AuxLossFreeMtpPage } from "./pages/aux-loss-free-mtp.tsx";
 import { DecodePipelinePage } from "./pages/decode-pipeline.tsx";
 import { DualPipePage } from "./pages/dualpipe.tsx";
 import { Fp8KernelsPage } from "./pages/fp8-kernels.tsx";
 import { FrontierBenchmarksPage } from "./pages/frontier-benchmarks.tsx";
+import { GitHubProjectsPage } from "./pages/github-projects.tsx";
 import { MlaMoeEfficiencyPage } from "./pages/mla-moe-efficiency.tsx";
 import { MpftDeepEpPage } from "./pages/mpft-deepep.tsx";
 import { OpenInfraSynthesisPage } from "./pages/open-infra-synthesis.tsx";
@@ -18,10 +20,19 @@ import { TrainingCostPage } from "./pages/training-cost.tsx";
 import { colors, theme } from "./theme.ts";
 
 /**
- * 14-slide technical architecture presentation deck for DeepSeek-V3 / R1
+ * 15-slide technical architecture presentation deck for DeepSeek-V3 / R1
  * and the Open-Source Week infrastructure stack.
  */
-export function DeepSeekSystemsDeck() {
+export function DeepSeekSystemsDeck({
+  fetchProject,
+}: {
+  readonly fetchProject?: typeof fetch;
+}) {
+  // Keep the request stable while the page retries inside Suspense.
+  const projects = useMemo(
+    () => fetchGitHubProjects(fetchProject),
+    [fetchProject],
+  );
   const pdMorphScope = useMemo(() => createMorphScope(), []);
 
   return (
@@ -59,6 +70,9 @@ export function DeepSeekSystemsDeck() {
       <Section name="04 · 强化学习推理涌现与全栈硬件协同总结">
         <R1RlDistillPage />
         <FrontierBenchmarksPage />
+        <Suspense fallback={null}>
+          <GitHubProjectsPage snapshot={projects} />
+        </Suspense>
         <OpenInfraSynthesisPage />
       </Section>
     </Deck>

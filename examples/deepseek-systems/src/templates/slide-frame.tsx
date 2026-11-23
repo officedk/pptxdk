@@ -187,7 +187,7 @@ export function SlideFrame({
           textWrap: "nowrap",
         }}
       >
-        <SlideNumber /> / 14
+        <SlideNumber /> / 15
       </Text>
     </Slide>
   );

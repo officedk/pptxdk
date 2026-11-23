@@ -6,6 +6,7 @@ import { paint } from "pptxdk/preview";
 import { expandDocument } from "pptxdk/react";
 import { it } from "vitest";
 
+import { fetchGitHubProjects } from "../src/github-projects.ts";
 import { DeepSeekSystemsDeck } from "../src/index.ts";
 
 function assertValidPng1280x720(png: Uint8Array, label: string): void {
@@ -21,8 +22,30 @@ function assertValidPng1280x720(png: Uint8Array, label: string): void {
   assert.equal(view.getUint32(20, false), 720, `${label}: PNG height`);
 }
 
-it("full deck preserves 14 slides, zero-diagnostic static preview, native charts and tables, morph continuity, click animations, and valid slide bounds", async () => {
-  const resolution = resolve(await expandDocument(<DeepSeekSystemsDeck />));
+it("full deck preserves 15 slides, zero-diagnostic static preview, native charts and tables, morph continuity, click animations, and valid slide bounds", async () => {
+  const projects = new Map([
+    ["FlashMLA", 0],
+    ["DeepEP", 500],
+    ["DeepGEMM", 1200],
+  ]);
+  const requests: string[] = [];
+  const fetchProject: typeof fetch = async (input) => {
+    assert.ok(typeof input === "string");
+    const url = new URL(input);
+    const name = url.pathname.split("/").at(-1)!;
+    assert.equal(url.href, `https://api.github.com/repos/deepseek-ai/${name}`);
+    assert.ok(projects.has(name));
+    requests.push(name);
+    return Response.json({
+      name,
+      html_url: `https://github.com/deepseek-ai/${name}`,
+      stargazers_count: projects.get(name),
+    });
+  };
+  const resolution = resolve(
+    await expandDocument(<DeepSeekSystemsDeck fetchProject={fetchProject} />),
+  );
+  assert.deepEqual(requests, [...projects.keys()]);
   const result = emit(resolution, {
     embedFonts: "full",
   });
@@ -30,7 +53,7 @@ it("full deck preserves 14 slides, zero-diagnostic static preview, native charts
   assert.deepEqual(result.report.diagnostics, []);
 
   const painted = paint(resolution);
-  assert.equal(painted.pages.length, 14);
+  assert.equal(painted.pages.length, 15);
   for (const page of painted.pages) {
     assert.deepEqual(page.diagnostics, [], `preview page ${page.page}`);
     assert.ok(page.png !== undefined, `preview page ${page.page} png`);
@@ -41,7 +64,7 @@ it("full deck preserves 14 slides, zero-diagnostic static preview, native charts
     allowedExtensions: ["p14", "p159"],
   });
   assert.deepEqual(file.errors, []);
-  assert.equal(file.slides.length, 14);
+  assert.equal(file.slides.length, 15);
   assert.deepEqual(
     file.slides.map((slide) => slide.id),
     [
@@ -58,9 +81,28 @@ it("full deck preserves 14 slides, zero-diagnostic static preview, native charts
       "production-metrics",
       "r1-rl-distill",
       "frontier-benchmarks",
+      "github-projects",
       "open-infra-synthesis",
     ],
   );
+
+  const githubPage = file.slides.find(({ id }) => id === "github-projects")!;
+  const githubChart = githubPage.objects.find(
+    ({ chart }) => chart !== undefined,
+  )?.chart;
+  assert.deepEqual(githubChart?.series[0]?.categories, [...projects.keys()]);
+  assert.deepEqual(githubChart?.series[0]?.values, [...projects.values()]);
+  for (const name of projects.keys()) {
+    assert.ok(
+      githubPage.objects.some(
+        ({ text, link }) =>
+          text?.text === name &&
+          link &&
+          "url" in link &&
+          link.url === `https://github.com/deepseek-ai/${name}`,
+      ),
+    );
+  }
 
   const openingSlide = file.slides.find(({ id }) => id === "opening")!;
   const kpiAuthorIds = Array.from(
@@ -165,7 +207,7 @@ it("full deck preserves 14 slides, zero-diagnostic static preview, native charts
         : [{ slideId: slide.id, chart: object.chart }],
     ),
   );
-  assert.equal(charts.length, 12);
+  assert.equal(charts.length, 13);
   for (const { slideId, chart } of charts) {
     assert.ok(
       chart.series.length > 0,
@@ -223,3 +265,19 @@ it("full deck preserves 14 slides, zero-diagnostic static preview, native charts
     }
   }
 }, 60_000);
+
+it("identifies the repository and HTTP status when fetching projects fails", async () => {
+  await assert.rejects(
+    fetchGitHubProjects(async (input) => {
+      assert.ok(typeof input === "string");
+      const name = new URL(input).pathname.split("/").at(-1);
+      if (name === "DeepEP") return new Response(null, { status: 403 });
+      return Response.json({
+        name,
+        html_url: `https://github.com/deepseek-ai/${name}`,
+        stargazers_count: 1,
+      });
+    }),
+    /deepseek-ai\/DeepEP.*403/u,
+  );
+});

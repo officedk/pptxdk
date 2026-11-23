@@ -12,7 +12,7 @@ test-results/
 .changeset/packed/
 
 /.agents
-docs/
+/docs
 /AGENTS.md
 /.scratch
 /.codex

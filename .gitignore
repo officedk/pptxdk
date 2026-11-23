@@ -7,7 +7,6 @@ coverage/
 .env
 .template/
 .vitest/
-data/
 playwright-report/
 test-results/
 .changeset/packed/

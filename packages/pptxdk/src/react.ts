@@ -28,6 +28,10 @@ export {
   type StepProps,
 } from "@pptxdk/capabilities/motion-elements";
 export { Notes, type NotesProps } from "@pptxdk/capabilities/notes-elements";
+export {
+  Placeholder,
+  type PlaceholderProps,
+} from "@pptxdk/capabilities/placeholder-elements";
 export { Shape, type ShapeProps } from "@pptxdk/capabilities/shape-elements";
 export {
   Cell,
@@ -89,8 +93,11 @@ export type {
   FontOptions,
   FontReference,
   FontSize,
+  FooterPlaceholderSpec,
+  FooterPlaceholders,
   FormatScheme,
   GradientStop,
+  HeaderFooter,
   LayoutLength,
   LayoutPlaceholderSpec,
   LayoutSpacing,
@@ -108,6 +115,7 @@ export type {
   PlaceholderListStyles,
   PlaceholderMap,
   PlaceholderOrient,
+  PlaceholderSize,
   PlaceholderStyle,
   PlaceholderSz,
   RadialGradient,
@@ -116,8 +124,10 @@ export type {
   SchemeColorSlot,
   Shadow,
   SlideBackground,
+  SlideFooterValue,
   SlideLayoutDefinition,
   SlideLayoutType,
+  SlideNumberValue,
   StyleUpdate,
   TextPlaceholderRole,
   Theme,

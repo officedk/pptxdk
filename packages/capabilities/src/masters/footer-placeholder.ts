@@ -53,6 +53,7 @@ import {
   resolveTextBody,
   type ResolvedTextBody,
 } from "../shared/text-service.ts";
+import { footerPlaceholderCodegen } from "./masters-codegen.ts";
 
 export type FooterPlaceholderSlotKey = "dateTime" | "footer" | "slideNumber";
 
@@ -1015,6 +1016,7 @@ export const footerPlaceholderCapability = {
   slot: "shape-tree",
   always: true,
   mechanisms: [footerPlaceholderMechanism] as const,
+  codegen: footerPlaceholderCodegen,
   bindSlide(
     input: CapabilityInput,
     context: SlideCapabilityParseContext,

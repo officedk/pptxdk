@@ -60,6 +60,7 @@ import {
   readNvPrPlaceholder,
 } from "../shared/placeholder-import.ts";
 import { resolvePlaceholderGeometry } from "../shared/style-inheritance.ts";
+import { placeholderCodegen } from "./placeholder-codegen.ts";
 
 const NonVisualSpIdSchema = z.object({
   id: ooxmlNonNegativeIntSchema,
@@ -341,6 +342,7 @@ export const contentPlaceholderMechanism = defineCanvasMechanism({
 export const placeholderCapability = {
   declaration: "placeholder",
   mechanisms: [contentPlaceholderMechanism] as const,
+  codegen: placeholderCodegen,
 
   bind(
     input: CapabilityInput,

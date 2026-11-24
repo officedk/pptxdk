@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@ykdz/cli-contract": "catalog:",
+    "fflate": "catalog:",
     "pptxdk": "workspace:*",
     "zod": "catalog:"
   },

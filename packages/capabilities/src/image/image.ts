@@ -39,6 +39,7 @@ import {
   type ResolvedBorder,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
+import { imageCodegen } from "./image-codegen.ts";
 import { imageVisualStyleKeys, type ImageFit } from "./image-declaration.ts";
 import {
   decodeImageToPngBytes,
@@ -515,6 +516,7 @@ export const picturePlaceholderMechanism = defineCanvasMechanism({
 /** Image module reads and validates formal resources, encapsulates bound state, and emits native picture objects. */
 export const imageCapability = {
   declaration: "image",
+  codegen: imageCodegen,
   mechanisms: [imageMechanism, picturePlaceholderMechanism] as const,
 
   bind(

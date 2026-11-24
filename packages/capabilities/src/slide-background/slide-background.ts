@@ -28,6 +28,7 @@ import {
   resolveGradientSpec,
   type ResolvedGradientStop,
 } from "../shared/visual.ts";
+import { slideBackgroundCodegen } from "./slide-background-codegen.ts";
 import { readSlideBackgroundSlot } from "./slide-background-import.ts";
 import {
   slideBackgroundGradientXml,
@@ -372,6 +373,7 @@ export const slideBackgroundCapability = {
   slideProp: "background",
   slot: "background",
   always: true,
+  codegen: slideBackgroundCodegen,
   mechanisms: [
     slideBackgroundSolidMechanism,
     slideBackgroundGradientMechanism,

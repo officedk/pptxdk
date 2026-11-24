@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validatePptx, type ValidationResult } from "@pptxdk/validation";
-import type { CodegenResult } from "pptxdk";
+import type { BuildOptions, CodegenResult } from "pptxdk";
 import { buildFromSource, type BuildResult } from "pptxdk/node";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -181,6 +181,7 @@ export async function rebuildGeneratedSourceRelocated(
   result: CodegenResult,
   options: {
     readonly verifyVanillaIsolation?: boolean;
+    readonly buildOptions?: BuildOptions;
   } = {},
 ): Promise<RelocatedRebuildOutcome> {
   const tempRoot = await mkdtemp(join(tmpdir(), "pptxdk-codegen-rebuild-"));
@@ -204,7 +205,7 @@ export async function rebuildGeneratedSourceRelocated(
       assertVanillaBuildFromSourceIsolatesReactAndPreview(entryPath);
     }
 
-    const built = await buildFromSource(entryPath);
+    const built = await buildFromSource(entryPath, options.buildOptions);
     const file = await validatePptx(built.pptx);
     return { built, file };
   } finally {

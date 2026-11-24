@@ -434,6 +434,8 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
     const expectedChecksums: Readonly<Record<string, string>> = {
       "WithMaster.pptx":
         "54ae7677fd2813a815160cc72bd8960a4e482690dfc369b392868521c9b61549",
+      "brand-master-inheritance-override.pptx":
+        "de3376969353a2322ccce48182393f63eea9a44f5a231565985bcb5d3d336536",
       "layouts.pptx":
         "9c3d53afa3115de2ba72ec77637a616aeed505a6ff3b30a46db871c4edd32be5",
       "placeholder-layout-color.pptx":

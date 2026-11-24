@@ -21,6 +21,7 @@ import {
   type TransitionDirection,
   type TransitionSpeed,
 } from "./transition-api.ts";
+import { transitionCodegen } from "./transition-codegen.ts";
 import { readSlideTransitionImport } from "./transition-import.ts";
 
 export {
@@ -469,6 +470,7 @@ export const transitionCapability = {
   slideProp: "transition",
   slideProps: ["transition", "advanceAfter"],
   slot: "transition",
+  codegen: transitionCodegen,
   mechanisms: [
     transitionFadeMechanism,
     transitionStripsMechanism,

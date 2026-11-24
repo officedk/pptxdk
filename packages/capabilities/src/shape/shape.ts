@@ -79,6 +79,7 @@ import {
   solidFillMechanism,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
+import { shapeCodegen } from "./shape-codegen.ts";
 import {
   shapeCoordinateSchema,
   shapeDeclarationPropsKeys,
@@ -341,6 +342,7 @@ export const customGeometryShapeMechanism = defineCanvasMechanism({
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
 export const shapeCapability = {
   declaration: "shape",
+  codegen: shapeCodegen,
   mechanisms: [
     presetShapeMechanism,
     customGeometryShapeMechanism,

@@ -31,6 +31,7 @@ import {
   parseMorphKey,
   parseOptionalName,
 } from "../shared/identity.ts";
+import { groupCodegen } from "./group-codegen.ts";
 import {
   groupDeclarationPropsKeys,
   groupDeclarationPropsSchema,
@@ -209,6 +210,7 @@ export const groupMechanism = defineCanvasMechanism({
 /** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
 export const groupCapability = {
   declaration: "group",
+  codegen: groupCodegen,
   mechanisms: [groupMechanism] as const,
 
   bind(

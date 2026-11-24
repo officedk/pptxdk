@@ -5,16 +5,26 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rename,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { validatePptx } from "@pptxdk/validation";
-import { fontEmbeddingModeSchema, targetNameSchema } from "pptxdk";
+import { strFromU8, unzipSync, zipSync } from "fflate";
+import {
+  build,
+  codegen,
+  codegenTargetSchema,
+  fontEmbeddingModeSchema,
+  targetNameSchema,
+} from "pptxdk";
+import { buildFromSource, importPptxFile } from "pptxdk/node";
 import { previewPageNumberSchema } from "pptxdk/preview";
+import { deck, font as vanillaFont, image, slide, text } from "pptxdk/vanilla";
 import { describe, expect, it } from "vitest";
 
 import { runCli } from "../src/index.ts";
@@ -102,7 +112,11 @@ describe("pptxdk CLI build", () => {
       kind: "directory",
       schemaVersion: "5",
       command: "pptxdk",
-      children: [{ command: "build" }, { command: "preview" }],
+      children: [
+        { command: "build" },
+        { command: "preview" },
+        { command: "codegen" },
+      ],
     });
 
     const buildSchema = await runInMemory(
@@ -874,6 +888,7 @@ describe("pptxdk CLI preview", () => {
     expect(parsedRootSchema.children.map((child) => child.command)).toEqual([
       "build",
       "preview",
+      "codegen",
     ]);
 
     const previewHelp = await runInMemory(
@@ -2163,6 +2178,820 @@ const code = await runCli({
 });
 if (code !== 0) {
   throw new Error("CLI build exited with code " + code);
+}
+process.stdout.write("ok");
+`;
+      const child = runNode(
+        ["--conditions=source", "--input-type=module", "--eval", script],
+        cliRoot,
+      );
+      expect(child.code).toBe(0);
+      expect(child.stdout).toBe("ok");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("pptxdk CLI codegen", () => {
+  it("exposes codegen help, shared text/structured contract schemas, mutual exclusion, and invalidOutput checks", async () => {
+    const rootHelp = await runInMemory(["--help"], import.meta.dirname);
+    expect(rootHelp.code).toBe(0);
+    expect(rootHelp.stdout).toContain("codegen");
+
+    const codegenHelp = await runInMemory(
+      ["codegen", "-h"],
+      import.meta.dirname,
+    );
+    expect(codegenHelp.code).toBe(0);
+    expect(codegenHelp.stderr).toBe("");
+    expect(codegenHelp.stdout).toContain("pptxdk codegen [--output <mode>]");
+    expect(codegenHelp.stdout).toContain("--target");
+    expect(codegenHelp.stdout).toContain("-t");
+    expect(codegenHelp.stdout).toContain("--out-dir");
+    expect(codegenHelp.stdout).toContain("--out-zip");
+    expect(codegenHelp.stdout).toContain("Constraints");
+    expect(codegenHelp.stdout).toContain("Schema");
+    expect(codegenHelp.stdout).toContain('(choices: "vanilla", "react")');
+
+    const codegenSummary = await runInMemory(
+      ["codegen", "--schema"],
+      import.meta.dirname,
+    );
+    expect(codegenSummary.code).toBe(0);
+    expect(JSON.parse(codegenSummary.stdout)).toMatchObject({
+      kind: "summary",
+      schemaVersion: "5",
+      command: "codegen",
+    });
+
+    const codegenInput = await runInMemory(
+      ["codegen", "--schema=input"],
+      import.meta.dirname,
+    );
+    expect(codegenInput.code).toBe(0);
+    expect(JSON.parse(codegenInput.stdout)).toMatchObject({
+      kind: "input",
+      schemaVersion: "5",
+      command: "codegen",
+      usageConstraints: [
+        { kind: "count", fields: ["outDir", "outZip"], max: 1 },
+      ],
+      input: {
+        inputSchema: {
+          required: ["entry", "target"],
+          properties: {
+            target: { enum: codegenTargetSchema.options },
+          },
+        },
+      },
+    });
+
+    const [successText, successStructured, failuresText, failuresStructured] =
+      await Promise.all([
+        runInMemory(["codegen", "--schema=success:text"], import.meta.dirname),
+        runInMemory(
+          ["codegen", "--schema=success:structured"],
+          import.meta.dirname,
+        ),
+        runInMemory(["codegen", "--schema=failures:text"], import.meta.dirname),
+        runInMemory(
+          ["codegen", "--schema=failures:structured"],
+          import.meta.dirname,
+        ),
+      ]);
+    for (const response of [
+      successText,
+      successStructured,
+      failuresText,
+      failuresStructured,
+    ]) {
+      expect(response.code).toBe(0);
+    }
+    const parsedSuccessText = JSON.parse(successText.stdout) as {
+      readonly success: unknown;
+    };
+    const parsedSuccessStructured = JSON.parse(successStructured.stdout) as {
+      readonly success: unknown;
+    };
+    expect(parsedSuccessText).toMatchObject({
+      kind: "success",
+      schemaVersion: "5",
+      command: "codegen",
+      mode: "text",
+      success: {
+        kind: "data",
+        variants: {
+          generated: {
+            exitCode: 0,
+            outputSchema: {
+              required: [
+                "target",
+                "delivery",
+                "output",
+                "entry",
+                "files",
+                "slides",
+                "diagnostics",
+              ],
+            },
+          },
+        },
+      },
+    });
+    expect(parsedSuccessText.success).toEqual(parsedSuccessStructured.success);
+
+    const parsedFailuresText = JSON.parse(failuresText.stdout) as {
+      readonly failures: Record<string, unknown>;
+    };
+    const parsedFailuresStructured = JSON.parse(failuresStructured.stdout) as {
+      readonly failures: Record<string, unknown>;
+    };
+    expect(Object.keys(parsedFailuresStructured.failures)).toEqual([
+      "invalidOutput",
+      "inputReadFailed",
+      "importFailed",
+      "codegenFailed",
+      "writeFailed",
+      "cancelled",
+    ]);
+    expect(parsedFailuresText.failures).toEqual(
+      parsedFailuresStructured.failures,
+    );
+
+    const directory = await mkdtemp(
+      join(tmpdir(), "pptxdk-cli-codegen-usage-"),
+    );
+    try {
+      const missingEntry = await runInMemory(
+        ["codegen", "--target", "vanilla"],
+        directory,
+      );
+      expect(missingEntry.code).toBe(2);
+      expect(missingEntry.stdout).toBe("");
+      expect(JSON.parse(missingEntry.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        kind: "usageFailure",
+      });
+
+      const missingTarget = await runInMemory(
+        ["codegen", "deck.pptx"],
+        directory,
+      );
+      expect(missingTarget.code).toBe(2);
+      expect(missingTarget.stdout).toBe("");
+
+      const invalidTarget = await runInMemory(
+        ["codegen", "deck.pptx", "-t", "svelte"],
+        directory,
+      );
+      expect(invalidTarget.code).toBe(2);
+
+      const mutuallyExclusive = await runInMemory(
+        [
+          "codegen",
+          "deck.pptx",
+          "--target",
+          "react",
+          "--out-dir",
+          "dir-out",
+          "--out-zip",
+          "out.zip",
+        ],
+        directory,
+      );
+      expect(mutuallyExclusive.code).toBe(2);
+      expect(mutuallyExclusive.stdout).toBe("");
+      expect(JSON.parse(mutuallyExclusive.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        kind: "usageFailure",
+        issues: [{ code: "countConstraintViolation" }],
+      });
+      expect(existsSync(join(directory, "dir-out"))).toBe(false);
+      expect(existsSync(join(directory, "out.zip"))).toBe(false);
+
+      const inputPptx = join(directory, "deck.pptx");
+      const { pptx } = await build(
+        deck({ width: 120, height: 96 }).append(slide({ id: "s1" })),
+      );
+      await writeFile(inputPptx, pptx);
+
+      const symlinkInput = join(directory, "deck-link.pptx");
+      await symlink(inputPptx, symlinkInput);
+      const sameZip = await runInMemory(
+        [
+          "codegen",
+          inputPptx,
+          "-t",
+          "vanilla",
+          "--out-zip",
+          symlinkInput,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(sameZip.code).toBe(2);
+      expect(sameZip.stdout).toBe("");
+      expect(JSON.parse(sameZip.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        kind: "failure",
+        variant: "invalidOutput",
+        data: { entry: inputPptx, output: symlinkInput },
+      });
+
+      const existingFile = join(directory, "not-a-dir");
+      await writeFile(existingFile, "occupied");
+      const fileOutDir = await runInMemory(
+        ["codegen", inputPptx, "-t", "react", "--out-dir", existingFile],
+        directory,
+      );
+      expect(fileOutDir.code).toBe(2);
+      expect(fileOutDir.stdout).toBe("");
+      expect(fileOutDir.stderr).toContain(
+        "Output directory cannot be a non-directory path",
+      );
+
+      const loopA = join(directory, "loop-a");
+      const loopB = join(directory, "loop-b");
+      await symlink(loopB, loopA);
+      await symlink(loopA, loopB);
+      const loopOutDir = await runInMemory(
+        ["codegen", inputPptx, "-t", "react", "--out-dir", loopA],
+        directory,
+      );
+      expect(loopOutDir.code).toBe(2);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("delivers identical directory and deterministic ZIP outputs with image and font assets that rebuild after deleting input and relocating", async () => {
+    const collectDirFiles = async (
+      rootDir: string,
+      prefix = "",
+    ): Promise<Record<string, Uint8Array>> => {
+      const entries = await readdir(rootDir, { withFileTypes: true });
+      const collected: Record<string, Uint8Array> = {};
+      for (const entry of entries) {
+        const relPath = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+        const fullPath = join(rootDir, entry.name);
+        if (entry.isDirectory()) {
+          Object.assign(collected, await collectDirFiles(fullPath, relPath));
+        } else {
+          collected[relPath] = new Uint8Array(await readFile(fullPath));
+        }
+      }
+      return collected;
+    };
+
+    const writeUnzippedEntries = async (
+      targetDir: string,
+      entries: Record<string, Uint8Array>,
+    ): Promise<void> => {
+      for (const [relPath, bytes] of Object.entries(entries)) {
+        const dest = join(targetDir, ...relPath.split("/"));
+        await mkdir(dirname(dest), { recursive: true });
+        await writeFile(dest, bytes);
+      }
+    };
+
+    const stageRoot = await mkdtemp(join(tmpdir(), "pptxdk-cli-codegen-e2e-"));
+    const consumerRoot = await mkdtemp(
+      join(tmpdir(), "pptxdk-cli-codegen-consumer-"),
+    );
+    try {
+      const inputDir = join(stageRoot, "input");
+      await mkdir(inputDir, { recursive: true });
+      const inputPptx = join(inputDir, "deck.pptx");
+
+      const jostBytes = new Uint8Array(
+        await readFile(fixture("Jost-400-Book.ttf")),
+      );
+      const pngBytes = Uint8Array.from(
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+      );
+
+      const jostFont = vanillaFont("Jost*", [{ weight: 400, data: jostBytes }]);
+      const sourceDeck = deck({ width: 320, height: 180 }).append(
+        slide({ id: "asset-slide" }).append(
+          text("CLI Asset Heading", {
+            id: "asset-heading",
+            x: 20,
+            y: 16,
+            width: 240,
+            height: 40,
+            style: { fontFamily: jostFont, fontSize: 18, color: "#1E293B" },
+          }),
+          image({
+            id: "hero-image",
+            x: 20,
+            y: 72,
+            width: 80,
+            height: 60,
+            src: pngBytes,
+            alt: "Red pixel",
+          }),
+        ),
+      );
+
+      const { pptx } = await build(sourceDeck, { embedFonts: "full" });
+      await writeFile(inputPptx, pptx);
+
+      const imported = await importPptxFile(inputPptx);
+      expect(imported.report.diagnostics).toEqual([]);
+
+      // Default --out-dir creates <stem>-source in cwd.
+      const defaultCwd = join(stageRoot, "default-cwd");
+      await mkdir(defaultCwd, { recursive: true });
+      const defaultVanilla = runNode(
+        [cli, "codegen", inputPptx, "--target", "vanilla"],
+        defaultCwd,
+      );
+      expect(defaultVanilla.code).toBe(0);
+      expect(defaultVanilla.stderr).toBe("");
+      expect(defaultVanilla.stdout).toContain(
+        `Generated vanilla source (directory): ${join(defaultCwd, "deck-source")}`,
+      );
+      expect(defaultVanilla.stdout).toContain("Entry: deck.ts");
+
+      const deliveries: {
+        readonly target: "vanilla" | "react";
+        readonly dirPath: string;
+        readonly zipPath: string;
+        readonly entry: string;
+      }[] = [];
+
+      for (const target of ["vanilla", "react"] as const) {
+        const expected = codegen(imported.document, { target });
+        const expectedPaths = Object.keys(expected.files).toSorted((a, b) =>
+          a < b ? -1 : a > b ? 1 : 0,
+        );
+        expect(expectedPaths.some((p) => p.startsWith("assets/"))).toBe(true);
+
+        const outDir = join(stageRoot, `${target}-dir`);
+        const outZip = join(stageRoot, `${target}.zip`);
+
+        const dirResult = runNode(
+          [
+            cli,
+            "codegen",
+            inputPptx,
+            "-t",
+            target,
+            "--out-dir",
+            outDir,
+            "--output",
+            "structured",
+          ],
+          stageRoot,
+        );
+        expect(dirResult.code).toBe(0);
+        expect(dirResult.stderr).toBe("");
+        expect(JSON.parse(dirResult.stdout)).toEqual({
+          schemaVersion: "3",
+          command: "codegen",
+          outputMode: "structured",
+          kind: "data",
+          variant: "generated",
+          data: {
+            target,
+            delivery: "directory",
+            output: outDir,
+            entry: expected.entry,
+            files: expectedPaths,
+            slides: 1,
+            diagnostics: [],
+          },
+        });
+
+        const zipResult = await runInMemory(
+          [
+            "codegen",
+            inputPptx,
+            "--target",
+            target,
+            "--out-zip",
+            outZip,
+            "--output",
+            "structured",
+          ],
+          stageRoot,
+        );
+        expect(zipResult.code).toBe(0);
+        expect(zipResult.stderr).toBe("");
+        expect(JSON.parse(zipResult.stdout)).toEqual({
+          schemaVersion: "3",
+          command: "codegen",
+          outputMode: "structured",
+          kind: "data",
+          variant: "generated",
+          data: {
+            target,
+            delivery: "zip",
+            output: outZip,
+            entry: expected.entry,
+            files: expectedPaths,
+            slides: 1,
+            diagnostics: [],
+          },
+        });
+
+        // Repeat ZIP generation must produce byte-identical archive.
+        const outZipRepeat = join(stageRoot, `${target}-repeat.zip`);
+        const repeatResult = await runInMemory(
+          ["codegen", inputPptx, "-t", target, "--out-zip", outZipRepeat],
+          stageRoot,
+        );
+        expect(repeatResult.code).toBe(0);
+        const zipBytes = await readFile(outZip);
+        const zipRepeatBytes = await readFile(outZipRepeat);
+        expect(Buffer.compare(zipBytes, zipRepeatBytes)).toBe(0);
+
+        const dirFiles = await collectDirFiles(outDir);
+        const unzippedFiles = unzipSync(new Uint8Array(zipBytes));
+
+        expect(Object.keys(dirFiles).toSorted()).toEqual(expectedPaths);
+        expect(Object.keys(unzippedFiles).toSorted()).toEqual(expectedPaths);
+        for (const relPath of expectedPaths) {
+          const expectedContent = expected.files[relPath];
+          const expectedBytes =
+            typeof expectedContent === "string"
+              ? Buffer.from(expectedContent, "utf8")
+              : Buffer.from(expectedContent!);
+          expect(Buffer.from(dirFiles[relPath]!)).toEqual(expectedBytes);
+          expect(Buffer.from(unzippedFiles[relPath]!)).toEqual(expectedBytes);
+        }
+
+        deliveries.push({
+          target,
+          dirPath: outDir,
+          zipPath: outZip,
+          entry: expected.entry,
+        });
+      }
+
+      // Remove original input PPTX completely before relocated rebuilds.
+      await rm(inputDir, { recursive: true, force: true });
+      expect(existsSync(inputPptx)).toBe(false);
+
+      // Prepare isolated consumer environment resolving only public pptxdk and react packages.
+      const cliNodeModules = join(import.meta.dirname, "../node_modules");
+      await mkdir(join(consumerRoot, "node_modules"), { recursive: true });
+      await symlink(
+        join(cliNodeModules, "pptxdk"),
+        join(consumerRoot, "node_modules/pptxdk"),
+        "dir",
+      );
+      await symlink(
+        join(cliNodeModules, "react"),
+        join(consumerRoot, "node_modules/react"),
+        "dir",
+      );
+
+      for (const item of deliveries) {
+        const movedDir = join(consumerRoot, `moved-${item.target}`);
+        const unzippedDir = join(consumerRoot, `unzipped-${item.target}`);
+        await rename(item.dirPath, movedDir);
+        await writeUnzippedEntries(
+          unzippedDir,
+          unzipSync(new Uint8Array(await readFile(item.zipPath))),
+        );
+
+        for (const relocatedDir of [movedDir, unzippedDir]) {
+          const rebuilt = await buildFromSource(
+            join(relocatedDir, item.entry),
+            { embedFonts: "full" },
+          );
+          const validation = await validatePptx(rebuilt.pptx);
+          expect(validation.errors).toEqual([]);
+
+          const parts = unzipSync(rebuilt.pptx);
+          const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+          expect(slideXml).toContain("CLI Asset Heading");
+
+          const mediaEntries = Object.entries(parts).filter(([partPath]) =>
+            partPath.startsWith("ppt/media/"),
+          );
+          expect(
+            mediaEntries.some(
+              ([, bytes]) => Buffer.compare(bytes, pngBytes) === 0,
+            ),
+          ).toBe(true);
+
+          const presentationXml = strFromU8(parts["ppt/presentation.xml"]!);
+          expect(presentationXml).toContain("embeddedFontLst");
+          expect(presentationXml).toContain("Jost*");
+          const fontParts = Object.keys(parts).filter((partPath) =>
+            partPath.startsWith("ppt/fonts/"),
+          );
+          expect(fontParts.length).toBeGreaterThan(0);
+        }
+      }
+    } finally {
+      await rm(stageRoot, { recursive: true, force: true });
+      await rm(consumerRoot, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("surfaces import diagnostics while generating retained source on partial import", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "pptxdk-cli-codegen-partial-"),
+    );
+    try {
+      const { pptx } = await build(
+        deck({ width: 240, height: 140 }).append(
+          slide({ id: "partial-slide" }).append(
+            text("Retained Healthy Text", {
+              id: "healthy-text",
+              x: 16,
+              y: 16,
+              width: 180,
+              height: 40,
+            }),
+          ),
+        ),
+      );
+
+      const parts = unzipSync(pptx);
+      const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+      const mutatedSlideXml = slideXml.replace(
+        "</p:spTree>",
+        '<unknown:widget xmlns:unknown="https://pptxdk.example.com/unknown"/></p:spTree>',
+      );
+      expect(mutatedSlideXml).not.toBe(slideXml);
+      const partialPptx = zipSync({
+        ...parts,
+        "ppt/slides/slide1.xml": Buffer.from(mutatedSlideXml, "utf8"),
+      });
+
+      const partialPath = join(directory, "partial.pptx");
+      await writeFile(partialPath, partialPptx);
+      const expectedImport = await importPptxFile(partialPath);
+      expect(expectedImport.report.diagnostics.length).toBeGreaterThan(0);
+
+      const outDir = join(directory, "partial-react-dir");
+      const textResult = await runInMemory(
+        ["codegen", partialPath, "-t", "react", "--out-dir", outDir],
+        directory,
+      );
+      expect(textResult.code).toBe(0);
+      expect(textResult.stderr).toBe("");
+      expect(textResult.stdout).toContain("ppt/slides/slide1.xml");
+      expect(textResult.stdout).toContain(
+        expectedImport.report.diagnostics[0]!.code,
+      );
+      expect(textResult.stdout).toContain(
+        `Generated react source (directory): ${outDir}`,
+      );
+
+      const outZip = join(directory, "partial-vanilla.zip");
+      const structuredResult = await runInMemory(
+        [
+          "codegen",
+          partialPath,
+          "-t",
+          "vanilla",
+          "--out-zip",
+          outZip,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(structuredResult.code).toBe(0);
+      expect(structuredResult.stderr).toBe("");
+      expect(JSON.parse(structuredResult.stdout)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        outputMode: "structured",
+        kind: "data",
+        variant: "generated",
+        data: {
+          target: "vanilla",
+          delivery: "zip",
+          output: outZip,
+          entry: "deck.ts",
+          diagnostics: expectedImport.report.diagnostics,
+        },
+      });
+
+      const rebuilt = await buildFromSource(join(outDir, "deck.tsx"));
+      const rebuiltParts = unzipSync(rebuilt.pptx);
+      expect(strFromU8(rebuiltParts["ppt/slides/slide1.xml"]!)).toContain(
+        "Retained Healthy Text",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("reports inputReadFailed, importFailed, writeFailed, and cancelled without creating stale outputs, and never loads @resvg/resvg-js", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "pptxdk-cli-codegen-failures-"),
+    );
+    try {
+      const missingPptx = join(directory, "missing.pptx");
+      const missingOutDir = join(directory, "missing-out-dir");
+      const missingOutZip = join(directory, "missing-out.zip");
+
+      const readFailText = await runInMemory(
+        ["codegen", missingPptx, "-t", "vanilla", "--out-dir", missingOutDir],
+        directory,
+      );
+      expect(readFailText.code).toBe(1);
+      expect(readFailText.stdout).toBe("");
+      expect(readFailText.stderr).toContain(
+        `Failed to read PPTX input ${missingPptx}:`,
+      );
+      expect(existsSync(missingOutDir)).toBe(false);
+
+      const readFailStructured = await runInMemory(
+        [
+          "codegen",
+          missingPptx,
+          "-t",
+          "react",
+          "--out-zip",
+          missingOutZip,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(readFailStructured.code).toBe(1);
+      expect(readFailStructured.stdout).toBe("");
+      expect(JSON.parse(readFailStructured.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "inputReadFailed",
+        data: { entry: missingPptx },
+      });
+      expect(existsSync(missingOutZip)).toBe(false);
+
+      // Corrupt archive -> importFailed (corrupt-archive).
+      const corruptPath = join(directory, "corrupt.pptx");
+      await writeFile(corruptPath, Uint8Array.from([1, 2, 3, 4]));
+      const corruptOutDir = join(directory, "corrupt-out-dir");
+      const corruptRes = await runInMemory(
+        [
+          "codegen",
+          corruptPath,
+          "-t",
+          "vanilla",
+          "--out-dir",
+          corruptOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(corruptRes.code).toBe(1);
+      expect(corruptRes.stdout).toBe("");
+      expect(JSON.parse(corruptRes.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        kind: "failure",
+        variant: "importFailed",
+        data: {
+          entry: corruptPath,
+          issue: { code: "corrupt-archive" },
+        },
+      });
+      expect(existsSync(corruptOutDir)).toBe(false);
+
+      // Malformed presentation.xml -> importFailed with part location.
+      const { pptx: validPptx } = await build(
+        deck({ width: 120, height: 96 }).append(slide({ id: "s1" })),
+      );
+      const validParts = unzipSync(validPptx);
+      const malformedPath = join(directory, "malformed.pptx");
+      await writeFile(
+        malformedPath,
+        zipSync({
+          ...validParts,
+          "ppt/presentation.xml": Buffer.from("<p:presentation", "utf8"),
+        }),
+      );
+      const malformedRes = await runInMemory(
+        ["codegen", malformedPath, "-t", "react"],
+        directory,
+      );
+      expect(malformedRes.code).toBe(1);
+      expect(malformedRes.stdout).toBe("");
+      expect(malformedRes.stderr).toContain("malformed-xml");
+      expect(malformedRes.stderr).toContain("ppt/presentation.xml");
+      expect(existsSync(join(directory, "malformed-source"))).toBe(false);
+
+      // Strict OOXML baseline -> importFailed (unsupported-format-baseline).
+      const strictPath = join(directory, "strict.pptx");
+      const strictPresentationXml = strFromU8(
+        validParts["ppt/presentation.xml"]!,
+      ).replace(
+        "http://schemas.openxmlformats.org/presentationml/2006/main",
+        "http://purl.oclc.org/ooxml/presentationml/main",
+      );
+      await writeFile(
+        strictPath,
+        zipSync({
+          ...validParts,
+          "ppt/presentation.xml": Buffer.from(strictPresentationXml, "utf8"),
+        }),
+      );
+      const strictRes = await runInMemory(
+        ["codegen", strictPath, "-t", "vanilla", "--output", "structured"],
+        directory,
+      );
+      expect(strictRes.code).toBe(1);
+      expect(strictRes.stdout).toBe("");
+      expect(JSON.parse(strictRes.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        kind: "failure",
+        variant: "importFailed",
+        data: {
+          entry: strictPath,
+          issue: {
+            code: "unsupported-format-baseline",
+            baseline: "ISO/IEC 29500 Strict",
+            location: { part: "ppt/presentation.xml" },
+          },
+        },
+      });
+
+      // Write failure: ZIP path occupied by existing directory.
+      const healthyPath = join(directory, "healthy.pptx");
+      await writeFile(healthyPath, validPptx);
+      const occupiedDir = join(directory, "occupied-zip-dir");
+      await mkdir(occupiedDir, { recursive: true });
+      const writeFailRes = await runInMemory(
+        [
+          "codegen",
+          healthyPath,
+          "-t",
+          "vanilla",
+          "--out-zip",
+          occupiedDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(writeFailRes.code).toBe(1);
+      expect(writeFailRes.stdout).toBe("");
+      expect(JSON.parse(writeFailRes.stderr)).toMatchObject({
+        schemaVersion: "3",
+        command: "codegen",
+        kind: "failure",
+        variant: "writeFailed",
+        data: { output: occupiedDir },
+      });
+
+      // Pre-aborted signal -> cancelled (130), zero output.
+      const abortController = new AbortController();
+      abortController.abort(new Error("User aborted"));
+      const cancelledOutDir = join(directory, "cancelled-out");
+      const cancelledRes = await runInMemory(
+        ["codegen", healthyPath, "-t", "react", "--out-dir", cancelledOutDir],
+        directory,
+        abortController.signal,
+      );
+      expect(cancelledRes.code).toBe(130);
+      expect(cancelledRes.stdout).toBe("");
+      expect(cancelledRes.stderr).toBe("Source generation cancelled\n");
+      expect(existsSync(cancelledOutDir)).toBe(false);
+
+      // Running CLI `codegen` must never load @resvg/resvg-js.
+      const cliRoot = join(import.meta.dirname, "..");
+      const isolatedOut = join(directory, "isolated-codegen.zip");
+      const script = `
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.includes("@resvg/resvg-js")) {
+      throw new Error("CLI codegen loaded forbidden @resvg/resvg-js: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const { runCli } = await import("./src/index.ts");
+const code = await runCli({
+  argv: ["node", "pptxdk", "codegen", ${JSON.stringify(healthyPath)}, "--target", "react", "--out-zip", ${JSON.stringify(isolatedOut)}],
+  cwd: ${JSON.stringify(directory)},
+  write: () => {},
+});
+if (code !== 0) {
+  throw new Error("CLI codegen exited with code " + code);
 }
 process.stdout.write("ok");
 `;

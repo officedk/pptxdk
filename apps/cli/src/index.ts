@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { lstat, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  posix,
+  relative,
+  resolve,
+} from "node:path";
 
 import {
   CliWriteError,
@@ -15,16 +22,30 @@ import {
   type WriteCliOutput,
 } from "@ykdz/cli-contract";
 import { isNodeBrokenPipe } from "@ykdz/cli-contract/node";
+import { strToU8, zipSync } from "fflate";
 import {
   BuildError,
+  CodegenError,
+  ImportError,
+  codegen,
+  codegenTargetSchema,
+  fatalImportIssueSchema,
   fontEmbeddingModeSchema,
+  importDiagnosticSchema,
   targetNameSchema,
   targets,
+  type CodegenDiagnostic,
+  type CodegenFileContent,
   type Diagnostic,
+  type FatalImportIssue,
+  type ImportDiagnostic,
+  type ImportLocation,
+  type ImportResult,
   type Target,
 } from "pptxdk";
 import {
   buildFromSource,
+  importPptxFile,
   previewFromSource,
   SourceLoadError,
 } from "pptxdk/node";
@@ -146,6 +167,14 @@ export const previewInputSchema = z.object({
 });
 export type PreviewInput = z.infer<typeof previewInputSchema>;
 
+export const codegenInputSchema = z.object({
+  entry: z.string().min(1),
+  target: codegenTargetSchema,
+  outDir: z.string().min(1).optional(),
+  outZip: z.string().min(1).optional(),
+});
+export type CodegenInput = z.infer<typeof codegenInputSchema>;
+
 export const builtSchema = z.object({
   output: z.string(),
   slides: z.number().int().nonnegative(),
@@ -159,6 +188,17 @@ export const previewedSchema = z.object({
   warnings: z.array(diagnosticItemSchema),
 });
 export type PreviewedOutput = z.infer<typeof previewedSchema>;
+
+export const generatedSourceSchema = z.object({
+  target: codegenTargetSchema,
+  delivery: z.enum(["directory", "zip"]),
+  output: z.string(),
+  entry: z.string(),
+  files: z.array(z.string()),
+  slides: z.number().int().nonnegative(),
+  diagnostics: z.array(importDiagnosticSchema),
+});
+export type GeneratedSourceOutput = z.infer<typeof generatedSourceSchema>;
 
 const invalidOutputSchema = z.object({
   entry: z.string(),
@@ -183,6 +223,39 @@ const previewFailedSchema = z.object({
   pages: z.array(previewPageItemSchema),
   warnings: z.array(diagnosticItemSchema),
   diagnostics: z.array(previewDiagnosticItemSchema),
+});
+
+const inputReadFailedSchema = z.object({
+  entry: z.string(),
+  message: z.string(),
+});
+
+const importFailedSchema = z.object({
+  entry: z.string(),
+  issue: fatalImportIssueSchema,
+  message: z.string(),
+});
+
+const codegenDiagnosticItemSchema = z.object({
+  severity: z.literal("error"),
+  path: z.string(),
+  code: z.enum([
+    "invalid-document",
+    "invalid-options",
+    "unsupported-declaration",
+    "unsupported-slide-property",
+    "unexpressible-value",
+  ] satisfies readonly [
+    CodegenDiagnostic["code"],
+    ...CodegenDiagnostic["code"][],
+  ]),
+  message: z.string(),
+});
+
+const codegenFailedSchema = z.object({
+  entry: z.string(),
+  diagnostics: z.array(codegenDiagnosticItemSchema),
+  importDiagnostics: z.array(importDiagnosticSchema),
 });
 
 const writeFailedSchema = z.object({
@@ -210,7 +283,12 @@ function errnoCode(error: unknown): string | undefined {
 }
 
 function isCancelledError(error: unknown, signal?: AbortSignal): boolean {
-  return Boolean(signal?.aborted && error === signal.reason);
+  if (!signal?.aborted) return false;
+  return (
+    error === signal.reason ||
+    errnoCode(error) === "ABORT_ERR" ||
+    (error instanceof Error && error.name === "AbortError")
+  );
 }
 
 function extractWarnings(diagnostics: readonly Diagnostic[]) {
@@ -272,16 +350,16 @@ async function isSameExistingFile(
   }
 }
 
-type PreviewOutputDirValidation =
+type OutputDirValidation =
   | { readonly kind: "valid" }
   | { readonly kind: "invalidOutput" }
   | { readonly kind: "error"; readonly error: unknown };
 
-// Validate outputDir read-only before previewFromSource so source or build failures never create an empty directory.
-async function validatePreviewOutputDir(
+// Validate outputDir read-only before running source/import work so upstream failures never create an empty directory.
+async function validateOutputDir(
   entry: string,
   outDir: string,
-): Promise<PreviewOutputDirValidation> {
+): Promise<OutputDirValidation> {
   if (outDir === entry) return { kind: "invalidOutput" };
   try {
     const stats = await stat(outDir);
@@ -337,6 +415,167 @@ function presentBuildFailed({
       ),
     ]),
   );
+}
+
+// Fixed timestamp guarantees byte-identical ZIP output across repeated invocations for the same input.
+const fixedZipMtime = new Date("2020-01-01T00:00:00Z");
+
+type NormalizedCodegenFile = {
+  readonly path: string;
+  readonly bytes: Uint8Array;
+};
+
+function normalizeRelativePosixPath(rawPath: string): string | undefined {
+  if (
+    rawPath.length === 0 ||
+    rawPath.includes("\\") ||
+    rawPath.includes("\0") ||
+    rawPath.startsWith("/")
+  ) {
+    return undefined;
+  }
+  const normalized = posix.normalize(rawPath);
+  if (
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    posix.isAbsolute(normalized)
+  ) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function normalizeCodegenFiles(
+  files: Readonly<Record<string, CodegenFileContent>>,
+): readonly NormalizedCodegenFile[] {
+  const normalizedEntries: NormalizedCodegenFile[] = [];
+  for (const [rawPath, content] of Object.entries(files)) {
+    const normalizedPath = normalizeRelativePosixPath(rawPath);
+    if (normalizedPath === undefined) {
+      throw new Error(`Invalid generated relative file path: ${rawPath}`);
+    }
+    normalizedEntries.push({
+      path: normalizedPath,
+      bytes: typeof content === "string" ? strToU8(content) : content,
+    });
+  }
+  return normalizedEntries.toSorted((left, right) =>
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
+  );
+}
+
+function isWithinDirectory(directory: string, candidate: string): boolean {
+  const rel = relative(directory, candidate);
+  return (
+    rel.length > 0 &&
+    rel !== ".." &&
+    !rel.startsWith("../") &&
+    !rel.startsWith("..\\")
+  );
+}
+
+function formatImportLocation(location: ImportLocation): string {
+  const details: string[] = [location.part];
+  if (location.slideIndex !== undefined) {
+    details.push(`slide ${location.slideIndex + 1}`);
+  }
+  if (location.objectName !== undefined && location.objectName.length > 0) {
+    details.push(`object ${JSON.stringify(location.objectName)}`);
+  }
+  if (location.xpath !== undefined) {
+    details.push(`at ${location.xpath}`);
+  }
+  return details.join(" ");
+}
+
+function formatImportDiagnostic(diagnostic: ImportDiagnostic): string {
+  const locationText = formatImportLocation(diagnostic.location);
+  const extras: string[] = [];
+  switch (diagnostic.code) {
+    case "corrupt-part":
+      break;
+    case "missing-target-part":
+      extras.push(
+        `relationship=${diagnostic.relationshipId}`,
+        `target=${diagnostic.targetPart}`,
+      );
+      break;
+    case "broken-relationship":
+      extras.push(`relationship=${diagnostic.relationshipId}`);
+      break;
+    case "invalid-xml-value":
+      extras.push(`attributeOrElement=${diagnostic.attributeOrElement}`);
+      if (diagnostic.rawValue !== undefined) {
+        extras.push(`value=${JSON.stringify(diagnostic.rawValue)}`);
+      }
+      break;
+    case "unsupported-mechanism":
+      extras.push(`element=${diagnostic.namespaceUri}:${diagnostic.localName}`);
+      if (diagnostic.mechanismHint !== undefined) {
+        extras.push(`hint=${diagnostic.mechanismHint}`);
+      }
+      if (diagnostic.loss !== undefined) {
+        extras.push(
+          `loss=${diagnostic.loss.lost}->${diagnostic.loss.retainedAs}`,
+        );
+      }
+      break;
+    case "compatibility-fallback":
+      extras.push(
+        `preferred=${diagnostic.preferredMechanism}`,
+        `fallback=${diagnostic.selectedFallback}`,
+        `loss=${diagnostic.loss.lost}->${diagnostic.loss.retainedAs}`,
+      );
+      break;
+    case "unconsumed-xml":
+      extras.push(
+        `xml=${diagnostic.kind}:${diagnostic.namespaceUri}:${diagnostic.localName}`,
+      );
+      break;
+  }
+  if ("cascaded" in diagnostic && diagnostic.cascaded !== undefined) {
+    extras.push(`cascaded=${diagnostic.cascaded.length}`);
+  }
+  const detailSuffix = extras.length > 0 ? ` (${extras.join(", ")})` : "";
+  return `Import diagnostic [${diagnostic.code}] (${diagnostic.disposition}) ${locationText}${detailSuffix}`;
+}
+
+function formatFatalImportIssue(issue: FatalImportIssue): string {
+  switch (issue.code) {
+    case "corrupt-archive":
+      return "Corrupt PPTX archive";
+    case "missing-entry": {
+      const expected =
+        issue.expectedRelationshipType === undefined
+          ? ""
+          : ` (expected ${issue.expectedRelationshipType})`;
+      return `Missing entry at ${formatImportLocation(issue.location)}${expected}`;
+    }
+    case "malformed-xml": {
+      const detail = issue.detail === undefined ? "" : `: ${issue.detail}`;
+      return `Malformed XML at ${formatImportLocation(issue.location)}${detail}`;
+    }
+    case "broken-entry-relationship": {
+      const details = [
+        issue.relationshipId === undefined
+          ? undefined
+          : `relationship=${issue.relationshipId}`,
+        issue.target === undefined ? undefined : `target=${issue.target}`,
+      ].filter((item) => item !== undefined);
+      const suffix = details.length > 0 ? ` (${details.join(", ")})` : "";
+      return `Broken entry relationship at ${formatImportLocation(issue.location)}${suffix}`;
+    }
+    case "invalid-presentation-root": {
+      const rootName = [issue.namespaceUri, issue.localName]
+        .filter((item) => item !== undefined)
+        .join(":");
+      const suffix = rootName.length > 0 ? ` (${rootName})` : "";
+      return `Invalid presentation root at ${formatImportLocation(issue.location)}${suffix}`;
+    }
+    case "unsupported-format-baseline":
+      return `Unsupported format baseline ${issue.baseline} (${issue.detectedNamespace}) at ${formatImportLocation(issue.location)}`;
+  }
 }
 
 const define = defineCli<CliDependencies>();
@@ -611,7 +850,7 @@ const previewCommand = define.command("preview")({
           dependencies.cwd,
           input.outDir ?? `${basename(entry, extname(entry))}-preview`,
         );
-        const outputDirCheck = await validatePreviewOutputDir(entry, outputDir);
+        const outputDirCheck = await validateOutputDir(entry, outputDir);
         if (outputDirCheck.kind === "invalidOutput") {
           return outcome.failure.invalidOutput({ entry, output: outputDir });
         }
@@ -804,6 +1043,313 @@ const previewCommand = define.command("preview")({
   },
 });
 
+const codegenCommand = define.command("codegen")({
+  kind: "command",
+  parent: "pptxdk",
+  name: "codegen",
+  description:
+    "Generate rebuildable vanilla TypeScript or React TSX source from a PPTX file.",
+  fields: {
+    entry: {
+      kind: "positional",
+      description: "Input PPTX file path",
+    },
+    target: {
+      kind: "valueOption",
+      longOption: "--target",
+      shortAlias: "-t",
+      description: "Author source syntax target",
+    },
+    outDir: {
+      kind: "valueOption",
+      longOption: "--out-dir",
+      description:
+        "Directory for generated source and assets (defaults to <entry>-source in current directory)",
+    },
+    outZip: {
+      kind: "valueOption",
+      longOption: "--out-zip",
+      description: "ZIP archive path for generated source and assets",
+    },
+  },
+  usageConstraints: [{ kind: "count", fields: ["outDir", "outZip"], max: 1 }],
+  input: codegenInputSchema,
+  outputs: ({ atomic }) => {
+    const codegenDeck = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          generated: {
+            description: "Generated rebuildable source and assets",
+            exitCode: 0,
+            schema: generatedSourceSchema,
+          },
+        },
+      },
+      failures: {
+        invalidOutput: {
+          description:
+            "Output path is invalid, non-directory, or overwrites input PPTX",
+          exitCode: 2,
+          schema: invalidOutputSchema,
+        },
+        inputReadFailed: {
+          description: "Failed to read input PPTX file",
+          exitCode: 1,
+          schema: inputReadFailedSchema,
+        },
+        importFailed: {
+          description: "PPTX import failed with fatal issue",
+          exitCode: 1,
+          schema: importFailedSchema,
+        },
+        codegenFailed: {
+          description: "Source generation failed for editable declarations",
+          exitCode: 1,
+          schema: codegenFailedSchema,
+        },
+        writeFailed: {
+          description: "Failed to write generated source or ZIP archive",
+          exitCode: 1,
+          schema: writeFailedSchema,
+        },
+        cancelled: {
+          description: "Source generation cancelled",
+          exitCode: 130,
+          schema: cancelledSchema,
+        },
+      },
+      async handler({ input, dependencies, outcome }) {
+        if (dependencies.signal?.aborted) {
+          return outcome.failure.cancelled({});
+        }
+
+        const entry = resolve(dependencies.cwd, input.entry);
+        const delivery = input.outZip === undefined ? "directory" : "zip";
+        const output =
+          input.outZip !== undefined
+            ? resolve(dependencies.cwd, input.outZip)
+            : resolve(
+                dependencies.cwd,
+                input.outDir ?? `${basename(entry, extname(entry))}-source`,
+              );
+
+        if (delivery === "zip") {
+          if (await isSameExistingFile(entry, output)) {
+            return outcome.failure.invalidOutput({ entry, output });
+          }
+        } else {
+          const dirCheck = await validateOutputDir(entry, output);
+          if (dirCheck.kind === "invalidOutput") {
+            return outcome.failure.invalidOutput({ entry, output });
+          }
+          if (dirCheck.kind === "error") {
+            return outcome.failure.writeFailed({
+              output,
+              message: errorMessage(dirCheck.error),
+            });
+          }
+        }
+
+        let imported: ImportResult;
+        try {
+          imported = await importPptxFile(entry, {
+            ...(dependencies.signal !== undefined && {
+              signal: dependencies.signal,
+            }),
+          });
+        } catch (error) {
+          if (isCancelledError(error, dependencies.signal)) {
+            return outcome.failure.cancelled({});
+          }
+          if (error instanceof ImportError) {
+            return outcome.failure.importFailed({
+              entry,
+              issue: error.issue,
+              message: error.message,
+            });
+          }
+          return outcome.failure.inputReadFailed({
+            entry,
+            message: errorMessage(error),
+          });
+        }
+
+        if (dependencies.signal?.aborted) {
+          return outcome.failure.cancelled({});
+        }
+
+        const importDiagnostics = [...imported.report.diagnostics];
+        let generated: ReturnType<typeof codegen>;
+        try {
+          generated = codegen(imported.document, { target: input.target });
+        } catch (error) {
+          if (isCancelledError(error, dependencies.signal)) {
+            return outcome.failure.cancelled({});
+          }
+          if (error instanceof CodegenError) {
+            return outcome.failure.codegenFailed({
+              entry,
+              diagnostics: error.diagnostics.map(
+                ({ severity, path, code, message }) => ({
+                  severity,
+                  path,
+                  code,
+                  message,
+                }),
+              ),
+              importDiagnostics,
+            });
+          }
+          throw error;
+        }
+
+        if (dependencies.signal?.aborted) {
+          return outcome.failure.cancelled({});
+        }
+
+        const normalizedFiles = normalizeCodegenFiles(generated.files);
+        const filePaths = normalizedFiles.map((file) => file.path);
+
+        if (delivery === "zip") {
+          const zipEntries: Record<string, Uint8Array> = {};
+          for (const file of normalizedFiles) {
+            zipEntries[file.path] = file.bytes;
+          }
+          try {
+            const zipBytes = zipSync(zipEntries, {
+              level: 6,
+              mtime: fixedZipMtime,
+            });
+            await writeArtifact(output, zipBytes);
+          } catch (writeError) {
+            if (isCancelledError(writeError, dependencies.signal)) {
+              return outcome.failure.cancelled({});
+            }
+            return outcome.failure.writeFailed({
+              output,
+              message: errorMessage(writeError),
+            });
+          }
+        } else {
+          const plannedTargets: {
+            readonly targetPath: string;
+            readonly bytes: Uint8Array;
+          }[] = [];
+          for (const file of normalizedFiles) {
+            const targetPath = resolve(output, ...file.path.split("/"));
+            if (
+              !isWithinDirectory(output, targetPath) ||
+              (await isSameExistingFile(entry, targetPath))
+            ) {
+              return outcome.failure.invalidOutput({
+                entry,
+                output: targetPath,
+              });
+            }
+            plannedTargets.push({ targetPath, bytes: file.bytes });
+          }
+
+          for (const item of plannedTargets) {
+            if (dependencies.signal?.aborted) {
+              return outcome.failure.cancelled({});
+            }
+            try {
+              await writeArtifact(item.targetPath, item.bytes);
+            } catch (writeError) {
+              if (isCancelledError(writeError, dependencies.signal)) {
+                return outcome.failure.cancelled({});
+              }
+              return outcome.failure.writeFailed({
+                output: item.targetPath,
+                message: errorMessage(writeError),
+              });
+            }
+          }
+        }
+
+        return outcome.data.generated({
+          target: generated.target,
+          delivery,
+          output,
+          entry: generated.entry,
+          files: filePaths,
+          slides: imported.report.slideCount,
+          diagnostics: importDiagnostics,
+        });
+      },
+    });
+
+    return {
+      default: "text",
+      modes: {
+        text: codegenDeck.text({
+          description: "Human-readable text output",
+          success: {
+            generated: ({
+              target,
+              delivery,
+              output,
+              entry,
+              files,
+              diagnostics,
+            }) =>
+              text.lines(
+                toContractTextLines([
+                  ...diagnostics.map(formatImportDiagnostic),
+                  `Generated ${target} source (${delivery}): ${output}`,
+                  `Entry: ${entry}`,
+                  `Files: ${files.length}`,
+                ]),
+              ),
+          },
+          failures: {
+            invalidOutput: ({ output }) =>
+              text.lines(
+                toContractTextLines([
+                  `Output directory cannot be a non-directory path or overwrite input: ${output}`,
+                ]),
+              ),
+            inputReadFailed: ({ entry, message }) =>
+              text.lines(
+                toContractTextLines([
+                  `Failed to read PPTX input ${entry}: ${message}`,
+                ]),
+              ),
+            importFailed: ({ entry, issue, message }) =>
+              text.lines(
+                toContractTextLines([
+                  `Failed to import PPTX ${entry} [${issue.code}]: ${formatFatalImportIssue(issue)} (${message})`,
+                ]),
+              ),
+            codegenFailed: ({ diagnostics, importDiagnostics }) =>
+              text.lines(
+                toContractTextLines([
+                  ...importDiagnostics.map(formatImportDiagnostic),
+                  "Source generation failed:",
+                  ...diagnostics.map(
+                    (diagnostic) =>
+                      `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
+                  ),
+                ]),
+              ),
+            writeFailed: ({ output, message }) =>
+              text.lines(
+                toContractTextLines([
+                  `Failed to write generated output to ${output}: ${message}`,
+                ]),
+              ),
+            cancelled: () => text.line("Source generation cancelled"),
+          },
+        }),
+        structured: codegenDeck.structured({
+          description: "Structured JSON output",
+        }),
+      },
+    };
+  },
+});
+
 const cliContract = define({
   root: "pptxdk",
   help: helpCapability({
@@ -813,12 +1359,14 @@ const cliContract = define({
       commands: "Commands",
       arguments: "Arguments",
       options: "Options",
+      constraints: "Constraints",
       schema: "Schema",
     },
     wording: {
       commandPlaceholder: "command",
       choices: "(choices: {choices})",
       default: "(default: {value})",
+      countAtMost: "At most {max} of {fields} may be specified",
     },
   }),
   version: versionCapability({
@@ -834,10 +1382,11 @@ const cliContract = define({
     pptxdk: {
       kind: "rootGroup",
       name: "pptxdk",
-      description: "Build and preview PowerPoint decks from source modules.",
+      description: "Build, preview, and generate source from PowerPoint decks.",
     },
     ...buildCommand,
     ...previewCommand,
+    ...codegenCommand,
   },
 });
 

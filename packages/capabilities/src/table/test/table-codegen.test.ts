@@ -147,10 +147,7 @@ describe("table capability codegen", () => {
     assert.match(vanillaSource, /columns: \[130, "auto", "1fr"\]/u);
     assert.match(vanillaSource, /columns: \["1fr", "2fr"\]/u);
     assert.match(vanillaSource, /placeholder: "data"/u);
-    assert.match(
-      vanillaSource,
-      /nativePlaceholder: \{ type: "tbl", explicitType: true, idx: 1 \}/u,
-    );
+    assert.doesNotMatch(vanillaSource, /nativePlaceholder/u);
     assert.match(vanillaSource, /colSpan: 2/u);
     assert.match(vanillaSource, /rowSpan: 2/u);
     assert.match(vanillaSource, /borderStyle: "dashed"/u);
@@ -432,10 +429,7 @@ describe("table capability codegen", () => {
     const vanillaSource = vanilla.files[vanilla.entry] as string;
     assert.match(vanillaSource, /name: "Table Placeholder 2"/u);
     assert.match(vanillaSource, /placeholder: "tbl"/u);
-    assert.match(
-      vanillaSource,
-      /nativePlaceholder: \{ type: "tbl", explicitType: true, idx: 10, sz: "quarter" \}/u,
-    );
+    assert.doesNotMatch(vanillaSource, /nativePlaceholder/u);
     assert.match(vanillaSource, /columns: \[192, 192\]/u);
 
     const react = generate(imported.document, { target: "react" });

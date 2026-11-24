@@ -39,6 +39,7 @@ import {
   type TextResourceClaim,
 } from "../shared/text-service.ts";
 import type { TextStyle } from "../shared/text-service.ts";
+import { chartCodegen } from "./chart-codegen.ts";
 import {
   chartImportHandler,
   chartPlaceholderImportHandler,
@@ -1026,6 +1027,7 @@ const chartMechanismsByKind = {
 /** Chart module validates input and resolves chart data/configuration for native emit and static paint. */
 export const chartCapability = {
   declaration: "chart",
+  codegen: chartCodegen,
   mechanisms: [
     chartColumnMechanism,
     chartBarMechanism,

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { CommonNode } from "@pptxdk/core/document";
 import { CodegenError, build, codegen, importPptx } from "pptxdk";
+import { createCodegen } from "pptxdk/build";
 import {
   Deck,
   P,
@@ -270,7 +272,8 @@ process.stdout.write("ok");
       }
     }
 
-    const unsupportedDeclDeck = deck({ width: 960, height: 540 }).append(
+    const trimmedCodegen = createCodegen([]);
+    const trimmedChartDeck = deck({ width: 960, height: 540 }).append(
       section({ name: "Main" }).append(
         slide({ id: "s-chart" }).append(
           chart({
@@ -292,11 +295,30 @@ process.stdout.write("ok");
     );
 
     assert.throws(
-      () => codegen(unsupportedDeclDeck, { target: "vanilla" }),
+      () => trimmedCodegen(trimmedChartDeck, { target: "vanilla" }),
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "unsupported-declaration" &&
         error.diagnostics[0]?.path === "deck/slide[s-chart]/chart[sales-chart]",
+    );
+
+    const unknownDeclDeck = deck({ width: 960, height: 540 }).append(
+      section({ name: "Main" }).append(
+        slide({ id: "s-unknown" }).append(
+          new CommonNode("custom-unsupported", "custom-unsupported", {
+            id: "unknown-widget",
+          }),
+        ),
+      ),
+    );
+
+    assert.throws(
+      () => codegen(unknownDeclDeck, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "unsupported-declaration" &&
+        error.diagnostics[0]?.path ===
+          "deck/slide[s-unknown]/custom-unsupported[unknown-widget]",
     );
 
     const invalidNumberDeck = deck({ width: 960, height: 540 }).append(

@@ -26,6 +26,40 @@ export default defineConfig({
       },
     },
     {
+      files: ["packages/codegen/src/**", "**/packages/codegen/src/**"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: [
+                  "@pptxdk/capabilities",
+                  "@pptxdk/capabilities/*",
+                  "@pptxdk/emit",
+                  "@pptxdk/emit/*",
+                  "@pptxdk/import",
+                  "@pptxdk/import/*",
+                  "@pptxdk/preview",
+                  "@pptxdk/preview/*",
+                  "@pptxdk/react",
+                  "@pptxdk/react/*",
+                  "@pptxdk/validation",
+                  "@pptxdk/validation/*",
+                  "pptxdk",
+                  "pptxdk/*",
+                  "react",
+                  "react/*",
+                ],
+                message:
+                  "Codegen stage source must remain a pure stage package depending only on @pptxdk/core and zod.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
       files: [
         "packages/capabilities/src/**",
         "**/packages/capabilities/src/**",
@@ -46,9 +80,11 @@ export default defineConfig({
                   "@pptxdk/preview/*",
                   "@pptxdk/react",
                   "@pptxdk/react/*",
+                  "pptxdk",
+                  "pptxdk/*",
                 ],
                 message:
-                  "Capabilities production source must only depend on core/emit/import stage contracts; preview and react are test-only devDependencies.",
+                  "Capabilities production source must only depend on core/emit/import/codegen stage contracts; preview, react, and sdk are excluded from capabilities runtime.",
               },
             ],
           },

@@ -1,5 +1,17 @@
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { slideBackgroundCapability } from "@pptxdk/capabilities/slide-background";
+import {
+  CodegenError,
+  codegenTargetSchema,
+  createCodegen,
+  type CodegenDiagnostic,
+  type CodegenEntryName,
+  type CodegenFileContent,
+  type CodegenOptions,
+  type CodegenResult,
+  type CodegenTarget,
+} from "@pptxdk/codegen";
+import type { CommonNode as DocumentCommonNode } from "@pptxdk/core/document";
 import { emit } from "@pptxdk/emit";
 import {
   ImportError,
@@ -25,6 +37,28 @@ import { createStagePipeline } from "./compose.ts";
 
 const pipeline = createStagePipeline(documentCapabilities);
 const importDocument = createImporter(documentCapabilities);
+const generateSource = createCodegen(documentCapabilities);
+
+/**
+ * Synchronously generates rebuildable vanilla TypeScript or React TSX source files from an
+ * editable CommonNode document.
+ */
+export function codegen<T extends CodegenTarget>(
+  document: DocumentCommonNode,
+  options: CodegenOptions<T>,
+): CodegenResult<T> {
+  return generateSource(document, options);
+}
+
+export { CodegenError, codegenTargetSchema };
+export type {
+  CodegenDiagnostic,
+  CodegenEntryName,
+  CodegenFileContent,
+  CodegenOptions,
+  CodegenResult,
+  CodegenTarget,
+};
 
 /**
  * Synchronously imports a Transitional PPTX archive into an editable CommonNode document

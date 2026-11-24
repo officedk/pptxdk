@@ -170,6 +170,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@pptxdk/codegen": "workspace:*",
     "@pptxdk/core": "workspace:*",
     "@pptxdk/emit": "workspace:*",
     "@pptxdk/import": "workspace:*",

@@ -68,6 +68,7 @@ import {
   type PlaceholderSpPrFlags,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
+import { textCodegen } from "./text-codegen.ts";
 import {
   textBoxImportHandler,
   textFieldSlideNumImportHandler,
@@ -325,6 +326,7 @@ export const embeddedFontMechanism = defineShowMechanism({
 /** Fixed-region and content-sized text box capability bound per formal build. */
 export const textCapability = {
   declaration: "text",
+  codegen: textCodegen,
   mechanisms: [
     textBoxMechanism,
     textPlaceholderMechanism,

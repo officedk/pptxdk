@@ -28,6 +28,7 @@ import {
   motionScopeAnnotation,
   motionStepAnnotation,
 } from "./motion-api.ts";
+import { motionCodegen } from "./motion-codegen.ts";
 import { readSlideMotionImport } from "./motion-import.ts";
 import {
   addMotionPlanStartDelay,
@@ -2927,6 +2928,7 @@ export const motionCapability: SlideCapabilityModule & {
   slot: "timing",
   always: true,
   mechanisms: motionMechanisms,
+  codegen: motionCodegen,
   transparentDeclarations: [
     {
       declaration: "motion-scope",

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, it } from "vitest";
@@ -205,5 +206,32 @@ process.stdout.write("ok");
     for (const condition of ["source", "dist"] as const) {
       assert.equal(runIsolatedNode(script, condition), "ok");
     }
+  });
+
+  it("excludes all capability test directories, test files, and test fixtures from dist/", () => {
+    const distRoot = join(packageRoot, "dist");
+    const forbiddenEntries: string[] = [];
+    const visit = (dir: string, relativePrefix: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const rel =
+          relativePrefix === ""
+            ? entry.name
+            : `${relativePrefix}/${entry.name}`;
+        if (entry.isDirectory()) {
+          if (entry.name === "test") {
+            forbiddenEntries.push(rel);
+            continue;
+          }
+          visit(join(dir, entry.name), rel);
+        } else if (
+          /\.test(?:\.d)?\.[cm]?[jt]sx?(?:\.map)?$/u.test(entry.name) ||
+          /\.(?:pptx|ttf|woff2|png)$/u.test(entry.name)
+        ) {
+          forbiddenEntries.push(rel);
+        }
+      }
+    };
+    visit(distRoot, "");
+    assert.deepEqual(forbiddenEntries, []);
   });
 });

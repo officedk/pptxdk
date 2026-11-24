@@ -22,17 +22,22 @@ import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
-import { build } from "../test-helpers.ts";
+import { build } from "../../../test/test-helpers.ts";
 
 const imageBytes = new Uint8Array(
-  readFileSync(new URL("../assets/wide-20000x1.png", import.meta.url)),
+  readFileSync(
+    new URL("../../../test/assets/wide-20000x1.png", import.meta.url),
+  ),
 );
 const jost = font("Jost*", [
   {
     weight: 400,
     data: new Uint8Array(
       readFileSync(
-        new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+        new URL(
+          "../../../test/assets/fonts/Jost-400-Book.ttf",
+          import.meta.url,
+        ),
       ),
     ),
   },

@@ -255,9 +255,9 @@ describe("native table import and editing roundtrip", () => {
   });
 
   it("imports dual-entry table scenario, edits one cell text and character format, and preserves merges, tracks, and adjacent cells", async () => {
-    const runs = await runCapabilityScenario(tablePositiveScenario);
-    const initialPptx = runs[0]!.pptx;
-    const initialValid = runs[0]!.validation;
+    const { runs } = await runCapabilityScenario(tablePositiveScenario);
+    const initialPptx = runs[0].pptx;
+    const initialValid = runs[0].validation;
     const initialTable = initialValid.slides[0]!.objects[0]!.table!;
 
     const imported = importDocument(new Uint8Array(initialPptx));

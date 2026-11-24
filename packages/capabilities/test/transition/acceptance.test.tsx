@@ -43,7 +43,7 @@ describe("Transition capability acceptance & bound slide contract", () => {
         transitionPositiveScenario,
         transitionBaselineVariantsScenario,
       ]) {
-        const runs = await runCapabilityScenario(scenario, {
+        const { runs } = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });
         assert.equal(runs.length, 2);

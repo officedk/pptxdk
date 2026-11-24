@@ -44,7 +44,7 @@ describe("Motion capability acceptance & bound slide contract", () => {
   it("runs Motion dual-author choreography scenario, static canvas preview, Group/Chart collaboration, and rejections", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-motion-accept-"));
     try {
-      const runs = await runCapabilityScenario(motionPositiveScenario, {
+      const { runs } = await runCapabilityScenario(motionPositiveScenario, {
         outputDir: outDir,
       });
       assert.equal(runs.length, 2);

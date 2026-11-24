@@ -23,7 +23,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
-import { build, build as buildReact } from "../test-helpers.ts";
+import { build, build as buildReact } from "./test-helpers.ts";
 
 function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {
   return strFromU8(unzipSync(result.pptx)[`ppt/slides/slide${index}.xml`]!);
@@ -36,7 +36,7 @@ const png = new Uint8Array(
   ),
 );
 const widePng = new Uint8Array(
-  readFileSync(new URL("../assets/wide-20000x1.png", import.meta.url)),
+  readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
 );
 
 describe("native content in the common document", () => {

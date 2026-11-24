@@ -55,5 +55,14 @@ export default defineConfig({
         ],
       },
     },
+    {
+      files: [
+        "packages/capabilities/src/**/test/**",
+        "**/packages/capabilities/src/**/test/**",
+      ],
+      rules: {
+        "no-restricted-imports": "off",
+      },
+    },
   ],
 });

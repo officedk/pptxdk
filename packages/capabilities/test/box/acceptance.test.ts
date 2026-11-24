@@ -63,7 +63,7 @@ describe("Box and layout capability acceptance", () => {
         layoutBlockFlexPositiveScenario,
         layoutGridPositiveScenario,
       ]) {
-        const runs = await runCapabilityScenario(scenario, {
+        const { runs } = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });
         assert.equal(runs.length, 2);

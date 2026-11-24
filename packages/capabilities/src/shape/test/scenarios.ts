@@ -29,10 +29,10 @@ import { PNG } from "pngjs";
 import { createElement } from "react";
 import { expect } from "vitest";
 
-import type { CapabilityScenario } from "../acceptance-runner.ts";
+import type { CapabilityScenario } from "../../../test/acceptance-runner.ts";
 
 const jostRegularBytes = readFileSync(
-  new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+  new URL("../../../test/assets/fonts/Jost-400-Book.ttf", import.meta.url),
 );
 
 const jostFont = font("Jost*", [
@@ -40,7 +40,7 @@ const jostFont = font("Jost*", [
   {
     weight: 700,
     data: readFileSync(
-      new URL("../assets/fonts/Jost-700-Bold.ttf", import.meta.url),
+      new URL("../../../test/assets/fonts/Jost-700-Bold.ttf", import.meta.url),
     ),
   },
 ]);
@@ -49,7 +49,10 @@ const notoFont = font("Noto Sans CJK SC", [
   {
     weight: 400,
     data: readFileSync(
-      new URL("../assets/fonts/NotoSansSC-Regular.woff2", import.meta.url),
+      new URL(
+        "../../../test/assets/fonts/NotoSansSC-Regular.woff2",
+        import.meta.url,
+      ),
     ),
   },
 ]);
@@ -58,7 +61,10 @@ const notoArabicFont = font("Noto Naskh Arabic", [
   {
     weight: 400,
     data: readFileSync(
-      new URL("../assets/fonts/NotoNaskhArabic.ttf", import.meta.url),
+      new URL(
+        "../../../test/assets/fonts/NotoNaskhArabic.ttf",
+        import.meta.url,
+      ),
     ),
   },
 ]);

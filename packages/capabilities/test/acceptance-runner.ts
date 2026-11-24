@@ -3,23 +3,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { documentCapabilities } from "@pptxdk/capabilities/all";
-import {
-  defaultTheme,
-  isTheme,
-  type BuildReport,
-  type CommonNode,
-  type EmitOptions,
-  type Font,
-  type Theme,
-} from "@pptxdk/core";
+import type { BuildReport, CommonNode, EmitOptions } from "@pptxdk/core";
 import { createResolver, type Resolution } from "@pptxdk/core/build";
-import {
-  CommonNode as DocumentCommonNode,
-  DeckContainer,
-  SlideMasterContainer,
-} from "@pptxdk/core/document";
 import { emit } from "@pptxdk/emit";
-import { createImporter, type ImportReport } from "@pptxdk/import";
+import {
+  createImporter,
+  type ImportReport,
+  type ImportResult,
+} from "@pptxdk/import";
 import {
   paint,
   type PreviewPageResult,
@@ -46,21 +37,53 @@ export type ScenarioAssertContext = {
   readonly validation: ValidationResult;
 };
 
+export type StageCounters = {
+  expandJsx: number;
+  buildDocument: number;
+  resolve: number;
+  emit: number;
+  paint: number;
+  import: number;
+  validate: number;
+};
+
 export type NativeRoundtripAssertContext = {
   readonly stage: "initial" | "roundtrip";
   readonly pptx: Uint8Array;
   readonly validation: ValidationResult;
   readonly report: BuildReport;
+  /** Read-only imported document snapshot on `roundtrip` stage. Do NOT mutate in place. */
+  readonly importedDocument?: CommonNode;
+  /** Opens a fresh independent editable ImportResult from a detached copy of primary PPTX. */
+  readonly openEditableDocument?: () => ImportResult;
 };
 
 export type RoundtripRunOutput = {
   readonly importReport: ImportReport;
+  /** Read-only imported document snapshot for pure file-recovery inspection. Do NOT mutate in place. */
   readonly importedDocument: CommonNode;
   readonly resolution: Resolution;
   readonly report: BuildReport;
   readonly pptx: Uint8Array;
   readonly preview: PreviewResult;
   readonly validation: ValidationResult;
+};
+
+export type ScenarioExecutionResult = {
+  readonly scenarioId: string;
+  readonly jsx: ScenarioRunOutput;
+  readonly document: ScenarioRunOutput;
+  /** Primary verified initial artifact (`jsx` run after dual-author equivalence passes). */
+  readonly primary: ScenarioRunOutput;
+  /** Single pure-file roundtrip artifact produced from `primary.pptx` with caller input bytes zeroed. */
+  readonly roundtrip: RoundtripRunOutput;
+  /** Tuple `[jsx, document]` preserved for callers iterating over both author entries. */
+  readonly runs: readonly [ScenarioRunOutput, ScenarioRunOutput];
+  /**
+   * Produces a fresh, independent editable `ImportResult` from a detached copy of `primary.pptx`
+   * (zeroing the temporary input buffer immediately) so edit/mutation assertions never pollute `roundtrip`.
+   */
+  readonly openEditableRoundtripDocument: () => ImportResult;
 };
 
 export type CapabilityScenario = {
@@ -100,255 +123,6 @@ export type ScenarioRunOutput = {
 
 const resolveDocument = createResolver(documentCapabilities);
 const importDocument = createImporter(documentCapabilities);
-
-function isFontRecord(value: unknown): value is Font {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Readonly<Record<string, unknown>>;
-  if (typeof record["family"] !== "string" || record["family"].trim() === "") {
-    return false;
-  }
-  const faces = record["faces"];
-  return faces === undefined || Array.isArray(faces);
-}
-
-function isPlainRecord(
-  value: unknown,
-): value is Readonly<Record<string, unknown>> {
-  if (typeof value !== "object" || value === null) return false;
-  const proto = Object.getPrototypeOf(value) as unknown;
-  return proto === Object.prototype || proto === null;
-}
-
-function collectFontsFromDocument(root: CommonNode): ReadonlyMap<string, Font> {
-  const fonts = new Map<string, Font>();
-  const visited = new Set<unknown>();
-
-  const recordFont = (candidate: Font): void => {
-    const key = candidate.family.trim().toLowerCase();
-    const existing = fonts.get(key);
-    const candidateCount = candidate.faces?.length ?? 0;
-    const existingCount = existing?.faces?.length ?? 0;
-    if (existing === undefined || candidateCount > existingCount) {
-      fonts.set(key, candidate);
-    }
-  };
-
-  const visit = (value: unknown): void => {
-    if (value === null || typeof value !== "object") return;
-    if (visited.has(value)) return;
-    visited.add(value);
-
-    if (value instanceof Uint8Array || value instanceof URL) return;
-
-    if (isFontRecord(value)) {
-      recordFont(value);
-      return;
-    }
-
-    if (isTheme(value)) {
-      for (const fontToken of Object.values(value.fonts)) {
-        visit(fontToken);
-      }
-      return;
-    }
-
-    if (value instanceof DocumentCommonNode) {
-      visit(value.props);
-      for (const child of value.children) {
-        visit(child);
-      }
-      if (value instanceof DeckContainer) {
-        for (const master of value.masters) {
-          visit(master);
-        }
-      } else if (value instanceof SlideMasterContainer) {
-        for (const layout of value.layouts) {
-          visit(layout);
-        }
-      }
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-
-    if (isPlainRecord(value)) {
-      for (const entry of Object.values(value)) {
-        visit(entry);
-      }
-    }
-  };
-
-  visit(root);
-  return fonts;
-}
-
-function inferNonBoldFaceWeight(
-  matched: Font,
-  styleRecord: Readonly<Record<string, unknown>>,
-): number | undefined {
-  if (matched.substitute === true) return undefined;
-  const currentWeight = styleRecord["fontWeight"];
-  if (
-    currentWeight !== undefined &&
-    currentWeight !== "normal" &&
-    currentWeight !== 400
-  ) {
-    return undefined;
-  }
-  const faces = matched.faces ?? [];
-  if (
-    faces.length === 0 ||
-    faces.some(
-      (face) =>
-        (face.weight ?? 400) === 400 && (face.style ?? "normal") === "normal",
-    )
-  ) {
-    return undefined;
-  }
-  const nonBoldFace = faces.find(
-    (face) =>
-      (face.weight ?? 400) < 600 && (face.style ?? "normal") === "normal",
-  );
-  return nonBoldFace?.weight;
-}
-
-function reattachUnembeddedFonts(
-  root: CommonNode,
-  fontsByFamily: ReadonlyMap<string, Font>,
-  inferNonBoldCustomWeight = false,
-): void {
-  if (fontsByFamily.size === 0) return;
-  const visited = new Set<unknown>();
-
-  const lookupFont = (family: string): Font | undefined =>
-    fontsByFamily.get(family.trim().toLowerCase());
-
-  const rewriteTheme = (theme: Theme): void => {
-    if (theme === defaultTheme) return;
-    const patch: Record<string, Font> = {};
-    for (const [token, val] of Object.entries(theme.fonts)) {
-      if (typeof val === "string") {
-        const matched = lookupFont(val);
-        if (matched !== undefined) patch[token] = matched;
-      }
-    }
-    if (Object.keys(patch).length > 0) {
-      theme.set({ fonts: patch });
-    }
-  };
-
-  const rewriteValue = (
-    value: unknown,
-  ): { readonly changed: boolean; readonly value: unknown } => {
-    if (value === null || typeof value !== "object") {
-      return { changed: false, value };
-    }
-    if (
-      value instanceof Uint8Array ||
-      value instanceof URL ||
-      value instanceof DocumentCommonNode ||
-      isFontRecord(value)
-    ) {
-      return { changed: false, value };
-    }
-    if (isTheme(value)) {
-      rewriteTheme(value);
-      return { changed: false, value };
-    }
-    if (Array.isArray(value)) {
-      let changed = false;
-      const next = value.map((item) => {
-        const res = rewriteValue(item);
-        if (res.changed) changed = true;
-        return res.value;
-      });
-      return { changed, value: changed ? next : value };
-    }
-    if (isPlainRecord(value)) {
-      let changed = false;
-      const next: Record<string, unknown> = {};
-      let inferredWeight: number | undefined;
-      for (const [key, entry] of Object.entries(value)) {
-        if (key === "fontFamily" && typeof entry === "string") {
-          const matched = lookupFont(entry);
-          if (matched !== undefined) {
-            next[key] = matched;
-            changed = true;
-            if (inferNonBoldCustomWeight) {
-              inferredWeight = inferNonBoldFaceWeight(matched, value);
-            }
-            continue;
-          }
-        }
-        const res = rewriteValue(entry);
-        if (res.changed) changed = true;
-        next[key] = res.value;
-      }
-      if (inferredWeight !== undefined) {
-        // OOXML <a:rPr b="0"> collapses all non-bold weights; restore the thin/light face weight matching the source font file's OS/2 usWeightClass.
-        next["fontWeight"] = inferredWeight;
-        changed = true;
-      }
-      return { changed, value: changed ? next : value };
-    }
-    return { changed: false, value };
-  };
-
-  const visitNode = (node: DocumentCommonNode): void => {
-    if (visited.has(node)) return;
-    visited.add(node);
-
-    const props = node.props;
-    if (isTheme(props["theme"])) {
-      rewriteTheme(props["theme"]);
-    }
-    const patch: Record<string, unknown> = {};
-    let hasPropPatch = false;
-    for (const [key, val] of Object.entries(props)) {
-      if (key === "style" || key === "theme" || key === "children") continue;
-      const res = rewriteValue(val);
-      if (res.changed) {
-        patch[key] = res.value;
-        hasPropPatch = true;
-      }
-    }
-    if (hasPropPatch) {
-      node.set(patch);
-    }
-
-    const styleVal = props["style"];
-    if (isPlainRecord(styleVal)) {
-      const styleRes = rewriteValue(styleVal);
-      if (styleRes.changed) {
-        node.style(styleRes.value as Readonly<Record<string, unknown>>);
-      }
-    }
-
-    for (const child of node.children) {
-      if (child instanceof DocumentCommonNode) {
-        visitNode(child);
-      }
-    }
-    if (node instanceof DeckContainer) {
-      for (const master of node.masters) {
-        visitNode(master);
-      }
-    } else if (node instanceof SlideMasterContainer) {
-      for (const layout of node.layouts) {
-        visitNode(layout);
-      }
-    }
-  };
-
-  if (root instanceof DocumentCommonNode) {
-    visitNode(root);
-  }
-}
 
 function summarizeFileObject(obj: FileObject): unknown {
   return {
@@ -532,39 +306,35 @@ function assertNativeRoundtripEquivalence(
   }
 }
 
-/** Executes the formal `import -> resolve -> emit -> paint -> validatePptx` roundtrip over an emitted PPTX. */
+/** Executes the formal `import -> resolve -> emit -> paint -> validatePptx` pure-file roundtrip over an emitted PPTX. */
 export async function runScenarioRoundtrip(
   pptx: Uint8Array,
   options: {
     readonly pages?: readonly number[];
     readonly emitOptions?: EmitOptions;
-    readonly fontSourceDocument?: CommonNode;
-    readonly allowFontWeight400Fallback?: boolean;
+    readonly counters?: StageCounters;
   } = {},
 ): Promise<RoundtripRunOutput> {
   const detachedCopy = new Uint8Array(pptx);
+  if (options.counters !== undefined) options.counters.import += 1;
   const imported = importDocument(detachedCopy);
   // Immediately zero caller bytes to prove the imported document retains no buffer references.
   detachedCopy.fill(0);
 
-  if (options.fontSourceDocument !== undefined) {
-    reattachUnembeddedFonts(
-      imported.document,
-      collectFontsFromDocument(options.fontSourceDocument),
-      options.allowFontWeight400Fallback === true,
-    );
-  }
-
   const previewOptions =
     options.pages === undefined ? {} : { pages: options.pages };
+  if (options.counters !== undefined) options.counters.resolve += 1;
   const resolution = resolveDocument(imported.document);
+  if (options.counters !== undefined) options.counters.emit += 1;
   const { pptx: reemittedPptx, report } = emit(resolution, options.emitOptions);
+  if (options.counters !== undefined) options.counters.paint += 1;
   const { pages } = paint(resolution, previewOptions);
   const preview: PreviewResult = Object.freeze({
     report: resolution.report,
     query: resolution.query,
     pages,
   });
+  if (options.counters !== undefined) options.counters.validate += 1;
   const validation = await validatePptx(reemittedPptx);
   assert.deepEqual(
     validation.errors,
@@ -686,29 +456,104 @@ function assertDualAuthorEquivalence(
   }
 }
 
+function expectedSlidePixelSize(validation: ValidationResult): {
+  readonly width?: number;
+  readonly height?: number;
+} {
+  return {
+    ...(validation.presentation.widthEmu === undefined
+      ? {}
+      : {
+          width: Math.round(validation.presentation.widthEmu / emuPerPx),
+        }),
+    ...(validation.presentation.heightEmu === undefined
+      ? {}
+      : {
+          height: Math.round(validation.presentation.heightEmu / emuPerPx),
+        }),
+  };
+}
+
+function assertPositiveRoundtripPageOutput(
+  page: PreviewPageResult,
+  roundtrip: RoundtripRunOutput,
+  scenario: CapabilityScenario,
+  expectedSize: { readonly width?: number; readonly height?: number },
+  label: string,
+): void {
+  if (
+    scenario.emitOptions?.embedFonts !== undefined ||
+    page.diagnostics.length === 0
+  ) {
+    assertPageOutput(page, scenario, expectedSize, label);
+    return;
+  }
+
+  for (const diagnostic of page.diagnostics) {
+    assert.equal(
+      diagnostic.severity,
+      "error",
+      `${label} unexpected non-error preview diagnostic: ${JSON.stringify(diagnostic)}`,
+    );
+    assert.match(
+      diagnostic.message,
+      /explicit monochrome outline font file/u,
+      `${label} unexpected unembedded-font roundtrip preview diagnostic: ${diagnostic.message}`,
+    );
+    assert.notEqual(
+      diagnostic.path.trim(),
+      "",
+      `${label} diagnostic path must be non-empty`,
+    );
+  }
+  assert.equal(
+    page.png,
+    undefined,
+    `${label} unembedded-font page must omit png`,
+  );
+  assert.equal(
+    page.svg,
+    undefined,
+    `${label} unembedded-font page must omit svg`,
+  );
+  assert.ok(
+    roundtrip.resolution.report.diagnostics.some(
+      (diagnostic) => diagnostic.code === "font-measurement-unavailable",
+    ),
+    `${label} expected font-measurement-unavailable diagnostic on roundtrip resolution`,
+  );
+}
+
 /**
  * Shared runner executing one capability-owned scenario across both real JSX and imperative
- * document authoring entries by resolving once, then feeding emit and paint independently.
+ * document authoring entries (solving once per entry for both emit and paint) plus a single
+ * pure-file roundtrip whose read-only artifacts are shared by callers.
  */
 export async function runCapabilityScenario(
   scenario: CapabilityScenario,
-  options: { readonly outputDir?: string } = {},
-): Promise<readonly ScenarioRunOutput[]> {
+  options: {
+    readonly outputDir?: string;
+    readonly counters?: StageCounters;
+  } = {},
+): Promise<ScenarioExecutionResult> {
   const results: ScenarioRunOutput[] = [];
-  let primaryDocument: CommonNode | undefined;
   const previewOptions =
     scenario.pages === undefined ? {} : { pages: scenario.pages };
 
   for (const author of ["jsx", "document"] as const) {
-    const document =
-      author === "jsx"
-        ? await expandDocument(scenario.jsx())
-        : scenario.document();
-    if (primaryDocument === undefined) {
-      primaryDocument = document;
+    let document: CommonNode;
+    if (author === "jsx") {
+      if (options.counters !== undefined) options.counters.expandJsx += 1;
+      document = await expandDocument(scenario.jsx());
+    } else {
+      if (options.counters !== undefined) options.counters.buildDocument += 1;
+      document = scenario.document();
     }
+    if (options.counters !== undefined) options.counters.resolve += 1;
     const resolution = resolveDocument(document);
+    if (options.counters !== undefined) options.counters.emit += 1;
     const { pptx, report } = emit(resolution, scenario.emitOptions);
+    if (options.counters !== undefined) options.counters.paint += 1;
     const { pages } = paint(resolution, previewOptions);
     const preview: PreviewResult = Object.freeze({
       report: resolution.report,
@@ -716,6 +561,7 @@ export async function runCapabilityScenario(
       pages,
     });
 
+    if (options.counters !== undefined) options.counters.validate += 1;
     const validation = await validatePptx(pptx);
     assert.deepEqual(
       validation.errors,
@@ -723,18 +569,7 @@ export async function runCapabilityScenario(
       `${scenario.id} (${author}) PPTX validation failed`,
     );
 
-    const expectedSize = {
-      ...(validation.presentation.widthEmu === undefined
-        ? {}
-        : {
-            width: Math.round(validation.presentation.widthEmu / emuPerPx),
-          }),
-      ...(validation.presentation.heightEmu === undefined
-        ? {}
-        : {
-            height: Math.round(validation.presentation.heightEmu / emuPerPx),
-          }),
-    };
+    const expectedSize = expectedSlidePixelSize(validation);
     for (const page of preview.pages) {
       assertPageOutput(
         page,
@@ -810,20 +645,17 @@ export async function runCapabilityScenario(
     });
   }
 
-  assertDualAuthorEquivalence(scenario, results[0]!, results[1]!);
+  const jsxRun = results[0]!;
+  const docRun = results[1]!;
+  assertDualAuthorEquivalence(scenario, jsxRun, docRun);
 
-  const primary = results[0]!;
+  const primary = jsxRun;
   const roundtrip = await runScenarioRoundtrip(primary.pptx, {
     ...(scenario.pages === undefined ? {} : { pages: scenario.pages }),
     ...(scenario.emitOptions === undefined
       ? {}
       : { emitOptions: scenario.emitOptions }),
-    ...(primaryDocument === undefined
-      ? {}
-      : { fontSourceDocument: primaryDocument }),
-    ...(scenario.kind === "rejection"
-      ? {}
-      : { allowFontWeight400Fallback: true }),
+    ...(options.counters === undefined ? {} : { counters: options.counters }),
   });
 
   if (scenario.kind !== "rejection") {
@@ -832,25 +664,11 @@ export async function runCapabilityScenario(
       [],
       `${scenario.id} roundtrip import must have zero unexpected diagnostics`,
     );
-    const roundtripExpectedSize = {
-      ...(roundtrip.validation.presentation.widthEmu === undefined
-        ? {}
-        : {
-            width: Math.round(
-              roundtrip.validation.presentation.widthEmu / emuPerPx,
-            ),
-          }),
-      ...(roundtrip.validation.presentation.heightEmu === undefined
-        ? {}
-        : {
-            height: Math.round(
-              roundtrip.validation.presentation.heightEmu / emuPerPx,
-            ),
-          }),
-    };
+    const roundtripExpectedSize = expectedSlidePixelSize(roundtrip.validation);
     for (const page of roundtrip.preview.pages) {
-      assertPageOutput(
+      assertPositiveRoundtripPageOutput(
         page,
+        roundtrip,
         scenario,
         roundtripExpectedSize,
         `${scenario.id}:roundtrip:p${page.page}`,
@@ -870,22 +688,7 @@ export async function runCapabilityScenario(
       `${scenario.id} rejection roundtrip import reported unexpected diagnostics: ${JSON.stringify(roundtrip.importReport.diagnostics)}`,
     );
     const isolatedCorruptParts = roundtrip.importReport.diagnostics.length > 0;
-    const roundtripExpectedSize = {
-      ...(roundtrip.validation.presentation.widthEmu === undefined
-        ? {}
-        : {
-            width: Math.round(
-              roundtrip.validation.presentation.widthEmu / emuPerPx,
-            ),
-          }),
-      ...(roundtrip.validation.presentation.heightEmu === undefined
-        ? {}
-        : {
-            height: Math.round(
-              roundtrip.validation.presentation.heightEmu / emuPerPx,
-            ),
-          }),
-    };
+    const roundtripExpectedSize = expectedSlidePixelSize(roundtrip.validation);
     for (const page of roundtrip.preview.pages) {
       assertPageOutput(
         page,
@@ -909,14 +712,36 @@ export async function runCapabilityScenario(
         const rtHasError = rtPage.diagnostics.some(
           (diag) => diag.severity === "error",
         );
-        assert.equal(
-          rtHasError,
-          initHasError,
-          `${scenario.id} rejection roundtrip page ${rtPage.page} error state mismatch`,
-        );
+        const isPureFileUnembeddedFontOnly =
+          !initHasError &&
+          rtHasError &&
+          scenario.emitOptions?.embedFonts === undefined &&
+          rtPage.diagnostics.length > 0 &&
+          rtPage.diagnostics.every(
+            (diag) =>
+              diag.severity === "error" &&
+              /explicit monochrome outline font file/u.test(diag.message),
+          ) &&
+          roundtrip.resolution.report.diagnostics.some(
+            (diag) => diag.code === "font-measurement-unavailable",
+          );
+        if (!isPureFileUnembeddedFontOnly) {
+          assert.equal(
+            rtHasError,
+            initHasError,
+            `${scenario.id} rejection roundtrip page ${rtPage.page} error state mismatch`,
+          );
+        }
       }
     }
   }
+
+  const openEditableRoundtripDocument = (): ImportResult => {
+    const copy = new Uint8Array(primary.pptx);
+    const editable = importDocument(copy);
+    copy.fill(0);
+    return editable;
+  };
 
   if (scenario.assertNative !== undefined) {
     await scenario.assertNative({
@@ -924,14 +749,25 @@ export async function runCapabilityScenario(
       pptx: primary.pptx,
       validation: primary.validation,
       report: primary.report,
+      openEditableDocument: openEditableRoundtripDocument,
     });
     await scenario.assertNative({
       stage: "roundtrip",
       pptx: roundtrip.pptx,
       validation: roundtrip.validation,
       report: roundtrip.report,
+      importedDocument: roundtrip.importedDocument,
+      openEditableDocument: openEditableRoundtripDocument,
     });
   }
 
-  return results;
+  return {
+    scenarioId: scenario.id,
+    jsx: jsxRun,
+    document: docRun,
+    primary,
+    roundtrip,
+    runs: [jsxRun, docRun],
+    openEditableRoundtripDocument,
+  };
 }

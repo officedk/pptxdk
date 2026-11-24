@@ -1,10 +1,14 @@
+import assert from "node:assert/strict";
+
 import type { PaintContext, PaintOutput } from "@pptxdk/core/capability";
 import { defineCanvasMechanism, defineShowMechanism } from "@pptxdk/import";
 import { describe, it } from "vitest";
 
+import type { StageCounters } from "./acceptance-runner.ts";
+import { textBoxRoundtripScenario } from "./mechanism-registry-content.ts";
 import {
+  productionMechanismVerifications,
   runProductionMechanismVerifications,
-  textBoxRoundtripScenario,
   type ExhaustiveMechanismVerificationMap,
 } from "./mechanism-verification.ts";
 
@@ -156,7 +160,28 @@ function compileDirectionalChecks(): void {
 void compileDirectionalChecks;
 
 describe("Exhaustive production mechanism verification", () => {
-  it("runs dual-author build, import roundtrip, and native assertions for every wired mechanism", async () => {
-    await runProductionMechanismVerifications();
+  it("runs dual-author build, single pure-file import roundtrip per scenario, and native assertions for every wired mechanism", async () => {
+    const counters: StageCounters = {
+      expandJsx: 0,
+      buildDocument: 0,
+      resolve: 0,
+      emit: 0,
+      paint: 0,
+      import: 0,
+      validate: 0,
+    };
+    await runProductionMechanismVerifications({ counters });
+    const uniqueScenarios = new Set(
+      Object.values(productionMechanismVerifications).map(
+        (entry) => entry.scenario,
+      ),
+    );
+    assert.equal(counters.expandJsx, uniqueScenarios.size);
+    assert.equal(counters.buildDocument, uniqueScenarios.size);
+    assert.equal(counters.import, uniqueScenarios.size);
+    assert.equal(counters.resolve, uniqueScenarios.size * 3);
+    assert.equal(counters.emit, uniqueScenarios.size * 3);
+    assert.equal(counters.paint, uniqueScenarios.size * 3);
+    assert.equal(counters.validate, uniqueScenarios.size * 3);
   });
 });

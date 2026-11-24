@@ -5,6 +5,7 @@ export default defineConfig({
   ...shared,
   test: {
     ...shared.test,
+    include: ["src/**/test/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}"],
     // Limit worker fan-out and allow cold WASM validator startup under parallel workspace gates.
     maxWorkers: 8,
     testTimeout: 15_000,

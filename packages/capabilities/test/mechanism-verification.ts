@@ -2,7 +2,21 @@ import { documentCapabilities } from "@pptxdk/capabilities/all";
 import type { NativeMechanismDefinition } from "@pptxdk/core/capability";
 import type { PreviewResult } from "@pptxdk/preview";
 
+import { chartMechanismVerifications } from "../src/chart/test/mechanisms.ts";
+import { groupMechanismVerifications } from "../src/group/test/mechanisms.ts";
+import { imageMechanismVerifications } from "../src/image/test/mechanisms.ts";
+import { footerPlaceholderMechanismVerifications } from "../src/masters/test/footer-mechanisms.ts";
+import { masterOwnershipVerifications } from "../src/masters/test/master-layout-mechanisms.ts";
+import { masterSharedCanvasMechanismVerifications } from "../src/masters/test/shared-canvas-mechanisms.ts";
+import { themeMechanismVerifications } from "../src/masters/test/theme-mechanisms.ts";
+import { motionMechanismVerifications } from "../src/motion/test/mechanisms.ts";
+import { notesMechanismVerifications } from "../src/notes/test/mechanisms.ts";
+import { placeholderMechanismVerifications } from "../src/placeholder/test/mechanisms.ts";
 import { shapeMechanismVerifications } from "../src/shape/test/mechanisms.ts";
+import { slideBackgroundMechanismVerifications } from "../src/slide-background/test/mechanisms.ts";
+import { tableMechanismVerifications } from "../src/table/test/mechanisms.ts";
+import { textMechanismVerifications } from "../src/text/test/mechanisms.ts";
+import { transitionMechanismVerifications } from "../src/transition/test/mechanisms.ts";
 import {
   runCapabilityScenario,
   type CapabilityScenario,
@@ -10,8 +24,6 @@ import {
   type ScenarioExecutionResult,
   type StageCounters,
 } from "./acceptance-runner.ts";
-import { contentMechanismVerifications } from "./mechanism-registry-content.ts";
-import { presentationMechanismVerifications } from "./mechanism-registry-presentation.ts";
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
@@ -54,8 +66,20 @@ export type ExhaustiveMechanismVerificationMap<
 export const productionMechanismVerifications: ExhaustiveMechanismVerificationMap =
   {
     ...shapeMechanismVerifications,
-    ...contentMechanismVerifications,
-    ...presentationMechanismVerifications,
+    ...groupMechanismVerifications,
+    ...textMechanismVerifications,
+    ...imageMechanismVerifications,
+    ...tableMechanismVerifications,
+    ...chartMechanismVerifications,
+    ...masterOwnershipVerifications,
+    ...themeMechanismVerifications,
+    ...masterSharedCanvasMechanismVerifications,
+    ...footerPlaceholderMechanismVerifications,
+    ...slideBackgroundMechanismVerifications,
+    ...placeholderMechanismVerifications,
+    ...notesMechanismVerifications,
+    ...transitionMechanismVerifications,
+    ...motionMechanismVerifications,
   };
 
 /**

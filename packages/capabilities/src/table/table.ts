@@ -49,6 +49,7 @@ import {
   type ResolvedTextBody,
   type ResolvedTextStyle,
 } from "../shared/text-service.ts";
+import { tableCodegen } from "./table-codegen.ts";
 import type { TableVerticalAlign } from "./table-declaration.ts";
 import {
   tableImportHandler,
@@ -916,6 +917,7 @@ export const tablePlaceholderMechanism = defineCanvasMechanism({
 export const tableCapability = {
   declaration: "table",
   mechanisms: [tableMechanism, tablePlaceholderMechanism] as const,
+  codegen: tableCodegen,
 
   bind(
     input: CapabilityInput,

@@ -78,6 +78,10 @@ export async function verifyGeneratedSourcesTypecheck(
 
   const dir = await mkdtemp(join(tmpdir(), "pptxdk-codegen-tsc-"));
   try {
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({ type: "module" }),
+    );
     await linkConsumerNodeModules(join(dir, "node_modules"), true);
     const caseManifest: string[] = [];
 

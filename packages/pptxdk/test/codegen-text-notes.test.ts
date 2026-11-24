@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,91 +44,9 @@ import {
   rebuildGeneratedSourceRelocated,
   verifyGeneratedSourcesTypecheck,
   writeCodegenFiles,
-  type GeneratedSourceTypecheckCase,
 } from "./helpers/codegen-acceptance.ts";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-const tscBin = join(packageRoot, "node_modules/.bin/tsc");
-
-/**
- * Checks generated sources containing `import.meta.url` asset references under strict `tsc`
- * with `"type": "module"` enabled for `module: "nodenext"` resolution.
- */
-async function verifyEsmGeneratedSourcesTypecheck(
-  cases: readonly GeneratedSourceTypecheckCase[],
-): Promise<void> {
-  if (cases.length === 0) return;
-
-  const dir = await mkdtemp(join(tmpdir(), "pptxdk-codegen-esm-tsc-"));
-  try {
-    const nodeModulesDir = join(dir, "node_modules");
-    await mkdir(join(nodeModulesDir, "@types"), { recursive: true });
-    await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
-    await symlink(
-      join(packageRoot, "node_modules/react"),
-      join(nodeModulesDir, "react"),
-      "dir",
-    );
-    await symlink(
-      join(packageRoot, "node_modules/@types/react"),
-      join(nodeModulesDir, "@types/react"),
-      "dir",
-    );
-    await symlink(
-      join(packageRoot, "node_modules/@types/node"),
-      join(nodeModulesDir, "@types/node"),
-      "dir",
-    );
-
-    const caseManifest: string[] = [];
-    for (const [index, item] of cases.entries()) {
-      await writeCodegenFiles(
-        join(dir, "cases", `case-${index}`),
-        item.result.files,
-      );
-      caseManifest.push(`case-${index}: ${item.label} (${item.result.entry})`);
-    }
-
-    await writeFile(
-      join(dir, "package.json"),
-      JSON.stringify({
-        name: "codegen-esm-consumer",
-        private: true,
-        type: "module",
-      }),
-    );
-    await writeFile(
-      join(dir, "tsconfig.json"),
-      JSON.stringify({
-        compilerOptions: {
-          target: "es2024",
-          module: "nodenext",
-          moduleResolution: "nodenext",
-          jsx: "react-jsx",
-          jsxImportSource: "react",
-          strict: true,
-          noEmit: true,
-          skipLibCheck: false,
-          types: ["node"],
-        },
-        include: ["cases/**/*.ts", "cases/**/*.tsx"],
-      }),
-    );
-
-    const tscResult = spawnSync(
-      tscBin,
-      ["-p", "tsconfig.json", "--pretty", "false"],
-      { cwd: dir, encoding: "utf8" },
-    );
-    assert.equal(
-      tscResult.status,
-      0,
-      `Consumer strict ESM tsc failed for:\n${caseManifest.join("\n")}\n\n${tscResult.stdout}\n${tscResult.stderr}`,
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
 
 async function previewGeneratedSourceRelocated(
   result: CodegenResult,
@@ -582,7 +499,7 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
       { label: `${label}:react`, result: codegen(doc, { target: "react" }) },
     ]);
 
-    await verifyEsmGeneratedSourcesTypecheck(generatedCases);
+    await verifyGeneratedSourcesTypecheck(generatedCases);
 
     for (const item of generatedCases) {
       const { built, file } = await rebuildGeneratedSourceRelocated(
@@ -746,7 +663,7 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
         },
       } as typeof generated;
 
-      await verifyEsmGeneratedSourcesTypecheck([
+      await verifyGeneratedSourcesTypecheck([
         { label: `edited-${target}`, result: editedResult },
       ]);
       const rebuilt = await rebuildGeneratedSourceRelocated(editedResult);
@@ -915,7 +832,7 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
         result: codegen(rejectionDeck, { target: "react" }),
       },
     ];
-    await verifyEsmGeneratedSourcesTypecheck(cases);
+    await verifyGeneratedSourcesTypecheck(cases);
 
     for (const item of cases) {
       const { file } = await rebuildGeneratedSourceRelocated(item.result);

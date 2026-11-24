@@ -4,8 +4,8 @@ import type { PaintContext, PaintOutput } from "@pptxdk/core/capability";
 import { defineCanvasMechanism, defineShowMechanism } from "@pptxdk/import";
 import { describe, it } from "vitest";
 
+import { textBoxRoundtripScenario } from "../src/text/test/mechanisms.ts";
 import type { StageCounters } from "./acceptance-runner.ts";
-import { textBoxRoundtripScenario } from "./mechanism-registry-content.ts";
 import {
   productionMechanismVerifications,
   runProductionMechanismVerifications,

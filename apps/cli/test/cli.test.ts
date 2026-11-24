@@ -126,6 +126,78 @@ describe("pptxdk CLI build", () => {
       schemaVersion: "5",
       command: "build",
     });
+
+    const [
+      buildSuccessText,
+      buildSuccessStructured,
+      buildFailuresText,
+      buildFailuresStructured,
+    ] = await Promise.all([
+      runInMemory(["build", "--schema=success:text"], import.meta.dirname),
+      runInMemory(
+        ["build", "--schema=success:structured"],
+        import.meta.dirname,
+      ),
+      runInMemory(["build", "--schema=failures:text"], import.meta.dirname),
+      runInMemory(
+        ["build", "--schema=failures:structured"],
+        import.meta.dirname,
+      ),
+    ]);
+    for (const response of [
+      buildSuccessText,
+      buildSuccessStructured,
+      buildFailuresText,
+      buildFailuresStructured,
+    ]) {
+      expect(response.code).toBe(0);
+    }
+    const parsedBuildSuccessText = JSON.parse(buildSuccessText.stdout) as {
+      readonly success: unknown;
+    };
+    const parsedBuildSuccessStructured = JSON.parse(
+      buildSuccessStructured.stdout,
+    ) as {
+      readonly success: unknown;
+    };
+    expect(parsedBuildSuccessText).toMatchObject({
+      kind: "success",
+      schemaVersion: "5",
+      command: "build",
+      mode: "text",
+      success: {
+        kind: "data",
+        variants: {
+          built: {
+            exitCode: 0,
+            outputSchema: {
+              required: ["output", "slides", "warnings"],
+            },
+          },
+        },
+      },
+    });
+    expect(parsedBuildSuccessText.success).toEqual(
+      parsedBuildSuccessStructured.success,
+    );
+    const parsedBuildFailuresText = JSON.parse(buildFailuresText.stdout) as {
+      readonly failures: Record<string, unknown>;
+    };
+    const parsedBuildFailuresStructured = JSON.parse(
+      buildFailuresStructured.stdout,
+    ) as {
+      readonly failures: Record<string, unknown>;
+    };
+    expect(Object.keys(parsedBuildFailuresStructured.failures)).toEqual([
+      "invalidOutput",
+      "sourceLoadFailed",
+      "buildFailed",
+      "writeFailed",
+      "cancelled",
+    ]);
+    expect(parsedBuildFailuresText.failures).toEqual(
+      parsedBuildFailuresStructured.failures,
+    );
   });
 
   it("builds default and named exports across working directories with delivery options and validates PPTX", async () => {
@@ -828,12 +900,26 @@ describe("pptxdk CLI preview", () => {
       command: "preview",
     });
 
+    const previewSuccessText = await runInMemory(
+      ["preview", "--schema=success:text"],
+      import.meta.dirname,
+    );
+    expect(previewSuccessText.code).toBe(0);
+
     const previewOutputSchema = await runInMemory(
       ["preview", "--schema=success:structured"],
       import.meta.dirname,
     );
     expect(previewOutputSchema.code).toBe(0);
-    expect(JSON.parse(previewOutputSchema.stdout)).toMatchObject({
+    const parsedPreviewSuccessText = JSON.parse(previewSuccessText.stdout) as {
+      readonly success: unknown;
+    };
+    const parsedPreviewSuccessStructured = JSON.parse(
+      previewOutputSchema.stdout,
+    ) as {
+      readonly success: unknown;
+    };
+    expect(parsedPreviewSuccessStructured).toMatchObject({
       kind: "success",
       schemaVersion: "5",
       command: "preview",
@@ -850,21 +936,30 @@ describe("pptxdk CLI preview", () => {
         },
       },
     });
+    expect(parsedPreviewSuccessText.success).toEqual(
+      parsedPreviewSuccessStructured.success,
+    );
+
+    const previewFailureText = await runInMemory(
+      ["preview", "--schema=failures:text"],
+      import.meta.dirname,
+    );
+    expect(previewFailureText.code).toBe(0);
 
     const previewFailureSchema = await runInMemory(
       ["preview", "--schema=failures:structured"],
       import.meta.dirname,
     );
     expect(previewFailureSchema.code).toBe(0);
-    expect(
-      Object.keys(
-        (
-          JSON.parse(previewFailureSchema.stdout) as {
-            readonly failures: Record<string, unknown>;
-          }
-        ).failures,
-      ),
-    ).toEqual([
+    const parsedPreviewFailureText = JSON.parse(previewFailureText.stdout) as {
+      readonly failures: Record<string, unknown>;
+    };
+    const parsedPreviewFailureStructured = JSON.parse(
+      previewFailureSchema.stdout,
+    ) as {
+      readonly failures: Record<string, unknown>;
+    };
+    expect(Object.keys(parsedPreviewFailureStructured.failures)).toEqual([
       "invalidOutput",
       "pageOutOfRange",
       "sourceLoadFailed",
@@ -873,6 +968,9 @@ describe("pptxdk CLI preview", () => {
       "writeFailed",
       "cancelled",
     ]);
+    expect(parsedPreviewFailureText.failures).toEqual(
+      parsedPreviewFailureStructured.failures,
+    );
 
     const directory = await mkdtemp(join(tmpdir(), "pptxdk preview "));
     try {

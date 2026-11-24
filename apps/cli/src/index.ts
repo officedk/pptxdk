@@ -5,10 +5,8 @@ import { basename, dirname, extname, resolve } from "node:path";
 
 import {
   CliWriteError,
-  type DataOutcome,
   defineCli,
   executeCli,
-  type FailureOutcome,
   helpCapability,
   parseCliInvocation,
   schemaCapability,
@@ -310,339 +308,501 @@ async function validatePreviewOutputDir(
   }
 }
 
-const buildSuccessVariant = {
-  description: "Built PPTX deck",
-  exitCode: 0,
-  schema: builtSchema,
-} as const;
-
-const buildSuccessVariants = {
-  built: buildSuccessVariant,
-} as const;
-
-const invalidOutputFailure = {
-  description: "Output path overwrites deck source",
-  exitCode: 2,
-  schema: invalidOutputSchema,
-} as const;
-
-const sourceLoadFailedFailure = {
-  description: "Failed to load deck source",
-  exitCode: 1,
-  schema: sourceLoadFailedSchema,
-} as const;
-
-const buildFailedFailure = {
-  description: "Deck build failed with diagnostics",
-  exitCode: 1,
-  schema: buildFailedSchema,
-} as const;
-
-const writeFailedFailure = {
-  description: "Failed to write PPTX output",
-  exitCode: 1,
-  schema: writeFailedSchema,
-} as const;
-
-const cancelledFailure = {
-  description: "Deck build cancelled",
-  exitCode: 130,
-  schema: cancelledSchema,
-} as const;
-
-const buildFailureVariants = {
-  invalidOutput: invalidOutputFailure,
-  sourceLoadFailed: sourceLoadFailedFailure,
-  buildFailed: buildFailedFailure,
-  writeFailed: writeFailedFailure,
-  cancelled: cancelledFailure,
-} as const;
-
-const previewSuccessVariant = {
-  description: "Previewed deck pages as PNG images",
-  exitCode: 0,
-  schema: previewedSchema,
-} as const;
-
-const previewSuccessVariants = {
-  previewed: previewSuccessVariant,
-} as const;
-
-const previewInvalidOutputFailure = {
-  description: "Output directory is invalid or points to a non-directory path",
-  exitCode: 2,
-  schema: invalidOutputSchema,
-} as const;
-
-const previewPageOutOfRangeFailure = {
-  description: "Requested preview pages exceed total slide count",
-  exitCode: 2,
-  schema: pageOutOfRangeSchema,
-} as const;
-
-const previewFailedFailure = {
-  description: "Deck preview failed on one or more pages",
-  exitCode: 1,
-  schema: previewFailedSchema,
-} as const;
-
-const previewWriteFailedFailure = {
-  description: "Failed to write preview image",
-  exitCode: 1,
-  schema: writeFailedSchema,
-} as const;
-
-const previewCancelledFailure = {
-  description: "Deck preview cancelled",
-  exitCode: 130,
-  schema: cancelledSchema,
-} as const;
-
-const previewFailureVariants = {
-  invalidOutput: previewInvalidOutputFailure,
-  pageOutOfRange: previewPageOutOfRangeFailure,
-  sourceLoadFailed: sourceLoadFailedFailure,
-  buildFailed: buildFailedFailure,
-  previewFailed: previewFailedFailure,
-  writeFailed: previewWriteFailedFailure,
-  cancelled: previewCancelledFailure,
-} as const;
-
-type BuildHandlerContext = {
-  readonly input: z.infer<typeof buildInputSchema>;
-  readonly dependencies: CliDependencies;
-  readonly outcome: DataOutcome<"build", typeof buildSuccessVariants> &
-    FailureOutcome<"build", typeof buildFailureVariants>;
-};
-
-type PreviewHandlerContext = {
-  readonly input: z.infer<typeof previewInputSchema>;
-  readonly dependencies: CliDependencies;
-  readonly outcome: DataOutcome<"preview", typeof previewSuccessVariants> &
-    FailureOutcome<"preview", typeof previewFailureVariants>;
-};
-
-async function buildDeckCommand({
-  input,
-  dependencies,
-  outcome,
-}: BuildHandlerContext) {
-  if (dependencies.signal?.aborted) {
-    return outcome.failure.cancelled({});
-  }
-
-  const entry = resolve(dependencies.cwd, input.entry);
-  const output = resolve(
-    dependencies.cwd,
-    input.out ?? `${basename(entry, extname(entry))}.pptx`,
+function formatBuildWarningLines(
+  warnings: readonly z.infer<typeof diagnosticItemSchema>[],
+): string[] {
+  return warnings.map(
+    (warning) =>
+      `Warning ${warning.path} [${warning.code}]: ${warning.message}`,
   );
-  if (await isSameExistingFile(entry, output)) {
-    return outcome.failure.invalidOutput({ entry, output });
-  }
-  const target =
-    input.target === undefined ? undefined : targetByName(input.target);
-
-  let result: Awaited<ReturnType<typeof buildFromSource>>;
-  try {
-    result = await buildFromSource(entry, {
-      ...(input.export !== undefined && { exportName: input.export }),
-      ...(target !== undefined && { target }),
-      ...(dependencies.signal !== undefined && {
-        signal: dependencies.signal,
-      }),
-      ...(input.embedFonts !== undefined && {
-        embedFonts: input.embedFonts,
-      }),
-    });
-  } catch (error) {
-    if (isCancelledError(error, dependencies.signal)) {
-      return outcome.failure.cancelled({});
-    }
-    if (error instanceof BuildError) {
-      return outcome.failure.buildFailed({
-        diagnostics: toBuildFailureDiagnostics(error.diagnostics),
-      });
-    }
-    if (error instanceof SourceLoadError) {
-      return outcome.failure.sourceLoadFailed({
-        message: error.message,
-      });
-    }
-    throw error;
-  }
-
-  try {
-    await writeArtifact(output, result.pptx);
-  } catch (writeError) {
-    if (isCancelledError(writeError, dependencies.signal)) {
-      return outcome.failure.cancelled({});
-    }
-    return outcome.failure.writeFailed({
-      output,
-      message: errorMessage(writeError),
-    });
-  }
-
-  return outcome.data.built({
-    output,
-    slides: result.report.slides.length,
-    warnings: extractWarnings(result.report.diagnostics),
-  });
 }
 
-async function previewDeckCommand({
-  input,
-  dependencies,
-  outcome,
-}: PreviewHandlerContext) {
-  if (dependencies.signal?.aborted) {
-    return outcome.failure.cancelled({});
-  }
-
-  const entry = resolve(dependencies.cwd, input.entry);
-  const outputDir = resolve(
-    dependencies.cwd,
-    input.outDir ?? `${basename(entry, extname(entry))}-preview`,
+function presentSourceLoadFailed({
+  message,
+}: z.infer<typeof sourceLoadFailedSchema>) {
+  return text.lines(
+    toContractTextLines([`Failed to load deck source: ${message}`]),
   );
-  const outputDirCheck = await validatePreviewOutputDir(entry, outputDir);
-  if (outputDirCheck.kind === "invalidOutput") {
-    return outcome.failure.invalidOutput({ entry, output: outputDir });
-  }
-  if (outputDirCheck.kind === "error") {
-    return outcome.failure.writeFailed({
-      output: outputDir,
-      message: errorMessage(outputDirCheck.error),
-    });
-  }
-
-  let result: Awaited<ReturnType<typeof previewFromSource>>;
-  try {
-    result = await previewFromSource(entry, {
-      ...(input.export !== undefined && { exportName: input.export }),
-      ...(input.pages !== undefined && { pages: input.pages }),
-      ...(dependencies.signal !== undefined && {
-        signal: dependencies.signal,
-      }),
-    });
-  } catch (error) {
-    if (isCancelledError(error, dependencies.signal)) {
-      return outcome.failure.cancelled({});
-    }
-    if (error instanceof BuildError) {
-      return outcome.failure.buildFailed({
-        diagnostics: toBuildFailureDiagnostics(error.diagnostics),
-      });
-    }
-    if (input.pages !== undefined && error instanceof PreviewPageRangeError) {
-      return outcome.failure.pageOutOfRange({
-        requestedPages: input.pages,
-        totalSlides: error.totalSlides,
-      });
-    }
-    if (error instanceof SourceLoadError) {
-      return outcome.failure.sourceLoadFailed({
-        message: error.message,
-      });
-    }
-    throw error;
-  }
-
-  const warnings = extractWarnings(result.report.diagnostics);
-  // Base zero-padding width on total slides in the resolved deck rather than painted pages.
-  const padWidth = Math.max(2, String(result.report.slides.length).length);
-  const writtenPages: z.infer<typeof previewPageItemSchema>[] = [];
-  const failedDiagnostics: z.infer<typeof previewDiagnosticItemSchema>[] = [];
-
-  for (const pageResult of result.pages) {
-    if (dependencies.signal?.aborted) {
-      return outcome.failure.cancelled({});
-    }
-
-    const errors = pageResult.diagnostics.filter(
-      (diagnostic) => diagnostic.severity === "error",
-    );
-    if (errors.length > 0 || pageResult.png === undefined) {
-      if (errors.length > 0) {
-        failedDiagnostics.push(
-          ...errors.map(({ page, path, message }) => ({
-            page,
-            path,
-            message,
-          })),
-        );
-      } else {
-        failedDiagnostics.push({
-          page: pageResult.page,
-          path: `deck/slide[${pageResult.id}]`,
-          message: "Preview did not produce a PNG image",
-        });
-      }
-      continue;
-    }
-
-    const pageOutput = resolve(
-      outputDir,
-      `page-${String(pageResult.page).padStart(padWidth, "0")}.png`,
-    );
-    try {
-      await writeArtifact(pageOutput, pageResult.png);
-    } catch (writeError) {
-      if (isCancelledError(writeError, dependencies.signal)) {
-        return outcome.failure.cancelled({});
-      }
-      return outcome.failure.writeFailed({
-        output: pageOutput,
-        message: errorMessage(writeError),
-      });
-    }
-
-    writtenPages.push({
-      page: pageResult.page,
-      id: pageResult.id,
-      output: pageOutput,
-    });
-  }
-
-  if (failedDiagnostics.length > 0) {
-    return outcome.failure.previewFailed({
-      outputDir,
-      pages: writtenPages,
-      warnings,
-      diagnostics: failedDiagnostics,
-    });
-  }
-
-  return outcome.data.previewed({
-    outputDir,
-    pages: writtenPages,
-    warnings,
-  });
 }
 
-const sharedTextFailures = {
-  sourceLoadFailed: {
-    ...sourceLoadFailedFailure,
-    text: ({ message }: z.infer<typeof sourceLoadFailedSchema>) =>
-      text.lines(
-        toContractTextLines([`Failed to load deck source: ${message}`]),
+function presentBuildFailed({
+  diagnostics,
+}: z.infer<typeof buildFailedSchema>) {
+  return text.lines(
+    toContractTextLines([
+      "Build failed:",
+      ...diagnostics.map(
+        (diagnostic) =>
+          `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
       ),
-  },
-  buildFailed: {
-    ...buildFailedFailure,
-    text: ({ diagnostics }: z.infer<typeof buildFailedSchema>) =>
-      text.lines(
-        toContractTextLines([
-          "Build failed:",
-          ...diagnostics.map(
-            (diagnostic) =>
-              `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
-          ),
-        ]),
-      ),
-  },
-} as const;
+    ]),
+  );
+}
 
 const define = defineCli<CliDependencies>();
+
+const buildCommand = define.command("build")({
+  kind: "command",
+  parent: "pptxdk",
+  name: "build",
+  description: "Build a PowerPoint deck from a source module.",
+  fields: {
+    entry: {
+      kind: "positional",
+      description: "Deck source entrypoint",
+    },
+    out: {
+      kind: "valueOption",
+      longOption: "--out",
+      shortAlias: "-o",
+      description:
+        "PPTX output path (defaults to <entry>.pptx in current directory)",
+    },
+    export: {
+      kind: "valueOption",
+      longOption: "--export",
+      shortAlias: "-e",
+      description:
+        "Named deck or component exported from entry (defaults to default)",
+    },
+    target: {
+      kind: "valueOption",
+      longOption: "--target",
+      description: "Target name exposed by library",
+    },
+    embedFonts: {
+      kind: "valueOption",
+      longOption: "--embed-fonts",
+      description: "Embed full fonts or subset of used glyphs",
+    },
+  },
+  input: buildInputSchema,
+  outputs: ({ atomic }) => {
+    const buildDeck = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          built: {
+            description: "Built PPTX deck",
+            exitCode: 0,
+            schema: builtSchema,
+          },
+        },
+      },
+      failures: {
+        invalidOutput: {
+          description: "Output path overwrites deck source",
+          exitCode: 2,
+          schema: invalidOutputSchema,
+        },
+        sourceLoadFailed: {
+          description: "Failed to load deck source",
+          exitCode: 1,
+          schema: sourceLoadFailedSchema,
+        },
+        buildFailed: {
+          description: "Deck build failed with diagnostics",
+          exitCode: 1,
+          schema: buildFailedSchema,
+        },
+        writeFailed: {
+          description: "Failed to write PPTX output",
+          exitCode: 1,
+          schema: writeFailedSchema,
+        },
+        cancelled: {
+          description: "Deck build cancelled",
+          exitCode: 130,
+          schema: cancelledSchema,
+        },
+      },
+      async handler({ input, dependencies, outcome }) {
+        if (dependencies.signal?.aborted) {
+          return outcome.failure.cancelled({});
+        }
+
+        const entry = resolve(dependencies.cwd, input.entry);
+        const output = resolve(
+          dependencies.cwd,
+          input.out ?? `${basename(entry, extname(entry))}.pptx`,
+        );
+        if (await isSameExistingFile(entry, output)) {
+          return outcome.failure.invalidOutput({ entry, output });
+        }
+        const target =
+          input.target === undefined ? undefined : targetByName(input.target);
+
+        let result: Awaited<ReturnType<typeof buildFromSource>>;
+        try {
+          result = await buildFromSource(entry, {
+            ...(input.export !== undefined && { exportName: input.export }),
+            ...(target !== undefined && { target }),
+            ...(dependencies.signal !== undefined && {
+              signal: dependencies.signal,
+            }),
+            ...(input.embedFonts !== undefined && {
+              embedFonts: input.embedFonts,
+            }),
+          });
+        } catch (error) {
+          if (isCancelledError(error, dependencies.signal)) {
+            return outcome.failure.cancelled({});
+          }
+          if (error instanceof BuildError) {
+            return outcome.failure.buildFailed({
+              diagnostics: toBuildFailureDiagnostics(error.diagnostics),
+            });
+          }
+          if (error instanceof SourceLoadError) {
+            return outcome.failure.sourceLoadFailed({
+              message: error.message,
+            });
+          }
+          throw error;
+        }
+
+        try {
+          await writeArtifact(output, result.pptx);
+        } catch (writeError) {
+          if (isCancelledError(writeError, dependencies.signal)) {
+            return outcome.failure.cancelled({});
+          }
+          return outcome.failure.writeFailed({
+            output,
+            message: errorMessage(writeError),
+          });
+        }
+
+        return outcome.data.built({
+          output,
+          slides: result.report.slides.length,
+          warnings: extractWarnings(result.report.diagnostics),
+        });
+      },
+    });
+
+    return {
+      default: "text",
+      modes: {
+        text: buildDeck.text({
+          description: "Human-readable text output",
+          success: {
+            built: ({ output, slides, warnings }) =>
+              text.lines(
+                toContractTextLines([
+                  ...formatBuildWarningLines(warnings),
+                  `Built deck: ${output}`,
+                  `Slides: ${slides}`,
+                ]),
+              ),
+          },
+          failures: {
+            invalidOutput: () =>
+              text.line("Output path cannot overwrite deck source"),
+            sourceLoadFailed: presentSourceLoadFailed,
+            buildFailed: presentBuildFailed,
+            writeFailed: ({ output, message }) =>
+              text.lines(
+                toContractTextLines([
+                  `Failed to write PPTX output to ${output}: ${message}`,
+                ]),
+              ),
+            cancelled: () => text.line("Deck build cancelled"),
+          },
+        }),
+        structured: buildDeck.structured({
+          description: "Structured JSON output",
+        }),
+      },
+    };
+  },
+});
+
+const previewCommand = define.command("preview")({
+  kind: "command",
+  parent: "pptxdk",
+  name: "preview",
+  description: "Render static PNG page previews from a source module.",
+  fields: {
+    entry: {
+      kind: "positional",
+      description: "Deck source entrypoint",
+    },
+    outDir: {
+      kind: "valueOption",
+      longOption: "--out-dir",
+      shortAlias: "-o",
+      description:
+        "Directory for preview PNGs (defaults to <entry>-preview in current directory)",
+    },
+    export: {
+      kind: "valueOption",
+      longOption: "--export",
+      shortAlias: "-e",
+      description:
+        "Named deck or component exported from entry (defaults to default)",
+    },
+    pages: {
+      kind: "valueOption",
+      longOption: "--pages",
+      shortAlias: "-p",
+      description:
+        "1-based page numbers or closed ranges to preview (for example, 1,3-5)",
+    },
+  },
+  input: previewInputSchema,
+  outputs: ({ atomic }) => {
+    const previewDeck = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          previewed: {
+            description: "Previewed deck pages as PNG images",
+            exitCode: 0,
+            schema: previewedSchema,
+          },
+        },
+      },
+      failures: {
+        invalidOutput: {
+          description:
+            "Output directory is invalid or points to a non-directory path",
+          exitCode: 2,
+          schema: invalidOutputSchema,
+        },
+        pageOutOfRange: {
+          description: "Requested preview pages exceed total slide count",
+          exitCode: 2,
+          schema: pageOutOfRangeSchema,
+        },
+        sourceLoadFailed: {
+          description: "Failed to load deck source",
+          exitCode: 1,
+          schema: sourceLoadFailedSchema,
+        },
+        buildFailed: {
+          description: "Deck build failed with diagnostics",
+          exitCode: 1,
+          schema: buildFailedSchema,
+        },
+        previewFailed: {
+          description: "Deck preview failed on one or more pages",
+          exitCode: 1,
+          schema: previewFailedSchema,
+        },
+        writeFailed: {
+          description: "Failed to write preview image",
+          exitCode: 1,
+          schema: writeFailedSchema,
+        },
+        cancelled: {
+          description: "Deck preview cancelled",
+          exitCode: 130,
+          schema: cancelledSchema,
+        },
+      },
+      async handler({ input, dependencies, outcome }) {
+        if (dependencies.signal?.aborted) {
+          return outcome.failure.cancelled({});
+        }
+
+        const entry = resolve(dependencies.cwd, input.entry);
+        const outputDir = resolve(
+          dependencies.cwd,
+          input.outDir ?? `${basename(entry, extname(entry))}-preview`,
+        );
+        const outputDirCheck = await validatePreviewOutputDir(entry, outputDir);
+        if (outputDirCheck.kind === "invalidOutput") {
+          return outcome.failure.invalidOutput({ entry, output: outputDir });
+        }
+        if (outputDirCheck.kind === "error") {
+          return outcome.failure.writeFailed({
+            output: outputDir,
+            message: errorMessage(outputDirCheck.error),
+          });
+        }
+
+        let result: Awaited<ReturnType<typeof previewFromSource>>;
+        try {
+          result = await previewFromSource(entry, {
+            ...(input.export !== undefined && { exportName: input.export }),
+            ...(input.pages !== undefined && { pages: input.pages }),
+            ...(dependencies.signal !== undefined && {
+              signal: dependencies.signal,
+            }),
+          });
+        } catch (error) {
+          if (isCancelledError(error, dependencies.signal)) {
+            return outcome.failure.cancelled({});
+          }
+          if (error instanceof BuildError) {
+            return outcome.failure.buildFailed({
+              diagnostics: toBuildFailureDiagnostics(error.diagnostics),
+            });
+          }
+          if (
+            input.pages !== undefined &&
+            error instanceof PreviewPageRangeError
+          ) {
+            return outcome.failure.pageOutOfRange({
+              requestedPages: input.pages,
+              totalSlides: error.totalSlides,
+            });
+          }
+          if (error instanceof SourceLoadError) {
+            return outcome.failure.sourceLoadFailed({
+              message: error.message,
+            });
+          }
+          throw error;
+        }
+
+        const warnings = extractWarnings(result.report.diagnostics);
+        // Base zero-padding width on total slides in the resolved deck rather than painted pages.
+        const padWidth = Math.max(
+          2,
+          String(result.report.slides.length).length,
+        );
+        const writtenPages: z.infer<typeof previewPageItemSchema>[] = [];
+        const failedDiagnostics: z.infer<typeof previewDiagnosticItemSchema>[] =
+          [];
+
+        for (const pageResult of result.pages) {
+          if (dependencies.signal?.aborted) {
+            return outcome.failure.cancelled({});
+          }
+
+          const errors = pageResult.diagnostics.filter(
+            (diagnostic) => diagnostic.severity === "error",
+          );
+          if (errors.length > 0 || pageResult.png === undefined) {
+            if (errors.length > 0) {
+              failedDiagnostics.push(
+                ...errors.map(({ page, path, message }) => ({
+                  page,
+                  path,
+                  message,
+                })),
+              );
+            } else {
+              failedDiagnostics.push({
+                page: pageResult.page,
+                path: `deck/slide[${pageResult.id}]`,
+                message: "Preview did not produce a PNG image",
+              });
+            }
+            continue;
+          }
+
+          const pageOutput = resolve(
+            outputDir,
+            `page-${String(pageResult.page).padStart(padWidth, "0")}.png`,
+          );
+          try {
+            await writeArtifact(pageOutput, pageResult.png);
+          } catch (writeError) {
+            if (isCancelledError(writeError, dependencies.signal)) {
+              return outcome.failure.cancelled({});
+            }
+            return outcome.failure.writeFailed({
+              output: pageOutput,
+              message: errorMessage(writeError),
+            });
+          }
+
+          writtenPages.push({
+            page: pageResult.page,
+            id: pageResult.id,
+            output: pageOutput,
+          });
+        }
+
+        if (failedDiagnostics.length > 0) {
+          return outcome.failure.previewFailed({
+            outputDir,
+            pages: writtenPages,
+            warnings,
+            diagnostics: failedDiagnostics,
+          });
+        }
+
+        return outcome.data.previewed({
+          outputDir,
+          pages: writtenPages,
+          warnings,
+        });
+      },
+    });
+
+    return {
+      default: "text",
+      modes: {
+        text: previewDeck.text({
+          description: "Human-readable text output",
+          success: {
+            previewed: ({ outputDir, pages, warnings }) =>
+              text.lines(
+                toContractTextLines([
+                  ...formatBuildWarningLines(warnings),
+                  `Previewed ${pages.length} page(s) in ${outputDir}`,
+                  ...pages.map(
+                    (page) =>
+                      `  Page ${page.page} (${page.id}): ${page.output}`,
+                  ),
+                ]),
+              ),
+          },
+          failures: {
+            invalidOutput: ({ output }) =>
+              text.lines(
+                toContractTextLines([
+                  `Output directory cannot be a non-directory path: ${output}`,
+                ]),
+              ),
+            pageOutOfRange: ({ requestedPages, totalSlides }) =>
+              text.lines(
+                toContractTextLines([
+                  `Requested pages (${requestedPages.join(", ")}) exceed total slides (${totalSlides})`,
+                ]),
+              ),
+            sourceLoadFailed: presentSourceLoadFailed,
+            buildFailed: presentBuildFailed,
+            previewFailed: ({ pages, warnings, diagnostics }) =>
+              text.lines(
+                toContractTextLines([
+                  ...formatBuildWarningLines(warnings),
+                  "Preview failed:",
+                  ...diagnostics.map(
+                    (diagnostic) =>
+                      `  Page ${diagnostic.page} ${diagnostic.path}: ${diagnostic.message}`,
+                  ),
+                  ...(pages.length > 0
+                    ? [
+                        "Written pages:",
+                        ...pages.map(
+                          (page) =>
+                            `  Page ${page.page} (${page.id}): ${page.output}`,
+                        ),
+                      ]
+                    : []),
+                ]),
+              ),
+            writeFailed: ({ output, message }) =>
+              text.lines(
+                toContractTextLines([
+                  `Failed to write preview image to ${output}: ${message}`,
+                ]),
+              ),
+            cancelled: () => text.line("Deck preview cancelled"),
+          },
+        }),
+        structured: previewDeck.structured({
+          description: "Structured JSON output",
+        }),
+      },
+    };
+  },
+});
 
 const cliContract = define({
   root: "pptxdk",
@@ -676,239 +836,8 @@ const cliContract = define({
       name: "pptxdk",
       description: "Build and preview PowerPoint decks from source modules.",
     },
-    ...define.command("build")({
-      kind: "command",
-      parent: "pptxdk",
-      name: "build",
-      description: "Build a PowerPoint deck from a source module.",
-      fields: {
-        entry: {
-          kind: "positional",
-          description: "Deck source entrypoint",
-        },
-        out: {
-          kind: "valueOption",
-          longOption: "--out",
-          shortAlias: "-o",
-          description:
-            "PPTX output path (defaults to <entry>.pptx in current directory)",
-        },
-        export: {
-          kind: "valueOption",
-          longOption: "--export",
-          shortAlias: "-e",
-          description:
-            "Named deck or component exported from entry (defaults to default)",
-        },
-        target: {
-          kind: "valueOption",
-          longOption: "--target",
-          description: "Target name exposed by library",
-        },
-        embedFonts: {
-          kind: "valueOption",
-          longOption: "--embed-fonts",
-          description: "Embed full fonts or subset of used glyphs",
-        },
-      },
-      input: buildInputSchema,
-      outputs: define.outputModes("build", buildInputSchema, (mode) => ({
-        default: "text",
-        modes: {
-          text: mode.atomic({
-            description: "Human-readable text output",
-            format: "text",
-            success: {
-              kind: "data",
-              variants: {
-                built: {
-                  ...buildSuccessVariant,
-                  text: ({ output, slides, warnings }) =>
-                    text.lines(
-                      toContractTextLines([
-                        ...warnings.map(
-                          (warning) =>
-                            `Warning ${warning.path} [${warning.code}]: ${warning.message}`,
-                        ),
-                        `Built deck: ${output}`,
-                        `Slides: ${slides}`,
-                      ]),
-                    ),
-                },
-              },
-            },
-            failures: {
-              invalidOutput: {
-                ...invalidOutputFailure,
-                text: () =>
-                  text.line("Output path cannot overwrite deck source"),
-              },
-              ...sharedTextFailures,
-              writeFailed: {
-                ...writeFailedFailure,
-                text: ({ output, message }) =>
-                  text.lines(
-                    toContractTextLines([
-                      `Failed to write PPTX output to ${output}: ${message}`,
-                    ]),
-                  ),
-              },
-              cancelled: {
-                ...cancelledFailure,
-                text: () => text.line("Deck build cancelled"),
-              },
-            },
-            handler: (context) => buildDeckCommand(context),
-          }),
-          structured: mode.atomic({
-            description: "Structured JSON output",
-            format: "structured",
-            success: {
-              kind: "data",
-              variants: buildSuccessVariants,
-            },
-            failures: buildFailureVariants,
-            handler: (context) => buildDeckCommand(context),
-          }),
-        },
-      })),
-    }),
-    ...define.command("preview")({
-      kind: "command",
-      parent: "pptxdk",
-      name: "preview",
-      description: "Render static PNG page previews from a source module.",
-      fields: {
-        entry: {
-          kind: "positional",
-          description: "Deck source entrypoint",
-        },
-        outDir: {
-          kind: "valueOption",
-          longOption: "--out-dir",
-          shortAlias: "-o",
-          description:
-            "Directory for preview PNGs (defaults to <entry>-preview in current directory)",
-        },
-        export: {
-          kind: "valueOption",
-          longOption: "--export",
-          shortAlias: "-e",
-          description:
-            "Named deck or component exported from entry (defaults to default)",
-        },
-        pages: {
-          kind: "valueOption",
-          longOption: "--pages",
-          shortAlias: "-p",
-          description:
-            "1-based page numbers or closed ranges to preview (for example, 1,3-5)",
-        },
-      },
-      input: previewInputSchema,
-      outputs: define.outputModes("preview", previewInputSchema, (mode) => ({
-        default: "text",
-        modes: {
-          text: mode.atomic({
-            description: "Human-readable text output",
-            format: "text",
-            success: {
-              kind: "data",
-              variants: {
-                previewed: {
-                  ...previewSuccessVariant,
-                  text: ({ outputDir, pages, warnings }) =>
-                    text.lines(
-                      toContractTextLines([
-                        ...warnings.map(
-                          (warning) =>
-                            `Warning ${warning.path} [${warning.code}]: ${warning.message}`,
-                        ),
-                        `Previewed ${pages.length} page(s) in ${outputDir}`,
-                        ...pages.map(
-                          (page) =>
-                            `  Page ${page.page} (${page.id}): ${page.output}`,
-                        ),
-                      ]),
-                    ),
-                },
-              },
-            },
-            failures: {
-              invalidOutput: {
-                ...previewInvalidOutputFailure,
-                text: ({ output }) =>
-                  text.lines(
-                    toContractTextLines([
-                      `Output directory cannot be a non-directory path: ${output}`,
-                    ]),
-                  ),
-              },
-              pageOutOfRange: {
-                ...previewPageOutOfRangeFailure,
-                text: ({ requestedPages, totalSlides }) =>
-                  text.lines(
-                    toContractTextLines([
-                      `Requested pages (${requestedPages.join(", ")}) exceed total slides (${totalSlides})`,
-                    ]),
-                  ),
-              },
-              ...sharedTextFailures,
-              previewFailed: {
-                ...previewFailedFailure,
-                text: ({ pages, warnings, diagnostics }) =>
-                  text.lines(
-                    toContractTextLines([
-                      ...warnings.map(
-                        (warning) =>
-                          `Warning ${warning.path} [${warning.code}]: ${warning.message}`,
-                      ),
-                      "Preview failed:",
-                      ...diagnostics.map(
-                        (diagnostic) =>
-                          `  Page ${diagnostic.page} ${diagnostic.path}: ${diagnostic.message}`,
-                      ),
-                      ...(pages.length > 0
-                        ? [
-                            "Written pages:",
-                            ...pages.map(
-                              (page) =>
-                                `  Page ${page.page} (${page.id}): ${page.output}`,
-                            ),
-                          ]
-                        : []),
-                    ]),
-                  ),
-              },
-              writeFailed: {
-                ...previewWriteFailedFailure,
-                text: ({ output, message }) =>
-                  text.lines(
-                    toContractTextLines([
-                      `Failed to write preview image to ${output}: ${message}`,
-                    ]),
-                  ),
-              },
-              cancelled: {
-                ...previewCancelledFailure,
-                text: () => text.line("Deck preview cancelled"),
-              },
-            },
-            handler: (context) => previewDeckCommand(context),
-          }),
-          structured: mode.atomic({
-            description: "Structured JSON output",
-            format: "structured",
-            success: {
-              kind: "data",
-              variants: previewSuccessVariants,
-            },
-            failures: previewFailureVariants,
-            handler: (context) => previewDeckCommand(context),
-          }),
-        },
-      })),
-    }),
+    ...buildCommand,
+    ...previewCommand,
   },
 });
 

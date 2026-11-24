@@ -42,6 +42,7 @@ import {
   type PlaceholderSpPrFlags,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
+import { mastersCodegen } from "./masters-codegen.ts";
 
 const supportedPlaceholderVisualStyleKeys = new Set(
   Object.keys(visualStyleSchema.unwrap().shape),
@@ -427,6 +428,7 @@ export const mastersCapability: SlideCapabilityModule & {
   declaration: "slide-masters",
   slideProps: [],
   slot: "background",
+  codegen: mastersCodegen,
   always: false,
   mechanisms: [
     slideMasterMechanism,

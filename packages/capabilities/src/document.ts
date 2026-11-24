@@ -61,6 +61,11 @@ import {
   type NotesDeclarationProps,
 } from "./notes/notes-declaration.ts";
 import {
+  createPlaceholderNode,
+  type PlaceholderDeclarationProps,
+  type PlaceholderNode,
+} from "./placeholder/placeholder.ts";
+import {
   createShapeNode,
   type ShapeDeclarationProps,
 } from "./shape/shape-declaration.ts";
@@ -244,6 +249,7 @@ export type TableAuthorProps = TableDeclarationProps;
 export type RowAuthorProps = RowDeclarationProps;
 export type CellAuthorProps = CellDeclarationProps;
 export type NotesAuthorProps = NotesDeclarationProps;
+export type PlaceholderAuthorProps = PlaceholderDeclarationProps;
 
 export type DeckNode = DeckContainer;
 export type SlideMasterNode = SlideMasterContainer;
@@ -301,6 +307,7 @@ export type MotionStepNode = CommonContainer<
   MotionStepAuthorProps
 >;
 export type { CellNode, ChartNode, RowNode, TableNode };
+export type { PlaceholderNode };
 
 export type TextContent = RichTextItem | readonly RichTextItem[];
 export type ParagraphContent = RichTextItem | readonly RichTextItem[];
@@ -433,6 +440,13 @@ export function box(props: BoxAuthorProps = {}): BoxNode {
 /** Creates a native shape whose geometry, visuals, and rich text remain editable after attachment. */
 export function shape(props: ShapeAuthorProps = {}): ShapeNode {
   return createShapeNode(props);
+}
+
+/** Creates an unpopulated native content placeholder bound to a layout placeholder slot. */
+export function placeholder(
+  props: PlaceholderAuthorProps = {},
+): PlaceholderNode {
+  return createPlaceholderNode(props);
 }
 
 /** Creates a native image whose source bytes, crop, fit, and visuals remain editable after attachment. */

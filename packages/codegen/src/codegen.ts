@@ -1,4 +1,8 @@
-import { isSlideLayoutDefinition } from "@pptxdk/core";
+import {
+  isSlideLayoutDefinition,
+  type LayoutPlaceholderSpec,
+  type PlaceholderMap,
+} from "@pptxdk/core";
 import type { DeclarationChild, DeclarationText } from "@pptxdk/core/build";
 import {
   defaultTheme,
@@ -267,6 +271,64 @@ function isDefined(value: unknown): boolean {
   return value !== undefined;
 }
 
+const knownNativePlaceholderKeys = new Set([
+  "type",
+  "explicitType",
+  "idx",
+  "sz",
+  "orient",
+  "hasCustomPrompt",
+]);
+
+function isNativePlaceholderRedundant(
+  nativeRef: unknown,
+  layoutSpec: LayoutPlaceholderSpec,
+): boolean {
+  if (!isRecord(nativeRef)) return false;
+  for (const key of Object.keys(nativeRef)) {
+    if (nativeRef[key] !== undefined && !knownNativePlaceholderKeys.has(key)) {
+      return false;
+    }
+  }
+  return (
+    nativeRef["type"] === layoutSpec.type &&
+    (nativeRef["explicitType"] !== false) ===
+      (layoutSpec.explicitType !== false) &&
+    nativeRef["idx"] === layoutSpec.idx &&
+    nativeRef["sz"] === layoutSpec.sz &&
+    nativeRef["orient"] === layoutSpec.orient &&
+    (nativeRef["hasCustomPrompt"] === true) ===
+      (layoutSpec.hasCustomPrompt === true)
+  );
+}
+
+function stripRedundantNativePlaceholder(
+  entries: readonly (readonly [string, unknown])[],
+  layoutPlaceholders: PlaceholderMap | undefined,
+): readonly (readonly [string, unknown])[] {
+  if (layoutPlaceholders === undefined) return entries;
+  let placeholderKey: string | undefined;
+  let nativePlaceholderValue: unknown;
+  for (const [key, value] of entries) {
+    if (key === "placeholder" && typeof value === "string") {
+      placeholderKey = value;
+    } else if (key === "nativePlaceholder" && value !== undefined) {
+      nativePlaceholderValue = value;
+    }
+  }
+  if (placeholderKey === undefined || nativePlaceholderValue === undefined) {
+    return entries;
+  }
+  const layoutSpec = layoutPlaceholders[placeholderKey];
+  if (
+    layoutSpec === undefined ||
+    !isNativePlaceholderRedundant(nativePlaceholderValue, layoutSpec)
+  ) {
+    return entries;
+  }
+  return entries.filter(([key]) => key !== "nativePlaceholder");
+}
+
 /**
  * Creates a synchronous source code generator wired with the provided capability modules.
  */
@@ -368,6 +430,7 @@ export function createCodegen(
 
     let currentScopeAllocator: IdentifierAllocator | undefined;
     let currentMotionScopeVars: Map<string, string> | undefined;
+    let currentSlideLayoutPlaceholders: PlaceholderMap | undefined;
 
     const serializeFont = (
       fontValue: Font,
@@ -552,9 +615,26 @@ export function createCodegen(
           }
           return result;
         },
-        formatProps: (entries) => formatPropsObject(entries, ctx, getHooks()),
+        formatProps: (entries) =>
+          formatPropsObject(
+            stripRedundantNativePlaceholder(
+              entries,
+              currentSlideLayoutPlaceholders,
+            ),
+            ctx,
+            getHooks(),
+          ),
         formatJsxElement: (tag, entries, children = []) =>
-          formatJsxElement(tag, entries, children, ctx, getHooks()),
+          formatJsxElement(
+            tag,
+            stripRedundantNativePlaceholder(
+              entries,
+              currentSlideLayoutPlaceholders,
+            ),
+            children,
+            ctx,
+            getHooks(),
+          ),
         formatVanillaCall: (callee, args, children = []) =>
           formatVanillaCall(callee, args, children),
         fail: (code, message, subPath) => {
@@ -691,20 +771,20 @@ export function createCodegen(
 
     for (const [masterIndex, masterNode] of masterNodes.entries()) {
       const masterPath = `deck/${childPathLabel(masterNode, masterIndex)}`;
-      const masterBase = toCamelCaseIdentifier(
-        masterNode.id ?? (masterNode.props["name"] as string | undefined),
-        `master${masterIndex + 1}`,
-      );
+      const masterRawName =
+        masterNode.id ?? (masterNode.props["name"] as string | undefined);
       const masterVar =
         target === "vanilla"
-          ? allocator.allocate(masterBase)
+          ? allocator.allocate(
+              toCamelCaseIdentifier(masterRawName, `master${masterIndex + 1}`),
+            )
           : allocator.allocate(
-              toPascalCaseIdentifier(
-                masterNode.id ??
-                  (masterNode.props["name"] as string | undefined),
-                `Master${masterIndex + 1}`,
-              ),
+              toPascalCaseIdentifier(masterRawName, `Master${masterIndex + 1}`),
             );
+      const masterPrefix =
+        target === "vanilla"
+          ? masterVar
+          : `${masterVar.charAt(0).toLowerCase()}${masterVar.slice(1)}`;
 
       const masterPropsEntries: [string, unknown][] = [];
       for (const [key, value] of Object.entries(masterNode.props)) {
@@ -749,8 +829,8 @@ export function createCodegen(
           toCamelCaseIdentifier(
             layoutRawName === undefined
               ? undefined
-              : `${masterBase}_${layoutRawName}`,
-            `${masterBase}Layout${layoutIndex + 1}`,
+              : `${masterPrefix}_${layoutRawName}`,
+            `${masterPrefix}Layout${layoutIndex + 1}`,
             "Layout",
           ),
         );
@@ -907,26 +987,35 @@ export function createCodegen(
       const slideMotionVars = new Map<string, string>();
       currentMotionScopeVars = slideMotionVars;
       currentScopeAllocator = target === "react" ? allocator.fork() : allocator;
+      const rawSlideLayout = slideNode.props["layout"];
+      currentSlideLayoutPlaceholders = isSlideLayoutDefinition(rawSlideLayout)
+        ? rawSlideLayout.placeholders
+        : rawSlideLayout instanceof SlideLayoutContainer
+          ? (rawSlideLayout.props["placeholders"] as PlaceholderMap | undefined)
+          : undefined;
 
       const childExprs: string[] = [];
-      let childIdx = 0;
-      for (const child of slideNode.children) {
-        if (!(child instanceof CommonNode)) {
-          if (isDeclarationTextLeaf(child) && child.text.trim() !== "") {
-            failAt(
-              slidePath,
-              "invalid-document",
-              "Slide cannot directly contain text content",
-            );
+      try {
+        let childIdx = 0;
+        for (const child of slideNode.children) {
+          if (!(child instanceof CommonNode)) {
+            if (isDeclarationTextLeaf(child) && child.text.trim() !== "") {
+              failAt(
+                slidePath,
+                "invalid-document",
+                "Slide cannot directly contain text content",
+              );
+            }
+            continue;
           }
-          continue;
+          childExprs.push(emitNode(child, slidePath, childIdx));
+          childIdx += 1;
         }
-        childExprs.push(emitNode(child, slidePath, childIdx));
-        childIdx += 1;
+      } finally {
+        currentMotionScopeVars = undefined;
+        currentScopeAllocator = undefined;
+        currentSlideLayoutPlaceholders = undefined;
       }
-
-      currentMotionScopeVars = undefined;
-      currentScopeAllocator = undefined;
 
       const slideCtx = makeContext(slidePath);
 

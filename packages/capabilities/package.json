@@ -158,6 +158,11 @@
       "source": "./src/placeholder/placeholder.ts",
       "types": "./dist/placeholder/placeholder.d.ts",
       "default": "./dist/placeholder/placeholder.js"
+    },
+    "./placeholder-elements": {
+      "source": "./src/placeholder/placeholder-elements.ts",
+      "types": "./dist/placeholder/placeholder-elements.d.ts",
+      "default": "./dist/placeholder/placeholder-elements.js"
     }
   },
   "scripts": {

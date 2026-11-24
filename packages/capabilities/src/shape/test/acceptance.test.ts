@@ -22,11 +22,19 @@ import { parseCapabilityLayoutContract } from "@pptxdk/core/capability";
 import { emit, pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { paint } from "@pptxdk/preview";
 import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
 import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
-import { runCapabilityScenario } from "../acceptance-runner.ts";
+import {
+  runCapabilityScenario,
+  type StageCounters,
+} from "../../../test/acceptance-runner.ts";
+import {
+  customBezierShape,
+  shapeAndGroupRoundtripScenario,
+} from "./mechanisms.ts";
 import {
   shapePositiveScenario,
   shapePresetCatalogScenario,
@@ -87,7 +95,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         shapeShadedFillsAndPathsScenario,
         shapeRejectionScenario,
       ]) {
-        const runs = await runCapabilityScenario(scenario, {
+        const { runs } = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });
         assert.equal(runs.length, 2);
@@ -393,7 +401,10 @@ describe("Shape capability acceptance & bound extension contracts", () => {
       {
         weight: 400,
         data: readFileSync(
-          new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+          new URL(
+            "../../../test/assets/fonts/Jost-400-Book.ttf",
+            import.meta.url,
+          ),
         ),
       },
     ]);
@@ -419,5 +430,89 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     const painted = paint(resolution);
     assert.deepEqual(painted.pages[0]?.diagnostics, []);
     assert.ok(painted.pages[0]?.png !== undefined);
+  });
+
+  it("executes shapeAndGroupRoundtripScenario with single pure-file roundtrip counters and isolated editable instances", async () => {
+    const counters: StageCounters = {
+      expandJsx: 0,
+      buildDocument: 0,
+      resolve: 0,
+      emit: 0,
+      paint: 0,
+      import: 0,
+      validate: 0,
+    };
+    const execution = await runCapabilityScenario(
+      shapeAndGroupRoundtripScenario,
+      { counters },
+    );
+
+    assert.deepEqual(counters, {
+      expandJsx: 1,
+      buildDocument: 1,
+      resolve: 3,
+      emit: 3,
+      paint: 3,
+      import: 1,
+      validate: 3,
+    });
+
+    const findShape = (
+      root: CommonNode,
+      name: string,
+    ): CommonNode | undefined => {
+      if (root.type === "shape" && root.props["name"] === name) return root;
+      for (const child of root.children) {
+        if (child instanceof CommonNode) {
+          const found = findShape(child, name);
+          if (found !== undefined) return found;
+        }
+      }
+      return undefined;
+    };
+
+    const expectedImportedGeometry = {
+      type: "custom",
+      width: 100,
+      height: 100,
+      paths: [{ commands: customBezierShape.paths[0]!.commands }],
+    };
+
+    const sharedCustom = findShape(
+      execution.roundtrip.importedDocument,
+      "Custom Radial",
+    );
+    assert.ok(sharedCustom !== undefined);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(sharedCustom.props["geometry"])),
+      expectedImportedGeometry,
+    );
+
+    const editable = execution.openEditableRoundtripDocument();
+    assert.deepEqual(editable.report.diagnostics, []);
+    const editableCustom = findShape(editable.document, "Custom Radial");
+    assert.ok(editableCustom !== undefined);
+    editableCustom.set({ name: "Edited Radial", geometry: "diamond" });
+
+    const editedValidation = await validatePptx(
+      emit(createResolver(documentCapabilities)(editable.document)).pptx,
+    );
+    assert.deepEqual(editedValidation.errors, []);
+    const editedObj = editedValidation.slides[0]?.objects.find(
+      (o) => o.name === "Edited Radial",
+    );
+    assert.equal(editedObj?.geometry, "diamond");
+
+    // Mutating the independent editable instance must not pollute the shared read-only roundtrip artifact.
+    assert.equal(sharedCustom.props["name"], "Custom Radial");
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(sharedCustom.props["geometry"])),
+      expectedImportedGeometry,
+    );
+    assert.ok(
+      execution.roundtrip.validation.slides[0]?.objects.some(
+        (o) => o.name === "Custom Radial" && o.geometry === "custom",
+      ),
+    );
   });
 });

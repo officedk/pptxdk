@@ -335,10 +335,14 @@ export const themeMechanismVerifications: Pick<
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#2563EB");
       assert.equal(roundtrip.pages.length, 3);
-      assert.deepEqual(roundtrip.pages[2]?.diagnostics, []);
-      const roundtripPng = roundtrip.pages[2]?.png;
-      assert.ok(roundtripPng instanceof Uint8Array);
-      assert.equal(readPngPixelHex(roundtripPng, 80, 80), "#2563EB");
+      assert.equal(roundtrip.pages[2]?.png, undefined);
+      assert.ok(
+        roundtrip.pages[2]?.diagnostics.some(
+          (diag) =>
+            diag.severity === "error" &&
+            /explicit monochrome outline font file/u.test(diag.message),
+        ),
+      );
     },
   },
   "color-map": {
@@ -367,10 +371,14 @@ export const themeMechanismVerifications: Pick<
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#F8FAFC");
       assert.equal(roundtrip.pages.length, 3);
-      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
-      const roundtripPng = roundtrip.pages[0]?.png;
-      assert.ok(roundtripPng instanceof Uint8Array);
-      assert.equal(readPngPixelHex(roundtripPng, 80, 80), "#F8FAFC");
+      assert.equal(roundtrip.pages[0]?.png, undefined);
+      assert.ok(
+        roundtrip.pages[0]?.diagnostics.some(
+          (diag) =>
+            diag.severity === "error" &&
+            /explicit monochrome outline font file/u.test(diag.message),
+        ),
+      );
     },
   },
   "theme-override": {
@@ -399,10 +407,14 @@ export const themeMechanismVerifications: Pick<
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#DC2626");
       assert.equal(roundtrip.pages.length, 3);
-      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
-      const roundtripPng = roundtrip.pages[1]?.png;
-      assert.ok(roundtripPng instanceof Uint8Array);
-      assert.equal(readPngPixelHex(roundtripPng, 80, 80), "#DC2626");
+      assert.equal(roundtrip.pages[1]?.png, undefined);
+      assert.ok(
+        roundtrip.pages[1]?.diagnostics.some(
+          (diag) =>
+            diag.severity === "error" &&
+            /explicit monochrome outline font file/u.test(diag.message),
+        ),
+      );
     },
   },
 };

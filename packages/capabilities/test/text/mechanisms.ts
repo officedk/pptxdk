@@ -464,8 +464,15 @@ export const textMechanismVerifications = {
       assert.deepEqual(initial.pages[0]?.diagnostics, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
-      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
-      assert.ok(roundtrip.pages[0]?.png instanceof Uint8Array);
+      // This scenario does not embed fonts, so pure-file roundtrip expects preview-unsupported-font.
+      assert.equal(roundtrip.pages[0]?.png, undefined);
+      assert.ok(
+        roundtrip.pages[0]?.diagnostics.some(
+          (diag) =>
+            diag.severity === "error" &&
+            /explicit monochrome outline font file/u.test(diag.message),
+        ),
+      );
     },
   } satisfies MechanismVerificationEntry<typeof textBoxMechanism>,
   "text-field-slidenum": {

@@ -20,19 +20,20 @@ import {
 } from "@pptxdk/capabilities/shape";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
 import { Text } from "@pptxdk/capabilities/text-elements";
+import { CommonNode } from "@pptxdk/core";
 import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 
-import type { CapabilityScenario } from "../acceptance-runner.ts";
-import type { ExhaustiveMechanismVerificationMap } from "../mechanism-verification.ts";
+import type { CapabilityScenario } from "../../../test/acceptance-runner.ts";
+import type { ExhaustiveMechanismVerificationMap } from "../../../test/mechanism-verification.ts";
 
 const jostFont = font("Jost*", [
   {
     weight: 400,
     data: readFileSync(
-      new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+      new URL("../../../test/assets/fonts/Jost-400-Book.ttf", import.meta.url),
     ),
   },
 ]);
@@ -45,7 +46,7 @@ const sampleFillPng = (() => {
   return new Uint8Array(PNG.sync.write(img));
 })();
 
-const customBezierShape: CustomGeometry = {
+export const customBezierShape: CustomGeometry = {
   type: "custom",
   width: 100,
   height: 100,
@@ -62,6 +63,51 @@ const customBezierShape: CustomGeometry = {
     },
   ],
 };
+
+function findFirstSlideNode(root: CommonNode): CommonNode | undefined {
+  if (root.type === "slide") return root;
+  for (const child of root.children) {
+    if (child instanceof CommonNode) {
+      const found = findFirstSlideNode(child);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
+function findShapeNodeByName(
+  root: CommonNode,
+  name: string,
+): CommonNode | undefined {
+  let matched: CommonNode | undefined;
+  const visit = (node: CommonNode): void => {
+    if (matched !== undefined) return;
+    if (node.type === "shape" && node.props["name"] === name) {
+      matched = node;
+      return;
+    }
+    for (const child of node.children) {
+      if (child instanceof CommonNode) {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
+  return matched;
+}
+
+function extractShapeXmlByName(slideXml: string, name: string): string {
+  const marker = `name="${name}"`;
+  const markerIdx = slideXml.indexOf(marker);
+  assert.ok(markerIdx >= 0, `Expected <p:sp> with ${marker} in slide XML`);
+  const spStart = slideXml.lastIndexOf("<p:sp>", markerIdx);
+  const spEnd = slideXml.indexOf("</p:sp>", markerIdx);
+  assert.ok(
+    spStart >= 0 && spEnd > spStart,
+    `Expected enclosing <p:sp>...</p:sp> for ${marker}`,
+  );
+  return slideXml.slice(spStart, spEnd + "</p:sp>".length);
+}
 
 export const shapeAndGroupRoundtripScenario: CapabilityScenario = {
   id: "mechanism-shape-group-layout-roundtrip",
@@ -556,14 +602,13 @@ export const shapeAndGroupRoundtripScenario: CapabilityScenario = {
   },
 };
 
-export const shapeAndGroupMechanismVerifications: Pick<
+export const shapeMechanismVerifications: Pick<
   ExhaustiveMechanismVerificationMap,
   | "preset-shape"
   | "custom-geometry-shape"
   | "solid-fill"
   | "gradient-fill"
   | "image-fill"
-  | "group"
 > = {
   "preset-shape": {
     scenario: shapeAndGroupRoundtripScenario,
@@ -573,6 +618,10 @@ export const shapeAndGroupMechanismVerifications: Pick<
       const presetSolid = s1.objects.find((o) => o.name === "Preset Solid");
       assert.equal(presetSolid?.geometry, "roundRect");
       assert.equal(presetSolid?.rotationDegrees, 15);
+      const presetLinear = s1.objects.find((o) => o.name === "Preset Linear");
+      assert.equal(presetLinear?.geometry, "ellipse");
+      const presetImage = s1.objects.find((o) => o.name === "Preset ImageFill");
+      assert.equal(presetImage?.geometry, "rect");
       const arrow = s1.objects.find((o) => o.name === "Arrow Connector");
       assert.equal(arrow?.geometry, "line");
       // Verify zIndex ordering in PPTX shape tree: Back Slate precedes Front Amber.
@@ -619,27 +668,94 @@ export const shapeAndGroupMechanismVerifications: Pick<
   },
   "custom-geometry-shape": {
     scenario: shapeAndGroupRoundtripScenario,
-    assertNative({ stage, pptx, validation }) {
-      assert.equal(validation.errors.length, 0, `${stage} errors`);
+    assertNative({ stage, pptx, validation, importedDocument }) {
+      const prefix = `[${shapeAndGroupRoundtripScenario.id}:${stage}:Custom Radial]`;
+      assert.equal(validation.errors.length, 0, `${prefix} validation errors`);
       const custom = validation.slides[0]!.objects.find(
         (o) => o.name === "Custom Radial",
       );
-      assert.equal(custom?.geometry, "custom");
-      assert.deepEqual(custom?.boxEmu, {
-        x: 24 * 9525,
-        y: 140 * 9525,
-        width: 140 * 9525,
-        height: 100 * 9525,
-      });
+      assert.equal(custom?.geometry, "custom", `${prefix} geometry kind`);
+      assert.deepEqual(
+        custom?.boxEmu,
+        {
+          x: 24 * 9525,
+          y: 140 * 9525,
+          width: 140 * 9525,
+          height: 100 * 9525,
+        },
+        `${prefix} boxEmu`,
+      );
       const slide1Xml = strFromU8(unzipSync(pptx)["ppt/slides/slide1.xml"]!);
-      assert.match(slide1Xml, /<a:custGeom>/u);
-      assert.match(slide1Xml, /<a:cubicBezTo>/u);
-      assert.match(slide1Xml, /<a:quadBezTo>/u);
-      assert.match(slide1Xml, /flipV="1"/u);
+      const customRadialXml = extractShapeXmlByName(slide1Xml, "Custom Radial");
+      assert.match(customRadialXml, /flipV="1"/u, `${prefix} flipV="1"`);
+      assert.match(
+        customRadialXml,
+        /<a:path w="100000" h="100000">/u,
+        `${prefix} path viewBox`,
+      );
+      assert.match(
+        customRadialXml,
+        /<a:moveTo><a:pt x="10000" y="80000"\/><\/a:moveTo>/u,
+        `${prefix} moveTo control point`,
+      );
+      assert.match(
+        customRadialXml,
+        /<a:cubicBezTo><a:pt x="10000" y="15000"\/><a:pt x="90000" y="15000"\/><a:pt x="90000" y="80000"\/><\/a:cubicBezTo>/u,
+        `${prefix} cubicBezTo control points`,
+      );
+      assert.match(
+        customRadialXml,
+        /<a:quadBezTo><a:pt x="50000" y="95000"\/><a:pt x="10000" y="80000"\/><\/a:quadBezTo>/u,
+        `${prefix} quadBezTo control points`,
+      );
+      assert.match(customRadialXml, /<a:close\/>/u, `${prefix} close command`);
+
+      if (stage === "roundtrip" && importedDocument !== undefined) {
+        const slide1 = findFirstSlideNode(importedDocument);
+        assert.ok(slide1 !== undefined, `${prefix} imported slide1`);
+        const importedCustom = findShapeNodeByName(slide1, "Custom Radial");
+        assert.ok(
+          importedCustom !== undefined,
+          `${prefix} imported Custom Radial node`,
+        );
+        assert.deepEqual(
+          JSON.parse(JSON.stringify(importedCustom.props["geometry"])),
+          {
+            type: "custom",
+            width: 100,
+            height: 100,
+            paths: [{ commands: customBezierShape.paths[0]!.commands }],
+          },
+          `${prefix} imported geometry commands and control points`,
+        );
+      }
     },
     assertPaint({ initial, roundtrip }) {
-      assert.ok(initial.pages[0]?.svg?.includes("<path "));
-      assert.ok(roundtrip.pages[0]?.svg?.includes("<path "));
+      const expectedPath =
+        'd="M38 220 C38 155 150 155 150 220 Q94 235 38 220 Z"';
+      for (const [phase, preview] of [
+        ["paint:initial", initial],
+        ["paint:roundtrip", roundtrip],
+      ] as const) {
+        const prefix = `[${shapeAndGroupRoundtripScenario.id}:${phase}:Custom Radial]`;
+        const page = preview.pages[0];
+        assert.ok(page !== undefined, `${prefix} missing page 1`);
+        assert.deepEqual(page.diagnostics, [], `${prefix} diagnostics`);
+        assert.ok(
+          page.svg?.includes(expectedPath),
+          `${prefix} expected SVG path ${expectedPath}`,
+        );
+        assert.ok(page.png instanceof Uint8Array, `${prefix} expected PNG`);
+        const decoded = PNG.sync.read(Buffer.from(page.png));
+        const offset = (190 * decoded.width + 94) * 4;
+        const r = decoded.data[offset] ?? 0;
+        const g = decoded.data[offset + 1] ?? 0;
+        const b = decoded.data[offset + 2] ?? 0;
+        assert.ok(
+          !(r === 255 && g === 255 && b === 255) && r > 200 && g > 120,
+          `${prefix} expected warm radial-gradient pixel at (94, 190), got rgb(${r}, ${g}, ${b})`,
+        );
+      }
     },
   },
   "solid-fill": {
@@ -685,45 +801,6 @@ export const shapeAndGroupMechanismVerifications: Pick<
     assertPaint({ initial, roundtrip }) {
       assert.ok(initial.pages[0]?.svg?.includes("<pattern "));
       assert.ok(roundtrip.pages[0]?.svg?.includes("<pattern "));
-    },
-  },
-  group: {
-    scenario: shapeAndGroupRoundtripScenario,
-    assertNative({ stage, validation }) {
-      assert.equal(validation.errors.length, 0, `${stage} errors`);
-      const s2 = validation.slides[1]!;
-      const outer = s2.objects[0];
-      assert.equal(outer?.kind, "group");
-      assert.equal(outer?.name, "Outer Cluster");
-      assert.equal(outer?.rotationDegrees, 12);
-      assert.deepEqual(
-        outer?.members?.map((m) => m.name),
-        ["Member Shape", "Inner Cluster"],
-      );
-      assert.equal(outer?.members?.[0]?.geometry, "hexagon");
-      const inner = outer?.members?.[1];
-      assert.equal(inner?.kind, "group");
-      assert.equal(inner?.name, "Inner Cluster");
-      assert.equal(inner?.rotationDegrees, 342);
-      assert.equal(inner?.members?.[0]?.name, "Nested Leaf");
-      assert.equal(inner?.members?.[0]?.geometry, "diamond");
-
-      const s3 = validation.slides[2]!;
-      const textGroup = s3.objects[1];
-      assert.equal(textGroup?.kind, "group");
-      assert.equal(textGroup?.name, "Text Cluster");
-      assert.equal(textGroup?.members?.[0]?.name, "Labeled Hex");
-      assert.equal(textGroup?.members?.[0]?.text?.text, "Hex");
-      assert.equal(textGroup?.members?.[1]?.name, "Member Text");
-      assert.equal(textGroup?.members?.[1]?.text?.text, "Group Label");
-    },
-    assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[1]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
-      assert.ok(initial.pages[1]?.svg?.includes("rotate(12 "));
-      assert.ok(initial.pages[1]?.svg?.includes("rotate(-18 "));
-      assert.ok(roundtrip.pages[1]?.svg?.includes("rotate(12 "));
-      assert.ok(roundtrip.pages[1]?.svg?.includes("rotate(342 "));
     },
   },
 };

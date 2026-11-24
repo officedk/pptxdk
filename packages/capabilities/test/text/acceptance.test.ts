@@ -46,7 +46,7 @@ describe("Text capability acceptance", () => {
         textRtlListsAndFillsScenario,
         textRejectionScenario,
       ]) {
-        const runs = await runCapabilityScenario(scenario, {
+        const { runs } = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });
         assert.equal(runs.length, 2);

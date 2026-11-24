@@ -13,7 +13,7 @@ describe("Group capability acceptance", () => {
     const outDir = await mkdtemp(join(tmpdir(), "rp-group-accept-"));
     try {
       for (const scenario of [groupPositiveScenario, groupRejectionScenario]) {
-        const runs = await runCapabilityScenario(scenario, {
+        const { runs } = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });
         assert.equal(runs.length, 2);

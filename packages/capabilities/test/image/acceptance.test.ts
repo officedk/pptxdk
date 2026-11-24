@@ -23,7 +23,7 @@ describe("Image capability acceptance", () => {
         imageSizingSoftBorderAndLinkScenario,
         imageRejectionScenario,
       ]) {
-        const runs = await runCapabilityScenario(scenario, {
+        const { runs } = await runCapabilityScenario(scenario, {
           outputDir: outDir,
         });
         assert.equal(runs.length, 2);

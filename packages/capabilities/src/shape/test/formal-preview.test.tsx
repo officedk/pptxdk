@@ -25,14 +25,14 @@ import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
 const jostRegularBytes = readFileSync(
-  new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+  new URL("../../../test/assets/fonts/Jost-400-Book.ttf", import.meta.url),
 );
 const jostFont = font("Jost*", [
   { weight: 400, data: jostRegularBytes },
   {
     weight: 700,
     data: readFileSync(
-      new URL("../assets/fonts/Jost-700-Bold.ttf", import.meta.url),
+      new URL("../../../test/assets/fonts/Jost-700-Bold.ttf", import.meta.url),
     ),
   },
 ]);

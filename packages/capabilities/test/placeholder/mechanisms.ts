@@ -10,7 +10,7 @@ import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 
 import type { contentPlaceholderMechanism } from "../../src/placeholder/placeholder.ts";
-import { picturePlaceholderRoundtripScenario } from "../image/mechanisms.ts";
+import { masterSharedCanvasScenario } from "../masters/shared-canvas-mechanisms.ts";
 import type {
   ExhaustiveMechanismVerificationMap,
   MechanismVerificationEntry,
@@ -21,9 +21,9 @@ const resolveDocument = createResolver(documentCapabilities);
 
 export const placeholderMechanismVerifications = {
   "content-placeholder": {
-    // Share the picture-placeholder scenario for cached build execution, and directly verify
+    // Share the master-shared-canvas scenario for cached build execution, and directly verify
     // unpopulated content placeholder roundtrip from the python-pptx reference fixture.
-    scenario: picturePlaceholderRoundtripScenario,
+    scenario: masterSharedCanvasScenario,
     async assertNative({ stage }) {
       if (stage !== "initial") return;
       const fixtureBytes = new Uint8Array(

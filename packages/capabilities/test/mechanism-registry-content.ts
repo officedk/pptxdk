@@ -1,11 +1,11 @@
-import { chartMechanismVerifications } from "./chart/mechanisms.ts";
-import { groupMechanismVerifications } from "./group/mechanisms.ts";
-import { imageMechanismVerifications } from "./image/mechanisms.ts";
-import { tableMechanismVerifications } from "./table/mechanisms.ts";
+import { chartMechanismVerifications } from "../src/chart/test/mechanisms.ts";
+import { groupMechanismVerifications } from "../src/group/test/mechanisms.ts";
+import { imageMechanismVerifications } from "../src/image/test/mechanisms.ts";
+import { tableMechanismVerifications } from "../src/table/test/mechanisms.ts";
 import {
   textBoxRoundtripScenario,
   textMechanismVerifications,
-} from "./text/mechanisms.ts";
+} from "../src/text/test/mechanisms.ts";
 
 export { textBoxRoundtripScenario };
 

@@ -34,6 +34,7 @@ import {
   paintVisualModel,
   resolveVisualModel,
 } from "../shared/visual.ts";
+import { boxCodegen } from "./box-codegen.ts";
 import { boxDeclarationPropsKeys, boxStyleSchema } from "./box-declaration.ts";
 
 export {
@@ -70,6 +71,7 @@ function objectXml(
 /** Visible Box backgrounds use the same shape property writer; boxes without fill, stroke, or shadow retain layout semantics only. */
 export const boxCapability: ObjectCapabilityModule = {
   declaration: "box",
+  codegen: boxCodegen,
 
   bind(
     input: CapabilityInput,

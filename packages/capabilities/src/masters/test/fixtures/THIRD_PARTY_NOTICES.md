@@ -1,0 +1,10 @@
+# Third-Party Test Fixtures (Masters & Layouts)
+
+The binary `.pptx` fixtures in this directory are unmodified upstream test files retained solely for automated SlideMaster, SlideLayout, theme, and placeholder inheritance tests within `@pptxdk/capabilities`.
+
+| File                            | Upstream Source                                                                                                                                                              | License      | SHA-256                                                            |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------ |
+| `prs-slide-masters.pptx`        | [python-pptx `prs-slide-masters.pptx`](https://github.com/scanny/python-pptx/blob/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/prs-slide-masters.pptx) | BSD-3-Clause | `6f2a9083194f537179b582ba962c9fc324bba76fd18f50e8446e7760ffb5d7eb` |
+| `layouts.pptx`                  | [Apache POI `layouts.pptx`](https://github.com/apache/poi/blob/c94ee8ad9096bdb8cf8e5e59d8d12432e950dbf3/test-data/slideshow/layouts.pptx)                                    | Apache-2.0   | `9c3d53afa3115de2ba72ec77637a616aeed505a6ff3b30a46db871c4edd32be5` |
+| `WithMaster.pptx`               | [Apache POI `WithMaster.pptx`](https://github.com/apache/poi/blob/c94ee8ad9096bdb8cf8e5e59d8d12432e950dbf3/test-data/slideshow/WithMaster.pptx)                              | Apache-2.0   | `54ae7677fd2813a815160cc72bd8960a4e482690dfc369b392868521c9b61549` |
+| `placeholder-layout-color.pptx` | [Apache POI `placeholder-layout-color.pptx`](https://github.com/apache/poi/blob/c94ee8ad9096bdb8cf8e5e59d8d12432e950dbf3/test-data/slideshow/placeholder-layout-color.pptx)  | Apache-2.0   | `b683af99cf4e71db112fe87db15840846c53dbc7a6839cbf84804980d21af9ce` |

@@ -19,6 +19,7 @@ import {
   type ResolvedTextBody,
   type ResolvedTextStyle,
 } from "../shared/text-service.ts";
+import { notesCodegen } from "./notes-codegen.ts";
 import {
   presentationSectionsImportHandler,
   speakerNotesImportHandler,
@@ -236,6 +237,7 @@ export const notesCapability: SlideCapabilityModule & {
   slideProps: [],
   slot: "timing",
   always: true,
+  codegen: notesCodegen,
   mechanisms: [speakerNotesMechanism, presentationSectionsMechanism] as const,
   bindSections(sections) {
     return {

@@ -3,11 +3,45 @@ import {
   expr,
   type CodegenContext,
   type CodegenExpr,
+  type DeclarationCodegenHandler,
 } from "@pptxdk/codegen";
 import type { DeclarationText } from "@pptxdk/core/build";
 import { CommonNode } from "@pptxdk/core/document";
 
+import {
+  paragraphAuthorPropsSchema,
+  slideNumberAuthorPropsSchema,
+  spanAuthorPropsSchema,
+  textAuthorPropsSchema,
+} from "../shared/text-schemas.ts";
+
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+
+const textAllowedPropKeys = new Set(
+  Object.keys(textAuthorPropsSchema.unwrap().shape),
+);
+const paragraphAllowedPropKeys = new Set(
+  Object.keys(paragraphAuthorPropsSchema.unwrap().shape),
+);
+const spanAllowedPropKeys = new Set(
+  Object.keys(spanAuthorPropsSchema.unwrap().shape),
+);
+const slideNumberAllowedPropKeys = new Set(
+  Object.keys(slideNumberAuthorPropsSchema.unwrap().shape),
+);
+
+/** Container-level rich-text child declaration types allowed directly inside `Text` and `Notes`. */
+export const blockRichTextChildKinds: ReadonlySet<string> = new Set([
+  "paragraph",
+  "span",
+  "slide-number",
+]);
+
+/** Inline-level rich-text child declaration types allowed inside `P` and `Span`. */
+export const inlineRichTextChildKinds: ReadonlySet<string> = new Set([
+  "span",
+  "slide-number",
+]);
 
 function singleTextLeaf(node: CommonNode): string | undefined {
   if (node.children.length !== 1) return undefined;
@@ -17,9 +51,11 @@ function singleTextLeaf(node: CommonNode): string | undefined {
   return leaf.type === "#text" ? leaf.text : undefined;
 }
 
-function collectNodeProps(
+/** Collects and validates own defined props on a rich-text or slide-number node. */
+export function collectRichTextNodeProps(
   node: CommonNode,
   ctx: CodegenContext,
+  allowedPropKeys: ReadonlySet<string>,
   supportObjectExtras: boolean,
 ): readonly (readonly [string, unknown])[] {
   const extra: Readonly<Record<string, CodegenExpr>> = supportObjectExtras
@@ -28,6 +64,13 @@ function collectNodeProps(
   const entries: [string, unknown][] = [];
   for (const [key, value] of Object.entries(node.props)) {
     if (value === undefined) continue;
+    if (!allowedPropKeys.has(key)) {
+      ctx.fail(
+        "invalid-document",
+        `${node.type} declaration does not support property ${JSON.stringify(key)}`,
+        `@${key}`,
+      );
+    }
     if (supportObjectExtras && objectMotionPropKeys.has(key)) {
       if (Object.hasOwn(extra, key)) {
         entries.push([key, extra[key]]);
@@ -45,65 +88,144 @@ function collectNodeProps(
   return entries;
 }
 
-function emitRichTextVanilla(
+function assertAllowedRichTextChildren(
   node: CommonNode,
   ctx: CodegenContext,
-  factoryName: string,
-  supportObjectExtras: boolean,
-): string {
-  const callee = ctx.useImport(factoryName);
-  const propsEntries = collectNodeProps(node, ctx, supportObjectExtras);
-  const leafText = singleTextLeaf(node);
-  if (leafText !== undefined) {
-    const args =
-      propsEntries.length === 0
-        ? [JSON.stringify(leafText)]
-        : [JSON.stringify(leafText), ctx.formatProps(propsEntries)];
-    return ctx.formatVanillaCall(callee, args);
+  allowedChildKinds: ReadonlySet<string>,
+): void {
+  let childIndex = 0;
+  for (const child of node.children) {
+    if (!(child instanceof CommonNode)) continue;
+    const label =
+      child.id === undefined
+        ? `${child.type}[${childIndex + 1}]`
+        : `${child.type}[${child.id}]`;
+    if (!allowedChildKinds.has(child.type)) {
+      ctx.fail(
+        "invalid-document",
+        `${node.type} declaration cannot contain ${JSON.stringify(child.type)} child`,
+        `${ctx.path}/${label}`,
+      );
+    }
+    childIndex += 1;
   }
-  if (node.children.length === 0) {
-    const args =
-      propsEntries.length === 0 ? [] : ["[]", ctx.formatProps(propsEntries)];
-    return ctx.formatVanillaCall(callee, args);
-  }
-  const children = ctx.emitRichTextChildren(node.children);
-  if (propsEntries.length === 0) {
-    return ctx.formatVanillaCall(callee, [], children);
-  }
-  const contentArg = ctx.emitValueExpr(children.map((code) => expr(code)));
-  return ctx.formatVanillaCall(callee, [
-    contentArg,
-    ctx.formatProps(propsEntries),
-  ]);
 }
 
-function emitRichTextReact(
+export type RichTextHandlerOptions = {
+  readonly vanillaFactory: string;
+  readonly reactComponent: string;
+  readonly allowedPropKeys: ReadonlySet<string>;
+  readonly allowedChildKinds: ReadonlySet<string>;
+  readonly supportObjectExtras: boolean;
+};
+
+/**
+ * Creates a dual-target (`vanilla` / `react`) codegen handler for a rich-text container node
+ * (`Text`, `P`, `Span`, or `Notes`), validating props and child declaration types.
+ */
+export function createRichTextCodegenHandler(
+  options: RichTextHandlerOptions,
+): DeclarationCodegenHandler {
+  return {
+    emitVanilla(node, ctx) {
+      assertAllowedRichTextChildren(node, ctx, options.allowedChildKinds);
+      const callee = ctx.useImport(options.vanillaFactory);
+      const propsEntries = collectRichTextNodeProps(
+        node,
+        ctx,
+        options.allowedPropKeys,
+        options.supportObjectExtras,
+      );
+      const leafText = singleTextLeaf(node);
+      if (leafText !== undefined) {
+        const args =
+          propsEntries.length === 0
+            ? [JSON.stringify(leafText)]
+            : [JSON.stringify(leafText), ctx.formatProps(propsEntries)];
+        return ctx.formatVanillaCall(callee, args);
+      }
+      if (node.children.length === 0) {
+        const args =
+          propsEntries.length === 0
+            ? []
+            : ["[]", ctx.formatProps(propsEntries)];
+        return ctx.formatVanillaCall(callee, args);
+      }
+      const children = ctx.emitRichTextChildren(node.children);
+      if (propsEntries.length === 0) {
+        return ctx.formatVanillaCall(callee, [], children);
+      }
+      const contentArg = ctx.emitValueExpr(children.map((code) => expr(code)));
+      return ctx.formatVanillaCall(callee, [
+        contentArg,
+        ctx.formatProps(propsEntries),
+      ]);
+    },
+    emitReact(node, ctx) {
+      assertAllowedRichTextChildren(node, ctx, options.allowedChildKinds);
+      const tag = ctx.useImport(options.reactComponent);
+      const propsEntries = collectRichTextNodeProps(
+        node,
+        ctx,
+        options.allowedPropKeys,
+        options.supportObjectExtras,
+      );
+      const children = ctx.emitRichTextChildren(node.children);
+      return ctx.formatJsxElement(tag, propsEntries, children);
+    },
+  };
+}
+
+function emitSlideNumberProps(
   node: CommonNode,
   ctx: CodegenContext,
-  componentName: string,
-  supportObjectExtras: boolean,
-): string {
-  const tag = ctx.useImport(componentName);
-  const propsEntries = collectNodeProps(node, ctx, supportObjectExtras);
-  const children = ctx.emitRichTextChildren(node.children);
-  return ctx.formatJsxElement(tag, propsEntries, children);
+): readonly (readonly [string, unknown])[] {
+  if (node.children.length > 0) {
+    ctx.fail(
+      "invalid-document",
+      "SlideNumber declaration cannot have children",
+    );
+  }
+  return collectRichTextNodeProps(node, ctx, slideNumberAllowedPropKeys, false);
 }
 
-/** Basic source codegen contribution for `text`, `paragraph`, and `span` declarations. */
+/** Source codegen contribution for `text`, `paragraph`, `span`, and `slide-number` declarations. */
 export const textCodegen = defineObjectCodegen({
   declarations: {
-    text: {
-      emitVanilla: (node, ctx) => emitRichTextVanilla(node, ctx, "text", true),
-      emitReact: (node, ctx) => emitRichTextReact(node, ctx, "Text", true),
-    },
-    paragraph: {
-      emitVanilla: (node, ctx) =>
-        emitRichTextVanilla(node, ctx, "paragraph", false),
-      emitReact: (node, ctx) => emitRichTextReact(node, ctx, "P", false),
-    },
-    span: {
-      emitVanilla: (node, ctx) => emitRichTextVanilla(node, ctx, "span", false),
-      emitReact: (node, ctx) => emitRichTextReact(node, ctx, "Span", false),
+    text: createRichTextCodegenHandler({
+      vanillaFactory: "text",
+      reactComponent: "Text",
+      allowedPropKeys: textAllowedPropKeys,
+      allowedChildKinds: blockRichTextChildKinds,
+      supportObjectExtras: true,
+    }),
+    paragraph: createRichTextCodegenHandler({
+      vanillaFactory: "paragraph",
+      reactComponent: "P",
+      allowedPropKeys: paragraphAllowedPropKeys,
+      allowedChildKinds: inlineRichTextChildKinds,
+      supportObjectExtras: false,
+    }),
+    span: createRichTextCodegenHandler({
+      vanillaFactory: "span",
+      reactComponent: "Span",
+      allowedPropKeys: spanAllowedPropKeys,
+      allowedChildKinds: inlineRichTextChildKinds,
+      supportObjectExtras: false,
+    }),
+    "slide-number": {
+      emitVanilla(node, ctx) {
+        const callee = ctx.useImport("slideNumber");
+        const propsEntries = emitSlideNumberProps(node, ctx);
+        const args =
+          propsEntries.length === 0 ? [] : [ctx.formatProps(propsEntries)];
+        return ctx.formatVanillaCall(callee, args);
+      },
+      emitReact(node, ctx) {
+        const tag = ctx.useImport("SlideNumber");
+        const propsEntries = emitSlideNumberProps(node, ctx);
+        return ctx.formatJsxElement(tag, propsEntries, []);
+      },
     },
   },
 });

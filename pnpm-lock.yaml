@@ -467,6 +467,9 @@ importers:
 
   packages/capabilities:
     dependencies:
+      '@pptxdk/codegen':
+        specifier: workspace:*
+        version: link:../codegen
       '@pptxdk/core':
         specifier: workspace:*
         version: link:../core
@@ -540,6 +543,37 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
+  packages/codegen:
+    dependencies:
+      '@pptxdk/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      '@pptxdk/tooling-config':
+        specifier: workspace:*
+        version: link:../tooling-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      oxfmt:
+        specifier: 'catalog:'
+        version: 0.74.0
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.90.0(oxlint-tsgolint@7.0.2005)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 7.0.2005
+      typescript-7:
+        specifier: 'catalog:'
+        version: typescript@7.0.2
       vitest:
         specifier: 'catalog:'
         version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
@@ -657,6 +691,9 @@ importers:
       '@pptxdk/capabilities':
         specifier: workspace:*
         version: link:../capabilities
+      '@pptxdk/codegen':
+        specifier: workspace:*
+        version: link:../codegen
       '@pptxdk/core':
         specifier: workspace:*
         version: link:../core

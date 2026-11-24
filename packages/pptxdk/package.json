@@ -66,6 +66,7 @@
   },
   "dependencies": {
     "@pptxdk/capabilities": "workspace:*",
+    "@pptxdk/codegen": "workspace:*",
     "@pptxdk/core": "workspace:*",
     "@pptxdk/emit": "workspace:*",
     "@pptxdk/import": "workspace:*",

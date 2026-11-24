@@ -697,6 +697,7 @@ export type ObjectCapabilityModule<
 > = {
   readonly declaration: string;
   readonly mechanisms?: readonly NativeMechanismDefinition[];
+  readonly codegen?: unknown;
   bind(input: CapabilityInput, context: CapabilityParseContext): Bound;
 };
 
@@ -902,6 +903,7 @@ export type SlideCapabilityModule<
   /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
   readonly mechanisms?: readonly NativeMechanismDefinition[];
+  readonly codegen?: unknown;
   readonly mastersCanvas?: {
     paintBackdrop(input: {
       readonly theme: ThemeContext;

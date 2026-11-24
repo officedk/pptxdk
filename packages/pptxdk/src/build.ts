@@ -1,4 +1,15 @@
 import {
+  CodegenError,
+  codegenTargetSchema,
+  createCodegen,
+  type CodegenDiagnostic,
+  type CodegenEntryName,
+  type CodegenFileContent,
+  type CodegenOptions,
+  type CodegenResult,
+  type CodegenTarget,
+} from "@pptxdk/codegen";
+import {
   BuildError,
   CapabilityError,
   buildOptionsSchema,
@@ -273,9 +284,12 @@ export async function build(
 export {
   BuildError,
   CapabilityError,
+  CodegenError,
   ImportError,
   buildOptionsSchema,
   cascadedOmissionSchema,
+  codegenTargetSchema,
+  createCodegen,
   createImporter,
   createResolver,
   diagnosticSchema,
@@ -296,6 +310,14 @@ export {
   targetNameSchema,
   targetSchema,
   targets,
+};
+export type {
+  CodegenDiagnostic,
+  CodegenEntryName,
+  CodegenFileContent,
+  CodegenOptions,
+  CodegenResult,
+  CodegenTarget,
 };
 export type {
   CascadedOmission,

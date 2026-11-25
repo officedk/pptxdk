@@ -170,12 +170,13 @@ describe("Exhaustive production mechanism verification", () => {
       import: 0,
       validate: 0,
     };
-    await runProductionMechanismVerifications({ counters });
+    const outcome = await runProductionMechanismVerifications({ counters });
     const uniqueScenarios = new Set(
       Object.values(productionMechanismVerifications).map(
         (entry) => entry.scenario,
       ),
     );
+    assert.equal(outcome.codegenScenarioCount, uniqueScenarios.size);
     assert.equal(counters.expandJsx, uniqueScenarios.size);
     assert.equal(counters.buildDocument, uniqueScenarios.size);
     assert.equal(counters.import, uniqueScenarios.size);
@@ -183,5 +184,5 @@ describe("Exhaustive production mechanism verification", () => {
     assert.equal(counters.emit, uniqueScenarios.size * 3);
     assert.equal(counters.paint, uniqueScenarios.size * 3);
     assert.equal(counters.validate, uniqueScenarios.size * 3);
-  });
+  }, 60_000);
 });

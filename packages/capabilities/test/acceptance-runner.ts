@@ -113,6 +113,7 @@ export type CollectedScenarioArtifact = {
 export type ScenarioRunOutput = {
   readonly scenarioId: string;
   readonly author: AuthorKind;
+  readonly document: CommonNode;
   readonly resolution: Resolution;
   readonly report: BuildReport;
   readonly pptx: Uint8Array;
@@ -636,6 +637,7 @@ export async function runCapabilityScenario(
     results.push({
       scenarioId: scenario.id,
       author,
+      document,
       resolution,
       report,
       pptx,

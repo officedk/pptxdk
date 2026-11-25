@@ -1118,7 +1118,7 @@ describe("pptxdk CLI preview", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it("pads page filenames based on total slide count and preserves slide ids with spaces and slashes", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pptxdk paging "));

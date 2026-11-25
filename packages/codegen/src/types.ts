@@ -186,7 +186,11 @@ export type ProductionSlideSlotProp =
   | "background"
   | "headerFooter"
   | "footerPlaceholders"
+  | "footer"
+  | "dateTime"
+  | "slideNumber"
   | "transition"
+  | "advanceAfter"
   | "motion";
 
 export type CapabilityCodegenModule = RegisteredCapabilityModule;

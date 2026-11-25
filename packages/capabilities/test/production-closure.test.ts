@@ -4,6 +4,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import type {
+  ObjectCodegenContribution,
+  ProductionDeclarationKind,
+  ProductionSlideSlotProp,
+  SlideCodegenContribution,
+} from "@pptxdk/codegen";
 import { describe, it } from "vitest";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -233,5 +240,219 @@ process.stdout.write("ok");
     };
     visit(distRoot, "");
     assert.deepEqual(forbiddenEntries, []);
+  });
+
+  it("mounts non-empty valid codegen contributions on every object and slide capability covering all production declarations, owner slots, and object motion props", () => {
+    const expectedDeclarations: readonly ProductionDeclarationKind[] = [
+      "box",
+      "cell",
+      "chart",
+      "group",
+      "image",
+      "motion-scope",
+      "motion-step",
+      "notes",
+      "paragraph",
+      "placeholder",
+      "row",
+      "shape",
+      "slide-number",
+      "span",
+      "table",
+      "text",
+    ];
+    const expectedSlotProps: readonly ProductionSlideSlotProp[] = [
+      "advanceAfter",
+      "background",
+      "dateTime",
+      "footer",
+      "footerPlaceholders",
+      "headerFooter",
+      "motion",
+      "slideNumber",
+      "transition",
+    ];
+    const expectedObjectProps = ["emphasis", "enter", "motion"] as const;
+
+    const coveredDeclarations = new Set<string>();
+    const coveredSlotProps = new Set<string>();
+    const coveredObjectProps = new Set<string>();
+
+    for (const mod of documentCapabilities) {
+      const isObjectOrSlide = "bind" in mod || "bindSlide" in mod;
+      assert.equal(
+        isObjectOrSlide,
+        true,
+        `Capability ${mod.declaration} must be an object or slide capability module`,
+      );
+      const rawCodegen = (mod as { readonly codegen?: unknown }).codegen;
+      assert.ok(
+        typeof rawCodegen === "object" && rawCodegen !== null,
+        `Capability ${mod.declaration} is missing a codegen contribution`,
+      );
+
+      if ("declarations" in rawCodegen) {
+        const contribution = rawCodegen as ObjectCodegenContribution;
+        const declEntries = Object.entries(contribution.declarations);
+        assert.ok(
+          declEntries.length > 0,
+          `Capability ${mod.declaration} object codegen must register at least one declaration`,
+        );
+        for (const [kind, handler] of declEntries) {
+          assert.equal(
+            typeof handler.emitVanilla,
+            "function",
+            `Capability ${mod.declaration} declaration ${kind} missing emitVanilla`,
+          );
+          assert.equal(
+            typeof handler.emitReact,
+            "function",
+            `Capability ${mod.declaration} declaration ${kind} missing emitReact`,
+          );
+          assert.equal(
+            coveredDeclarations.has(kind),
+            false,
+            `Duplicate codegen declaration ${kind} on ${mod.declaration}`,
+          );
+          coveredDeclarations.add(kind);
+        }
+        if (contribution.objectProps !== undefined) {
+          for (const [prop, serializer] of Object.entries(
+            contribution.objectProps,
+          )) {
+            assert.equal(typeof serializer, "function");
+            coveredObjectProps.add(prop);
+          }
+        }
+        if (contribution.ownerProps !== undefined) {
+          for (const [prop, serializer] of Object.entries(
+            contribution.ownerProps,
+          )) {
+            assert.equal(typeof serializer, "function");
+            coveredSlotProps.add(prop);
+          }
+        }
+        if (contribution.valueSerializers !== undefined) {
+          for (const serializer of contribution.valueSerializers) {
+            assert.equal(typeof serializer, "function");
+          }
+        }
+      } else if ("slideProps" in rawCodegen) {
+        const contribution = rawCodegen as SlideCodegenContribution;
+        const propEntries = Object.entries(contribution.slideProps);
+        assert.ok(
+          propEntries.length > 0,
+          `Capability ${mod.declaration} slide codegen must register at least one slideProp`,
+        );
+        for (const [prop, serializer] of propEntries) {
+          assert.equal(
+            typeof serializer,
+            "function",
+            `Capability ${mod.declaration} slideProp ${prop} must be a function`,
+          );
+          assert.equal(
+            coveredSlotProps.has(prop),
+            false,
+            `Duplicate codegen slideProp ${prop} on ${mod.declaration}`,
+          );
+          coveredSlotProps.add(prop);
+        }
+        if (contribution.valueSerializers !== undefined) {
+          for (const serializer of contribution.valueSerializers) {
+            assert.equal(typeof serializer, "function");
+          }
+        }
+      } else {
+        assert.fail(
+          `Capability ${mod.declaration} codegen contribution must define declarations or slideProps`,
+        );
+      }
+    }
+
+    assert.deepEqual(
+      [...coveredDeclarations].toSorted(),
+      [...expectedDeclarations].toSorted(),
+    );
+    assert.deepEqual(
+      [...coveredSlotProps].toSorted(),
+      [...expectedSlotProps].toSorted(),
+    );
+    assert.deepEqual(
+      [...coveredObjectProps].toSorted(),
+      [...expectedObjectProps].toSorted(),
+    );
+  });
+
+  it("runs createCodegen(documentCapabilities) across multi-capability documents without loading preview, rasterizer, react, or reconciler", () => {
+    const pngBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=";
+    const script = `
+import { registerHooks } from "node:module";
+
+function checkForbidden(target, label) {
+  if (
+    target === "react" ||
+    target.startsWith("react/") ||
+    target === "react-reconciler" ||
+    target.startsWith("react-reconciler/") ||
+    target.includes("/react-reconciler/") ||
+    target === "@pptxdk/preview" ||
+    target.startsWith("@pptxdk/preview/") ||
+    target.includes("/packages/preview/") ||
+    target === "@pptxdk/react" ||
+    target.startsWith("@pptxdk/react/") ||
+    target.includes("/packages/react/") ||
+    target === "@pptxdk/validation" ||
+    target.startsWith("@pptxdk/validation/") ||
+    target.includes("/packages/validation/") ||
+    target.includes("@resvg/resvg-js") ||
+    target === "pngjs" ||
+    target.startsWith("pngjs/") ||
+    target.includes("/pngjs/") ||
+    target === "jpeg-js" ||
+    target.startsWith("jpeg-js/") ||
+    target.includes("/jpeg-js/")
+  ) {
+    throw new Error("codegen loaded forbidden dependency (" + label + "): " + target);
+  }
+}
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    checkForbidden(specifier, "specifier");
+    const resolved = nextResolve(specifier, context);
+    checkForbidden(resolved.url, "resolved.url");
+    return resolved;
+  },
+});
+
+const { createCodegen } = await import("@pptxdk/codegen");
+const { documentCapabilities } = await import("@pptxdk/capabilities/all");
+const { deck, image, notes, shape, slide, step, text } = await import("@pptxdk/capabilities/document");
+const { fade } = await import("@pptxdk/capabilities/motion");
+const { transitions } = await import("@pptxdk/capabilities/transition");
+
+const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
+const doc = deck({ width: 960, height: 540 }).append(
+  slide({ id: "s1", background: "#F8FAFC", transition: transitions.fade() }).append(
+    shape({ id: "sh1", x: 10, y: 10, width: 80, height: 40, fill: "#2563EB" }),
+    image({ id: "img1", src: pngBytes, x: 100, y: 20, width: 40, height: 40 }),
+    step({ n: 1 }).append(text("Animated", { id: "t1", x: 160, y: 20, width: 120, height: 32, enter: fade() })),
+    notes("Note"),
+  ),
+);
+
+const generate = createCodegen(documentCapabilities);
+const vanilla = generate(doc, { target: "vanilla" });
+const react = generate(doc, { target: "react" });
+if (typeof vanilla.files[vanilla.entry] !== "string" || typeof react.files[react.entry] !== "string") {
+  throw new Error("Expected string entry output");
+}
+process.stdout.write("ok");
+`;
+
+    for (const condition of ["source", "dist"] as const) {
+      assert.equal(runIsolatedNode(script, condition), "ok");
+    }
   });
 });

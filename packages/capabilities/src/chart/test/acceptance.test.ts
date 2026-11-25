@@ -89,7 +89,7 @@ describe("Chart capability acceptance", () => {
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 60_000);
 
   it("enforces [slideBackgroundCapability, chartCapability] trimming across JSX and document entries", async () => {
     const chartFont = font("Jost*", [

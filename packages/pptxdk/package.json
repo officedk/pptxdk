@@ -1,7 +1,7 @@
 {
   "name": "@officedk/pptxdk",
   "version": "0.1.0",
-  "description": "Build, preview, and import editable PowerPoint presentations with TypeScript or React.",
+  "description": "From TypeScript to PowerPoint and back.",
   "license": "MIT",
   "repository": {
     "type": "git",

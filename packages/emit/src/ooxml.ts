@@ -472,7 +472,8 @@ function ooxmlAnchor(value: NonNullable<TextStyle["verticalAlign"]>): string {
 export function placeholderRefXml(ref: NativePlaceholderRef): string {
   const attrs: string[] = [];
   if (ref.explicitType !== false) attrs.push(`type="${xmlEscape(ref.type)}"`);
-  if (ref.sz !== undefined) attrs.push(`sz="${xmlEscape(ref.sz)}"`);
+  const size = ref.size ?? ref.sz;
+  if (size !== undefined) attrs.push(`sz="${xmlEscape(size)}"`);
   if (ref.orient !== undefined) attrs.push(`orient="${xmlEscape(ref.orient)}"`);
   if (ref.idx !== undefined) attrs.push(`idx="${ref.idx}"`);
   if (ref.hasCustomPrompt === true) attrs.push('hasCustomPrompt="1"');
@@ -688,13 +689,14 @@ function placeholderShapesXml(
     .map(([key, spec], index) => {
       const id = 2 + index;
       const name = xmlEscape(spec.name ?? key);
+      const size = spec.size ?? spec.sz;
       const phXml = placeholderRefXml({
         type: spec.type,
         ...(spec.explicitType === undefined
           ? {}
           : { explicitType: spec.explicitType }),
         ...(spec.idx === undefined ? {} : { idx: spec.idx }),
-        ...(spec.sz === undefined ? {} : { sz: spec.sz }),
+        ...(size === undefined ? {} : { size }),
         ...(spec.orient === undefined ? {} : { orient: spec.orient }),
         ...(spec.hasCustomPrompt === undefined
           ? {}

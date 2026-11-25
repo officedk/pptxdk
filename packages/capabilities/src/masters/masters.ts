@@ -1,6 +1,7 @@
 import {
   defaultColorMap,
   defaultTheme,
+  resolvePlaceholderBoxFromLayers,
   visualStyleSchema,
   type ColorMap,
   type ColorMapOverride,
@@ -96,15 +97,17 @@ function importDeckMasters(context: DeckImportContext): DeckImportOutcome {
 function resolvePlaceholderVisualEntries(
   placeholders: PlaceholderMap | undefined,
   theme: ThemeContext,
+  dimensions: { readonly width: number; readonly height: number },
 ): readonly ResolvedPlaceholderVisualEntry[] {
   if (placeholders === undefined) return [];
   const entries: ResolvedPlaceholderVisualEntry[] = [];
   for (const [key, spec] of Object.entries(placeholders)) {
+    const resolvedBox = resolvePlaceholderBoxFromLayers([spec], dimensions);
     const hasBox =
-      spec.x !== undefined &&
-      spec.y !== undefined &&
-      spec.width !== undefined &&
-      spec.height !== undefined;
+      typeof resolvedBox.x === "number" &&
+      typeof resolvedBox.y === "number" &&
+      typeof resolvedBox.width === "number" &&
+      typeof resolvedBox.height === "number";
     const styleRecord = spec.style as
       | Readonly<Record<string, unknown>>
       | undefined;
@@ -139,10 +142,10 @@ function resolvePlaceholderVisualEntries(
 
     const box = hasBox
       ? {
-          x: spec.x,
-          y: spec.y,
-          width: spec.width,
-          height: spec.height,
+          x: resolvedBox.x as number,
+          y: resolvedBox.y as number,
+          width: resolvedBox.width as number,
+          height: resolvedBox.height as number,
         }
       : { x: 0, y: 0, width: 100, height: 100 };
     const visual = resolveVisualModel({
@@ -480,6 +483,7 @@ export const mastersCapability: SlideCapabilityModule & {
     const entries = resolvePlaceholderVisualEntries(
       placeholders,
       context.theme,
+      context.dimensions,
     );
     return {
       resolveSlide() {

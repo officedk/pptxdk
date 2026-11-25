@@ -1556,7 +1556,7 @@ describe("bound object capability contract", () => {
     );
   });
 
-  it("coordinates generic non-Group BoundContainerCollaboration modules with when-styled layout, member composition, and continuity restrictions", async () => {
+  it("coordinates generic non-Group BoundContainerCollaboration modules with member composition and continuity restrictions", async () => {
     type ClusterProps = {
       readonly id?: string;
       readonly name?: string;
@@ -1606,7 +1606,6 @@ describe("bound object capability contract", () => {
           children: input.children,
           theme: derivedTheme,
           emitsObject: true,
-          layoutMode: "when-styled",
           childComposition: "members",
           restrictsMemberContinuity: true,
           observesLayout: false,
@@ -1638,12 +1637,16 @@ describe("bound object capability contract", () => {
             const y = Math.min(...boxes.map((b) => b.y));
             const right = Math.max(...boxes.map((b) => b.x + b.width));
             const bottom = Math.max(...boxes.map((b) => b.y + b.height));
-            const box = resolveContext.layoutBox ?? {
-              x,
-              y,
-              width: right - x,
-              height: bottom - y,
-            };
+            const box =
+              contract.layoutStyle.width !== undefined &&
+              resolveContext.layoutBox !== undefined
+                ? resolveContext.layoutBox
+                : {
+                    x,
+                    y,
+                    width: right - x,
+                    height: bottom - y,
+                  };
             const name =
               resolveContext.morphName ??
               requestedName ??
@@ -1893,7 +1896,6 @@ describe("bound object capability contract", () => {
           container: {
             children: input.children,
             emitsObject: true,
-            layoutMode: "when-styled",
             childComposition: "members",
             restrictsMemberContinuity: true,
             observesLayout: false,

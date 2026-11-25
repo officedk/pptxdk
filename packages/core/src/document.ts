@@ -25,6 +25,7 @@ export type {
   SlideProps,
   SlideStyle,
 } from "#/author-schemas.ts";
+import type { SlideStyle } from "#/author-schemas.ts";
 export {
   footerPlaceholderSpecSchema,
   footerPlaceholdersSchema,
@@ -611,7 +612,7 @@ export class AuthorQuery<Node extends CommonNode = CommonNode> {
 export class SlideLayoutContainer<
   P extends PlaceholderMap = PlaceholderMap,
   Props extends object = SlideLayoutProps<P>,
-> extends CommonContainer<"slide-layout", Props, TextStyle> {
+> extends CommonContainer<"slide-layout", Props, SlideStyle> {
   // Retains the inferred placeholder map type parameter so Slide<layout> can extract P without casts.
   declare readonly "~placeholderMap"?: P;
 }
@@ -638,7 +639,7 @@ export class SlideContainer<
 /** Editable SlideMaster node owning its SlideLayouts in declaration order. */
 export class SlideMasterContainer<
   Props extends object = SlideMasterProps,
-> extends CommonContainer<"slide-master", Props, TextStyle> {
+> extends CommonContainer<"slide-master", Props, SlideStyle> {
   /** Native theme bound to this master (shared by object identity across masters when reused). */
   get theme(): Theme | ThemeInput | undefined {
     return this.props["theme"] as Theme | ThemeInput | undefined;

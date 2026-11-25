@@ -395,7 +395,7 @@ export const textCapability = {
     const insets = textInsets(input.props["style"], placeholder);
     const styleHeight = layoutStyleValue(input, "height");
     const requestedHeight = height(
-      styleHeight ?? input.props["height"] ?? placeholderGeometry?.height,
+      placeholderGeometry?.height ?? styleHeight ?? input.props["height"],
     );
 
     const {
@@ -514,15 +514,15 @@ export const textCapability = {
       resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const dimensions = {
           x: coordinate(
-            resolveContext.layoutBox?.x ?? contract.x ?? declaredX,
+            resolveContext.layoutBox?.x ?? declaredX ?? contract.x,
             "x",
           ),
           y: coordinate(
-            resolveContext.layoutBox?.y ?? contract.y ?? declaredY,
+            resolveContext.layoutBox?.y ?? declaredY ?? contract.y,
             "y",
           ),
           width: size(
-            resolveContext.layoutBox?.width ?? contract.width ?? declaredWidth,
+            resolveContext.layoutBox?.width ?? declaredWidth ?? contract.width,
             "width",
           ),
         };

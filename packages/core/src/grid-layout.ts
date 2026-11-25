@@ -818,7 +818,11 @@ export function createGridContainerSolver(
         ) {
           width = intrinsic.height * childStyle.aspectRatio;
         }
-        if (!widthSpecified || widthPercent !== undefined) {
+        if (
+          !widthSpecified ||
+          widthPercent !== undefined ||
+          child.contentMinimumsEnforced
+        ) {
           port.setChildConstraints(child, { width: Math.max(0, width) });
         }
         const naturalAtWidth = port.measureNaturalSize(child, width);
@@ -827,7 +831,10 @@ export function createGridContainerSolver(
           : align === "stretch" && childStyle.aspectRatio === undefined
             ? availableHeight
             : naturalAtWidth.height;
-        if (!heightSpecified && childStyle.aspectRatio === undefined) {
+        if (
+          (!heightSpecified && childStyle.aspectRatio === undefined) ||
+          child.contentMinimumsEnforced
+        ) {
           port.setChildConstraints(child, { height: Math.max(0, height) });
         }
         // Recalculate after assigning the stretched size; the previous natural-size pass may
@@ -835,6 +842,12 @@ export function createGridContainerSolver(
         const finalSize = port.measureNaturalSize(child, width);
         const usedWidth = finalSize.width || width;
         const usedHeight = finalSize.height || height;
+        if (child.contentMinimumsEnforced) {
+          port.setChildConstraints(child, {
+            width: Math.max(0, usedWidth),
+            height: Math.max(0, usedHeight),
+          });
+        }
         if (child.isContainer && !heightSpecified) {
           port.setAllocatedHeight(child, height);
         }

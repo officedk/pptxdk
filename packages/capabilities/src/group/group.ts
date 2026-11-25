@@ -9,6 +9,7 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
+  type GeometryBox,
   type ObjectCapabilityModule,
   type ObjectObservation,
   type ObjectResolveContext,
@@ -304,7 +305,6 @@ export const groupCapability = {
       children: input.children,
       theme,
       emitsObject: true,
-      layoutMode: "when-styled",
       childComposition: "members",
       restrictsMemberContinuity: true,
       observesLayout: false,
@@ -329,8 +329,135 @@ export const groupCapability = {
       resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const resolvedChildren = resolveContext.resolveChildren(input.children);
         const geometry = bounds(resolvedChildren.objects);
-        const outputGeometry =
-          resolveContext.layoutBox ?? explicitBox ?? geometry.pixels;
+        const layoutBox = resolveContext.layoutBox;
+        const position = contract.layoutStyle.position;
+        const isPositioned = position === "relative" || position === "absolute";
+        const hasExplicitWidth =
+          contract.layoutStyle.width !== undefined ||
+          ((contract.layoutStyle.left !== undefined ||
+            contract.layoutStyle.inset !== undefined) &&
+            (contract.layoutStyle.right !== undefined ||
+              contract.layoutStyle.inset !== undefined));
+        const hasExplicitHeight =
+          contract.layoutStyle.height !== undefined ||
+          ((contract.layoutStyle.top !== undefined ||
+            contract.layoutStyle.inset !== undefined) &&
+            (contract.layoutStyle.bottom !== undefined ||
+              contract.layoutStyle.inset !== undefined));
+        const hasLayoutWidth =
+          hasExplicitWidth ||
+          contract.layoutStyle.flex !== undefined ||
+          contract.layoutStyle.flexGrow !== undefined ||
+          contract.layoutStyle.flexBasis !== undefined;
+        const hasLayoutHeight = hasExplicitHeight;
+
+        let outputGeometry: GeometryBox;
+        if (
+          !isPositioned &&
+          explicitBox !== undefined &&
+          !hasExplicitWidth &&
+          !hasExplicitHeight
+        ) {
+          // Transitional bridge (Tickets 03-10): imported groups with Group.bounds keep
+          // slide-space members un-offset until Ticket 06 migrates group-import.
+          outputGeometry = explicitBox;
+        } else if (isPositioned) {
+          const memberBounds = geometry.pixels;
+          if (layoutBox !== undefined) {
+            const resolvedWidth =
+              hasExplicitWidth || layoutBox.width > 0
+                ? layoutBox.width
+                : memberBounds.width > 0
+                  ? Math.max(
+                      memberBounds.width,
+                      memberBounds.x + memberBounds.width - layoutBox.x,
+                    )
+                  : 0;
+            const resolvedHeight =
+              hasExplicitHeight || layoutBox.height > 0
+                ? layoutBox.height
+                : memberBounds.height > 0
+                  ? Math.max(
+                      memberBounds.height,
+                      memberBounds.y + memberBounds.height - layoutBox.y,
+                    )
+                  : 0;
+            outputGeometry = {
+              x: layoutBox.x,
+              y: layoutBox.y,
+              width: resolvedWidth,
+              height: resolvedHeight,
+            };
+          } else {
+            outputGeometry = explicitBox ?? memberBounds;
+          }
+        } else {
+          const memberBounds = geometry.pixels;
+          if (
+            layoutBox !== undefined &&
+            hasLayoutWidth &&
+            hasLayoutHeight &&
+            layoutBox.width > 0 &&
+            layoutBox.height > 0
+          ) {
+            outputGeometry = layoutBox;
+          } else if (
+            layoutBox !== undefined &&
+            layoutBox.width > 0 &&
+            layoutBox.height > 0
+          ) {
+            const x = hasLayoutWidth
+              ? layoutBox.x
+              : memberBounds.width > 0
+                ? Math.min(layoutBox.x, memberBounds.x)
+                : layoutBox.x;
+            const y = hasLayoutHeight
+              ? layoutBox.y
+              : memberBounds.height > 0
+                ? Math.min(layoutBox.y, memberBounds.y)
+                : layoutBox.y;
+            const right = hasLayoutWidth
+              ? layoutBox.x + layoutBox.width
+              : memberBounds.width > 0
+                ? Math.max(
+                    layoutBox.x + layoutBox.width,
+                    memberBounds.x + memberBounds.width,
+                  )
+                : layoutBox.x + layoutBox.width;
+            const bottom = hasLayoutHeight
+              ? layoutBox.y + layoutBox.height
+              : memberBounds.height > 0
+                ? Math.max(
+                    layoutBox.y + layoutBox.height,
+                    memberBounds.y + memberBounds.height,
+                  )
+                : layoutBox.y + layoutBox.height;
+            outputGeometry = {
+              x,
+              y,
+              width: right - x,
+              height: bottom - y,
+            };
+          } else if (
+            layoutBox !== undefined &&
+            (hasLayoutWidth || hasLayoutHeight)
+          ) {
+            outputGeometry = {
+              x: hasLayoutWidth ? layoutBox.x : memberBounds.x,
+              y: hasLayoutHeight ? layoutBox.y : memberBounds.y,
+              width:
+                hasLayoutWidth && layoutBox.width > 0
+                  ? layoutBox.width
+                  : memberBounds.width,
+              height:
+                hasLayoutHeight && layoutBox.height > 0
+                  ? layoutBox.height
+                  : memberBounds.height,
+            };
+          } else {
+            outputGeometry = memberBounds;
+          }
+        }
         if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
           throw new CapabilityError(
             "invalid-group-geometry",

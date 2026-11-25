@@ -38,6 +38,7 @@ import {
   masterTextStyleCategoryForRole,
   matchMasterPlaceholderSpec,
   nativePlaceholderRefSchema,
+  resolvePlaceholderBoxFromLayers,
   type MasterPlaceholderMap,
   type MasterTextStyles,
   type PlaceholderMap,
@@ -143,6 +144,7 @@ type ParsedLayoutSpec = {
   >;
   readonly placeholders?: PlaceholderMap;
   readonly background?: unknown;
+  readonly style?: Readonly<Record<string, unknown>>;
   readonly headerFooter?: HeaderFooter;
   readonly footerPlaceholders?: FooterPlaceholders;
   readonly key: string;
@@ -626,6 +628,7 @@ function resolveSlides(
       "name",
       "preserve",
       "colorMap",
+      "style",
       "background",
       "headerFooter",
       "footerPlaceholders",
@@ -785,6 +788,7 @@ function resolveSlides(
         "placeholders",
         "colorMapOverride",
         "themeOverride",
+        "style",
         "background",
         "headerFooter",
         "footerPlaceholders",
@@ -821,6 +825,7 @@ function resolveSlides(
         "placeholders",
         "colorMapOverride",
         "themeOverride",
+        "style",
         "background",
         "headerFooter",
         "footerPlaceholders",
@@ -989,6 +994,13 @@ function resolveSlides(
         ...(normalizedLayoutPlaceholders === undefined
           ? {}
           : { placeholders: normalizedLayoutPlaceholders }),
+        ...(parsedLayout.data.style === undefined
+          ? {}
+          : {
+              style: parsedLayout.data.style as Readonly<
+                Record<string, unknown>
+              >,
+            }),
         ...(parsedLayout.data.background === undefined
           ? {}
           : { background: parsedLayout.data.background }),
@@ -1902,7 +1914,7 @@ function resolveBoundContainer(args: {
     content,
   } = args;
   const box = context.layout.boxes.get(child);
-  if (box === undefined && container.layoutMode !== "when-styled") {
+  if (box === undefined) {
     context.slide.diagnostics.push(
       diagnostic(
         path,
@@ -2426,6 +2438,7 @@ function collectNestedPlaceholders(
 function buildSlidePlaceholderContexts(args: {
   readonly slideId: string;
   readonly slidePath: string;
+  readonly dimensions: ResolutionDimensions;
   readonly hasExplicitLayout: boolean;
   readonly layoutSpec: InternalResolvedSlideLayout | undefined;
   readonly masterSpec: InternalResolvedSlideMaster | undefined;
@@ -2438,6 +2451,7 @@ function buildSlidePlaceholderContexts(args: {
   const {
     slideId,
     slidePath,
+    dimensions,
     hasExplicitLayout,
     layoutSpec,
     masterSpec,
@@ -2553,6 +2567,7 @@ function buildSlidePlaceholderContexts(args: {
         return;
       }
 
+      const nativeRefSize = layoutPlaceholder?.size ?? layoutPlaceholder?.sz;
       const nativeRef =
         parsedNativePh ??
         ({
@@ -2563,9 +2578,7 @@ function buildSlidePlaceholderContexts(args: {
           ...(layoutPlaceholder!.idx === undefined
             ? {}
             : { idx: layoutPlaceholder!.idx }),
-          ...(layoutPlaceholder!.sz === undefined
-            ? {}
-            : { sz: layoutPlaceholder!.sz }),
+          ...(nativeRefSize === undefined ? {} : { size: nativeRefSize }),
           ...(layoutPlaceholder!.orient === undefined
             ? {}
             : { orient: layoutPlaceholder!.orient }),
@@ -2582,6 +2595,7 @@ function buildSlidePlaceholderContexts(args: {
         ...(typeof rawKey === "string" ? { key: rawKey } : {}),
         nativeRef,
         masterTheme: placeholderTheme ?? masterSpec.themeContext,
+        slideDimensions: dimensions,
         ...(masterSpec.textStyles === undefined
           ? {}
           : { masterTextStyles: masterSpec.textStyles }),
@@ -2756,6 +2770,7 @@ function resolveSlideDeclaration(
   const placeholderContexts = buildSlidePlaceholderContexts({
     slideId: id,
     slidePath: path,
+    dimensions,
     hasExplicitLayout,
     layoutSpec,
     masterSpec,
@@ -3049,7 +3064,17 @@ function resolveSharedCanvasLayers(args: {
     document,
     initialNextId = 2,
   } = args;
-  if (children.length === 0) return { layers: [], objects: [] };
+  if (children.length === 0) {
+    if (style !== undefined) {
+      new LayoutPass(modules.declarations, dimensions, 1, options).run(
+        [],
+        path,
+        theme,
+        style,
+      );
+    }
+    return { layers: [], objects: [] };
+  }
   const state: SlideResolveState = {
     index: 1,
     nextId: initialNextId,
@@ -3267,6 +3292,7 @@ function buildResolvedPlaceholders(
   placeholders: PlaceholderMap | undefined,
   masterPlaceholders: MasterPlaceholderMap | undefined,
   masterTextStyles: MasterTextStyles | undefined,
+  dimensions: ResolutionDimensions,
 ): readonly ResolvedPlaceholder[] {
   if (placeholders === undefined) return [];
   const result: ResolvedPlaceholder[] = [];
@@ -3275,16 +3301,21 @@ function buildResolvedPlaceholders(
       masterPlaceholders === undefined
         ? undefined
         : matchMasterPlaceholderSpec(masterPlaceholders, spec.type);
-    const x = spec.x ?? masterPh?.x;
-    const y = spec.y ?? masterPh?.y;
-    const width = spec.width ?? masterPh?.width;
-    const height = spec.height ?? masterPh?.height;
+    const resolvedBox = resolvePlaceholderBoxFromLayers(
+      [masterPh, spec],
+      dimensions,
+    );
     const box =
-      x !== undefined &&
-      y !== undefined &&
-      width !== undefined &&
-      height !== undefined
-        ? { x, y, width, height }
+      typeof resolvedBox.x === "number" &&
+      typeof resolvedBox.y === "number" &&
+      typeof resolvedBox.width === "number" &&
+      typeof resolvedBox.height === "number"
+        ? {
+            x: resolvedBox.x,
+            y: resolvedBox.y,
+            width: resolvedBox.width,
+            height: resolvedBox.height,
+          }
         : undefined;
     const category = masterTextStyleCategoryForRole(spec.type);
     const masterTxLevel1 = masterTextStyles?.[category]?.[1];
@@ -3309,7 +3340,7 @@ function buildResolvedPlaceholders(
           : styleValue;
     }
     const idx = spec.idx ?? masterPh?.idx;
-    const size = spec.sz ?? masterPh?.sz;
+    const size = spec.size ?? spec.sz ?? masterPh?.size ?? masterPh?.sz;
     result.push({
       key,
       type: spec.type,
@@ -3345,14 +3376,15 @@ function deriveFooterPlaceholdersFromMap(
       spec.style !== undefined || spec.listStyles?.[1] !== undefined
         ? { ...spec.style, ...spec.listStyles?.[1] }
         : undefined;
+    const sizeVal = spec.size ?? spec.sz;
     const candidate = {
       ...(spec.x === undefined ? {} : { x: spec.x }),
       ...(spec.y === undefined ? {} : { y: spec.y }),
       ...(spec.width === undefined ? {} : { width: spec.width }),
       ...(spec.height === undefined ? {} : { height: spec.height }),
       ...(spec.idx === undefined ? {} : { idx: spec.idx }),
-      ...(spec.sz === "full" || spec.sz === "half" || spec.sz === "quarter"
-        ? { size: spec.sz }
+      ...(sizeVal === "full" || sizeVal === "half" || sizeVal === "quarter"
+        ? { size: sizeVal }
         : {}),
       ...(spec.promptText === undefined ? {} : { text: spec.promptText }),
       ...(mergedStyle === undefined ? {} : { style: mergedStyle }),
@@ -3496,20 +3528,18 @@ function resolveDocument(
   >();
 
   for (const parsedMaster of parsedMasters) {
-    const mergedMasterStyle =
-      parsedMaster.style === undefined
-        ? (deck.props["style"] as Record<string, unknown> | undefined)
-        : {
-            ...(deck.props["style"] as Record<string, unknown> | undefined),
-            ...parsedMaster.style,
-          };
     let masterThemeBase: ThemeContext;
     try {
       masterThemeBase = createThemeContext(
         parsedMaster.theme,
-        mergedMasterStyle,
+        deck.props["style"] as Record<string, unknown> | undefined,
         { colorMap: parsedMaster.colorMap },
       );
+      if (parsedMaster.style !== undefined) {
+        masterThemeBase = masterThemeBase.withTextStyle(
+          textStyleFrom(parsedMaster.style, masterThemeBase),
+        );
+      }
     } catch (error) {
       if (!(error instanceof CapabilityError)) throw error;
       throw new BuildError([
@@ -3601,6 +3631,7 @@ function resolveDocument(
       parsedMaster.placeholders,
       undefined,
       parsedMaster.textStyles,
+      size,
     );
 
     const resolvedLayouts: InternalResolvedSlideLayout[] = [];
@@ -3620,6 +3651,18 @@ function resolveDocument(
           parsedLayout.data.themeOverride,
           parsedLayout.data.colorMapOverride,
         );
+      }
+      if (parsedLayout.style !== undefined) {
+        try {
+          layoutThemeBase = layoutThemeBase.withTextStyle(
+            textStyleFrom(parsedLayout.style, layoutThemeBase),
+          );
+        } catch (error) {
+          if (!(error instanceof CapabilityError)) throw error;
+          throw new BuildError([
+            diagnostic(parsedLayout.path, error.code, error.message),
+          ]);
+        }
       }
       const layoutCapResult = resolveOwnerSlideCapabilities({
         type: "slide-layout",
@@ -3704,7 +3747,7 @@ function resolveDocument(
       const layoutShared = resolveSharedCanvasLayers({
         children: parsedLayout.node.children.map(capabilityChild),
         path: parsedLayout.path,
-        style: parsedLayout.node.props["style"],
+        style: parsedLayout.style,
         modules,
         dimensions: size,
         options,
@@ -3716,6 +3759,7 @@ function resolveDocument(
         parsedLayout.placeholders,
         parsedMaster.placeholders,
         parsedMaster.textStyles,
+        size,
       );
 
       const resolvedLayout: InternalResolvedSlideLayout = {

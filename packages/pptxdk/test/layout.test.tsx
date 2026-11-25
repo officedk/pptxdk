@@ -1744,8 +1744,6 @@ describe("public layout entry", () => {
           />
           <Shape
             id="page-relative"
-            x={10}
-            y={20}
             width={20}
             height={10}
             style={{ position: "relative", left: "10%", top: "10%" }}
@@ -1765,7 +1763,7 @@ describe("public layout entry", () => {
         },
         {
           id: "page-relative",
-          box: { x: 42, y: 44, width: 20, height: 10 },
+          box: { x: 32, y: 24, width: 20, height: 10 },
         },
       ],
     );
@@ -3567,7 +3565,15 @@ describe("public layout entry", () => {
   });
 
   it("distinguishes upper-bound measurement of natural width from precise layout allocation in Table", async () => {
-    const table = (testId: string, style: { readonly width?: number } = {}) => (
+    const table = (
+      testId: string,
+      style: {
+        readonly width?: number;
+        readonly position?: "absolute";
+        readonly left?: number;
+        readonly top?: number;
+      } = {},
+    ) => (
       <Table
         id={testId}
         columns={[80]}
@@ -3580,7 +3586,9 @@ describe("public layout entry", () => {
     );
     const result = await build(
       <Deck width={600} height={400}>
-        <Slide id="table-natural-control">{table("natural")}</Slide>
+        <Slide id="table-natural-control">
+          {table("natural", { position: "absolute", left: 0, top: 0 })}
+        </Slide>
         <Slide id="table-flex-natural">
           <Box
             style={{

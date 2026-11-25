@@ -696,6 +696,7 @@ type ParsedTable = {
   readonly declaredX: unknown;
   readonly declaredY: unknown;
   readonly declaredWidth: unknown;
+  readonly declaredHeight: unknown;
 };
 
 type TableLayoutModel = {
@@ -965,13 +966,16 @@ export const tableCapability = {
 
     const allowedStyleKeys = new Set<string>(tableStyleKeys);
 
-    const contract = parseCapabilityLayoutContract({
-      nativeKind: "graphicFrame",
-      props: input.props,
-      allowedStyleKeys,
-      allowPadding: false,
-      path: context.path,
-    });
+    const contract: CapabilityLayoutContract = {
+      ...parseCapabilityLayoutContract({
+        nativeKind: "graphicFrame",
+        props: input.props,
+        allowedStyleKeys,
+        allowPadding: false,
+        path: context.path,
+      }),
+      contentMinimumsEnforced: true,
+    };
 
     const columns = parseTableColumns(input.props["columns"]);
     const tableStyle = trackStyle(input, "table");
@@ -1000,9 +1004,13 @@ export const tableCapability = {
       declaredX: placeholderGeometry?.x ?? input.props["x"],
       declaredY: placeholderGeometry?.y ?? input.props["y"],
       declaredWidth:
+        placeholderGeometry?.width ??
         contract.layoutStyle.width ??
-        input.props["width"] ??
-        placeholderGeometry?.width,
+        input.props["width"],
+      declaredHeight:
+        placeholderGeometry?.height ??
+        contract.layoutStyle.height ??
+        input.props["height"],
     };
 
     const authorId =
@@ -1040,15 +1048,22 @@ export const tableCapability = {
           typeof parsed.declaredWidth === "number"
             ? parseTablePositiveSize(parsed.declaredWidth, "Table.width")
             : undefined;
-        const natural = tableLayoutModel(parsed, undefined, request.theme);
-        const naturalWidth = natural.widths.reduce(
-          (sum, width) => sum + width,
-          0,
-        );
+        const declaredHeight =
+          typeof parsed.declaredHeight === "number"
+            ? parseTablePositiveSize(parsed.declaredHeight, "Table.height")
+            : undefined;
         const availableWidth =
           request.availableWidth !== undefined && request.availableWidth > 0
             ? request.availableWidth
             : undefined;
+        const canSkipNatural =
+          (declaredSize !== undefined || request.widthMode === "exactly") &&
+          !columns.some((track) => track.kind === "auto");
+        const natural = canSkipNatural
+          ? undefined
+          : tableLayoutModel(parsed, undefined, request.theme);
+        const naturalWidth =
+          natural?.widths.reduce((sum, width) => sum + width, 0) ?? 0;
         const requestedWidth =
           declaredSize ??
           (availableWidth !== undefined &&
@@ -1059,30 +1074,37 @@ export const tableCapability = {
             : undefined);
         const model =
           requestedWidth === undefined
-            ? natural
+            ? (natural ?? tableLayoutModel(parsed, undefined, request.theme))
             : tableLayoutModel(parsed, requestedWidth, request.theme);
         const width = model.widths.reduce((sum, value) => sum + value, 0);
-        const height = model.heights.reduce((sum, value) => sum + value, 0);
+        const baseHeight = model.heights.reduce((sum, value) => sum + value, 0);
+        const targetHeight =
+          declaredHeight ??
+          (request.heightMode === "exactly"
+            ? request.availableHeight
+            : undefined);
+        const hasAutoRow = rows.some((row) => row.height === undefined);
+        const height =
+          targetHeight !== undefined &&
+          targetHeight > baseHeight + 0.01 &&
+          hasAutoRow
+            ? targetHeight
+            : baseHeight;
         return {
           width,
           height,
-          minContentWidth: natural.widths.reduce(
-            (sum, value) => sum + value,
-            0,
-          ),
-          minContentHeight: natural.heights.reduce(
-            (sum, value) => sum + value,
-            0,
-          ),
+          minContentWidth: natural === undefined ? width : naturalWidth,
+          minContentHeight: baseHeight,
         };
       },
 
       resolve(resolveContext: ObjectResolveContext): ObjectResolution {
-        const requestedWidth =
-          resolveContext.layoutBox?.width ??
-          (typeof parsed.declaredWidth === "number"
+        const declaredRequestedWidth =
+          typeof parsed.declaredWidth === "number"
             ? parseTablePositiveSize(parsed.declaredWidth, "Table.width")
-            : undefined);
+            : undefined;
+        const requestedWidth =
+          declaredRequestedWidth ?? resolveContext.layoutBox?.width;
         const model = tableLayoutModel(
           parsed,
           requestedWidth,
@@ -1104,7 +1126,12 @@ export const tableCapability = {
           claims.push(...result.resourceClaims);
           fontUses.push(...result.fontUses.map((use) => ({ ...use, path })));
         };
-        const targetHeight = resolveContext.layoutBox?.height;
+        const declaredTargetHeight =
+          typeof parsed.declaredHeight === "number"
+            ? parseTablePositiveSize(parsed.declaredHeight, "Table.height")
+            : undefined;
+        const targetHeight =
+          declaredTargetHeight ?? resolveContext.layoutBox?.height;
         if (targetHeight !== undefined) {
           const naturalHeight = heights.reduce((sum, value) => sum + value, 0);
           if (targetHeight > naturalHeight + 0.01) {

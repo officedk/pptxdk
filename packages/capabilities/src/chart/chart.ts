@@ -1241,13 +1241,13 @@ export const chartCapability = {
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
     const rawWidth =
+      placeholderGeometry?.width ??
       contract.layoutStyle.width ??
-      (input.props["width"] as number | undefined) ??
-      placeholderGeometry?.width;
+      (input.props["width"] as number | undefined);
     const rawHeight =
+      placeholderGeometry?.height ??
       contract.layoutStyle.height ??
-      (input.props["height"] as number | undefined) ??
-      placeholderGeometry?.height;
+      (input.props["height"] as number | undefined);
     const declaredWidth =
       rawWidth !== undefined
         ? parseChartExtentBySchema(rawWidth, "width")

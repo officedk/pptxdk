@@ -8,6 +8,7 @@ import Yoga, {
   Justify,
   MeasureMode,
   PositionType,
+  Unit,
   Wrap,
   type MeasureFunction,
   type Node as YogaNode,
@@ -432,6 +433,7 @@ type BlockFlexNode = {
   readonly isRoot: boolean;
   readonly isContainer: boolean;
   readonly propagatesBaseline: boolean;
+  readonly contentMinimumsEnforced?: boolean | undefined;
   readonly contractWidth?: LayoutLength | undefined;
   readonly contractHeight?: LayoutLength | undefined;
   readonly contractX?: number | undefined;
@@ -687,17 +689,21 @@ export function createBlockFlexLayoutSolver(options: {
     if (horizontal) {
       const padding = expandedSpacing(node.style, "padding");
       content += padding.left + padding.right;
-      const declared = styleLength(node.style.width);
-      const maximum = styleLength(node.style.maxWidth);
-      if (declared !== undefined) content = Math.min(content, declared);
-      if (maximum !== undefined) content = Math.min(content, maximum);
+      if (!node.contentMinimumsEnforced) {
+        const declared = styleLength(node.style.width);
+        const maximum = styleLength(node.style.maxWidth);
+        if (declared !== undefined) content = Math.min(content, declared);
+        if (maximum !== undefined) content = Math.min(content, maximum);
+      }
     } else {
       const padding = expandedSpacing(node.style, "padding");
       content += padding.top + padding.bottom;
-      const declared = styleLength(node.style.height);
-      const maximum = styleLength(node.style.maxHeight);
-      if (declared !== undefined) content = Math.min(content, declared);
-      if (maximum !== undefined) content = Math.min(content, maximum);
+      if (!node.contentMinimumsEnforced) {
+        const declared = styleLength(node.style.height);
+        const maximum = styleLength(node.style.maxHeight);
+        if (declared !== undefined) content = Math.min(content, declared);
+        if (maximum !== undefined) content = Math.min(content, maximum);
+      }
     }
     return content;
   };
@@ -711,6 +717,9 @@ export function createBlockFlexLayoutSolver(options: {
       node.style[axis] ??
       (axis === "width" ? node.contractWidth : node.contractHeight);
     let size = parseLayoutLength(rawDimension, axis, node.path) ?? content;
+    if (node.contentMinimumsEnforced) {
+      size = Math.max(size, content);
+    }
     const minimum =
       axis === "width"
         ? styleLength(node.style.minWidth)
@@ -720,7 +729,9 @@ export function createBlockFlexLayoutSolver(options: {
         ? styleLength(node.style.maxWidth)
         : styleLength(node.style.maxHeight);
     if (minimum !== undefined) size = Math.max(size, minimum);
-    if (maximum !== undefined) size = Math.min(size, maximum);
+    if (maximum !== undefined && !node.contentMinimumsEnforced) {
+      size = Math.min(size, maximum);
+    }
     const margin = expandedSpacing(node.style, "margin");
     return (
       size +
@@ -1031,9 +1042,36 @@ export function createBlockFlexLayoutSolver(options: {
     measureNaturalSize(node, availableWidth) {
       const internal = asInternal(node);
       internal.yoga.calculateLayout(availableWidth, undefined, Direction.LTR);
+      const yogaWidth = internal.yoga.getComputedWidth();
+      const yogaHeight = internal.yoga.getComputedHeight();
+      if (internal.contentMinimumsEnforced && internal.measure !== undefined) {
+        const explicitHeight =
+          internal.yoga.getHeight().unit === Unit.Point
+            ? internal.yoga.getHeight().value
+            : undefined;
+        const queryWidth =
+          availableWidth ?? (yogaWidth > 0 ? yogaWidth : undefined);
+        const measured = internal.measure({
+          ...(queryWidth === undefined
+            ? {}
+            : {
+                availableWidth: queryWidth,
+                widthMode: availableWidth !== undefined ? "exactly" : "at-most",
+              }),
+          ...(explicitHeight === undefined
+            ? {}
+            : { availableHeight: explicitHeight, heightMode: "exactly" }),
+        });
+        if (measured !== undefined) {
+          return {
+            width: measured.width ?? yogaWidth,
+            height: measured.height ?? yogaHeight,
+          };
+        }
+      }
       return {
-        width: internal.yoga.getComputedWidth(),
-        height: internal.yoga.getComputedHeight(),
+        width: yogaWidth,
+        height: yogaHeight,
       };
     },
     measureMinContentContribution(node, axis) {
@@ -1074,6 +1112,50 @@ export function createBlockFlexLayoutSolver(options: {
     setGridCellArea(node, area) {
       asInternal(node).relativeGridArea = area;
     },
+  };
+
+  const syncContentMinimumNodes = (node: BlockFlexNode): boolean => {
+    let changed = false;
+    if (
+      node.contentMinimumsEnforced &&
+      node.measure !== undefined &&
+      node.parent?.customHandler === undefined
+    ) {
+      const candW = node.yoga.getComputedWidth();
+      const candH = node.yoga.getComputedHeight();
+      const measured = node.measure({
+        ...(candW > 0
+          ? { availableWidth: candW, widthMode: "exactly" as const }
+          : { widthMode: "at-most" as const }),
+        ...(candH > 0
+          ? { availableHeight: candH, heightMode: "exactly" as const }
+          : { heightMode: "at-most" as const }),
+      });
+      if (
+        measured?.width !== undefined &&
+        measured.height !== undefined &&
+        (Math.abs(measured.width - candW) > 0.01 ||
+          Math.abs(measured.height - candH) > 0.01)
+      ) {
+        node.yoga.setWidth(measured.width);
+        node.yoga.setMinWidth(measured.width);
+        const maxW = node.yoga.getMaxWidth();
+        if (maxW.unit === Unit.Point && maxW.value < measured.width) {
+          node.yoga.setMaxWidth(undefined);
+        }
+        node.yoga.setHeight(measured.height);
+        node.yoga.setMinHeight(measured.height);
+        const maxH = node.yoga.getMaxHeight();
+        if (maxH.unit === Unit.Point && maxH.value < measured.height) {
+          node.yoga.setMaxHeight(undefined);
+        }
+        changed = true;
+      }
+    }
+    for (const child of node.children) {
+      if (syncContentMinimumNodes(child)) changed = true;
+    }
+    return changed;
   };
 
   const resolveCustomContainers = (node: BlockFlexNode): void => {
@@ -1118,6 +1200,19 @@ export function createBlockFlexLayoutSolver(options: {
           Direction.LTR,
         );
       }
+      if (syncContentMinimumNodes(node)) {
+        container.calculateLayout(
+          containingBox.width,
+          containingBox.height,
+          Direction.LTR,
+        );
+        resolveCustomContainers(node);
+        container.calculateLayout(
+          containingBox.width,
+          containingBox.height,
+          Direction.LTR,
+        );
+      }
       container.calculateLayout(
         containingBox.width,
         containingBox.height,
@@ -1139,12 +1234,24 @@ export function createBlockFlexLayoutSolver(options: {
       meta?: LayoutCommitMetadata,
     ) => void,
   ): void => {
-    // Keep the solver's precision: capabilities compile and write the same geometry, so display rounding here would shrink native output.
+    // Keep the solver's precision: Yoga stores 32-bit floats, so restore exact 64-bit numbers when Yoga returns the untouched fround value.
+    const preserveDouble = (
+      computed: number,
+      declared: LayoutLength | undefined,
+    ): number =>
+      typeof declared === "number" && computed === Math.fround(declared)
+        ? declared
+        : computed;
+    const rawWidth = node.yoga.getComputedWidth();
+    const rawHeight = node.yoga.getComputedHeight();
     const box: GeometryBox = {
       x: origin.x + node.yoga.getComputedLeft(),
       y: origin.y + node.yoga.getComputedTop(),
-      width: node.yoga.getComputedWidth(),
-      height: node.yoga.getComputedHeight(),
+      width: preserveDouble(rawWidth, node.contractWidth ?? node.style.width),
+      height: preserveDouble(
+        rawHeight,
+        node.contractHeight ?? node.style.height,
+      ),
     };
     const gridArea: Rect | undefined =
       node.relativeGridArea === undefined
@@ -1245,6 +1352,20 @@ export function createBlockFlexLayoutSolver(options: {
       const height = spec.contractHeight ?? spec.style.height;
       if (width !== undefined) setLength(yoga, "width", width);
       if (height !== undefined) setLength(yoga, "height", height);
+      if (
+        spec.preservesIntrinsicSize &&
+        parentInternal.style.display !== "flex" &&
+        parentInternal.customHandler === undefined &&
+        width === undefined &&
+        spec.style.alignSelf === undefined &&
+        !(
+          spec.style.position === "absolute" &&
+          (spec.style.left !== undefined || spec.style.inset !== undefined) &&
+          (spec.style.right !== undefined || spec.style.inset !== undefined)
+        )
+      ) {
+        yoga.setAlignSelf(Align.FlexStart);
+      }
       if (spec.style.position === "absolute") {
         if (
           spec.style.left === undefined &&
@@ -1269,6 +1390,9 @@ export function createBlockFlexLayoutSolver(options: {
         style: spec.style,
         isRoot: false,
         isContainer: spec.isContainer,
+        ...(spec.contentMinimumsEnforced
+          ? { contentMinimumsEnforced: true }
+          : {}),
         ...(spec.contractWidth === undefined
           ? {}
           : { contractWidth: spec.contractWidth }),
@@ -1286,6 +1410,9 @@ export function createBlockFlexLayoutSolver(options: {
         isRoot: false,
         isContainer: spec.isContainer,
         propagatesBaseline: spec.propagatesBaseline ?? false,
+        ...(spec.contentMinimumsEnforced
+          ? { contentMinimumsEnforced: true }
+          : {}),
         ...(spec.contractWidth === undefined
           ? {}
           : { contractWidth: spec.contractWidth }),
@@ -1352,75 +1479,6 @@ export function createBlockFlexLayoutSolver(options: {
       (parentInternal.view.children as LayoutSolverNode[]).push(child);
     },
 
-    requiresLooseLayout(style) {
-      return (
-        style.position === "absolute" ||
-        style.position === "relative" ||
-        style.aspectRatio !== undefined ||
-        style.width !== undefined ||
-        style.height !== undefined ||
-        style.minWidth !== undefined ||
-        style.minHeight !== undefined ||
-        style.maxWidth !== undefined ||
-        style.maxHeight !== undefined
-      );
-    },
-
-    positionLooseGeometry(node) {
-      const internal = asInternal(node);
-      if (internal.isRoot) return;
-      const x = internal.contractX ?? 0;
-      const y = internal.contractY ?? 0;
-      if (internal.style.position === "absolute") {
-        if (
-          internal.style.left === undefined &&
-          internal.style.inset === undefined &&
-          internal.style.right === undefined
-        ) {
-          internal.yoga.setPosition(Edge.Left, x);
-        }
-        if (
-          internal.style.top === undefined &&
-          internal.style.inset === undefined &&
-          internal.style.bottom === undefined
-        ) {
-          internal.yoga.setPosition(Edge.Top, y);
-        }
-        return;
-      }
-      const offset = (
-        start: LayoutLength | undefined,
-        end: LayoutLength | undefined,
-        basis: number,
-      ) => {
-        if (typeof start === "number") return start;
-        if (typeof start === "string" && start.endsWith("%")) {
-          return (Number(start.slice(0, -1)) * basis) / 100;
-        }
-        if (typeof end === "number") return -end;
-        if (typeof end === "string" && end.endsWith("%")) {
-          return -(Number(end.slice(0, -1)) * basis) / 100;
-        }
-        return 0;
-      };
-      const left = offset(
-        internal.style.left ?? internal.style.inset,
-        internal.style.right ?? internal.style.inset,
-        dimensions.width,
-      );
-      const top = offset(
-        internal.style.top ?? internal.style.inset,
-        internal.style.bottom ?? internal.style.inset,
-        dimensions.height,
-      );
-      internal.yoga.setPositionType(PositionType.Absolute);
-      internal.yoga.setPositionAuto(Edge.Right);
-      internal.yoga.setPositionAuto(Edge.Bottom);
-      internal.yoga.setPosition(Edge.Left, x + left);
-      internal.yoga.setPosition(Edge.Top, y + top);
-      internal.yoga.setAlwaysFormsContainingBlock(true);
-    },
-
     solve(onCommit) {
       if (rootNode === undefined) {
         throw new Error("Layout solver root has not been initialized");
@@ -1450,6 +1508,19 @@ export function createBlockFlexLayoutSolver(options: {
           );
         }
         if (applyAutomaticMinimums(root)) {
+          root.yoga.calculateLayout(
+            dimensions.width,
+            dimensions.height,
+            Direction.LTR,
+          );
+          resolveCustomContainers(root);
+          root.yoga.calculateLayout(
+            dimensions.width,
+            dimensions.height,
+            Direction.LTR,
+          );
+        }
+        if (syncContentMinimumNodes(root)) {
           root.yoga.calculateLayout(
             dimensions.width,
             dimensions.height,

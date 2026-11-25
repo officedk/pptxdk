@@ -626,11 +626,11 @@ export const imageCapability = {
     const declaredX = placeholderGeometry?.x ?? input.props["x"];
     const declaredY = placeholderGeometry?.y ?? input.props["y"];
     const requestedWidth =
-      requestedDimension(imageStyle, input.props, "width") ??
-      placeholderGeometry?.width;
+      placeholderGeometry?.width ??
+      requestedDimension(imageStyle, input.props, "width");
     const requestedHeight =
-      requestedDimension(imageStyle, input.props, "height") ??
-      placeholderGeometry?.height;
+      placeholderGeometry?.height ??
+      requestedDimension(imageStyle, input.props, "height");
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -679,7 +679,9 @@ export const imageCapability = {
         }
         const width =
           declaredWidth ??
-          Math.min(image.width, request.availableWidth ?? image.width);
+          (declaredHeight !== undefined
+            ? (declaredHeight * image.width) / image.height
+            : Math.min(image.width, request.availableWidth ?? image.width));
         const height = declaredHeight ?? (width * image.height) / image.width;
         return {
           width,

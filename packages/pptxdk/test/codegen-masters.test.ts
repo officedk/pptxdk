@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { unzipSync, strFromU8 } from "fflate";
 import {
   DeckContainer,
   build,
@@ -10,7 +9,7 @@ import {
   defineTheme,
   importPptx,
   lighter,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Deck,
   Placeholder,
@@ -20,7 +19,7 @@ import {
   SlideMaster,
   Text,
   expandDocument,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   deck,
   defineSlideLayout,
@@ -30,7 +29,8 @@ import {
   slideLayout,
   slideMaster,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { unzipSync, strFromU8 } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -266,7 +266,7 @@ function buildDualMasterFixtures() {
 
 function extractMaster2VanillaFragment(generatedSource: string): string {
   const importMatch = generatedSource.match(
-    /^import\s+\{[\s\S]*?\}\s+from\s+"pptxdk\/vanilla";/u,
+    /^import\s+\{[\s\S]*?\}\s+from\s+"@officedk\/pptxdk\/vanilla";/u,
   );
   const themeMatch = generatedSource.match(
     /const executiveSlateTheme = defineTheme\([\s\S]*?\n\}\);/u,
@@ -305,7 +305,7 @@ export default deck({ width: 960, height: 540 }).append(master2, reusedSlide);
 
 function extractMaster2ReactFragment(generatedSource: string): string {
   const importMatch = generatedSource.match(
-    /^import\s+\{[\s\S]*?\}\s+from\s+"pptxdk\/react";/u,
+    /^import\s+\{[\s\S]*?\}\s+from\s+"@officedk\/pptxdk\/react";/u,
   );
   const themeMatch = generatedSource.match(
     /const executiveSlateTheme = defineTheme\([\s\S]*?\n\}\);/u,
@@ -474,7 +474,7 @@ describe("pptxdk masters & placeholders codegen acceptance", () => {
     const prsVanillaSrc = codegen(importedPrs.document, { target: "vanilla" })
       .files["deck.ts"] as string;
     const prsImport = prsVanillaSrc.match(
-      /^import\s+\{[\s\S]*?\}\s+from\s+"pptxdk\/vanilla";/u,
+      /^import\s+\{[\s\S]*?\}\s+from\s+"@officedk\/pptxdk\/vanilla";/u,
     )?.[0];
     const prsTheme2 = prsVanillaSrc.match(
       /const slideMaster2Theme = defineTheme\([\s\S]*?\n\}\);/u,
@@ -491,7 +491,7 @@ describe("pptxdk masters & placeholders codegen acceptance", () => {
       entry: "deck.ts" as const,
       files: {
         "deck.ts": `${prsImport}
-import { slide, text } from "pptxdk/vanilla";
+import { slide, text } from "@officedk/pptxdk/vanilla";
 
 ${prsTheme2}
 

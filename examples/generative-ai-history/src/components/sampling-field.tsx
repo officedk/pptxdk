@@ -1,4 +1,4 @@
-import { path, preset, Shape, Text } from "pptxdk/react";
+import { path, preset, Shape, Text } from "@officedk/pptxdk/react";
 
 import { colors, transparent } from "../theme.ts";
 import { Circle } from "./primitives.tsx";

@@ -7,7 +7,7 @@ import {
   Text,
   transitions,
   type MorphScope,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

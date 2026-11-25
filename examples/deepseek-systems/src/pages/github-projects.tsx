@@ -1,4 +1,4 @@
-import { Chart, Text } from "pptxdk/react";
+import { Chart, Text } from "@officedk/pptxdk/react";
 import { use } from "react";
 
 import type { fetchGitHubProjects } from "../github-projects.ts";

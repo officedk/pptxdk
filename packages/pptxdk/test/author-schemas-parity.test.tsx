@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import * as coreMain from "@pptxdk/core";
-import * as coreCapability from "@pptxdk/core/capability";
-import * as coreDocument from "@pptxdk/core/document";
-import * as coreTheme from "@pptxdk/core/theme";
-import * as importMain from "@pptxdk/import";
-import { validatePptx } from "@pptxdk/validation";
-import * as pptxdkMain from "pptxdk";
+import * as pptxdkMain from "@officedk/pptxdk";
 import {
   BuildError,
   authorIdSchema,
@@ -29,8 +23,8 @@ import {
   themeInputSchema,
   themeSchema,
   themeScopeSchema,
-} from "pptxdk";
-import * as pptxdkBuild from "pptxdk/build";
+} from "@officedk/pptxdk";
+import * as pptxdkBuild from "@officedk/pptxdk/build";
 import {
   Box,
   Deck,
@@ -42,7 +36,7 @@ import {
   Text,
   expandDocument,
   useMotionScope,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   box,
   createMotionScopeHandle,
@@ -53,7 +47,13 @@ import {
   slide,
   span,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import * as coreMain from "@pptxdk/core";
+import * as coreCapability from "@pptxdk/core/capability";
+import * as coreDocument from "@pptxdk/core/document";
+import * as coreTheme from "@pptxdk/core/theme";
+import * as importMain from "@pptxdk/import";
+import { validatePptx } from "@pptxdk/validation";
 import type { ReactNode } from "react";
 import { describe, it } from "vitest";
 
@@ -124,8 +124,11 @@ describe("core author Zod schemas & dual-entry parity", () => {
       "ImportError",
     ] as const) {
       assert.ok(key in importMain, `@pptxdk/import must export ${key}`);
-      assert.ok(key in pptxdkMain, `pptxdk must export ${key}`);
-      assert.ok(key in pptxdkBuild, `pptxdk/build must export ${key}`);
+      assert.ok(key in pptxdkMain, `@officedk/pptxdk must export ${key}`);
+      assert.ok(
+        key in pptxdkBuild,
+        `@officedk/pptxdk/build must export ${key}`,
+      );
     }
 
     assert.equal(authorIdSchema.parse("hero"), "hero");
@@ -154,7 +157,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
     );
   });
 
-  it("produces identical valid documents and PPTX outputs from pptxdk/react and pptxdk/vanilla", async () => {
+  it("produces identical valid documents and PPTX outputs from @officedk/pptxdk/react and @officedk/pptxdk/vanilla", async () => {
     const theme = defineTheme({
       name: "Shared Brand",
       colors: { ink: "#1E293B", accent: "accent1" },
@@ -297,7 +300,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
     assert.deepEqual(jsxValidation.slides, vanillaValidation.slides);
   });
 
-  it("rejects invalid inputs identically across pptxdk/react and pptxdk/vanilla with localized diagnostics", async () => {
+  it("rejects invalid inputs identically across @officedk/pptxdk/react and @officedk/pptxdk/vanilla with localized diagnostics", async () => {
     const cases: readonly {
       readonly label: string;
       readonly expectedCode: string;

@@ -1,4 +1,4 @@
-import { Shape, Slide, Text } from "pptxdk/react";
+import { Shape, Slide, Text } from "@officedk/pptxdk/react";
 
 import { WorldMap, type RegionStory } from "../components/world-map.tsx";
 import { colors } from "../theme.ts";

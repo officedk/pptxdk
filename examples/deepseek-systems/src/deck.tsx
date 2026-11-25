@@ -1,4 +1,4 @@
-import { createMorphScope, Deck, Section } from "pptxdk/react";
+import { createMorphScope, Deck, Section } from "@officedk/pptxdk/react";
 import { Suspense, useMemo } from "react";
 
 import { fetchGitHubProjects } from "./github-projects.ts";

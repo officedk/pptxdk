@@ -70,7 +70,7 @@ export const officialCapabilityNames = Object.freeze([
 ] as const);
 
 export const officialCapabilityNameSchema = z.enum(officialCapabilityNames);
-/** Official capability module names accepted by `pptxdk/build`. */
+/** Official capability module names accepted by `@officedk/pptxdk/build`. */
 export type OfficialCapabilityName = z.infer<
   typeof officialCapabilityNameSchema
 >;

@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { PNG } from "pngjs";
-import { build, codegen, importPptx } from "pptxdk";
+import { build, codegen, importPptx } from "@officedk/pptxdk";
 import {
   Cell,
   Deck,
@@ -18,7 +16,7 @@ import {
   Text,
   defineSlideLayout,
   expandDocument,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   cell,
   deck,
@@ -32,7 +30,9 @@ import {
   span,
   table,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

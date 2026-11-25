@@ -8,7 +8,7 @@ import {
   Text,
   useMotionScope,
   wipe,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import { regionBars, type MapRegionId } from "../assets/world-map.ts";
 import { colors, motion } from "../theme.ts";

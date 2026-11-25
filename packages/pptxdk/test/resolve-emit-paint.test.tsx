@@ -3,8 +3,6 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { shapeCapability } from "@pptxdk/capabilities/shape";
-import { validatePptx } from "@pptxdk/validation";
 import {
   BuildError,
   CommonNode,
@@ -17,15 +15,31 @@ import {
   resolve,
   targets,
   transitions,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   createResolver,
   emit as emitFromBuild,
   type CapabilityModule,
-} from "pptxdk/build";
-import { paint, preview } from "pptxdk/preview";
-import { Deck, Shape, Slide, Text, expandDocument } from "pptxdk/react";
-import { box, chart, deck, section, shape, slide, text } from "pptxdk/vanilla";
+} from "@officedk/pptxdk/build";
+import { paint, preview } from "@officedk/pptxdk/preview";
+import {
+  Deck,
+  Shape,
+  Slide,
+  Text,
+  expandDocument,
+} from "@officedk/pptxdk/react";
+import {
+  box,
+  chart,
+  deck,
+  section,
+  shape,
+  slide,
+  text,
+} from "@officedk/pptxdk/vanilla";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { validatePptx } from "@pptxdk/validation";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -256,11 +270,11 @@ registerHooks({
   },
 });
 
-const { build, emit, resolve } = await import("pptxdk");
-const vanillaEntry = await import("pptxdk/vanilla");
-await import("pptxdk/react");
-const buildEntry = await import("pptxdk/build");
-await import("pptxdk/node");
+const { build, emit, resolve } = await import("@officedk/pptxdk");
+const vanillaEntry = await import("@officedk/pptxdk/vanilla");
+await import("@officedk/pptxdk/react");
+const buildEntry = await import("@officedk/pptxdk/build");
+await import("@officedk/pptxdk/node");
 
 const doc = vanillaEntry.deck({ width: 320, height: 180 }).append(
   vanillaEntry.slide({ id: "s1" }).append(

@@ -1,4 +1,4 @@
-import { Deck, Shape, SlideLayout, SlideMaster } from "pptxdk/react";
+import { Deck, Shape, SlideLayout, SlideMaster } from "@officedk/pptxdk/react";
 
 import { AlignmentPage } from "./pages/alignment.tsx";
 import { DiffusionPage } from "./pages/diffusion.tsx";

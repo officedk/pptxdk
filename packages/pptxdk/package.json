@@ -1,28 +1,20 @@
 {
-  "name": "pptxdk",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@officedk/pptxdk",
+  "version": "0.1.0",
+  "description": "Build, preview, and import editable PowerPoint presentations with TypeScript or React.",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "url": "git+https://github.com/officedk/pptxdk.git",
     "directory": "packages/pptxdk"
+  },
+  "bin": {
+    "pptxdk": "./dist/cli.js"
   },
   "files": [
     "dist"
   ],
   "type": "module",
-  "imports": {
-    "#/*.ts": {
-      "source": "./src/*.ts",
-      "types": "./dist/*.d.ts",
-      "default": "./dist/*.js"
-    },
-    "#/*.tsx": {
-      "source": "./src/*.tsx",
-      "types": "./dist/*.d.ts",
-      "default": "./dist/*.js"
-    }
-  },
   "exports": {
     ".": {
       "source": "./src/index.ts",
@@ -55,16 +47,46 @@
       "default": "./dist/preview.js"
     }
   },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.js",
+      "./build": "./dist/build.js",
+      "./react": "./dist/react.js",
+      "./vanilla": "./dist/vanilla.js",
+      "./node": "./dist/node.js",
+      "./preview": "./dist/preview.js"
+    },
+    "access": "public"
+  },
   "scripts": {
     "format:check": "oxfmt --list-different .",
     "format:write": "oxfmt --write .",
     "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
     "lint:fix": "oxlint --format=unix . --fix",
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false && rolldown -c && rm -rf dist/.declarations && chmod +x dist/cli.js",
     "test": "vitest run"
   },
   "dependencies": {
+    "@resvg/resvg-js": "catalog:",
+    "@types/fontkit": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@xmldom/xmldom": "catalog:",
+    "@ykdz/cli-contract": "catalog:",
+    "esbuild": "catalog:",
+    "fflate": "catalog:",
+    "fontkit": "catalog:",
+    "harfbuzzjs": "catalog:",
+    "jpeg-js": "catalog:",
+    "linebreak": "catalog:",
+    "pngjs": "catalog:",
+    "react": "catalog:",
+    "react-reconciler": "catalog:",
+    "yoga-layout": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
     "@pptxdk/capabilities": "workspace:*",
     "@pptxdk/codegen": "workspace:*",
     "@pptxdk/core": "workspace:*",
@@ -72,26 +94,15 @@
     "@pptxdk/import": "workspace:*",
     "@pptxdk/preview": "workspace:*",
     "@pptxdk/react": "workspace:*",
-    "esbuild": "catalog:",
-    "react": "catalog:",
-    "zod": "catalog:"
-  },
-  "devDependencies": {
     "@pptxdk/tooling-config": "workspace:*",
     "@pptxdk/validation": "workspace:*",
     "@types/emscripten": "catalog:",
-    "@types/fontkit": "catalog:",
-    "@types/node": "catalog:",
     "@types/pngjs": "catalog:",
-    "@types/react": "catalog:",
-    "fflate": "catalog:",
-    "fontkit": "catalog:",
-    "harfbuzzjs": "catalog:",
-    "jpeg-js": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
-    "pngjs": "catalog:",
+    "rolldown": "catalog:",
+    "rolldown-plugin-dts": "catalog:",
     "typescript-7": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

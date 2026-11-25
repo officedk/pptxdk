@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 
+import { emit, resolve } from "@officedk/pptxdk";
+import { paint } from "@officedk/pptxdk/preview";
+import { expandDocument } from "@officedk/pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
-import { emit, resolve } from "pptxdk";
-import { paint } from "pptxdk/preview";
-import { expandDocument } from "pptxdk/react";
 import { it } from "vitest";
 
 import { fetchGitHubProjects } from "../src/github-projects.ts";

@@ -1,4 +1,4 @@
-import { Slide, path, Shape, Text } from "pptxdk/react";
+import { Slide, path, Shape, Text } from "@officedk/pptxdk/react";
 import { Fragment } from "react";
 
 import { OutlineBox } from "../components/primitives.tsx";

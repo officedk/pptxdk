@@ -3,6 +3,8 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // CLI subprocesses and deck rebuilds share CPU with the other workspace suites.
+    maxWorkers: 4,
     projects: [
       { ...shared, test: { ...shared.test, name: "development" } },
       // React adaptation reads private reconciler state; ADR-0018 requires real integration acceptance against the production build users run.

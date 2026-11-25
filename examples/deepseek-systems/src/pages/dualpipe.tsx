@@ -10,7 +10,7 @@ import {
   Text,
   useMotionScope,
   wipe,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import {
   EnteredShapeText,

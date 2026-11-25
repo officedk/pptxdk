@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import { PNG } from "pngjs";
 import {
   build,
   DeckContainer,
@@ -14,8 +11,8 @@ import {
   importPptx,
   isTheme,
   type Theme,
-} from "pptxdk";
-import { preview } from "pptxdk/preview";
+} from "@officedk/pptxdk";
+import { preview } from "@officedk/pptxdk/preview";
 import {
   Deck,
   Shape,
@@ -23,8 +20,17 @@ import {
   SlideLayout,
   SlideMaster,
   Text,
-} from "pptxdk/react";
-import { deck, slide, slideLayout, slideMaster, text } from "pptxdk/vanilla";
+} from "@officedk/pptxdk/react";
+import {
+  deck,
+  slide,
+  slideLayout,
+  slideMaster,
+  text,
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { describe, it } from "vitest";
 
 const jostFont = font("Jost*", [

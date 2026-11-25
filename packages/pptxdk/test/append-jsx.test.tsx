@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   after,
   build,
@@ -15,7 +13,7 @@ import {
   fade,
   RichTextContainer,
   type MotionObservation,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   appendJSX,
   Box,
@@ -27,8 +25,10 @@ import {
   Step,
   Text,
   useMotionScope,
-} from "pptxdk/react";
-import { box, deck, shape, slide, text } from "pptxdk/vanilla";
+} from "@officedk/pptxdk/react";
+import { box, deck, shape, slide, text } from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
   Component,
   createContext,

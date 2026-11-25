@@ -1,5 +1,5 @@
-import { Deck, Shape, Slide } from "pptxdk/react";
-import { deck, shape, slide } from "pptxdk/vanilla";
+import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
+import { deck, shape, slide } from "@officedk/pptxdk/vanilla";
 import { useEffect, useMemo, useState } from "react";
 
 import { sourceLabel } from "./source-label.ts";

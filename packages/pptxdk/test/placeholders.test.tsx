@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   BuildError,
   build,
@@ -11,8 +9,8 @@ import {
   font,
   importPptx,
   resolve,
-} from "pptxdk";
-import { preview } from "pptxdk/preview";
+} from "@officedk/pptxdk";
+import { preview } from "@officedk/pptxdk/preview";
 import {
   Box,
   Cell,
@@ -27,7 +25,7 @@ import {
   Span,
   Table,
   Text,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   CommonNode,
   DeckContainer,
@@ -46,7 +44,9 @@ import {
   text,
   type PlaceholderMap,
   type TextNode,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { type ReactNode } from "react";
 import { describe, it } from "vitest";
 

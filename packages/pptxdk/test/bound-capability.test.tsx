@@ -2,6 +2,32 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  boxCapability,
+  fade,
+  font,
+  groupCapability,
+  imageCapability,
+  motionCapability,
+  notesCapability,
+  observeMotion,
+  preset,
+  shapeCapability,
+  targets,
+  transitionCapability,
+  transitions,
+} from "@officedk/pptxdk";
+import { Box, Group, P, Shape, Span } from "@officedk/pptxdk/react";
+import {
+  box as impBox,
+  deck as impDeck,
+  group as impGroup,
+  image as impImage,
+  paragraph as impParagraph,
+  shape as impShape,
+  slide as impSlide,
+  span as impSpan,
+} from "@officedk/pptxdk/vanilla";
+import {
   BuildError,
   CommonContainer,
   CommonNode,
@@ -43,32 +69,6 @@ import { paint } from "@pptxdk/preview";
 import { Deck, expandDocument, Slide } from "@pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
-import {
-  boxCapability,
-  fade,
-  font,
-  groupCapability,
-  imageCapability,
-  motionCapability,
-  notesCapability,
-  observeMotion,
-  preset,
-  shapeCapability,
-  targets,
-  transitionCapability,
-  transitions,
-} from "pptxdk";
-import { Box, Group, P, Shape, Span } from "pptxdk/react";
-import {
-  box as impBox,
-  deck as impDeck,
-  group as impGroup,
-  image as impImage,
-  paragraph as impParagraph,
-  shape as impShape,
-  slide as impSlide,
-  span as impSpan,
-} from "pptxdk/vanilla";
 import { createElement, type ReactNode } from "react";
 import { describe, it } from "vitest";
 

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   BuildError,
   CommonNode,
@@ -15,10 +13,24 @@ import {
   font,
   importPptx,
   resolve,
-} from "pptxdk";
-import { preview } from "pptxdk/preview";
-import { Deck, Slide, SlideLayout, SlideMaster, Text } from "pptxdk/react";
-import { deck, slide, slideLayout, slideMaster, text } from "pptxdk/vanilla";
+} from "@officedk/pptxdk";
+import { preview } from "@officedk/pptxdk/preview";
+import {
+  Deck,
+  Slide,
+  SlideLayout,
+  SlideMaster,
+  Text,
+} from "@officedk/pptxdk/react";
+import {
+  deck,
+  slide,
+  slideLayout,
+  slideMaster,
+  text,
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

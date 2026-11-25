@@ -1188,8 +1188,7 @@ export function createCodegen(
     }
     if (sdkImports.size > 0) {
       const sortedSdk = [...sdkImports].toSorted();
-      const moduleSpecifier =
-        target === "vanilla" ? "pptxdk/vanilla" : "pptxdk/react";
+      const moduleSpecifier = `@officedk/pptxdk/${target}`;
       const singleLine = `import { ${sortedSdk.join(", ")} } from "${moduleSpecifier}";`;
       importLines.push(
         singleLine.length <= 80

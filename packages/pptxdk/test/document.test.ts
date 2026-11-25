@@ -4,8 +4,6 @@ import { getEventListeners } from "node:events";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   build,
   createMorphScope,
@@ -13,7 +11,7 @@ import {
   type ChartSeries,
   type ChartTrendline,
   type LinearGradient,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   box,
   chart,
@@ -23,7 +21,9 @@ import {
   slideNumber,
   span,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 
 const jostBook = new Uint8Array(
@@ -636,8 +636,8 @@ registerHooks({
   },
 });
 
-const { build } = await import("pptxdk");
-const entry = await import("pptxdk/vanilla");
+const { build } = await import("@officedk/pptxdk");
+const entry = await import("@officedk/pptxdk/vanilla");
 const png = new Uint8Array(
   Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n1sAAAAASUVORK5CYII=",

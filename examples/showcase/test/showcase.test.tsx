@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 
+import { build, emit, resolve } from "@officedk/pptxdk";
+import { paint } from "@officedk/pptxdk/preview";
+import { Deck, expandDocument, Slide } from "@officedk/pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
 import { unzipSync } from "fflate";
-import { build, emit, resolve } from "pptxdk";
-import { paint } from "pptxdk/preview";
-import { Deck, expandDocument, Slide } from "pptxdk/react";
 import { it } from "vitest";
 
 import { Progress } from "../src/components/progress.tsx";

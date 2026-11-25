@@ -11,11 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import { PNG } from "pngjs";
-import { build, codegen, importPptx } from "pptxdk";
-import { buildFromSource, previewFromSource } from "pptxdk/node";
+import { build, codegen, importPptx } from "@officedk/pptxdk";
+import { buildFromSource, previewFromSource } from "@officedk/pptxdk/node";
 import {
   Box,
   Deck,
@@ -30,8 +27,11 @@ import {
   expandDocument,
   path,
   preset,
-} from "pptxdk/react";
-import { box, deck, group, shape, slide, text } from "pptxdk/vanilla";
+} from "@officedk/pptxdk/react";
+import { box, deck, group, shape, slide, text } from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -46,8 +46,8 @@ const emuPerPx = 9525;
 
 async function linkConsumerDeps(dir: string): Promise<void> {
   const nodeModulesDir = join(dir, "node_modules");
-  await mkdir(nodeModulesDir, { recursive: true });
-  await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
+  await mkdir(join(nodeModulesDir, "@officedk"), { recursive: true });
+  await symlink(packageRoot, join(nodeModulesDir, "@officedk/pptxdk"), "dir");
   await symlink(
     join(packageRoot, "node_modules/react"),
     join(nodeModulesDir, "react"),

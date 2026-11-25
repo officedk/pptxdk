@@ -1,4 +1,4 @@
-import { Deck, Slide } from "pptxdk/react";
+import { Deck, Slide } from "@officedk/pptxdk/react";
 import { Suspense, use, useEffect } from "react";
 
 declare global {

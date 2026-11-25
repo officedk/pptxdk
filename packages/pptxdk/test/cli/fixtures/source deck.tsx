@@ -1,4 +1,4 @@
-import { Deck, Shape, Slide } from "pptxdk/react";
+import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
 
 import { sourceLabel } from "./source-label.ts";
 

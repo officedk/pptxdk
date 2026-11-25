@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 
-import { BuildError } from "@pptxdk/core";
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync, zipSync } from "fflate";
 import {
   CommonContainer,
   build,
@@ -10,7 +7,7 @@ import {
   importPptx,
   linearGradient,
   transitions,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Deck,
   Box,
@@ -27,7 +24,10 @@ import {
   Span,
   Table,
   Text,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
+import { BuildError } from "@pptxdk/core";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync, zipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

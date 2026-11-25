@@ -5,10 +5,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import { PNG } from "pngjs";
-import { build, codegen, importPptx, type CodegenResult } from "pptxdk";
+import {
+  build,
+  codegen,
+  importPptx,
+  type CodegenResult,
+} from "@officedk/pptxdk";
 import {
   Chart,
   Deck,
@@ -18,7 +20,7 @@ import {
   defineSlideLayout,
   expandDocument,
   lighter,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   chart,
   deck,
@@ -26,7 +28,10 @@ import {
   slide,
   slideLayout,
   slideMaster,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

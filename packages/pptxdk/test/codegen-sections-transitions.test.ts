@@ -3,8 +3,6 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { validatePptx, type ValidationResult } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   BuildError,
   CodegenError,
@@ -12,8 +10,8 @@ import {
   codegen,
   importPptx,
   type CodegenResult,
-} from "pptxdk";
-import { buildFromSource } from "pptxdk/node";
+} from "@officedk/pptxdk";
+import { buildFromSource } from "@officedk/pptxdk/node";
 import {
   Deck,
   Section,
@@ -25,7 +23,7 @@ import {
   defineSlideLayout,
   expandDocument,
   transitions,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   deck,
   defineSlideLayout as vanillaDefineSlideLayout,
@@ -36,7 +34,9 @@ import {
   slide,
   slideLayout,
   slideMaster,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx, type ValidationResult } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

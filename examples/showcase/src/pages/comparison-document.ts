@@ -9,7 +9,7 @@ import {
   step,
   text,
   wipe,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
 
 import { colors, motion } from "../theme.ts";
 

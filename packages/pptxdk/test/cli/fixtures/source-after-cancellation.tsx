@@ -1,4 +1,4 @@
-import { Deck, Slide } from "pptxdk/react";
+import { Deck, Slide } from "@officedk/pptxdk/react";
 
 export default function SourceAfterCancellationDeck() {
   return (

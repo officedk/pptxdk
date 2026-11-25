@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { strFromU8, unzipSync } from "fflate";
-import { PNG } from "pngjs";
-import { BuildError, CodegenError, build, codegen, importPptx } from "pptxdk";
+import {
+  BuildError,
+  CodegenError,
+  build,
+  codegen,
+  importPptx,
+} from "@officedk/pptxdk";
 import {
   Box,
   Chart,
@@ -34,7 +38,7 @@ import {
   useMotionScope,
   wipe,
   zoom,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   box,
   chart,
@@ -49,7 +53,9 @@ import {
   slideMaster,
   step,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

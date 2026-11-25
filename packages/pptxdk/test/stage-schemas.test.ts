@@ -3,6 +3,51 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
+  BuildError,
+  buildOptionsSchema,
+  diagnosticSchema,
+  diagnosticSeveritySchema,
+  emit,
+  emitOptionsSchema,
+  extensionSchema,
+  fontEmbeddingModeSchema,
+  formatBaseline,
+  formatBaselineSchema,
+  resolve,
+  resolveOptionsSchema,
+  targetNameSchema,
+  targetSchema,
+  targets,
+} from "@officedk/pptxdk";
+import {
+  build as buildTrimmed,
+  officialCapabilityNameSchema,
+  officialCapabilityNames,
+  resolve as resolveTrimmed,
+  trimmedBuildOptionsSchema,
+  trimmedResolveOptionsSchema,
+} from "@officedk/pptxdk/build";
+import {
+  buildFromSource,
+  buildFromSourceOptionsSchema,
+  exportNameSchema,
+  previewFromSource,
+  previewFromSourceOptionsSchema,
+} from "@officedk/pptxdk/node";
+import {
+  paint,
+  paintOptionsSchema,
+  preview,
+  previewDiagnosticSchema,
+  previewOptionsSchema,
+  previewPageNumberSchema,
+  previewPagesSchema,
+  previewSeveritySchema,
+  screenGeometrySchema,
+  screenPointSchema,
+} from "@officedk/pptxdk/preview";
+import { deck, slide } from "@officedk/pptxdk/vanilla";
+import {
   buildOptionsSchema as coreBuildOptionsSchema,
   diagnosticSchema as coreDiagnosticSchema,
   diagnosticSeveritySchema as coreDiagnosticSeveritySchema,
@@ -30,55 +75,10 @@ import {
   screenPointSchema as pkgScreenPointSchema,
   validatePaintOptions,
 } from "@pptxdk/preview";
-import {
-  BuildError,
-  buildOptionsSchema,
-  diagnosticSchema,
-  diagnosticSeveritySchema,
-  emit,
-  emitOptionsSchema,
-  extensionSchema,
-  fontEmbeddingModeSchema,
-  formatBaseline,
-  formatBaselineSchema,
-  resolve,
-  resolveOptionsSchema,
-  targetNameSchema,
-  targetSchema,
-  targets,
-} from "pptxdk";
-import {
-  build as buildTrimmed,
-  officialCapabilityNameSchema,
-  officialCapabilityNames,
-  resolve as resolveTrimmed,
-  trimmedBuildOptionsSchema,
-  trimmedResolveOptionsSchema,
-} from "pptxdk/build";
-import {
-  buildFromSource,
-  buildFromSourceOptionsSchema,
-  exportNameSchema,
-  previewFromSource,
-  previewFromSourceOptionsSchema,
-} from "pptxdk/node";
-import {
-  paint,
-  paintOptionsSchema,
-  preview,
-  previewDiagnosticSchema,
-  previewOptionsSchema,
-  previewPageNumberSchema,
-  previewPagesSchema,
-  previewSeveritySchema,
-  screenGeometrySchema,
-  screenPointSchema,
-} from "pptxdk/preview";
-import { deck, slide } from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 describe("stage option schemas (core + emit)", () => {
-  it("exposes shared stage option schemas across @pptxdk/core and pptxdk", () => {
+  it("exposes shared stage option schemas across @pptxdk/core and @officedk/pptxdk", () => {
     assert.equal(formatBaselineSchema, coreFormatBaselineSchema);
     assert.equal(extensionSchema, coreExtensionSchema);
     assert.equal(fontEmbeddingModeSchema, coreFontEmbeddingModeSchema);
@@ -275,7 +275,7 @@ describe("stage option schemas (core + emit)", () => {
 });
 
 describe("preview schemas and lazy resvg loading", () => {
-  it("exposes preview schemas across @pptxdk/preview and pptxdk/preview", () => {
+  it("exposes preview schemas across @pptxdk/preview and @officedk/pptxdk/preview", () => {
     assert.equal(previewPageNumberSchema, pkgPreviewPageNumberSchema);
     assert.equal(previewPagesSchema, pkgPreviewPagesSchema);
     assert.equal(paintOptionsSchema, pkgPaintOptionsSchema);
@@ -350,7 +350,7 @@ describe("preview schemas and lazy resvg loading", () => {
     assert.equal(emptyPreview.pages.length, 0);
   });
 
-  it("never loads @resvg/resvg-js when importing schemas from pptxdk/preview or painting zero pages", () => {
+  it("never loads @resvg/resvg-js when importing schemas from @officedk/pptxdk/preview or painting zero pages", () => {
     const packageRoot = fileURLToPath(new URL("../", import.meta.url));
     const script = `
 import { registerHooks } from "node:module";
@@ -364,9 +364,9 @@ registerHooks({
   },
 });
 
-const previewEntry = await import("pptxdk/preview");
-const { resolve } = await import("pptxdk");
-const { deck, slide } = await import("pptxdk/vanilla");
+const previewEntry = await import("@officedk/pptxdk/preview");
+const { resolve } = await import("@officedk/pptxdk");
+const { deck, slide } = await import("@officedk/pptxdk/vanilla");
 
 if (previewEntry.previewPageNumberSchema.safeParse(2).success !== true) {
   throw new Error("expected valid page number");
@@ -389,8 +389,8 @@ process.stdout.write("ok");
   });
 });
 
-describe("pptxdk/build and pptxdk/node schemas", () => {
-  it("exposes and validates trimmed build/resolve schemas in pptxdk/build", async () => {
+describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
+  it("exposes and validates trimmed build/resolve schemas in @officedk/pptxdk/build", async () => {
     assert.deepEqual(
       officialCapabilityNameSchema.options,
       officialCapabilityNames,

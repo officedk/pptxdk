@@ -6,7 +6,7 @@ import {
   Table,
   Text,
   type MorphScope,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import { PanelCard, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

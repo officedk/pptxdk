@@ -6,7 +6,7 @@ import {
   useMotionScope,
   wipe,
   type LayoutStyle,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

@@ -1,4 +1,4 @@
-import { preset, Shape, Slide, Text } from "pptxdk/react";
+import { preset, Shape, Slide, Text } from "@officedk/pptxdk/react";
 
 import { colors } from "../theme.ts";
 

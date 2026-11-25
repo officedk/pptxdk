@@ -142,7 +142,7 @@ describe("table capability codegen", () => {
     const vanillaSource = vanilla.files[vanilla.entry] as string;
     assert.match(
       vanillaSource,
-      /import \{[\s\S]*\bcell\b[\s\S]*\brow\b[\s\S]*\btable\b[\s\S]*\} from "pptxdk\/vanilla";/u,
+      /import \{[\s\S]*\bcell\b[\s\S]*\brow\b[\s\S]*\btable\b[\s\S]*\} from "@officedk\/pptxdk\/vanilla";/u,
     );
     assert.match(vanillaSource, /columns: \[130, "auto", "1fr"\]/u);
     assert.match(vanillaSource, /columns: \["1fr", "2fr"\]/u);
@@ -160,7 +160,7 @@ describe("table capability codegen", () => {
     const reactSource = react.files[react.entry] as string;
     assert.match(
       reactSource,
-      /import \{[\s\S]*\bCell\b[\s\S]*\bRow\b[\s\S]*\bTable\b[\s\S]*\} from "pptxdk\/react";/u,
+      /import \{[\s\S]*\bCell\b[\s\S]*\bRow\b[\s\S]*\bTable\b[\s\S]*\} from "@officedk\/pptxdk\/react";/u,
     );
     assert.match(
       reactSource,

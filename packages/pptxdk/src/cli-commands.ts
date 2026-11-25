@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { lstat, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { findPackageJSON } from "node:module";
 import {
   basename,
   dirname,
@@ -10,19 +11,6 @@ import {
   resolve,
 } from "node:path";
 
-import {
-  CliWriteError,
-  defineCli,
-  executeCli,
-  helpCapability,
-  parseCliInvocation,
-  schemaCapability,
-  text,
-  versionCapability,
-  type WriteCliOutput,
-} from "@ykdz/cli-contract";
-import { isNodeBrokenPipe } from "@ykdz/cli-contract/node";
-import { strToU8, zipSync } from "fflate";
 import {
   BuildError,
   CodegenError,
@@ -42,14 +30,30 @@ import {
   type ImportLocation,
   type ImportResult,
   type Target,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   buildFromSource,
   importPptxFile,
   previewFromSource,
   SourceLoadError,
-} from "pptxdk/node";
-import { PreviewPageRangeError, previewPageNumberSchema } from "pptxdk/preview";
+} from "@officedk/pptxdk/node";
+import {
+  PreviewPageRangeError,
+  previewPageNumberSchema,
+} from "@officedk/pptxdk/preview";
+import {
+  CliWriteError,
+  defineCli,
+  executeCli,
+  helpCapability,
+  parseCliInvocation,
+  schemaCapability,
+  text,
+  versionCapability,
+  type WriteCliOutput,
+} from "@ykdz/cli-contract";
+import { isNodeBrokenPipe } from "@ykdz/cli-contract/node";
+import { strToU8, zipSync } from "fflate";
 import { z } from "zod";
 
 /**
@@ -70,13 +74,11 @@ type CliDependencies = {
   readonly signal?: AbortSignal;
 };
 
-// Read package.json at runtime rather than statically importing it because tsconfig.build.json sets rootDir to src.
+// Source and bundled modules have different depths. Both report the installed SDK version.
 const { version: cliVersion } = z
   .object({ version: z.string().min(1) })
   .parse(
-    JSON.parse(
-      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-    ),
+    JSON.parse(readFileSync(findPackageJSON("./", import.meta.url)!, "utf8")),
   );
 
 const diagnosticItemSchema = z.object({

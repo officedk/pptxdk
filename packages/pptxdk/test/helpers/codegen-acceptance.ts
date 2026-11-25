@@ -12,14 +12,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validatePptx, type ValidationResult } from "@pptxdk/validation";
-import type { BuildOptions, CodegenResult } from "pptxdk";
+import type { BuildOptions, CodegenResult } from "@officedk/pptxdk";
 import {
   buildFromSource,
   previewFromSource,
   type BuildResult,
   type PreviewResult,
-} from "pptxdk/node";
+} from "@officedk/pptxdk/node";
+import { validatePptx, type ValidationResult } from "@pptxdk/validation";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const tscBin = join(packageRoot, "node_modules/.bin/tsc");
@@ -50,8 +50,8 @@ async function linkConsumerNodeModules(
   nodeModulesDir: string,
   includeTypes: boolean,
 ): Promise<void> {
-  await mkdir(nodeModulesDir, { recursive: true });
-  await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
+  await mkdir(join(nodeModulesDir, "@officedk"), { recursive: true });
+  await symlink(packageRoot, join(nodeModulesDir, "@officedk/pptxdk"), "dir");
   await symlink(
     join(packageRoot, "node_modules/react"),
     join(nodeModulesDir, "react"),
@@ -156,7 +156,7 @@ registerHooks({
   },
 });
 
-const { buildFromSource } = await import("pptxdk/node");
+const { buildFromSource } = await import("@officedk/pptxdk/node");
 const built = await buildFromSource(${JSON.stringify(entryPath)});
 if (!(built.pptx instanceof Uint8Array) || built.pptx.byteLength === 0) {
   throw new Error("Expected non-empty rebuilt PPTX bytes");

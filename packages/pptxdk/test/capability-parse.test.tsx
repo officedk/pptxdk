@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   boxCapability,
   build,
@@ -13,8 +11,19 @@ import {
   shapeCapability,
   textCapability,
   transitions,
-} from "pptxdk";
-import { Box, Deck, Group, P, Shape, Slide, Span, Text } from "pptxdk/react";
+} from "@officedk/pptxdk";
+import {
+  Box,
+  Deck,
+  Group,
+  P,
+  Shape,
+  Slide,
+  Span,
+  Text,
+} from "@officedk/pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, it, vi } from "vitest";
 
 const notoFont = font("Noto Sans CJK SC", [

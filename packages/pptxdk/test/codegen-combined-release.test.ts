@@ -2,9 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { type ValidationResult } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import { PNG } from "pngjs";
 import {
   DeckContainer,
   build,
@@ -13,7 +10,7 @@ import {
   importPptx,
   lighter,
   type CodegenResult,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Box,
   Cell,
@@ -48,7 +45,7 @@ import {
   transitions,
   useMotionScope,
   wipe,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   box,
   cell,
@@ -76,7 +73,10 @@ import {
   step,
   table,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { type ValidationResult } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

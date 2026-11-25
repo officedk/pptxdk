@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "url": "git+https://github.com/officedk/pptxdk.git",
     "directory": "packages/codegen"
   },
   "files": [

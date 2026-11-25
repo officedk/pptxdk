@@ -4,7 +4,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "url": "git+https://github.com/officedk/pptxdk.git",
     "directory": "examples/deepseek-systems"
   },
   "files": [
@@ -41,11 +41,10 @@
     "export:pptx": "pptxdk build src/index.ts --embed-fonts full --out dist/deepseek-systems.pptx"
   },
   "dependencies": {
-    "pptxdk": "workspace:*",
+    "@officedk/pptxdk": "workspace:*",
     "react": "catalog:"
   },
   "devDependencies": {
-    "@pptxdk/cli": "workspace:*",
     "@pptxdk/tooling-config": "workspace:*",
     "@pptxdk/validation": "workspace:*",
     "@types/node": "catalog:",

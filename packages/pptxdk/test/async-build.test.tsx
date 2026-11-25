@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
 
+import { BuildError, build, emit, resolve } from "@officedk/pptxdk";
+import { Deck, expandDocument, Slide, Text } from "@officedk/pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
-import { BuildError, build, emit, resolve } from "pptxdk";
-import { Deck, expandDocument, Slide, Text } from "pptxdk/react";
 import {
   Component,
   createElement,

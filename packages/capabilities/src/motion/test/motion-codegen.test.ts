@@ -84,7 +84,7 @@ describe("motion capability codegen", () => {
     const vanillaSource = vanilla.files[vanilla.entry] as string;
     assert.match(
       vanillaSource,
-      /import \{[\s\S]*\bafter\b[\s\S]*\bcreateMotionScopeHandle\b[\s\S]*\bmotionScope\b[\s\S]*\bstep\b[\s\S]*\} from "pptxdk\/vanilla";/u,
+      /import \{[\s\S]*\bafter\b[\s\S]*\bcreateMotionScopeHandle\b[\s\S]*\bmotionScope\b[\s\S]*\bstep\b[\s\S]*\} from "@officedk\/pptxdk\/vanilla";/u,
     );
     assert.doesNotMatch(vanillaSource, /stepIdentity/u);
     assert.match(
@@ -117,7 +117,7 @@ describe("motion capability codegen", () => {
     const reactSource = react.files[react.entry] as string;
     assert.match(
       reactSource,
-      /import \{[\s\S]*\bMotionScope\b[\s\S]*\bStep\b[\s\S]*\bafter\b[\s\S]*\buseMotionScope\b[\s\S]*\} from "pptxdk\/react";/u,
+      /import \{[\s\S]*\bMotionScope\b[\s\S]*\bStep\b[\s\S]*\bafter\b[\s\S]*\buseMotionScope\b[\s\S]*\} from "@officedk\/pptxdk\/react";/u,
     );
     assert.doesNotMatch(reactSource, /stepIdentity/u);
     assert.match(reactSource, /const motionScopeHandle = useMotionScope\(\);/u);

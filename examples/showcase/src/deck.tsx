@@ -1,4 +1,4 @@
-import { createMorphScope, Deck } from "pptxdk/react";
+import { createMorphScope, Deck } from "@officedk/pptxdk/react";
 
 import { CalendarPage } from "./pages/calendar.tsx";
 import { ClosingPage } from "./pages/closing.tsx";

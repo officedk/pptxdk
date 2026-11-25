@@ -1,4 +1,4 @@
-import { Box, Group, preset, Shape } from "pptxdk/react";
+import { Box, Group, preset, Shape } from "@officedk/pptxdk/react";
 import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";

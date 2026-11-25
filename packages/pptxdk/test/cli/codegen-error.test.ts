@@ -3,14 +3,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { build } from "@officedk/pptxdk";
+import { deck, slide, text } from "@officedk/pptxdk/vanilla";
 import { strFromU8, unzipSync, zipSync } from "fflate";
-import { build } from "pptxdk";
-import { deck, slide, text } from "pptxdk/vanilla";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("pptxdk CLI codegen CodegenError handling", () => {
   afterEach(() => {
-    vi.doUnmock("pptxdk");
+    vi.doUnmock("@officedk/pptxdk");
     vi.resetModules();
   });
 
@@ -41,8 +41,9 @@ describe("pptxdk CLI codegen CodegenError handling", () => {
       );
 
       vi.resetModules();
-      vi.doMock("pptxdk", async (importOriginal) => {
-        const actual = await importOriginal<typeof import("pptxdk")>();
+      vi.doMock("@officedk/pptxdk", async (importOriginal) => {
+        const actual =
+          await importOriginal<typeof import("@officedk/pptxdk")>();
         return {
           ...actual,
           codegen: () => {
@@ -58,7 +59,7 @@ describe("pptxdk CLI codegen CodegenError handling", () => {
         };
       });
 
-      const { runCli } = await import("../src/index.ts");
+      const { runCli } = await import("../../src/cli-commands.ts");
 
       const outDir = join(directory, "should-not-exist");
       let textStdout = "";

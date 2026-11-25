@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { defineTheme, font } from "pptxdk/vanilla";
+import { defineTheme, font } from "@officedk/pptxdk/vanilla";
 
 function fontBytes(name: string) {
   return new Uint8Array(

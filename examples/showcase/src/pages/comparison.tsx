@@ -1,4 +1,12 @@
-import { Box, Group, Shape, Slide, Step, Text, wipe } from "pptxdk/react";
+import {
+  Box,
+  Group,
+  Shape,
+  Slide,
+  Step,
+  Text,
+  wipe,
+} from "@officedk/pptxdk/react";
 
 import { InfoCard } from "../components/info-card.tsx";
 import { colors, motion } from "../theme.ts";

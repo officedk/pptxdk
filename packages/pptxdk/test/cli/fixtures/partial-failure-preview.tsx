@@ -1,4 +1,4 @@
-import { Deck, Image, Shape, Slide } from "pptxdk/react";
+import { Deck, Image, Shape, Slide } from "@officedk/pptxdk/react";
 
 // Passes formal resolve() header validation, then fails paint() on this slide only with a PNG pixel decode error.
 const corruptPixelPng = new Uint8Array([

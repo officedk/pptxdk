@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { validatePptx, type FileObject } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   after,
   build,
@@ -25,8 +23,8 @@ import {
   type ChartGroup,
   type MotionEffectObservation,
   type MotionObservation,
-} from "pptxdk";
-import { paint } from "pptxdk/preview";
+} from "@officedk/pptxdk";
+import { paint } from "@officedk/pptxdk/preview";
 import {
   appendJSX,
   Box,
@@ -48,9 +46,11 @@ import {
   Step,
   Table,
   Text,
-} from "pptxdk/react";
-import { type ChartProps } from "pptxdk/react";
-import { type ChartNode, type TextNode } from "pptxdk/vanilla";
+} from "@officedk/pptxdk/react";
+import { type ChartProps } from "@officedk/pptxdk/react";
+import { type ChartNode, type TextNode } from "@officedk/pptxdk/vanilla";
+import { validatePptx, type FileObject } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { createContext, createElement, Fragment, useContext } from "react";
 import { describe, it } from "vitest";
 

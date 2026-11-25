@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   build,
   build as buildDocument,
@@ -11,7 +9,7 @@ import {
   createMotionScopeHandle,
   resolve as resolveDocument,
   RichTextContainer,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Box,
   Cell,
@@ -32,7 +30,7 @@ import {
   Step,
   Table,
   Text,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   box,
   cell,
@@ -52,7 +50,9 @@ import {
   step,
   table,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import {
   createElement,
   useEffect,

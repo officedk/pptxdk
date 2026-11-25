@@ -1,4 +1,4 @@
-import { Shape, Slide, Text } from "pptxdk/react";
+import { Shape, Slide, Text } from "@officedk/pptxdk/react";
 import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";

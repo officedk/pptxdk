@@ -1,4 +1,4 @@
-import { P, Slide, Text } from "pptxdk/react";
+import { P, Slide, Text } from "@officedk/pptxdk/react";
 
 import { SamplingField } from "../components/sampling-field.tsx";
 import { coverLayout } from "../templates/layouts.ts";

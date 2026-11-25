@@ -7,7 +7,7 @@ import {
   Text,
   wipe,
   zoom,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import { colors, motion } from "../theme.ts";
 

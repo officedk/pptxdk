@@ -6,9 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { PNG } from "pngjs";
 import {
   ImportError,
   RichTextContainer,
@@ -17,11 +14,14 @@ import {
   font,
   importPptx,
   resolve,
-} from "pptxdk";
-import { createImporter, selectCapabilities } from "pptxdk/build";
-import { importPptxFile } from "pptxdk/node";
-import { preview } from "pptxdk/preview";
-import { Deck, Slide, Text } from "pptxdk/react";
+} from "@officedk/pptxdk";
+import { createImporter, selectCapabilities } from "@officedk/pptxdk/build";
+import { importPptxFile } from "@officedk/pptxdk/node";
+import { preview } from "@officedk/pptxdk/preview";
+import { Deck, Slide, Text } from "@officedk/pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -128,7 +128,7 @@ describe("pptxdk import -> edit -> resolve/preview/emit/build roundtrip", () => 
     }
   });
 
-  it("supports selective capability import via pptxdk/build without loading unselected modules, React, or preview", async () => {
+  it("supports selective capability import via @officedk/pptxdk/build without loading unselected modules, React, or preview", async () => {
     const sample = await build(
       createElement(
         Deck,
@@ -165,13 +165,13 @@ registerHooks({
       specifier.includes("@resvg/resvg-js") ||
       specifier.includes("@pptxdk/validation")
     ) {
-      throw new Error("pptxdk/build createImporter loaded forbidden module: " + resolved.url);
+      throw new Error("@officedk/pptxdk/build createImporter loaded forbidden module: " + resolved.url);
     }
     return resolved;
   },
 });
 
-const { createImporter, selectCapabilities, createResolver, emit } = await import("pptxdk/build");
+const { createImporter, selectCapabilities, createResolver, emit } = await import("@officedk/pptxdk/build");
 const modules = await selectCapabilities(["text"]);
 const importer = createImporter(modules);
 const bytes = new Uint8Array(Buffer.from("${base64}", "base64"));
@@ -195,7 +195,7 @@ process.stdout.write("ok");
     assert.equal(res.report.slideCount, 1);
   }, 45_000);
 
-  it("reads PPTX files via pptxdk/node importPptxFile and surfaces ImportError on invalid files", async () => {
+  it("reads PPTX files via @officedk/pptxdk/node importPptxFile and surfaces ImportError on invalid files", async () => {
     const sample = await build(
       createElement(
         Deck,
@@ -247,7 +247,7 @@ process.stdout.write("ok");
     }
   });
 
-  it("runs pptxdk importPptx without eagerly loading React, preview, resvg, or validation across source and dist", async () => {
+  it("runs @officedk/pptxdk importPptx without eagerly loading React, preview, resvg, or validation across source and dist", async () => {
     const sample = await build(
       createElement(
         Deck,
@@ -281,13 +281,13 @@ registerHooks({
       specifier.includes("@pptxdk/validation") ||
       specifier === "@pptxdk/capabilities"
     ) {
-      throw new Error("pptxdk importPptx loaded forbidden dependency: " + specifier);
+      throw new Error("@officedk/pptxdk importPptx loaded forbidden dependency: " + specifier);
     }
     return nextResolve(specifier, context);
   },
 });
 
-const { importPptx, resolve, emit } = await import("pptxdk");
+const { importPptx, resolve, emit } = await import("@officedk/pptxdk");
 const bytes = new Uint8Array(Buffer.from("${base64}", "base64"));
 const imported = importPptx(bytes);
 bytes.fill(0);

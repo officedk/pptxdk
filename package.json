@@ -3,7 +3,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pptxdk/pptxdk.git"
+    "url": "git+https://github.com/officedk/pptxdk.git"
   },
   "type": "module",
   "scripts": {
@@ -18,7 +18,8 @@
     "check:full": "node --conditions=source scripts/task-gates.ts check:full",
     "fix": "node --conditions=source scripts/task-gates.ts fix",
     "boundaries": "turbo boundaries",
-    "publication:pack": "turbo run build && changeset pack --out-dir .changeset/packed",
+    "check:packed": "node scripts/check-packed.ts",
+    "publication:pack": "PPTXDK_RELEASE_PACK_DIR=.changeset/packed turbo run //#check:packed",
     "publication:publish": "changeset publish --from-pack-dir .changeset/packed"
   },
   "devDependencies": {

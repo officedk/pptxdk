@@ -5,7 +5,7 @@ import {
   Text,
   transitions,
   type Transition,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import type { ReactNode } from "react";
 
 import { Rule, type SemanticTone } from "../components/primitives.tsx";

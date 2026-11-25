@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validatePptx } from "@pptxdk/validation";
 import {
   BuildError,
   build,
@@ -15,7 +14,7 @@ import {
   font,
   transitions,
   type Transition,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Deck,
   expandDocument,
@@ -23,8 +22,15 @@ import {
   Slide,
   Text,
   type SlideProps,
-} from "pptxdk/react";
-import { deck, shape, slide, text, type SlideNode } from "pptxdk/vanilla";
+} from "@officedk/pptxdk/react";
+import {
+  deck,
+  shape,
+  slide,
+  text,
+  type SlideNode,
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
 import { describe, it } from "vitest";
 
 const jostBook = new Uint8Array(
@@ -42,7 +48,7 @@ function testTheme() {
 }
 
 describe("public author entrypoints", () => {
-  it("shares editable documents between pptxdk/react and pptxdk/vanilla and builds via pptxdk", async () => {
+  it("shares editable documents between @officedk/pptxdk/react and @officedk/pptxdk/vanilla and builds via @officedk/pptxdk", async () => {
     const fadeTransition: Transition = transitions.fade();
     const slideProps: SlideProps = {
       id: "intro",
@@ -163,8 +169,13 @@ describe("public author entrypoints", () => {
       const dir = await mkdtemp(join(tmpdir(), "pptxdk-consumer-tsc-"));
       try {
         const nodeModulesDir = join(dir, "node_modules");
+        await mkdir(join(nodeModulesDir, "@officedk"), { recursive: true });
         await mkdir(join(nodeModulesDir, "@types"), { recursive: true });
-        await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
+        await symlink(
+          packageRoot,
+          join(nodeModulesDir, "@officedk/pptxdk"),
+          "dir",
+        );
         await symlink(
           join(packageRoot, "node_modules/react"),
           join(nodeModulesDir, "react"),
@@ -202,9 +213,9 @@ describe("public author entrypoints", () => {
     };
 
     const validResult = await runConsumerTsc(`
-import { transitions } from "pptxdk";
-import { Deck, Shape, Slide, type ShapeProps, type SlideProps } from "pptxdk/react";
-import { deck, shape, slide, type SlideNode } from "pptxdk/vanilla";
+import { transitions } from "@officedk/pptxdk";
+import { Deck, Shape, Slide, type ShapeProps, type SlideProps } from "@officedk/pptxdk/react";
+import { deck, shape, slide, type SlideNode } from "@officedk/pptxdk/vanilla";
 
 const slideProps: SlideProps = { id: "cover", transition: transitions.fade() };
 const shapeProps: ShapeProps = { id: "box", x: 10, y: 20, width: 200, height: 100 };
@@ -229,7 +240,7 @@ export const validVanilla = deck({ width: 960, height: 540 }).append(vanillaSlid
     );
 
     const missingIdResult = await runConsumerTsc(`
-import { Deck, Shape, Slide } from "pptxdk/react";
+import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
 
 export const missingIdDeck = (
   <Deck width={960} height={540}>
@@ -246,7 +257,7 @@ export const missingIdDeck = (
     );
 
     const stringWidthResult = await runConsumerTsc(`
-import { Deck, Shape, Slide } from "pptxdk/react";
+import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
 
 export const stringWidthDeck = (
   <Deck width={960} height={540}>
@@ -321,8 +332,8 @@ registerHooks({
   },
 });
 
-const { build, transitions } = await import("pptxdk");
-const { deck, shape, slide, text } = await import("pptxdk/vanilla");
+const { build, transitions } = await import("@officedk/pptxdk");
+const { deck, shape, slide, text } = await import("@officedk/pptxdk/vanilla");
 const doc = deck({ width: 960, height: 540 }).append(
   slide({ id: "s1", transition: transitions.fade() }).append(
     shape({ id: "sh1", x: 20, y: 20, width: 120, height: 60, text: "Shape" }),
@@ -348,23 +359,23 @@ registerHooks({
     ) {
       throw new Error("JSX build loaded preview dependency: " + specifier);
     }
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier === "@pptxdk/react"
-    ) {
+    const resolved = nextResolve(specifier, context);
+    if (specifier === "react" || specifier === "react-reconciler") {
       loaded.add(specifier);
     }
-    return nextResolve(specifier, context);
+    if (specifier === "@pptxdk/react" || resolved.url.endsWith("/react/dist/index.js")) {
+      loaded.add("@pptxdk/react");
+    }
+    return resolved;
   },
 });
 
-const { build } = await import("pptxdk");
+const { build } = await import("@officedk/pptxdk");
 if (loaded.size !== 0) {
-  throw new Error("Importing pptxdk root eagerly loaded: " + [...loaded].join(", "));
+  throw new Error("Importing @officedk/pptxdk root eagerly loaded: " + [...loaded].join(", "));
 }
 const { createElement } = await import("react");
-const { Deck, Shape, Slide } = await import("pptxdk/react");
+const { Deck, Shape, Slide } = await import("@officedk/pptxdk/react");
 const result = await build(
   createElement(
     Deck,

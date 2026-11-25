@@ -8,7 +8,7 @@ import {
   type EntranceEffectDeclaration,
   type ShapeProps,
   type TextStyle,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import type { ReactNode } from "react";
 
 import { colors } from "../theme.ts";

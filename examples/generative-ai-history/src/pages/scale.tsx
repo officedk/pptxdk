@@ -1,4 +1,4 @@
-import { Slide, Chart, Text } from "pptxdk/react";
+import { Slide, Chart, Text } from "@officedk/pptxdk/react";
 
 import { Rule } from "../components/primitives.tsx";
 import { contentLayout } from "../templates/layouts.ts";

@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 
-import { shapeCapability } from "@pptxdk/capabilities/shape";
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   after,
   build,
@@ -11,8 +8,8 @@ import {
   fade,
   transitions,
   type MotionObservation,
-} from "pptxdk";
-import { createResolver } from "pptxdk/build";
+} from "@officedk/pptxdk";
+import { createResolver } from "@officedk/pptxdk/build";
 import {
   Box,
   Cell,
@@ -31,7 +28,7 @@ import {
   Table,
   Text,
   useMotionScope,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   box,
   cell,
@@ -48,7 +45,10 @@ import {
   step,
   table,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 
 const png = new Uint8Array(

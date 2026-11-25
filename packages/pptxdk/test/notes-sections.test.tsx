@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { CommonNode, DeckContainer, build, importPptx } from "@officedk/pptxdk";
+import { paragraph } from "@officedk/pptxdk/vanilla";
 import { validatePptx } from "@pptxdk/validation";
-import { CommonNode, DeckContainer, build, importPptx } from "pptxdk";
-import { paragraph } from "pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 describe("SDK importPptx for prs-notes.pptx and baseline notesMaster", () => {

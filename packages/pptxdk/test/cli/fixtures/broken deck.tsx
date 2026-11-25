@@ -1,4 +1,4 @@
-import { Deck, Shape, Slide } from "pptxdk/react";
+import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
 
 export default function BrokenDeck() {
   return (

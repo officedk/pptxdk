@@ -14,11 +14,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { unpackEotFontData } from "@pptxdk/import";
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import * as fontkit from "fontkit";
-import { PNG } from "pngjs";
 import {
   build,
   codegen,
@@ -26,8 +21,8 @@ import {
   importPptx,
   type BuildOptions,
   type CodegenResult,
-} from "pptxdk";
-import { buildFromSource, previewFromSource } from "pptxdk/node";
+} from "@officedk/pptxdk";
+import { buildFromSource, previewFromSource } from "@officedk/pptxdk/node";
 import {
   Deck,
   Image,
@@ -44,7 +39,7 @@ import {
   radialGradient,
   SlideLayout,
   SlideMaster,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   deck,
   defineSlideLayout as vanillaDefineSlideLayout,
@@ -59,7 +54,12 @@ import {
   slideMaster,
   span,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { unpackEotFontData } from "@pptxdk/import";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import * as fontkit from "fontkit";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -150,8 +150,8 @@ async function withRelocatedConsumerProject<T>(
   try {
     const consumerRoot = join(tempRoot, "consumer");
     const nodeModulesDir = join(consumerRoot, "node_modules");
-    await mkdir(nodeModulesDir, { recursive: true });
-    await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
+    await mkdir(join(nodeModulesDir, "@officedk"), { recursive: true });
+    await symlink(packageRoot, join(nodeModulesDir, "@officedk/pptxdk"), "dir");
     await symlink(
       join(packageRoot, "node_modules/react"),
       join(nodeModulesDir, "react"),

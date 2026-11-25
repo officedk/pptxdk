@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { CommonNode } from "@pptxdk/core/document";
-import { CodegenError, build, codegen, importPptx } from "pptxdk";
-import { createCodegen } from "pptxdk/build";
+import { CodegenError, build, codegen, importPptx } from "@officedk/pptxdk";
+import { createCodegen } from "@officedk/pptxdk/build";
 import {
   Deck,
   P,
@@ -13,7 +12,7 @@ import {
   Span,
   Text,
   expandDocument,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   chart,
   deck,
@@ -26,7 +25,8 @@ import {
   slideMaster,
   span,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { CommonNode } from "@pptxdk/core/document";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -160,7 +160,7 @@ async function createSampleReactDeck() {
 }
 
 describe("pptxdk public codegen acceptance", () => {
-  it("imports codegen from pptxdk root without preloading react or @pptxdk/preview", () => {
+  it("imports codegen from @officedk/pptxdk root without preloading react or @pptxdk/preview", () => {
     const script = `
 import { registerHooks } from "node:module";
 
@@ -175,18 +175,18 @@ registerHooks({
       specifier.includes("@pptxdk/preview") ||
       specifier.includes("@resvg/resvg-js")
     ) {
-      throw new Error("Importing codegen from pptxdk loaded forbidden module: " + specifier);
+      throw new Error("Importing codegen from @officedk/pptxdk loaded forbidden module: " + specifier);
     }
     return nextResolve(specifier, context);
   },
 });
 
-const { codegen, CodegenError, codegenTargetSchema } = await import("pptxdk");
+const { codegen, CodegenError, codegenTargetSchema } = await import("@officedk/pptxdk");
 if (typeof codegen !== "function" || typeof CodegenError !== "function") {
-  throw new Error("Expected codegen exports on pptxdk");
+  throw new Error("Expected codegen exports on @officedk/pptxdk");
 }
 if (codegenTargetSchema.parse("vanilla") !== "vanilla") {
-  throw new Error("Expected codegenTargetSchema on pptxdk");
+  throw new Error("Expected codegenTargetSchema on @officedk/pptxdk");
 }
 process.stdout.write("ok");
 `;

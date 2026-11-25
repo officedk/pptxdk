@@ -1,4 +1,4 @@
-import { defineSlideLayout } from "pptxdk/react";
+import { defineSlideLayout } from "@officedk/pptxdk/react";
 
 import { colors } from "../theme.ts";
 

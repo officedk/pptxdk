@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   BuildError,
   build,
   fade,
   observeMotion,
   type CommonNode,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Box,
   Cell,
@@ -23,7 +21,7 @@ import {
   Table,
   Text,
   expandDocument,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   box,
   deck,
@@ -34,7 +32,9 @@ import {
   span,
   text,
   type TextNode,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, it } from "vitest";
 
 function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {

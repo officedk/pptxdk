@@ -13,10 +13,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import { build, codegen, defineTheme, importPptx, lighter } from "pptxdk";
-import { buildFromSource } from "pptxdk/node";
+import {
+  build,
+  codegen,
+  defineTheme,
+  importPptx,
+  lighter,
+} from "@officedk/pptxdk";
+import { buildFromSource } from "@officedk/pptxdk/node";
 import {
   cell,
   chart,
@@ -47,10 +51,12 @@ import {
   fade,
   transitions,
   wipe,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const cliBin = join(packageRoot, "dist/cli.js");
 
 function createSamplePng(): Uint8Array {
@@ -87,7 +93,7 @@ describe("pptxdk CLI combined release directory and ZIP relocated rebuild", () =
 
       const jostBytes = new Uint8Array(
         await readFile(
-          new URL("./fixtures/Jost-400-Book.ttf", import.meta.url),
+          new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
         ),
       );
       const jostFont = font("Jost*", [{ weight: 400, data: jostBytes }]);
@@ -440,15 +446,16 @@ describe("pptxdk CLI combined release directory and ZIP relocated rebuild", () =
       await rm(inputDir, { recursive: true, force: true });
       expect(existsSync(inputPptx)).toBe(false);
 
-      const cliNodeModules = join(packageRoot, "node_modules");
-      await mkdir(join(consumerRoot, "node_modules"), { recursive: true });
+      await mkdir(join(consumerRoot, "node_modules/@officedk"), {
+        recursive: true,
+      });
       await symlink(
-        join(cliNodeModules, "pptxdk"),
-        join(consumerRoot, "node_modules/pptxdk"),
+        packageRoot,
+        join(consumerRoot, "node_modules/@officedk/pptxdk"),
         "dir",
       );
       await symlink(
-        join(cliNodeModules, "react"),
+        join(packageRoot, "node_modules/react"),
         join(consumerRoot, "node_modules/react"),
         "dir",
       );

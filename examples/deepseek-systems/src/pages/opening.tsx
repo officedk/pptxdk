@@ -6,7 +6,7 @@ import {
   Text,
   transitions,
   useMotionScope,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import { MetricCard, Rule } from "../components/primitives.tsx";
 import { colors } from "../theme.ts";

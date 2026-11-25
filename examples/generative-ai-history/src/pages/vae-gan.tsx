@@ -6,7 +6,7 @@ import {
   Shape,
   Text,
   type ColorValue,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import { Circle, Rule } from "../components/primitives.tsx";
 import { contentLayout } from "../templates/layouts.ts";

@@ -1,4 +1,4 @@
-import { deck, shape, slide } from "pptxdk/vanilla";
+import { deck, shape, slide } from "@officedk/pptxdk/vanilla";
 
 export const SpecialIdDeck = deck({ width: 120, height: 96 }).append(
   slide({ id: "sec 1/intro" }).append(

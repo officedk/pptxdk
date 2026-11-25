@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { CodegenError, build, codegen, importPptx } from "pptxdk";
+import { CodegenError, build, codegen, importPptx } from "@officedk/pptxdk";
 import {
   Deck,
   Notes,
@@ -13,7 +12,7 @@ import {
   Span,
   Text,
   expandDocument,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   deck,
   defineTheme,
@@ -25,7 +24,8 @@ import {
   slideNumber,
   span,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

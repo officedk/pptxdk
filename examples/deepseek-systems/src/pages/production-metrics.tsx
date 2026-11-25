@@ -1,4 +1,4 @@
-import { Chart, Text } from "pptxdk/react";
+import { Chart, Text } from "@officedk/pptxdk/react";
 
 import { MetricCard, PanelCard, Rule } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

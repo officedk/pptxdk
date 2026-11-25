@@ -48,6 +48,12 @@
       "outputs": [],
       "tags": ["quality:light"]
     },
+    "//#check:packed": {
+      "dependsOn": ["@officedk/pptxdk#build"],
+      "passThroughEnv": ["PPTXDK_RELEASE_PACK_DIR"],
+      "cache": false,
+      "tags": ["quality:heavy"]
+    },
     "//#publication:pack": {
       "tags": ["work:release"],
       "cache": false
@@ -129,23 +135,6 @@
         }
       },
       "layer:example": {
-        "dependencies": {
-          "allow": [
-            "layer:tooling",
-            "layer:validation",
-            "layer:core",
-            "layer:emit",
-            "layer:import",
-            "layer:codegen",
-            "layer:preview",
-            "layer:capabilities",
-            "layer:react",
-            "layer:entry",
-            "layer:application"
-          ]
-        }
-      },
-      "layer:application": {
         "dependencies": {
           "allow": [
             "layer:tooling",

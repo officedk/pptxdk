@@ -13,24 +13,30 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync, zipSync } from "fflate";
 import {
   build,
   codegen,
   codegenTargetSchema,
   fontEmbeddingModeSchema,
   targetNameSchema,
-} from "pptxdk";
-import { buildFromSource, importPptxFile } from "pptxdk/node";
-import { previewPageNumberSchema } from "pptxdk/preview";
-import { deck, font as vanillaFont, image, slide, text } from "pptxdk/vanilla";
+} from "@officedk/pptxdk";
+import { buildFromSource, importPptxFile } from "@officedk/pptxdk/node";
+import { previewPageNumberSchema } from "@officedk/pptxdk/preview";
+import {
+  deck,
+  font as vanillaFont,
+  image,
+  slide,
+  text,
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 
-import { runCli } from "../src/index.ts";
+import { runCli } from "../../src/cli-commands.ts";
 
 const fixture = (name: string) => join(import.meta.dirname, "fixtures", name);
-const cli = join(import.meta.dirname, "../dist/cli.js");
+const cli = join(import.meta.dirname, "../../dist/cli.js");
 const waitForClose = (child: ReturnType<typeof spawn>) =>
   new Promise<number>((resolve, reject) => {
     child.once("error", reject);
@@ -94,7 +100,7 @@ describe("pptxdk CLI build", () => {
     expect(buildHelp.stdout).toContain('(choices: "full", "subset")');
 
     const pkg = JSON.parse(
-      await readFile(join(import.meta.dirname, "../package.json"), "utf8"),
+      await readFile(join(import.meta.dirname, "../../package.json"), "utf8"),
     ) as { readonly version: string };
 
     const versionLong = await runInMemory(["--version"], import.meta.dirname);
@@ -779,7 +785,7 @@ describe("pptxdk CLI build", () => {
       const programmaticScript = [
         'import { pathToFileURL } from "node:url";',
         'import { writeFile } from "node:fs/promises";',
-        'import { buildFromSource } from "pptxdk/node";',
+        'import { buildFromSource } from "@officedk/pptxdk/node";',
         `const result = await buildFromSource(${JSON.stringify(source)}, { exportName: "SourceDeck" });`,
         `await writeFile(${JSON.stringify(programmaticOut)}, result.pptx);`,
         'async function expectHookReleased(path) { const error = await import(pathToFileURL(path).href).then(() => undefined, failure => failure); if (error?.code !== "ERR_UNKNOWN_FILE_EXTENSION") throw new Error(JSON.stringify({ path, error })); }',
@@ -823,7 +829,7 @@ describe("pptxdk CLI build", () => {
 
   it("cancellation during source import terminates the call immediately and isolates concurrent loading", () => {
     const programmaticScript = [
-      'import { buildFromSource } from "pptxdk/node";',
+      'import { buildFromSource } from "@officedk/pptxdk/node";',
       'import { pathToFileURL } from "node:url";',
       `const pendingEntry = ${JSON.stringify(fixture("source-load-pending.tsx"))};`,
       `const concurrentEntry = ${JSON.stringify(fixture("source-load-after-cancel.tsx"))};`,
@@ -1005,7 +1011,7 @@ describe("pptxdk CLI preview", () => {
       const defaultFiles = await readdir(defaultOutDir);
       expect(defaultFiles).toEqual(["page-01.png"]);
 
-      const { previewFromSource } = await import("pptxdk/node");
+      const { previewFromSource } = await import("@officedk/pptxdk/node");
       const formal = await previewFromSource(source);
       expect(formal.pages[0]?.png).toBeInstanceOf(Uint8Array);
       expect(await readFile(join(defaultOutDir, "page-01.png"))).toEqual(
@@ -1050,7 +1056,7 @@ describe("pptxdk CLI preview", () => {
     const directory = await mkdtemp(join(tmpdir(), "pptxdk dual "));
     try {
       const source = fixture("preview deck.tsx");
-      const { previewFromSource } = await import("pptxdk/node");
+      const { previewFromSource } = await import("@officedk/pptxdk/node");
       const cases = [
         {
           exportName: "AsyncVanillaDeck",
@@ -1265,7 +1271,7 @@ describe("pptxdk CLI preview", () => {
         },
       });
 
-      const { previewFromSource } = await import("pptxdk/node");
+      const { previewFromSource } = await import("@officedk/pptxdk/node");
       const formal = await previewFromSource(source);
       expect(await readFile(join(outDir, "page-01.png"))).toEqual(
         Buffer.from(formal.pages[0]!.png!),
@@ -1715,7 +1721,7 @@ describe("pptxdk CLI preview", () => {
         "page-05.png",
       ]);
 
-      const { previewFromSource } = await import("pptxdk/node");
+      const { previewFromSource } = await import("@officedk/pptxdk/node");
       const formal = await previewFromSource(source, {
         exportName: "SixPageDeck",
         pages: [1, 3, 4, 5],
@@ -1891,7 +1897,7 @@ describe("pptxdk CLI preview", () => {
         },
       });
 
-      const { previewFromSource } = await import("pptxdk/node");
+      const { previewFromSource } = await import("@officedk/pptxdk/node");
       const formal = await previewFromSource(source, {
         exportName: "OneTwentyPageDeck",
         pages: [3],
@@ -2153,10 +2159,10 @@ describe("pptxdk CLI preview", () => {
     );
     expect(unsafePageResult.code).toBe(2);
 
-    // Running CLI `build` must never load @resvg/resvg-js even though CLI imports pptxdk/preview schemas.
+    // Running CLI `build` must never load @resvg/resvg-js even though CLI imports the public preview schemas.
     const directory = await mkdtemp(join(tmpdir(), "pptxdk cli-isolation "));
     try {
-      const cliRoot = join(import.meta.dirname, "..");
+      const cliRoot = join(import.meta.dirname, "../..");
       const outPath = join(directory, "isolated.pptx");
       const script = `
 import { registerHooks } from "node:module";
@@ -2170,7 +2176,7 @@ registerHooks({
   },
 });
 
-const { runCli } = await import("./src/index.ts");
+const { runCli } = await import("./src/cli-commands.ts");
 const code = await runCli({
   argv: ["node", "pptxdk", "build", ${JSON.stringify(fixture("source deck.tsx"))}, "--out", ${JSON.stringify(outPath)}],
   cwd: ${JSON.stringify(directory)},
@@ -2469,7 +2475,9 @@ describe("pptxdk CLI codegen", () => {
       const inputPptx = join(inputDir, "deck.pptx");
 
       const jostBytes = new Uint8Array(
-        await readFile(fixture("Jost-400-Book.ttf")),
+        await readFile(
+          new URL("../assets/fonts/Jost-400-Book.ttf", import.meta.url),
+        ),
       );
       const pngBytes = Uint8Array.from(
         Buffer.from(
@@ -2642,15 +2650,17 @@ describe("pptxdk CLI codegen", () => {
       expect(existsSync(inputPptx)).toBe(false);
 
       // Prepare isolated consumer environment resolving only public pptxdk and react packages.
-      const cliNodeModules = join(import.meta.dirname, "../node_modules");
-      await mkdir(join(consumerRoot, "node_modules"), { recursive: true });
+      const packageRoot = join(import.meta.dirname, "../..");
+      await mkdir(join(consumerRoot, "node_modules/@officedk"), {
+        recursive: true,
+      });
       await symlink(
-        join(cliNodeModules, "pptxdk"),
-        join(consumerRoot, "node_modules/pptxdk"),
+        packageRoot,
+        join(consumerRoot, "node_modules/@officedk/pptxdk"),
         "dir",
       );
       await symlink(
-        join(cliNodeModules, "react"),
+        join(packageRoot, "node_modules/react"),
         join(consumerRoot, "node_modules/react"),
         "dir",
       );
@@ -2970,7 +2980,7 @@ describe("pptxdk CLI codegen", () => {
       expect(existsSync(cancelledOutDir)).toBe(false);
 
       // Running CLI `codegen` must never load @resvg/resvg-js.
-      const cliRoot = join(import.meta.dirname, "..");
+      const cliRoot = join(import.meta.dirname, "../..");
       const isolatedOut = join(directory, "isolated-codegen.zip");
       const script = `
 import { registerHooks } from "node:module";
@@ -2984,7 +2994,7 @@ registerHooks({
   },
 });
 
-const { runCli } = await import("./src/index.ts");
+const { runCli } = await import("./src/cli-commands.ts");
 const code = await runCli({
   argv: ["node", "pptxdk", "codegen", ${JSON.stringify(healthyPath)}, "--target", "react", "--out-zip", ${JSON.stringify(isolatedOut)}],
   cwd: ${JSON.stringify(directory)},

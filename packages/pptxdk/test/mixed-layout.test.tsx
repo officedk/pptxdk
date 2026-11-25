@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import * as fontkit from "fontkit";
-import { build, BuildError, font } from "pptxdk";
-import { Box, Chart, Deck, Group, Image, Slide, Text } from "pptxdk/react";
+import { build, BuildError, font } from "@officedk/pptxdk";
+import {
+  Box,
+  Chart,
+  Deck,
+  Group,
+  Image,
+  Slide,
+  Text,
+} from "@officedk/pptxdk/react";
 import {
   box as authorBox,
   chart as authorChart,
@@ -14,7 +19,10 @@ import {
   image as authorImage,
   slide as authorSlide,
   text as authorText,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
+import * as fontkit from "fontkit";
 import { describe, it } from "vitest";
 
 const jostBoldBytes = new Uint8Array(

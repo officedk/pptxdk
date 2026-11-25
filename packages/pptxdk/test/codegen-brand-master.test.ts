@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { unzipSync, strFromU8 } from "fflate";
-import { PNG } from "pngjs";
 import {
   DeckContainer,
   build,
@@ -12,7 +10,7 @@ import {
   importPptx,
   lighter,
   type CodegenResult,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Deck,
   Image,
@@ -22,7 +20,7 @@ import {
   Text,
   expandDocument,
   font as reactFont,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 import {
   deck,
   defineSlideLayout,
@@ -32,7 +30,9 @@ import {
   slideLayout,
   slideMaster,
   text,
-} from "pptxdk/vanilla";
+} from "@officedk/pptxdk/vanilla";
+import { unzipSync, strFromU8 } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

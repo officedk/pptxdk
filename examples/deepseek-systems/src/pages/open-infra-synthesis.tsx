@@ -1,4 +1,4 @@
-import { Shape, Text } from "pptxdk/react";
+import { Shape, Text } from "@officedk/pptxdk/react";
 
 import { Rule } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";

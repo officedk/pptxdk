@@ -6,11 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { BuildError } from "@officedk/pptxdk";
+import * as nodeEntry from "@officedk/pptxdk/node";
+import { preview } from "@officedk/pptxdk/preview";
+import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
-import { BuildError } from "pptxdk";
-import * as nodeEntry from "pptxdk/node";
-import { preview } from "pptxdk/preview";
-import { Deck, Shape, Slide } from "pptxdk/react";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -21,8 +21,8 @@ const jostFontUrl = new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)
 async function createSourceWorkspace() {
   const root = await mkdtemp(join(tmpdir(), "pptxdk source "));
   const nodeModules = join(root, "node_modules");
-  await mkdir(nodeModules, { recursive: true });
-  await symlink(packageRoot, join(nodeModules, "pptxdk"), "dir");
+  await mkdir(join(nodeModules, "@officedk"), { recursive: true });
+  await symlink(packageRoot, join(nodeModules, "@officedk/pptxdk"), "dir");
   await symlink(
     join(packageRoot, "node_modules/react"),
     join(nodeModules, "react"),
@@ -41,7 +41,7 @@ function runInNode(conditions: readonly string[], script: string, cwd: string) {
   return child.stdout;
 }
 
-describe("pptxdk/node source SDK", () => {
+describe("@officedk/pptxdk/node source SDK", () => {
   it("loads TS, TSX, MTS, and JSX entries with local deps, deferred imports, paths/URLs, and exportName parity", async () => {
     const root = await createSourceWorkspace();
     try {
@@ -52,7 +52,7 @@ describe("pptxdk/node source SDK", () => {
         join(spaceDir, "theme-token.ts"),
         [
           'import { readFileSync } from "node:fs";',
-          'import { defineTheme, font } from "pptxdk";',
+          'import { defineTheme, font } from "@officedk/pptxdk";',
           'export const accentColor = "#2563EB";',
           `const jost = font("Jost", [{ weight: 400, data: readFileSync(new URL(${JSON.stringify(jostFontUrl)})) }], { substitute: true });`,
           'export const deckTheme = defineTheme({ name: "Test", fonts: { major: jost, minor: jost } });',
@@ -66,7 +66,7 @@ describe("pptxdk/node source SDK", () => {
       await writeFile(
         join(spaceDir, "shared-slide.jsx"),
         [
-          'import { Shape, Slide } from "pptxdk/react";',
+          'import { Shape, Slide } from "@officedk/pptxdk/react";',
           "export function SharedSlide({ id, label, color }) {",
           "  return (",
           "    <Slide id={id}>",
@@ -82,7 +82,7 @@ describe("pptxdk/node source SDK", () => {
       await writeFile(
         tsxEntry,
         [
-          'import { Deck, Shape, Slide } from "pptxdk/react";',
+          'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
           'import { accentColor, deckTheme } from "./theme-token.ts";',
           'import { SharedSlide } from "./shared-slide.jsx";',
           'const { lazyTitle } = await import("./lazy-label.mts");',
@@ -112,7 +112,7 @@ describe("pptxdk/node source SDK", () => {
       await writeFile(
         jsxEntry,
         [
-          'import { Deck, Shape, Slide } from "pptxdk/react";',
+          'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
           "export default (",
           "  <Deck width={320} height={180}>",
           '    <Slide id="jsx-only">',
@@ -129,7 +129,7 @@ describe("pptxdk/node source SDK", () => {
         mtsEntry,
         [
           'import { createElement } from "react";',
-          'import { Deck, Shape, Slide } from "pptxdk/react";',
+          'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
           'const { lazyTitle } = await import("./lazy-label.mts");',
           "export default createElement(",
           "  Deck,",
@@ -149,7 +149,7 @@ describe("pptxdk/node source SDK", () => {
         tsEntry,
         [
           'import { createElement } from "react";',
-          'import { Deck, Shape, Slide } from "pptxdk/react";',
+          'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
           'import { accentColor } from "./theme-token.ts";',
           "export default createElement(",
           "  Deck,",
@@ -200,7 +200,7 @@ describe("pptxdk/node source SDK", () => {
       assert.equal(parsedNamed.slides[0]?.objects[0]?.text?.text, "Named TSX");
 
       const { readFileSync } = await import("node:fs");
-      const { defineTheme, font } = await import("pptxdk");
+      const { defineTheme, font } = await import("@officedk/pptxdk");
       const jost = font(
         "Jost",
         [{ weight: 400, data: readFileSync(new URL(jostFontUrl)) }],
@@ -276,7 +276,7 @@ describe("pptxdk/node source SDK", () => {
         ["--conditions=source"],
         [
           'import assert from "node:assert/strict";',
-          'import { buildFromSource, previewFromSource } from "pptxdk/node";',
+          'import { buildFromSource, previewFromSource } from "@officedk/pptxdk/node";',
           'const b = await buildFromSource("./deck dir/multi deck.tsx");',
           'const p = await previewFromSource("./deck dir/multi deck.tsx", { pages: [1] });',
           "assert.equal(b.report.slides.length, 2);",
@@ -300,9 +300,9 @@ describe("pptxdk/node source SDK", () => {
         [
           'import { readFileSync } from "node:fs";',
           'import { useEffect, useMemo, useState } from "react";',
-          'import { defineTheme, font } from "pptxdk";',
-          'import { deck, shape, slide } from "pptxdk/vanilla";',
-          'import { Deck, Shape, Slide } from "pptxdk/react";',
+          'import { defineTheme, font } from "@officedk/pptxdk";',
+          'import { deck, shape, slide } from "@officedk/pptxdk/vanilla";',
+          'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
           "",
           `const jost = font("Jost", [{ weight: 400, data: readFileSync(new URL(${JSON.stringify(jostFontUrl)})) }], { substitute: true });`,
           'const theme = defineTheme({ name: "Test", fonts: { major: jost, minor: jost } });',
@@ -363,11 +363,11 @@ describe("pptxdk/node source SDK", () => {
         'import assert from "node:assert/strict";',
         'import { readFileSync } from "node:fs";',
         'import { createElement } from "react";',
-        'import { build, defineTheme, font } from "pptxdk";',
-        'import { preview } from "pptxdk/preview";',
-        'import { buildFromSource, previewFromSource } from "pptxdk/node";',
-        'import { deck, shape, slide } from "pptxdk/vanilla";',
-        'import { Deck, Shape, Slide } from "pptxdk/react";',
+        'import { build, defineTheme, font } from "@officedk/pptxdk";',
+        'import { preview } from "@officedk/pptxdk/preview";',
+        'import { buildFromSource, previewFromSource } from "@officedk/pptxdk/node";',
+        'import { deck, shape, slide } from "@officedk/pptxdk/vanilla";',
+        'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
         "",
         `const jost = font("Jost", [{ weight: 400, data: readFileSync(new URL(${JSON.stringify(jostFontUrl)})) }], { substitute: true });`,
         'const theme = defineTheme({ name: "Test", fonts: { major: jost, minor: jost } });',
@@ -420,7 +420,7 @@ describe("pptxdk/node source SDK", () => {
       await writeFile(
         badExports,
         [
-          'import { Deck, Slide } from "pptxdk/react";',
+          'import { Deck, Slide } from "@officedk/pptxdk/react";',
           "export const undefExport = undefined;",
           "export const nullExport = null;",
           "export const numExport = 42;",
@@ -449,7 +449,7 @@ describe("pptxdk/node source SDK", () => {
       await writeFile(
         invalidDeck,
         [
-          'import { Deck, Slide } from "pptxdk/react";',
+          'import { Deck, Slide } from "@officedk/pptxdk/react";',
           'export default <Deck width={320} height={180}><Slide id="outer"><Slide id="inner" /></Slide></Deck>;',
           "",
         ].join("\n"),
@@ -499,7 +499,7 @@ describe("pptxdk/node source SDK", () => {
         [
           'import assert from "node:assert/strict";',
           'import { pathToFileURL } from "node:url";',
-          'import { buildFromSource, previewFromSource, SourceLoadError } from "pptxdk/node";',
+          'import { buildFromSource, previewFromSource, SourceLoadError } from "@officedk/pptxdk/node";',
           `const badFiles = ${JSON.stringify([join(root, "does-not-exist.ts"), syntaxErr, runtimeErr])};`,
           `const probeBase = ${JSON.stringify(probeUnloaded)};`,
           "for (let i = 0; i < badFiles.length; i += 1) {",
@@ -551,7 +551,7 @@ describe("pptxdk/node source SDK", () => {
       await writeFile(
         preEntry,
         [
-          'import { Deck, Slide } from "pptxdk/react";',
+          'import { Deck, Slide } from "@officedk/pptxdk/react";',
           "globalThis.__pptxdkPreCancelExecuted = true;",
           'export default <Deck width={320} height={180}><Slide id="pre" /></Deck>;',
           "",
@@ -598,7 +598,7 @@ describe("pptxdk/node source SDK", () => {
           await writeFile(
             importPending,
             [
-              'import { Deck, Slide } from "pptxdk/react";',
+              'import { Deck, Slide } from "@officedk/pptxdk/react";',
               "const state = globalThis.__pptxdkImportState;",
               "state.start();",
               "await state.wait;",
@@ -681,7 +681,7 @@ describe("pptxdk/node source SDK", () => {
             suspensePending,
             [
               'import { Suspense, use, useEffect } from "react";',
-              'import { Deck, Slide, Text } from "pptxdk/react";',
+              'import { Deck, Slide, Text } from "@officedk/pptxdk/react";',
               "const never = new Promise<string>(() => {});",
               "function PendingChild() {",
               "  useEffect(() => {",
@@ -751,8 +751,8 @@ describe("pptxdk/node source SDK", () => {
         plainEntry,
         [
           'import { readFileSync } from "node:fs";',
-          'import { defineTheme, font } from "pptxdk";',
-          'import { deck, shape, slide } from "pptxdk/vanilla";',
+          'import { defineTheme, font } from "@officedk/pptxdk";',
+          'import { deck, shape, slide } from "@officedk/pptxdk/vanilla";',
           `const jost = font("Jost", [{ weight: 400, data: readFileSync(new URL(${JSON.stringify(jostFontUrl)})) }], { substitute: true });`,
           'const theme = defineTheme({ name: "Test", fonts: { major: jost, minor: jost } });',
           "function makeDeck(id: string, text: string) {",
@@ -775,7 +775,7 @@ describe("pptxdk/node source SDK", () => {
       await writeFile(
         jsxEntry,
         [
-          'import { Deck, Shape, Slide } from "pptxdk/react";',
+          'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
           "export default function JsxSourceDeck() {",
           "  return (",
           "    <Deck width={320} height={180}>",
@@ -834,7 +834,7 @@ describe("pptxdk/node source SDK", () => {
         "    return nextResolve(specifier, context);",
         "  },",
         "});",
-        'const { buildFromSource } = await import("pptxdk/node");',
+        'const { buildFromSource } = await import("@officedk/pptxdk/node");',
         'const syncBuilt = await buildFromSource("./plain-vanilla.ts");',
         'const asyncBuilt = await buildFromSource("./plain-vanilla.ts", { exportName: "asyncPlain" });',
         "assert.ok(syncBuilt.pptx.byteLength > 0);",
@@ -853,7 +853,7 @@ describe("pptxdk/node source SDK", () => {
         "    return nextResolve(specifier, context);",
         "  },",
         "});",
-        'const { previewFromSource } = await import("pptxdk/node");',
+        'const { previewFromSource } = await import("@officedk/pptxdk/node");',
         'const syncPreview = await previewFromSource("./plain-vanilla.ts");',
         'const asyncPreview = await previewFromSource("./plain-vanilla.ts", { exportName: "asyncPlain" });',
         "assert.deepEqual(syncPreview.pages[0]?.diagnostics, []);",
@@ -874,7 +874,7 @@ describe("pptxdk/node source SDK", () => {
         "    return nextResolve(specifier, context);",
         "  },",
         "});",
-        'const { buildFromSource } = await import("pptxdk/node");',
+        'const { buildFromSource } = await import("@officedk/pptxdk/node");',
         'const built = await buildFromSource("./jsx-source.tsx");',
         "assert.ok(built.pptx.byteLength > 0);",
         'process.stdout.write("ok");',
@@ -891,7 +891,7 @@ describe("pptxdk/node source SDK", () => {
         "    return nextResolve(specifier, context);",
         "  },",
         "});",
-        'const { buildFromSource, previewFromSource } = await import("pptxdk/node");',
+        'const { buildFromSource, previewFromSource } = await import("@officedk/pptxdk/node");',
         "const controller = new AbortController();",
         'const reason = new Error("pre-cancelled isolation");',
         "controller.abort(reason);",

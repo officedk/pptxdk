@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { nodeCliOutput } from "@ykdz/cli-contract/node";
 
-import { runCli } from "./index.ts";
+import { runCli } from "./cli-commands.ts";
 
 const interrupt = new AbortController();
 const onInterrupt = () => interrupt.abort();

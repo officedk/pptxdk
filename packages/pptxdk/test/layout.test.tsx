@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
-import { build, BuildError, fade, font } from "pptxdk";
+import { build, BuildError, fade, font } from "@officedk/pptxdk";
 import {
   Box,
   Chart,
@@ -16,7 +14,9 @@ import {
   Row,
   Table,
   Text,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 

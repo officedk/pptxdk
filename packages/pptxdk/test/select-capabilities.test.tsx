@@ -3,9 +3,6 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { createPlaceholderNode } from "@pptxdk/capabilities/placeholder";
-import { validatePptx } from "@pptxdk/validation";
-import { PNG } from "pngjs";
 import {
   CommonContainer,
   CommonNode,
@@ -15,7 +12,7 @@ import {
   defineTheme,
   font,
   transitions,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   BuildError,
   build as buildTrimmed,
@@ -24,8 +21,8 @@ import {
   officialCapabilityNames,
   resolve as resolveTrimmed,
   selectCapabilities,
-} from "pptxdk/build";
-import { paint } from "pptxdk/preview";
+} from "@officedk/pptxdk/build";
+import { paint } from "@officedk/pptxdk/preview";
 import {
   Deck,
   P,
@@ -36,8 +33,17 @@ import {
   SlideMaster,
   Span,
   Text,
-} from "pptxdk/react";
-import { deck, slide, slideLayout, slideMaster, text } from "pptxdk/vanilla";
+} from "@officedk/pptxdk/react";
+import {
+  deck,
+  slide,
+  slideLayout,
+  slideMaster,
+  text,
+} from "@officedk/pptxdk/vanilla";
+import { createPlaceholderNode } from "@pptxdk/capabilities/placeholder";
+import { validatePptx } from "@pptxdk/validation";
+import { PNG } from "pngjs";
 import { describe, it } from "vitest";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -65,8 +71,8 @@ function runSubprocess(conditions: readonly string[], script: string): string {
   return child.stdout;
 }
 
-describe("pptxdk/build capability selection", () => {
-  it("builds shapes with text, theme, geometry, gradient, morph, and motion via pptxdk/vanilla with capabilities: ['shape', 'motion', 'transition'] across source and dist without loading unselected implementations, React, or preview", () => {
+describe("@officedk/pptxdk/build capability selection", () => {
+  it("builds shapes with text, theme, geometry, gradient, morph, and motion via @officedk/pptxdk/vanilla with capabilities: ['shape', 'motion', 'transition'] across source and dist without loading unselected implementations, React, or preview", () => {
     const vanillaScript = `
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
@@ -115,8 +121,8 @@ const {
   span,
   step,
   transitions,
-} = await import("pptxdk/vanilla");
-const { build } = await import("pptxdk/build");
+} = await import("@officedk/pptxdk/vanilla");
+const { build } = await import("@officedk/pptxdk/build");
 const { validatePptx } = await import("@pptxdk/validation");
 
 const jostBytes = new Uint8Array(readFileSync("./test/assets/fonts/Jost-400-Book.ttf"));
@@ -199,7 +205,7 @@ process.stdout.write(JSON.stringify(texts));
     }
   }, 45_000);
 
-  it("builds shapes with text, theme, geometry, gradient, morph, and motion via pptxdk/react with capabilities: ['shape', 'motion', 'transition'] across source and dist without loading unselected implementations or preview", () => {
+  it("builds shapes with text, theme, geometry, gradient, morph, and motion via @officedk/pptxdk/react with capabilities: ['shape', 'motion', 'transition'] across source and dist without loading unselected implementations or preview", () => {
     const reactScript = `
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
@@ -244,8 +250,8 @@ const {
   Span,
   Step,
   transitions,
-} = await import("pptxdk/react");
-const { build } = await import("pptxdk/build");
+} = await import("@officedk/pptxdk/react");
+const { build } = await import("@officedk/pptxdk/build");
 const { validatePptx } = await import("@pptxdk/validation");
 
 const jostBytes = new Uint8Array(readFileSync("./test/assets/fonts/Jost-400-Book.ttf"));

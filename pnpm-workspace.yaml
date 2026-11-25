@@ -14,7 +14,6 @@ allowBuilds:
   esbuild: true
 overrides: {}
 packages:
-  - apps/*
   - packages/*
   - examples/*
 catalog:
@@ -41,6 +40,8 @@ catalog:
   pngjs: 7.0.0
   react: 19.3.1
   react-reconciler: 0.34.0
+  rolldown: 1.2.16
+  rolldown-plugin-dts: 0.30.2
   turbo: 2.11.10
   vite: 8.3.5
   vitest: 5.0.5

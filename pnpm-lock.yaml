@@ -230,6 +230,12 @@ catalogs:
     react-reconciler:
       specifier: 0.34.0
       version: 0.34.0
+    rolldown:
+      specifier: 1.2.16
+      version: 1.2.16
+    rolldown-plugin-dts:
+      specifier: 0.30.2
+      version: 0.30.2
     turbo:
       specifier: 2.11.10
       version: 2.11.10
@@ -287,67 +293,15 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
-  apps/cli:
-    dependencies:
-      '@ykdz/cli-contract':
-        specifier: 'catalog:'
-        version: 0.7.0
-      fflate:
-        specifier: 'catalog:'
-        version: 0.8.3
-      pptxdk:
-        specifier: workspace:*
-        version: link:../../packages/pptxdk
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
-    devDependencies:
-      '@pptxdk/tooling-config':
-        specifier: workspace:*
-        version: link:../../packages/tooling-config
-      '@pptxdk/validation':
-        specifier: workspace:*
-        version: link:../../packages/validation
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.6
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.3.0
-      oxfmt:
-        specifier: 'catalog:'
-        version: 0.74.0
-      oxlint:
-        specifier: 'catalog:'
-        version: 1.90.0(oxlint-tsgolint@7.0.2005)
-      oxlint-tsgolint:
-        specifier: 'catalog:'
-        version: 7.0.2005
-      react:
-        specifier: 'catalog:'
-        version: 19.3.1
-      typescript-7:
-        specifier: 'catalog:'
-        version: typescript@7.0.2
-      vite:
-        specifier: 'catalog:'
-        version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
-
   examples/deepseek-systems:
     dependencies:
-      pptxdk:
+      '@officedk/pptxdk':
         specifier: workspace:*
         version: link:../../packages/pptxdk
       react:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
-      '@pptxdk/cli':
-        specifier: workspace:*
-        version: link:../../apps/cli
       '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../../packages/tooling-config
@@ -381,16 +335,13 @@ importers:
 
   examples/generative-ai-history:
     dependencies:
-      pptxdk:
+      '@officedk/pptxdk':
         specifier: workspace:*
         version: link:../../packages/pptxdk
       react:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
-      '@pptxdk/cli':
-        specifier: workspace:*
-        version: link:../../apps/cli
       '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../../packages/tooling-config
@@ -424,16 +375,13 @@ importers:
 
   examples/showcase:
     dependencies:
-      pptxdk:
+      '@officedk/pptxdk':
         specifier: workspace:*
         version: link:../../packages/pptxdk
       react:
         specifier: 'catalog:'
         version: 19.3.1
     devDependencies:
-      '@pptxdk/cli':
-        specifier: workspace:*
-        version: link:../../apps/cli
       '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../../packages/tooling-config
@@ -691,6 +639,58 @@ importers:
 
   packages/pptxdk:
     dependencies:
+      '@resvg/resvg-js':
+        specifier: 'catalog:'
+        version: 2.6.2
+      '@types/fontkit':
+        specifier: 'catalog:'
+        version: 2.0.9
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@xmldom/xmldom':
+        specifier: 'catalog:'
+        version: 0.9.12
+      '@ykdz/cli-contract':
+        specifier: 'catalog:'
+        version: 0.7.0
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
+      fontkit:
+        specifier: 'catalog:'
+        version: 2.0.4
+      harfbuzzjs:
+        specifier: 'catalog:'
+        version: 1.6.4
+      jpeg-js:
+        specifier: 'catalog:'
+        version: 0.4.4
+      linebreak:
+        specifier: 'catalog:'
+        version: 1.1.0
+      pngjs:
+        specifier: 'catalog:'
+        version: 7.0.0
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+      react-reconciler:
+        specifier: 'catalog:'
+        version: 0.34.0(react@19.3.1)
+      yoga-layout:
+        specifier: 'catalog:'
+        version: 3.2.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
       '@pptxdk/capabilities':
         specifier: workspace:*
         version: link:../capabilities
@@ -712,16 +712,6 @@ importers:
       '@pptxdk/react':
         specifier: workspace:*
         version: link:../react
-      esbuild:
-        specifier: 'catalog:'
-        version: 0.28.2
-      react:
-        specifier: 'catalog:'
-        version: 19.3.1
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
-    devDependencies:
       '@pptxdk/tooling-config':
         specifier: workspace:*
         version: link:../tooling-config
@@ -731,30 +721,9 @@ importers:
       '@types/emscripten':
         specifier: 'catalog:'
         version: 1.41.6
-      '@types/fontkit':
-        specifier: 'catalog:'
-        version: 2.0.9
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.6
       '@types/pngjs':
         specifier: 'catalog:'
         version: 6.0.5
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.3.0
-      fflate:
-        specifier: 'catalog:'
-        version: 0.8.3
-      fontkit:
-        specifier: 'catalog:'
-        version: 2.0.4
-      harfbuzzjs:
-        specifier: 'catalog:'
-        version: 1.6.4
-      jpeg-js:
-        specifier: 'catalog:'
-        version: 0.4.4
       oxfmt:
         specifier: 'catalog:'
         version: 0.74.0
@@ -764,9 +733,12 @@ importers:
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 7.0.2005
-      pngjs:
+      rolldown:
         specifier: 'catalog:'
-        version: 7.0.0
+        version: 1.2.16
+      rolldown-plugin-dts:
+        specifier: 'catalog:'
+        version: 0.30.2(rolldown@1.2.16)(typescript@7.0.2)
       typescript-7:
         specifier: 'catalog:'
         version: typescript@7.0.2
@@ -1821,6 +1793,36 @@ packages:
     resolution: {integrity: sha512-GXeDBtkSTZ/AoKKvfqZVAWmZ5ENZ0NhD+oDsumMm6poFXvI7N0DGkHzJijwKm4Jk/hKdYvW3cI+rXN+m4XWjYw==}
     engines: {node: ^26.13.0}
 
+  '@yuku-toolchain/darwin-arm64@0.28.1':
+    resolution: {integrity: sha512-xMtZUwiGvJH90ogLjRrnG5+YEhinKti8qMPF18bd5z0ahSoaHWyBoe16evT7cSUxid0JEaZvh6H3daDPwDw4+g==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@yuku-toolchain/darwin-x64@0.28.1':
+    resolution: {integrity: sha512-aI60ScUkZgVEX5GHZfpiAAfTb9e7L6NUxfSU7Ucn+34GyrtswvBapEntbYKPzUuy5ubtVcD9vSWgptm/mlyTxQ==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@yuku-toolchain/linux-arm64@0.28.1':
+    resolution: {integrity: sha512-JYDBUtSI4CHfR9VxSvoJvcD8MS4qhuOk4MAMAqoouHq9Hky/fQbvGkN1VxTiwRtEcYtMp3JUs7vtsSZmbGk4lw==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@yuku-toolchain/linux-x64@0.28.1':
+    resolution: {integrity: sha512-lEWh0UkCr195bQj4DNlpww/B7hPeuotE0hpKbC2oz4STHqYxCEoaMzNOf9vr5Ydjwr9egEDepA0XRsu5xP+z8w==}
+    cpu: [x64]
+    os: [linux]
+
+  '@yuku-toolchain/win32-arm64@0.28.1':
+    resolution: {integrity: sha512-CUiumoJIwNiH9Utm5SbG5GaEaJRUatEXgG5HcPj2yEWh4kxTmEbigB346C3HEmtc+zbRLY0T0XsFO5RGSZaj2A==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@yuku-toolchain/win32-x64@0.28.1':
+    resolution: {integrity: sha512-CSTUi/ya58q2PuWTpk//BNSpXgOz7ol45T+SDuU7QfD/vN1FcLjSh99KDQzLf4AbIy43ORUw5UFehhfMGPNj9w==}
+    cpu: [x64]
+    os: [win32]
+
   ansi-regex@6.5.0:
     resolution: {integrity: sha512-zhvbbbdt1kbw7EJ9OQoxmQcuaNR9P5kTj7e/YdmOSU10aHWbycofJxA6jKfoEy3vlLdctOF9ZHaxLtmSm998wQ==}
     engines: {node: '>=12'}
@@ -1872,6 +1874,15 @@ packages:
 
   dfa@1.2.0:
     resolution: {integrity: sha512-ED3jP8saaweFTjeGX8HQPjeC1YYyZs98jGNZx6IiBvxW7JG5v492kamAQB3m2wop07CvU/RQmzcKr6bgcC5D/Q==}
+
+  dts-resolver@3.0.0:
+    resolution: {integrity: sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q==}
+    engines: {node: ^22.18.0 || >=24.0.0}
+    peerDependencies:
+      oxc-resolver: '>=11.0.0'
+    peerDependenciesMeta:
+      oxc-resolver:
+        optional: true
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -1934,6 +1945,10 @@ packages:
   get-east-asian-width@1.7.0:
     resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==}
     engines: {node: '>=18'}
+
+  get-tsconfig@5.0.0-beta.6:
+    resolution: {integrity: sha512-X6fBC0pmImC70gvX2zm56go9hx0MyoGVdG0tUCkg/D+Xnh5TJsOZ7iDbOdI3PvmtrDxnu1YdDufpK2QJX1Meqw==}
+    engines: {node: '>=20.20.0'}
 
   harfbuzzjs@1.6.4:
     resolution: {integrity: sha512-T/PyfhVt1gGR2Tkf5KJUj1DQFkVBXHw552lS1iLEEDhV1Lukb3eq1pk2ov85kgbT2YUiZtJBTak9w+M7YgzUEQ==}
@@ -2110,8 +2125,33 @@ packages:
     resolution: {integrity: sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw==}
     engines: {node: '>=0.10.0'}
 
+  resolve-pkg-maps@1.0.0:
+    resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
+
   restructure@3.0.2:
     resolution: {integrity: sha512-gSfoiOEA0VPE6Tukkrr7I0RBdE0s7H1eFCDBk05l1KIQT1UIKNc5JZy6jdyW6eYH3aR3g5b3PuL77rq0hvwtAw==}
+
+  rolldown-plugin-dts@0.30.2:
+    resolution: {integrity: sha512-Q3wRlwawifZeN1llb1BaeZfimmJMF/WHzm7z5ieZ8g2CWHQM0gvVWLYPbgBglsXJqcd405gc+3LS2NzSevbYNQ==}
+    engines: {node: ^22.18.0 || ^24.11.0 || >=26.0.0}
+    peerDependencies:
+      '@volar/typescript': ~2.4.0
+      '@vue/language-core': ~3.2.0 || ~3.3.0
+      rolldown: ^1.2.0
+      tsrs: '*'
+      typescript: ^5.0.0 || ^6.0.0 || ~7.0.0 || ~7.1.0-0
+      vue-tsc: ~3.2.0 || ~3.3.0
+    peerDependenciesMeta:
+      '@volar/typescript':
+        optional: true
+      '@vue/language-core':
+        optional: true
+      tsrs:
+        optional: true
+      typescript:
+        optional: true
+      vue-tsc:
+        optional: true
 
   rolldown@1.2.16:
     resolution: {integrity: sha512-bWvlMpFKiTfDKfnK7FC2MPgPeWCf/Kpwsq49ApdW+FQaBZb6O6dZ4MAPbPUjp7hYQrw/RobqCzn64BRrQecGHw==}
@@ -2304,6 +2344,15 @@ packages:
 
   yoga-layout@3.2.1:
     resolution: {integrity: sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==}
+
+  yuku@0.28.1:
+    resolution: {integrity: sha512-l899L8rSywcq9OLHf8JNQKpgyrBUL7UNJ7JqefoSVy0oYaFpdf3HoF72EVQFNWYr9HqMw0nGw1r1DefNujOnLQ==}
+    engines: {node: '>=16.4.0'}
+    peerDependencies:
+      '@yuku-toolchain/wasm': 0.28.1
+    peerDependenciesMeta:
+      '@yuku-toolchain/wasm':
+        optional: true
 
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
@@ -2899,6 +2948,24 @@ snapshots:
     dependencies:
       '@standard-schema/spec': 1.1.0
 
+  '@yuku-toolchain/darwin-arm64@0.28.1':
+    optional: true
+
+  '@yuku-toolchain/darwin-x64@0.28.1':
+    optional: true
+
+  '@yuku-toolchain/linux-arm64@0.28.1':
+    optional: true
+
+  '@yuku-toolchain/linux-x64@0.28.1':
+    optional: true
+
+  '@yuku-toolchain/win32-arm64@0.28.1':
+    optional: true
+
+  '@yuku-toolchain/win32-x64@0.28.1':
+    optional: true
+
   ansi-regex@6.5.0: {}
 
   ansi-styles@6.2.3: {}
@@ -2932,6 +2999,8 @@ snapshots:
   detect-libc@2.1.2: {}
 
   dfa@1.2.0: {}
+
+  dts-resolver@3.0.0: {}
 
   emoji-regex@10.6.0: {}
 
@@ -3010,6 +3079,10 @@ snapshots:
   get-caller-file@2.0.5: {}
 
   get-east-asian-width@1.7.0: {}
+
+  get-tsconfig@5.0.0-beta.6:
+    dependencies:
+      resolve-pkg-maps: 1.0.0
 
   harfbuzzjs@1.6.4: {}
 
@@ -3169,7 +3242,22 @@ snapshots:
 
   react@19.3.1: {}
 
+  resolve-pkg-maps@1.0.0: {}
+
   restructure@3.0.2: {}
+
+  rolldown-plugin-dts@0.30.2(rolldown@1.2.16)(typescript@7.0.2):
+    dependencies:
+      dts-resolver: 3.0.0
+      get-tsconfig: 5.0.0-beta.6
+      obug: 3.0.0
+      rolldown: 1.2.16
+      yuku: 0.28.1
+    optionalDependencies:
+      typescript: 7.0.2
+    transitivePeerDependencies:
+      - '@yuku-toolchain/wasm'
+      - oxc-resolver
 
   rolldown@1.2.16:
     dependencies:
@@ -3336,5 +3424,14 @@ snapshots:
       yargs-parser: 22.0.0
 
   yoga-layout@3.2.1: {}
+
+  yuku@0.28.1:
+    optionalDependencies:
+      '@yuku-toolchain/darwin-arm64': 0.28.1
+      '@yuku-toolchain/darwin-x64': 0.28.1
+      '@yuku-toolchain/linux-arm64': 0.28.1
+      '@yuku-toolchain/linux-x64': 0.28.1
+      '@yuku-toolchain/win32-arm64': 0.28.1
+      '@yuku-toolchain/win32-x64': 0.28.1
 
   zod@4.6.7: {}

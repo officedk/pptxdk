@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
 import {
   build,
   BuildError,
@@ -11,7 +9,7 @@ import {
   font,
   lighter,
   type ThemeScope,
-} from "pptxdk";
+} from "@officedk/pptxdk";
 import {
   Box,
   Chart,
@@ -27,7 +25,9 @@ import {
   Cell,
   Text,
   useMotionScope,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
+import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import type { ReactNode } from "react";
 import { describe, it } from "vitest";
 

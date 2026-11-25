@@ -8,7 +8,7 @@ import {
   useMotionScope,
   wipe,
   type MorphScope,
-} from "pptxdk/react";
+} from "@officedk/pptxdk/react";
 
 import {
   EnteredShapeText,

@@ -1,4 +1,4 @@
-import { Chart, Shape, Text } from "pptxdk/react";
+import { Chart, Shape, Text } from "@officedk/pptxdk/react";
 
 import {
   MetricCard,

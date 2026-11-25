@@ -518,8 +518,6 @@ describe("integrated acceptance", () => {
     }
 
     const comboBase: Omit<ChartProps, "groups"> = {
-      x: 0,
-      y: 0,
       width: 552,
       height: 240,
       title: "Revenue and trend",

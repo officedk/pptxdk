@@ -1,10 +1,13 @@
 import { z } from "zod";
 
 import {
+  footerPlaceholderStyleSchema,
   placeholderSizeSchema,
   slideBackgroundSchema,
+  slideStyleSchema,
   xml10StringSchema,
   type SlideBackground,
+  type SlideStyle,
 } from "#/author-schemas.ts";
 import { CapabilityError } from "#/diagnostics.ts";
 import {
@@ -21,10 +24,8 @@ import {
 import {
   colorMapOverrideSchema,
   colorMapSchema,
-  textStyleSchema,
   themeOverrideSchema,
   type ColorMapOverride,
-  type TextStyle,
   type Theme,
   type ThemeInput,
   type ThemeOverride,
@@ -52,7 +53,7 @@ export const footerPlaceholderSpecSchema = z
     idx: z.number().int().nonnegative().optional(),
     size: placeholderSizeSchema.optional(),
     text: xml10StringSchema.optional(),
-    style: textStyleSchema.optional(),
+    style: footerPlaceholderStyleSchema.optional(),
     visible: z.boolean().optional(),
   })
   .readonly();
@@ -119,6 +120,7 @@ export const slideMasterDataPropsSchema = z
     placeholders: masterPlaceholderMapSchema.optional(),
     textStyles: masterTextStylesSchema.optional(),
     colorMap: colorMapSchema.optional(),
+    style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
     footerPlaceholders: footerPlaceholdersSchema.optional(),
@@ -131,7 +133,7 @@ export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
 
 export type SlideMasterProps = SlideMasterDataProps & {
   readonly theme?: ThemeInput | Theme | undefined;
-  readonly style?: TextStyle | undefined;
+  readonly style?: SlideStyle | undefined;
   readonly placeholders?: MasterPlaceholderMap | undefined;
   readonly textStyles?: MasterTextStyles | undefined;
 };
@@ -149,6 +151,7 @@ export const slideLayoutDataPropsSchema = z
     placeholders: placeholderMapSchema.optional(),
     colorMapOverride: colorMapOverrideSchema.optional(),
     themeOverride: themeOverrideSchema.optional(),
+    style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
     footerPlaceholders: footerPlaceholdersSchema.optional(),
@@ -202,6 +205,7 @@ export const resolvedSlideLayoutSchema = z
     showMasterPlaceholderAnimations: z.boolean().optional(),
     colorMapOverride: colorMapOverrideSchema.optional(),
     themeOverride: themeOverrideSchema.optional(),
+    style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
     objects: z.array(z.custom<ResolvedObject>()).readonly(),
@@ -253,6 +257,7 @@ export type SlideLayoutDefinition<P extends PlaceholderMap = PlaceholderMap> = {
   readonly placeholders?: P | undefined;
   readonly colorMapOverride?: ColorMapOverride | undefined;
   readonly themeOverride?: ThemeOverride | undefined;
+  readonly style?: SlideStyle | undefined;
   readonly background?: SlideBackground | undefined;
   readonly headerFooter?: HeaderFooter | undefined;
   readonly footerPlaceholders?: FooterPlaceholders | undefined;
@@ -332,6 +337,7 @@ export function defineSlideLayout<
     ...(frozenProps.themeOverride === undefined
       ? {}
       : { themeOverride: frozenProps.themeOverride }),
+    ...(frozenProps.style === undefined ? {} : { style: frozenProps.style }),
     ...(frozenProps.background === undefined
       ? {}
       : { background: frozenProps.background }),

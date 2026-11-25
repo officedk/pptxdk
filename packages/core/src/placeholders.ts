@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 import { geometrySchema } from "#/geometry-schemas.ts";
-import { paddingStyleSchema } from "#/layout-schemas.ts";
+import { resolvePercent } from "#/layout-protocol.ts";
+import {
+  layoutStyleSchema,
+  paddingStyleSchema,
+  type LayoutLength,
+} from "#/layout-schemas.ts";
 import {
   textStyleShape,
   visualStyleSchema,
@@ -67,8 +72,13 @@ export const contentPlaceholderRoles = [
 export const placeholderRoleSchema = z.enum(contentPlaceholderRoles);
 export type ContentPlaceholderRole = z.infer<typeof placeholderRoleSchema>;
 
-export const placeholderSzSchema = z.enum(["full", "half", "quarter"]);
-export type PlaceholderSz = z.infer<typeof placeholderSzSchema>;
+/** Official OOXML ST_PlaceholderSize values for placeholder slots. */
+export const placeholderSizeSchema = z.enum(["full", "half", "quarter"]);
+export type PlaceholderSize = z.infer<typeof placeholderSizeSchema>;
+
+/** Transitional aliases retained until Ticket 11. */
+export const placeholderSzSchema = placeholderSizeSchema;
+export type PlaceholderSz = PlaceholderSize;
 
 export const placeholderOrientSchema = z.enum(["horz", "vert"]);
 export type PlaceholderOrient = z.infer<typeof placeholderOrientSchema>;
@@ -101,6 +111,7 @@ export type PlaceholderListStyles = z.infer<typeof placeholderListStylesSchema>;
 
 export const placeholderStyleSchema = z
   .strictObject({
+    ...layoutStyleSchema.unwrap().shape,
     ...paddingStyleSchema.unwrap().shape,
     ...textStyleShape,
     ...visualStyleSchema.unwrap().shape,
@@ -112,6 +123,7 @@ const basePlaceholderSpecSchema = z.strictObject({
   type: placeholderRoleSchema,
   explicitType: z.boolean().optional(),
   idx: z.number().int().nonnegative().optional(),
+  size: placeholderSizeSchema.optional(),
   sz: placeholderSzSchema.optional(),
   orient: placeholderOrientSchema.optional(),
   hasCustomPrompt: z.boolean().optional(),
@@ -167,6 +179,7 @@ export const nativePlaceholderRefSchema = z
     type: placeholderRoleSchema,
     explicitType: z.boolean().optional(),
     idx: z.number().int().nonnegative().optional(),
+    size: placeholderSizeSchema.optional(),
     sz: placeholderSzSchema.optional(),
     orient: placeholderOrientSchema.optional(),
     hasCustomPrompt: z.boolean().optional(),
@@ -181,7 +194,177 @@ export type PlaceholderResolutionContext = {
   readonly masterTextStyles?: MasterTextStyles;
   readonly masterPlaceholder?: MasterPlaceholderSpec;
   readonly layoutPlaceholder?: LayoutPlaceholderSpec;
+  readonly slideDimensions?: {
+    readonly width: number;
+    readonly height: number;
+  };
 };
+
+export type PlaceholderBoxLayer = {
+  readonly x?: unknown;
+  readonly y?: unknown;
+  readonly width?: unknown;
+  readonly height?: unknown;
+  readonly style?: Readonly<Record<string, unknown>> | undefined;
+};
+
+function resolvePlaceholderScalar(
+  value: unknown,
+  basis: number | undefined,
+): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (basis !== undefined && typeof value === "string") {
+    return resolvePercent(value as LayoutLength, basis);
+  }
+  return undefined;
+}
+
+/**
+ * Cascades box coordinates (`left`/`right`/`inset`/`width`/`x` and `top`/`bottom`/`inset`/`height`/`y`)
+ * across Master -> Layout -> Slide placeholder layers, resolving percentages against `slideDimensions`.
+ */
+export function resolvePlaceholderBoxFromLayers(
+  layers: readonly (PlaceholderBoxLayer | undefined)[],
+  slideDimensions?: { readonly width: number; readonly height: number },
+): {
+  readonly x: unknown;
+  readonly y: unknown;
+  readonly width: unknown;
+  readonly height: unknown;
+} {
+  let accLeft: unknown;
+  let accRight: unknown;
+  let accWidth: unknown;
+  let accTop: unknown;
+  let accBottom: unknown;
+  let accHeight: unknown;
+
+  for (const layer of layers) {
+    if (layer === undefined) continue;
+    const style =
+      typeof layer.style === "object" &&
+      layer.style !== null &&
+      !Array.isArray(layer.style)
+        ? layer.style
+        : undefined;
+    const hasOwn = (obj: Readonly<Record<string, unknown>>, key: string) =>
+      Object.hasOwn(obj, key) && obj[key] !== undefined;
+    const hasLeft =
+      (style !== undefined &&
+        (hasOwn(style, "left") || hasOwn(style, "inset"))) ||
+      hasOwn(layer as Readonly<Record<string, unknown>>, "x");
+    const hasRight =
+      style !== undefined && (hasOwn(style, "right") || hasOwn(style, "inset"));
+    const hasWidth =
+      (style !== undefined && hasOwn(style, "width")) ||
+      hasOwn(layer as Readonly<Record<string, unknown>>, "width");
+    const hasTop =
+      (style !== undefined &&
+        (hasOwn(style, "top") || hasOwn(style, "inset"))) ||
+      hasOwn(layer as Readonly<Record<string, unknown>>, "y");
+    const hasBottom =
+      style !== undefined &&
+      (hasOwn(style, "bottom") || hasOwn(style, "inset"));
+    const hasHeight =
+      (style !== undefined && hasOwn(style, "height")) ||
+      hasOwn(layer as Readonly<Record<string, unknown>>, "height");
+
+    if (hasRight && !hasLeft) accLeft = undefined;
+    if (hasLeft && !hasRight && hasWidth) accRight = undefined;
+    if (hasLeft) {
+      accLeft =
+        style !== undefined && hasOwn(style, "left")
+          ? style["left"]
+          : style !== undefined && hasOwn(style, "inset")
+            ? style["inset"]
+            : layer.x;
+    }
+    if (hasRight) {
+      accRight = hasOwn(style!, "right") ? style!["right"] : style!["inset"];
+    }
+    if (hasWidth) {
+      accWidth =
+        style !== undefined && hasOwn(style, "width")
+          ? style["width"]
+          : layer.width;
+    }
+
+    if (hasBottom && !hasTop) accTop = undefined;
+    if (hasTop && !hasBottom && hasHeight) accBottom = undefined;
+    if (hasTop) {
+      accTop =
+        style !== undefined && hasOwn(style, "top")
+          ? style["top"]
+          : style !== undefined && hasOwn(style, "inset")
+            ? style["inset"]
+            : layer.y;
+    }
+    if (hasBottom) {
+      accBottom = hasOwn(style!, "bottom") ? style!["bottom"] : style!["inset"];
+    }
+    if (hasHeight) {
+      accHeight =
+        style !== undefined && hasOwn(style, "height")
+          ? style["height"]
+          : layer.height;
+    }
+  }
+
+  const leftNum = resolvePlaceholderScalar(accLeft, slideDimensions?.width);
+  const rightNum = resolvePlaceholderScalar(accRight, slideDimensions?.width);
+  const widthNum = resolvePlaceholderScalar(accWidth, slideDimensions?.width);
+  let resolvedX: unknown = leftNum ?? accLeft;
+  let resolvedWidth: unknown = widthNum ?? accWidth;
+  if (
+    slideDimensions !== undefined &&
+    leftNum !== undefined &&
+    rightNum !== undefined &&
+    widthNum === undefined
+  ) {
+    resolvedWidth = slideDimensions.width - leftNum - rightNum;
+  } else if (
+    slideDimensions !== undefined &&
+    leftNum === undefined &&
+    rightNum !== undefined &&
+    widthNum !== undefined
+  ) {
+    resolvedX = slideDimensions.width - rightNum - widthNum;
+  }
+
+  const topNum = resolvePlaceholderScalar(accTop, slideDimensions?.height);
+  const bottomNum = resolvePlaceholderScalar(
+    accBottom,
+    slideDimensions?.height,
+  );
+  const heightNum = resolvePlaceholderScalar(
+    accHeight,
+    slideDimensions?.height,
+  );
+  let resolvedY: unknown = topNum ?? accTop;
+  let resolvedHeight: unknown = heightNum ?? accHeight;
+  if (
+    slideDimensions !== undefined &&
+    topNum !== undefined &&
+    bottomNum !== undefined &&
+    heightNum === undefined
+  ) {
+    resolvedHeight = slideDimensions.height - topNum - bottomNum;
+  } else if (
+    slideDimensions !== undefined &&
+    topNum === undefined &&
+    bottomNum !== undefined &&
+    heightNum !== undefined
+  ) {
+    resolvedY = slideDimensions.height - bottomNum - heightNum;
+  }
+
+  return {
+    x: resolvedX,
+    y: resolvedY,
+    width: resolvedWidth,
+    height: resolvedHeight,
+  };
+}
 
 const baseAuthorKeyByRole: Readonly<Record<ContentPlaceholderRole, string>> = {
   title: "title",

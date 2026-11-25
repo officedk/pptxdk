@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import { authorIdSchema, readAuthorId, type AuthorId } from "#/author-ids.ts";
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
-import { slideLayoutStyleShape } from "#/layout-schemas.ts";
+import { layoutStyleSchema, slideLayoutStyleShape } from "#/layout-schemas.ts";
+import { placeholderSizeSchema, type PlaceholderSize } from "#/placeholders.ts";
 import {
   colorMapOverrideSchema,
   colorValueSchema,
@@ -112,9 +113,18 @@ const slideCorePropsObjectSchema = z.strictObject({
 });
 export const slideCorePropsSchema = slideCorePropsObjectSchema.readonly();
 
-/** Official OOXML ST_PlaceholderSize values for date, footer, and slide-number slots. */
-export const placeholderSizeSchema = z.enum(["full", "half", "quarter"]);
-export type PlaceholderSize = z.infer<typeof placeholderSizeSchema>;
+export { placeholderSizeSchema, type PlaceholderSize };
+
+/** Footer placeholder slot style combining inherited text styles and LayoutStyle placement. */
+export const footerPlaceholderStyleSchema = z
+  .strictObject({
+    ...textStyleShape,
+    ...layoutStyleSchema.unwrap().shape,
+  })
+  .readonly();
+export type FooterPlaceholderStyle = z.infer<
+  typeof footerPlaceholderStyleSchema
+>;
 
 /** Per-slide dateTime/footer override declaration (`false` hides; string sets text; object overrides text/style/slot). */
 export const slideFooterValueSchema = z.union([
@@ -123,7 +133,7 @@ export const slideFooterValueSchema = z.union([
   z
     .strictObject({
       text: xml10StringSchema.optional(),
-      style: textStyleSchema.optional(),
+      style: footerPlaceholderStyleSchema.optional(),
       idx: z.number().int().nonnegative().optional(),
       size: placeholderSizeSchema.optional(),
       visible: z.boolean().optional(),
@@ -137,7 +147,7 @@ export const slideNumberValueSchema = z.union([
   z.boolean(),
   z
     .strictObject({
-      style: textStyleSchema.optional(),
+      style: footerPlaceholderStyleSchema.optional(),
       idx: z.number().int().nonnegative().optional(),
       size: placeholderSizeSchema.optional(),
       visible: z.boolean().optional(),

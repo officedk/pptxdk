@@ -28,6 +28,7 @@ import type {
   CapabilityLayoutMeasurement,
   Diagnostic,
   GeometryBox,
+  LayoutLength,
   LayoutStyle,
   NativeElementKind,
   PlaceholderResolutionContext,
@@ -229,8 +230,14 @@ export function parseCapabilityLayoutContract(options: {
     }
   }
 
-  const x = typeof props["x"] === "number" ? props["x"] : undefined;
-  const y = typeof props["y"] === "number" ? props["y"] : undefined;
+  const x =
+    typeof props["x"] === "number" && Number.isFinite(props["x"])
+      ? props["x"]
+      : undefined;
+  const y =
+    typeof props["y"] === "number" && Number.isFinite(props["y"])
+      ? props["y"]
+      : undefined;
   const styleWidth = rawStyle !== undefined ? rawStyle["width"] : undefined;
   const styleHeight = rawStyle !== undefined ? rawStyle["height"] : undefined;
   const width = (styleWidth ?? props["width"]) as
@@ -244,14 +251,89 @@ export function parseCapabilityLayoutContract(options: {
     | "auto"
     | undefined;
 
+  const isValidBridgeLength = (value: unknown): value is LayoutLength =>
+    (typeof value === "number" && Number.isFinite(value) && value >= 0) ||
+    value === "auto" ||
+    (typeof value === "string" && /^(\d+(?:\.\d*)?|\.\d+)%$/u.test(value));
+
+  // Transitional geometry bridge (Tickets 03-10): map legacy top-level x/y/width/height into
+  // LayoutStyle so unmigrated callers keep working inside unconditional block/flex/grid containers.
+  let effectiveLayoutStyle = layoutStyle;
+  if (
+    x !== undefined ||
+    y !== undefined ||
+    isValidBridgeLength(props["width"]) ||
+    isValidBridgeLength(props["height"])
+  ) {
+    const bridged: Record<string, unknown> = { ...layoutStyle };
+    if (
+      (x !== undefined || y !== undefined) &&
+      layoutStyle.position === undefined
+    ) {
+      bridged["position"] = "absolute";
+      if (
+        layoutStyle.left === undefined &&
+        layoutStyle.inset === undefined &&
+        layoutStyle.right === undefined
+      ) {
+        bridged["left"] = x ?? 0;
+      }
+      if (
+        layoutStyle.top === undefined &&
+        layoutStyle.inset === undefined &&
+        layoutStyle.bottom === undefined
+      ) {
+        bridged["top"] = y ?? 0;
+      }
+    } else if (layoutStyle.position === "absolute") {
+      if (
+        layoutStyle.left === undefined &&
+        layoutStyle.inset === undefined &&
+        layoutStyle.right === undefined &&
+        x !== undefined
+      ) {
+        bridged["left"] = x;
+      }
+      if (
+        layoutStyle.top === undefined &&
+        layoutStyle.inset === undefined &&
+        layoutStyle.bottom === undefined &&
+        y !== undefined
+      ) {
+        bridged["top"] = y;
+      }
+    }
+    if (
+      layoutStyle.width === undefined &&
+      isValidBridgeLength(props["width"])
+    ) {
+      bridged["width"] = props["width"];
+    }
+    if (
+      layoutStyle.height === undefined &&
+      isValidBridgeLength(props["height"])
+    ) {
+      bridged["height"] = props["height"];
+    }
+    effectiveLayoutStyle = bridged as LayoutStyle;
+  }
+
+  const isIntrinsicWidthObject =
+    nativeKind === "pic" ||
+    (nativeKind === "grpSp" &&
+      effectiveLayoutStyle.position !== "relative" &&
+      effectiveLayoutStyle.position !== "absolute" &&
+      effectiveLayoutStyle.width === undefined);
+
   return {
     nativeKind,
     ...(x === undefined ? {} : { x }),
     ...(y === undefined ? {} : { y }),
     ...(width === undefined ? {} : { width }),
     ...(height === undefined ? {} : { height }),
-    layoutStyle,
+    layoutStyle: effectiveLayoutStyle,
     ...(padding === undefined ? {} : { padding }),
+    ...(isIntrinsicWidthObject ? { preservesIntrinsicSize: true } : {}),
   };
 }
 
@@ -369,13 +451,7 @@ export class LayoutPass {
       path: parentPath,
       style: rootStyle,
     });
-    this.#appendChildren(
-      children,
-      parentPath,
-      root,
-      slideStyle !== undefined,
-      theme,
-    );
+    this.#appendChildren(children, parentPath, root, theme);
     this.#solver.solve((node, box, meta) => {
       const elementMeta = this.#nodeMeta.get(node);
       if (elementMeta === undefined) return;
@@ -455,12 +531,11 @@ export class LayoutPass {
     return bound;
   }
 
-  // Transparent or loose containers are not in the layout tree, so theme context must be passed separately along the declaration tree.
+  // Transparent containers are not in the layout tree, so theme context must be passed separately along the declaration tree.
   #appendChildren(
     children: readonly CapabilityChild[],
     parentPath: string,
     parent: LayoutSolverNode,
-    includeObjects: boolean,
     themeContext: ThemeContext,
   ): void {
     children.forEach((child, index) => {
@@ -475,13 +550,7 @@ export class LayoutPass {
         this.#themes.set(child, themeContext);
         // An owned subtree belongs to its capability and never becomes layout content.
         if (module.children === "owned") return;
-        this.#appendChildren(
-          child.children,
-          childPath,
-          parent,
-          includeObjects,
-          themeContext,
-        );
+        this.#appendChildren(child.children, childPath, parent, themeContext);
         return;
       }
       if (objectModule(module)) {
@@ -510,27 +579,6 @@ export class LayoutPass {
           mode.validateItemStyle(contract.layoutStyle, parent.style, childPath);
         }
         if (bound.container !== undefined) {
-          if (
-            !includeObjects &&
-            bound.container.layoutMode === "when-styled" &&
-            !Object.keys(contract.layoutStyle).some(
-              (key) =>
-                key !== "zIndex" &&
-                layoutPropertySet.has(key) &&
-                contract.layoutStyle[key as keyof LayoutStyle] !== undefined,
-            )
-          ) {
-            const theme = bound.container.theme ?? themeContext;
-            this.#themes.set(child, theme);
-            this.#appendChildren(
-              bound.container.children,
-              childPath,
-              parent,
-              false,
-              theme,
-            );
-            return;
-          }
           const built = this.#buildContainer(
             child,
             childPath,
@@ -543,12 +591,6 @@ export class LayoutPass {
           return;
         }
         this.#themes.set(child, themeContext);
-        if (
-          !includeObjects &&
-          !this.#solver.requiresLooseLayout(contract.layoutStyle)
-        ) {
-          return;
-        }
         const built = this.#buildLeafObject(
           child,
           childPath,
@@ -557,9 +599,6 @@ export class LayoutPass {
           bound,
           contract,
         );
-        if (!includeObjects) {
-          this.#solver.positionLooseGeometry(built);
-        }
         this.#solver.appendChild(parent, built);
       }
     });
@@ -582,6 +621,9 @@ export class LayoutPass {
         style,
         isContainer: true,
         propagatesBaseline: container.propagatesBaseline !== false,
+        ...(contract.preservesIntrinsicSize
+          ? { preservesIntrinsicSize: true }
+          : {}),
         ...(contract.width === undefined
           ? {}
           : { contractWidth: contract.width }),
@@ -600,7 +642,7 @@ export class LayoutPass {
       element: input,
       checksCanvasOverflow: container.checksCanvasOverflow !== false,
     });
-    this.#appendChildren(container.children, path, node, true, theme);
+    this.#appendChildren(container.children, path, node, theme);
     return node;
   }
 
@@ -618,6 +660,12 @@ export class LayoutPass {
         style: contract.layoutStyle,
         isContainer: false,
         propagatesBaseline: false,
+        ...(contract.preservesIntrinsicSize
+          ? { preservesIntrinsicSize: true }
+          : {}),
+        ...(contract.contentMinimumsEnforced
+          ? { contentMinimumsEnforced: true }
+          : {}),
         ...(contract.width === undefined
           ? {}
           : { contractWidth: contract.width }),
@@ -635,6 +683,9 @@ export class LayoutPass {
               measure: (request: {
                 readonly availableWidth?: number;
                 readonly widthMode?: "at-most" | "exactly";
+                readonly availableHeight?: number;
+                readonly heightMode?: "at-most" | "exactly";
+                readonly purpose?: "baseline" | "layout";
               }) => this.#measure(path, themeContext, bound, request),
             }),
       },
@@ -668,6 +719,8 @@ export class LayoutPass {
     request: {
       readonly availableWidth?: number;
       readonly widthMode?: "at-most" | "exactly";
+      readonly availableHeight?: number;
+      readonly heightMode?: "at-most" | "exactly";
       readonly purpose?: "baseline" | "layout";
     },
   ): CapabilityLayoutMeasurement | undefined {

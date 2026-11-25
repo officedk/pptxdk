@@ -249,7 +249,11 @@ describe("native tables", () => {
           { id: "automatic" },
           createElement(
             Table,
-            { id: "automatic-row", columns: [30], style },
+            {
+              id: "automatic-row",
+              columns: [30],
+              style: { ...style, width: 30 },
+            },
             createElement(
               Row,
               null,

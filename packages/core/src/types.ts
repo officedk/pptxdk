@@ -641,6 +641,10 @@ export type CapabilityLayoutRequest = {
   readonly availableWidth?: number;
   /** Whether available width is a shrinkable upper bound or an exact width the layout must allocate. */
   readonly widthMode?: "at-most" | "exactly";
+  /** Target height provided by the current layout algorithm in pixels. */
+  readonly availableHeight?: number;
+  /** Whether available height is a shrinkable upper bound or an exact target height. */
+  readonly heightMode?: "at-most" | "exactly";
   /** Distinguishes baseline queries from general intrinsic sizing queries. */
   readonly purpose?: "baseline" | "layout";
   /** Theme, local scope, and container text defaults shared between measurement and object compilation. */
@@ -669,6 +673,10 @@ export type CapabilityLayoutContract = {
     readonly bottom: number;
     readonly left: number;
   };
+  /** Prevents `display: "block"` `alignItems: "stretch"` from expanding auto-width replaced items to container width. */
+  readonly preservesIntrinsicSize?: boolean;
+  /** Enforces measured content/track dimensions as lower bounds and preserves explicit row sums over target dimensions (CSS table sizing). */
+  readonly contentMinimumsEnforced?: boolean;
 };
 
 export type CapabilityParseContext = {
@@ -765,11 +773,6 @@ export type BoundContainerCollaboration = {
   readonly theme?: ThemeContext;
   /** True when this container produces a native PresentationML object rather than remaining layout-only. */
   readonly emitsObject: boolean;
-  /**
-   * Controls whether this container enters the Yoga layout tree when placed inside a loose parent
-   * without declaring non-text layout styles. Defaults to `"always"`.
-   */
-  readonly layoutMode?: "always" | "when-styled";
   /**
    * Controls whether resolved children remain siblings of the container or are enclosed as native
    * members inside `bound.resolve` via `context.resolveChildren`. Defaults to `"siblings"`.

@@ -135,6 +135,7 @@ export {
   placeholderRoleSchema,
   placeholderStyleSchema,
   placeholderSzSchema,
+  resolvePlaceholderBoxFromLayers,
   textListBulletSchema,
   textListNumberSchema,
   textListSchema,

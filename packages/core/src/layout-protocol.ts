@@ -28,6 +28,8 @@ export type LayoutEdges = {
 export type LayoutMeasurementRequest = {
   readonly availableWidth?: number;
   readonly widthMode?: "at-most" | "exactly";
+  readonly availableHeight?: number;
+  readonly heightMode?: "at-most" | "exactly";
   readonly purpose?: "baseline" | "layout";
 };
 
@@ -40,6 +42,8 @@ export type LayoutNodeSpec = {
   readonly style: LayoutStyle;
   readonly isContainer: boolean;
   readonly propagatesBaseline?: boolean;
+  readonly preservesIntrinsicSize?: boolean;
+  readonly contentMinimumsEnforced?: boolean;
   readonly contractWidth?: LayoutLength;
   readonly contractHeight?: LayoutLength;
   readonly contractX?: number;
@@ -53,6 +57,7 @@ export type LayoutSolverNode = {
   readonly style: LayoutStyle;
   readonly isRoot: boolean;
   readonly isContainer: boolean;
+  readonly contentMinimumsEnforced?: boolean;
   readonly contractWidth?: LayoutLength;
   readonly contractHeight?: LayoutLength;
   readonly padding?: LayoutEdges;
@@ -153,8 +158,6 @@ export type LayoutSolver = {
   }): LayoutSolverNode;
   createNode(spec: LayoutNodeSpec, parent: LayoutSolverNode): LayoutSolverNode;
   appendChild(parent: LayoutSolverNode, child: LayoutSolverNode): void;
-  requiresLooseLayout(style: LayoutStyle): boolean;
-  positionLooseGeometry(node: LayoutSolverNode): void;
   solve(
     onCommit: (
       node: LayoutSolverNode,

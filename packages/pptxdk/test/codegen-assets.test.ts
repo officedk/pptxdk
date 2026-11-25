@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
   mkdir,
@@ -73,85 +72,6 @@ import {
 const require = createRequire(import.meta.url);
 const { encode: encodeJpeg } = require("jpeg-js") as typeof import("jpeg-js");
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-const tscBin = join(packageRoot, "node_modules/.bin/tsc");
-
-/**
- * Isolated ESM consumer strict `tsc --noEmit` check (adds `"type": "module"` so `module: "nodenext"`
- * accepts `import.meta.url` asset URLs emitted for images and fonts).
- */
-async function verifyEsmConsumerTypecheck(
-  cases: readonly { readonly label: string; readonly result: CodegenResult }[],
-): Promise<void> {
-  if (cases.length === 0) return;
-  const dir = await mkdtemp(join(tmpdir(), "pptxdk-assets-tsc-"));
-  try {
-    const nodeModulesDir = join(dir, "node_modules");
-    await mkdir(join(nodeModulesDir, "@types"), { recursive: true });
-    await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
-    await symlink(
-      join(packageRoot, "node_modules/react"),
-      join(nodeModulesDir, "react"),
-      "dir",
-    );
-    await symlink(
-      join(packageRoot, "node_modules/@types/react"),
-      join(nodeModulesDir, "@types/react"),
-      "dir",
-    );
-    await symlink(
-      join(packageRoot, "node_modules/@types/node"),
-      join(nodeModulesDir, "@types/node"),
-      "dir",
-    );
-
-    const manifest: string[] = [];
-    for (const [index, item] of cases.entries()) {
-      await writeCodegenFiles(
-        join(dir, "cases", `case-${index}`),
-        item.result.files,
-      );
-      manifest.push(`case-${index}: ${item.label} (${item.result.entry})`);
-    }
-    await writeFile(
-      join(dir, "package.json"),
-      JSON.stringify({
-        name: "codegen-assets-consumer",
-        private: true,
-        type: "module",
-      }),
-    );
-    await writeFile(
-      join(dir, "tsconfig.json"),
-      JSON.stringify({
-        compilerOptions: {
-          target: "es2024",
-          module: "nodenext",
-          moduleResolution: "nodenext",
-          jsx: "react-jsx",
-          jsxImportSource: "react",
-          strict: true,
-          noEmit: true,
-          skipLibCheck: false,
-          types: ["node"],
-        },
-        include: ["cases/**/*.ts", "cases/**/*.tsx"],
-      }),
-    );
-
-    const tscResult = spawnSync(
-      tscBin,
-      ["-p", "tsconfig.json", "--pretty", "false"],
-      { cwd: dir, encoding: "utf8" },
-    );
-    assert.equal(
-      tscResult.status,
-      0,
-      `ESM consumer strict tsc failed for:\n${manifest.join("\n")}\n\n${tscResult.stdout}\n${tscResult.stderr}`,
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
 
 const jostRegularSource = new Uint8Array(
   readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
@@ -787,7 +707,7 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
     jostItalicCopy.fill(0);
     await rm(localInputDir, { recursive: true, force: true });
 
-    await verifyEsmConsumerTypecheck(generatedCases);
+    await verifyGeneratedSourcesTypecheck(generatedCases);
 
     for (const item of generatedCases) {
       // Standard relocated rebuild (vanilla isolation check + validatePptx)
@@ -1021,7 +941,7 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
       ),
     );
     const subGenerated = codegen(withSubstituteFont, { target: "vanilla" });
-    await verifyEsmConsumerTypecheck([
+    await verifyGeneratedSourcesTypecheck([
       { label: "extra-font-env", result: subGenerated },
     ]);
     await withRelocatedConsumerProject(subGenerated, async ({ entryPath }) => {

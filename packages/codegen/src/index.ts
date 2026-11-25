@@ -1,6 +1,9 @@
 export { createCodegen } from "./codegen.ts";
 export {
   CodegenError,
+  codegenDiagnosticCodeSchema,
+  codegenDiagnosticSchema,
+  codegenOptionsSchema,
   codegenTargetSchema,
   defineObjectCodegen,
   defineSlideCodegen,

@@ -38,7 +38,7 @@ import {
 } from "./printer.ts";
 import {
   CodegenError,
-  codegenTargetSchema,
+  codegenOptionsSchema,
   expr,
   type CodegenContext,
   type CodegenDiagnosticCode,
@@ -344,7 +344,7 @@ export function createCodegen(
     if (!(document instanceof CommonNode) || document.type !== "deck") {
       failAt("deck", "invalid-document", "Expected a Deck root CommonNode");
     }
-    const parsedOptions = codegenTargetSchema.safeParse(options?.target);
+    const parsedOptions = codegenOptionsSchema.safeParse(options);
     if (!parsedOptions.success) {
       failAt(
         "deck",
@@ -352,7 +352,7 @@ export function createCodegen(
         'Codegen options.target must be "vanilla" or "react"',
       );
     }
-    const target = parsedOptions.data as T;
+    const target = parsedOptions.data.target as T;
     const entry = (
       target === "vanilla" ? "deck.ts" : "deck.tsx"
     ) as CodegenResult<T>["entry"];
@@ -684,7 +684,13 @@ export function createCodegen(
           if (target === "vanilla") {
             emitted.push(JSON.stringify(child.text));
           } else {
-            emitted.push(formatJsxTextChild(child.text));
+            // Multiple children are formatted on separate lines, so adjacent bare JSX text
+            // would normalize newlines into spaces; wrap leaves in expression containers.
+            emitted.push(
+              children.length === 1
+                ? formatJsxTextChild(child.text)
+                : `{${JSON.stringify(child.text)}}`,
+            );
           }
         }
       }

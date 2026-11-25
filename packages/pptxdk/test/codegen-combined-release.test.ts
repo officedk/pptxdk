@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rename, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { type ValidationResult } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
@@ -18,7 +14,6 @@ import {
   lighter,
   type CodegenResult,
 } from "pptxdk";
-import { previewFromSource, type PreviewResult } from "pptxdk/node";
 import {
   Box,
   Cell,
@@ -86,12 +81,11 @@ import { createElement } from "react";
 import { describe, it } from "vitest";
 
 import {
+  previewGeneratedSourceRelocated,
   rebuildGeneratedSourceRelocated,
   verifyGeneratedSourcesTypecheck,
-  writeCodegenFiles,
 } from "./helpers/codegen-acceptance.ts";
 
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const BRAND_FIXTURE_SHA256 =
   "de3376969353a2322ccce48182393f63eea9a44f5a231565985bcb5d3d336536";
 
@@ -140,34 +134,6 @@ function assertByteIdenticalCodegen(
       assert.ok(a instanceof Uint8Array && b instanceof Uint8Array);
       assert.equal(Buffer.compare(a, b), 0, `${label} ${relPath} binary bytes`);
     }
-  }
-}
-
-async function previewGeneratedSourceRelocated(
-  result: CodegenResult,
-): Promise<PreviewResult> {
-  const tempRoot = await mkdtemp(
-    join(tmpdir(), "pptxdk-codegen-combined-preview-"),
-  );
-  try {
-    const consumerRoot = join(tempRoot, "consumer");
-    const nodeModulesDir = join(consumerRoot, "node_modules");
-    await mkdir(nodeModulesDir, { recursive: true });
-    await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
-    await symlink(
-      join(packageRoot, "node_modules/react"),
-      join(nodeModulesDir, "react"),
-      "dir",
-    );
-
-    const originDir = join(tempRoot, "origin");
-    await writeCodegenFiles(originDir, result.files);
-    const relocatedDir = join(consumerRoot, "relocated");
-    await rename(originDir, relocatedDir);
-
-    return await previewFromSource(join(relocatedDir, result.entry));
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
   }
 }
 
@@ -1374,7 +1340,7 @@ describe("pptxdk combined release acceptance", () => {
     }
   }, 120_000);
 
-  it("matches Ticket 10 brand-master-inheritance-override.pptx correspondence across codegen and relocated rebuild", async () => {
+  it("matches brand-master-inheritance-override.pptx correspondence across codegen and relocated rebuild", async () => {
     const rawFixture = new Uint8Array(
       readFileSync(
         new URL(
@@ -1395,13 +1361,13 @@ describe("pptxdk combined release acceptance", () => {
     const vanilla = codegen(imported.document, { target: "vanilla" });
     const react = codegen(imported.document, { target: "react" });
     await verifyGeneratedSourcesTypecheck([
-      { label: "ticket10-brand-vanilla", result: vanilla },
-      { label: "ticket10-brand-react", result: react },
+      { label: "brand-master-vanilla", result: vanilla },
+      { label: "brand-master-react", result: react },
     ]);
 
     for (const [label, result] of [
-      ["ticket10-brand-vanilla", vanilla],
-      ["ticket10-brand-react", react],
+      ["brand-master-vanilla", vanilla],
+      ["brand-master-react", react],
     ] as const) {
       const { built, file } = await rebuildGeneratedSourceRelocated(result);
       assert.deepEqual(file.errors, [], `${label} validation errors`);

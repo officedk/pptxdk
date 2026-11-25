@@ -2,9 +2,13 @@ import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { slideBackgroundCapability } from "@pptxdk/capabilities/slide-background";
 import {
   CodegenError,
+  codegenDiagnosticCodeSchema,
+  codegenDiagnosticSchema,
+  codegenOptionsSchema,
   codegenTargetSchema,
   createCodegen,
   type CodegenDiagnostic,
+  type CodegenDiagnosticCode,
   type CodegenEntryName,
   type CodegenFileContent,
   type CodegenOptions,
@@ -50,9 +54,16 @@ export function codegen<T extends CodegenTarget>(
   return generateSource(document, options);
 }
 
-export { CodegenError, codegenTargetSchema };
+export {
+  CodegenError,
+  codegenDiagnosticCodeSchema,
+  codegenDiagnosticSchema,
+  codegenOptionsSchema,
+  codegenTargetSchema,
+};
 export type {
   CodegenDiagnostic,
+  CodegenDiagnosticCode,
   CodegenEntryName,
   CodegenFileContent,
   CodegenOptions,

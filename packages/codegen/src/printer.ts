@@ -203,7 +203,9 @@ export function formatJsxTextChild(text: string): string {
 }
 
 function isSimpleJsxStringAttr(value: string): boolean {
-  if (/["\r\n\t]/u.test(value)) return false;
+  // JSX string attributes preserve backslashes verbatim and decode HTML entities, so emit
+  // expression containers whenever a string contains `\` or `&` alongside quotes/controls.
+  if (/["\\&\r\n\t]/u.test(value)) return false;
   for (const ch of value) {
     const code = ch.codePointAt(0);
     if (code !== undefined && (code < 0x20 || code === 0x7f)) {
@@ -271,7 +273,15 @@ export function formatJsxElement(
   ) {
     return `${head}${children[0]}</${tag}>`;
   }
-  return `${head}\n${indentBlock(children.join("\n"))}\n</${tag}>`;
+  const formattedChildren =
+    children.length > 1
+      ? children.map((child) =>
+          child.startsWith("<") || child.startsWith("{")
+            ? child
+            : `{${JSON.stringify(child)}}`,
+        )
+      : children;
+  return `${head}\n${indentBlock(formattedChildren.join("\n"))}\n</${tag}>`;
 }
 
 export function formatVanillaCall(

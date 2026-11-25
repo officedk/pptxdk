@@ -28,13 +28,13 @@ import {
   CodegenError,
   ImportError,
   codegen,
+  codegenDiagnosticSchema,
   codegenTargetSchema,
   fatalImportIssueSchema,
   fontEmbeddingModeSchema,
   importDiagnosticSchema,
   targetNameSchema,
   targets,
-  type CodegenDiagnostic,
   type CodegenFileContent,
   type Diagnostic,
   type FatalImportIssue,
@@ -236,25 +236,9 @@ const importFailedSchema = z.object({
   message: z.string(),
 });
 
-const codegenDiagnosticItemSchema = z.object({
-  severity: z.literal("error"),
-  path: z.string(),
-  code: z.enum([
-    "invalid-document",
-    "invalid-options",
-    "unsupported-declaration",
-    "unsupported-slide-property",
-    "unexpressible-value",
-  ] satisfies readonly [
-    CodegenDiagnostic["code"],
-    ...CodegenDiagnostic["code"][],
-  ]),
-  message: z.string(),
-});
-
 const codegenFailedSchema = z.object({
   entry: z.string(),
-  diagnostics: z.array(codegenDiagnosticItemSchema),
+  diagnostics: z.array(codegenDiagnosticSchema),
   importDiagnostics: z.array(importDiagnosticSchema),
 });
 

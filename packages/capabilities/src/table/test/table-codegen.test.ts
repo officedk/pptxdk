@@ -408,7 +408,7 @@ describe("table capability codegen", () => {
     );
     assert.ok(importedSlide3 !== undefined, "Expected slide-3 in fixture");
 
-    // Remove non-table slides and clear master background (handled by ticket 08) on the imported deck.
+    // Isolate the table slide and clear the master background so this test focuses on table codegen.
     const importedMaster = imported.document.children.find(
       (child): child is CommonNode =>
         child instanceof CommonNode && child.type === "slide-master",

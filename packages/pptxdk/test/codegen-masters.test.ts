@@ -365,10 +365,7 @@ describe("pptxdk masters & placeholders codegen acceptance", () => {
 
     const prsRaw = new Uint8Array(
       readFileSync(
-        new URL(
-          "../../capabilities/src/masters/test/fixtures/prs-slide-masters.pptx",
-          import.meta.url,
-        ),
+        new URL("./fixtures/prs-slide-masters.pptx", import.meta.url),
       ),
     );
     const importedPrs = importPptx(prsRaw);
@@ -469,10 +466,7 @@ describe("pptxdk masters & placeholders codegen acceptance", () => {
     // Also verify copying Master 2 from prs-slide-masters.pptx (zero-slide external fixture).
     const prsRaw = new Uint8Array(
       readFileSync(
-        new URL(
-          "../../capabilities/src/masters/test/fixtures/prs-slide-masters.pptx",
-          import.meta.url,
-        ),
+        new URL("./fixtures/prs-slide-masters.pptx", import.meta.url),
       ),
     );
     const importedPrs = importPptx(prsRaw);

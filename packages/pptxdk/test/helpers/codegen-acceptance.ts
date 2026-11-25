@@ -14,7 +14,12 @@ import { fileURLToPath } from "node:url";
 
 import { validatePptx, type ValidationResult } from "@pptxdk/validation";
 import type { BuildOptions, CodegenResult } from "pptxdk";
-import { buildFromSource, type BuildResult } from "pptxdk/node";
+import {
+  buildFromSource,
+  previewFromSource,
+  type BuildResult,
+  type PreviewResult,
+} from "pptxdk/node";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const tscBin = join(packageRoot, "node_modules/.bin/tsc");
@@ -208,6 +213,29 @@ export async function rebuildGeneratedSourceRelocated(
     const built = await buildFromSource(entryPath, options.buildOptions);
     const file = await validatePptx(built.pptx);
     return { built, file };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Writes generated files to an origin directory, relocates them via `rename` to an isolated
+ * project path, and renders a formal preview via `previewFromSource`.
+ */
+export async function previewGeneratedSourceRelocated(
+  result: CodegenResult,
+): Promise<PreviewResult> {
+  const tempRoot = await mkdtemp(join(tmpdir(), "pptxdk-codegen-preview-"));
+  try {
+    const consumerRoot = join(tempRoot, "consumer");
+    await linkConsumerNodeModules(join(consumerRoot, "node_modules"), false);
+
+    const originDir = join(tempRoot, "origin");
+    await writeCodegenFiles(originDir, result.files);
+    const relocatedDir = join(consumerRoot, "relocated");
+    await rename(originDir, relocatedDir);
+
+    return await previewFromSource(join(relocatedDir, result.entry));
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

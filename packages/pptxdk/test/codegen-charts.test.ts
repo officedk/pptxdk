@@ -1,23 +1,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  rename,
-  rm,
-  symlink,
-} from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { build, codegen, importPptx, type CodegenResult } from "pptxdk";
-import { previewFromSource, type PreviewResult } from "pptxdk/node";
 import {
   Chart,
   Deck,
@@ -40,12 +31,11 @@ import { createElement } from "react";
 import { describe, it } from "vitest";
 
 import {
+  previewGeneratedSourceRelocated,
   rebuildGeneratedSourceRelocated,
   verifyGeneratedSourcesTypecheck,
   writeCodegenFiles,
 } from "./helpers/codegen-acceptance.ts";
-
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 
 const jostBookBytes = new Uint8Array(
   readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
@@ -75,32 +65,6 @@ const chartPlaceholderLayout = defineSlideLayout({
     },
   },
 });
-
-async function previewGeneratedSourceRelocated(
-  result: CodegenResult,
-): Promise<PreviewResult> {
-  const tempRoot = await mkdtemp(join(tmpdir(), "pptxdk-codegen-cht-preview-"));
-  try {
-    const consumerRoot = join(tempRoot, "consumer");
-    const nodeModulesDir = join(consumerRoot, "node_modules");
-    await mkdir(nodeModulesDir, { recursive: true });
-    await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
-    await symlink(
-      join(packageRoot, "node_modules/react"),
-      join(nodeModulesDir, "react"),
-      "dir",
-    );
-
-    const originDir = join(tempRoot, "origin");
-    await writeCodegenFiles(originDir, result.files);
-    const relocatedDir = join(consumerRoot, "relocated");
-    await rename(originDir, relocatedDir);
-
-    return await previewFromSource(join(relocatedDir, result.entry));
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-}
 
 function countPaintedPixelsInBox(
   pngBytes: Uint8Array,

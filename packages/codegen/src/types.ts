@@ -14,6 +14,13 @@ export type CodegenEntryName<T extends CodegenTarget = CodegenTarget> =
       ? "deck.tsx"
       : "deck.ts" | "deck.tsx";
 
+/** Options controlling `codegen` target syntax output. */
+export const codegenOptionsSchema = z
+  .object({
+    target: codegenTargetSchema,
+  })
+  .readonly();
+
 export type CodegenOptions<T extends CodegenTarget = CodegenTarget> = {
   readonly target: T;
 };
@@ -26,19 +33,24 @@ export type CodegenResult<T extends CodegenTarget = CodegenTarget> = {
   readonly files: Readonly<Record<string, CodegenFileContent>>;
 };
 
-export type CodegenDiagnosticCode =
-  | "invalid-document"
-  | "invalid-options"
-  | "unsupported-declaration"
-  | "unsupported-slide-property"
-  | "unexpressible-value";
+export const codegenDiagnosticCodeSchema = z.enum([
+  "invalid-document",
+  "invalid-options",
+  "unsupported-declaration",
+  "unsupported-slide-property",
+  "unexpressible-value",
+]);
+export type CodegenDiagnosticCode = z.infer<typeof codegenDiagnosticCodeSchema>;
 
-export type CodegenDiagnostic = {
-  readonly severity: "error";
-  readonly path: string;
-  readonly code: CodegenDiagnosticCode;
-  readonly message: string;
-};
+export const codegenDiagnosticSchema = z
+  .object({
+    severity: z.literal("error"),
+    path: z.string(),
+    code: codegenDiagnosticCodeSchema,
+    message: z.string(),
+  })
+  .readonly();
+export type CodegenDiagnostic = z.infer<typeof codegenDiagnosticSchema>;
 
 /** Structured error thrown when an editable document cannot be expressed in generated source. */
 export class CodegenError extends Error {

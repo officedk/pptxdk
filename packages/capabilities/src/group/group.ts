@@ -164,6 +164,8 @@ type ResolvedGroupModel = {
   readonly emu: EmuBox;
   readonly angle: number;
   readonly rotation?: number;
+  readonly flipH: boolean;
+  readonly flipV: boolean;
 };
 
 function roundSvgNumber(value: number): string {
@@ -183,6 +185,8 @@ function emitGroupModel(
       emitContext.childrenXml,
       model.rotation,
       nativeLinkXml(emitContext.nativeLink),
+      model.flipH,
+      model.flipV,
     ),
   };
 }
@@ -192,10 +196,16 @@ function paintGroupModel(
   paintContext: PaintContext,
 ): PaintOutput {
   const childrenSvg = paintContext.childrenSvg ?? "";
-  const cx = roundSvgNumber(model.box.x + model.box.width / 2);
-  const cy = roundSvgNumber(model.box.y + model.box.height / 2);
+  const cxNum = model.box.x + model.box.width / 2;
+  const cyNum = model.box.y + model.box.height / 2;
+  const cx = roundSvgNumber(cxNum);
+  const cy = roundSvgNumber(cyNum);
+  const transform =
+    model.flipH || model.flipV
+      ? `translate(${cx} ${cy}) rotate(${roundSvgNumber(model.angle)}) scale(${model.flipH ? -1 : 1} ${model.flipV ? -1 : 1}) translate(${roundSvgNumber(-cxNum)} ${roundSvgNumber(-cyNum)})`
+      : `rotate(${roundSvgNumber(model.angle)} ${cx} ${cy})`;
   return {
-    svg: `<g transform="rotate(${roundSvgNumber(model.angle)} ${cx} ${cy})">${childrenSvg}</g>`,
+    svg: `<g transform="${transform}">${childrenSvg}</g>`,
   };
 }
 
@@ -260,6 +270,22 @@ export const groupCapability = {
       );
     }
     const rotation = rawRotation as number | undefined;
+    const rawFlipH = styleRecord["flipH"];
+    if (rawFlipH !== undefined && typeof rawFlipH !== "boolean") {
+      throw new CapabilityError(
+        "invalid-visual-style",
+        "flipH must be a boolean",
+      );
+    }
+    const rawFlipV = styleRecord["flipV"];
+    if (rawFlipV !== undefined && typeof rawFlipV !== "boolean") {
+      throw new CapabilityError(
+        "invalid-visual-style",
+        "flipV must be a boolean",
+      );
+    }
+    const flipH = Boolean(rawFlipH);
+    const flipV = Boolean(rawFlipV);
 
     let explicitBox:
       | {
@@ -501,12 +527,14 @@ export const groupCapability = {
           emu: outputEmu,
           angle,
           ...(rotation === undefined ? {} : { rotation }),
+          flipH,
+          flipV,
         };
         const transform: PreviewTransform = {
           box: outputGeometry,
           angle,
-          flipH: false,
-          flipV: false,
+          flipH,
+          flipV,
         };
         return {
           observation: {

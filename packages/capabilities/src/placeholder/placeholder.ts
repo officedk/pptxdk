@@ -8,6 +8,7 @@ import {
   matchLayoutPlaceholderKey,
   nativePlaceholderRefSchema,
   parseCapabilityLayoutContract,
+  visualStyleSchema,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
@@ -26,7 +27,6 @@ import { CommonNode } from "@pptxdk/core/document";
 import {
   assertXml10Characters,
   placeholderRefXml,
-  pxToEmu,
   xmlEscape,
 } from "@pptxdk/emit";
 import {
@@ -60,7 +60,18 @@ import {
   isPlaceholderSpElement,
   readNvPrPlaceholder,
 } from "../shared/placeholder-import.ts";
-import { resolvePlaceholderGeometry } from "../shared/style-inheritance.ts";
+import {
+  hasLocalDeclaration,
+  resolvePlaceholderGeometry,
+  resolvePlaceholderVisualStyle,
+} from "../shared/style-inheritance.ts";
+import {
+  emitPlaceholderVisualSpPr,
+  resolveVisualModel,
+  visualStyleKeys,
+  type PlaceholderSpPrFlags,
+  type ResolvedVisualModel,
+} from "../shared/visual.ts";
 import { placeholderCodegen } from "./placeholder-codegen.ts";
 
 const NonVisualSpIdSchema = z.object({
@@ -72,6 +83,13 @@ const NonVisualSpPrFlagsSchema = z.object({
   txBox: ooxmlBoolSchema.optional(),
 });
 
+export const placeholderObjectStyleSchema = z
+  .strictObject({
+    ...layoutStyleSchema.unwrap().shape,
+    ...visualStyleSchema.unwrap().shape,
+  })
+  .readonly();
+
 export const placeholderDeclarationPropsSchema = z.strictObject({
   id: authorIdSchema.optional(),
   name: optionalNameSchema.optional(),
@@ -79,7 +97,7 @@ export const placeholderDeclarationPropsSchema = z.strictObject({
   placeholder: z.string().min(1).optional(),
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
   link: linkTargetSchema.optional(),
-  style: layoutStyleSchema.optional(),
+  style: placeholderObjectStyleSchema.optional(),
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
   width: z.number().finite().positive().optional(),
@@ -110,7 +128,8 @@ type ResolvedPlaceholderModel = {
   readonly box: GeometryBox;
   readonly name: string;
   readonly nativeRef: NativePlaceholderRef;
-  readonly omitSpPrTransform: boolean;
+  readonly visual: ResolvedVisualModel;
+  readonly spPrFlags: PlaceholderSpPrFlags;
 };
 
 function emitPlaceholderModel(
@@ -118,9 +137,11 @@ function emitPlaceholderModel(
   emitContext: EmitContext,
 ): EmitOutput {
   const escapedName = xmlEscape(model.name);
-  const spPrXml = model.omitSpPrTransform
-    ? "<p:spPr/>"
-    : `<p:spPr><a:xfrm><a:off x="${pxToEmu(model.box.x)}" y="${pxToEmu(model.box.y)}"/><a:ext cx="${pxToEmu(model.box.width)}" cy="${pxToEmu(model.box.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`;
+  const spPrXml = emitPlaceholderVisualSpPr(
+    model.visual,
+    model.spPrFlags,
+    (resource) => emitContext.registerResource(resource),
+  );
   return {
     xml: `<p:sp><p:nvSpPr><p:cNvPr id="${emitContext.id}" name="${escapedName}">${nativeLinkXml(emitContext.nativeLink)}</p:cNvPr><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr>${placeholderRefXml(model.nativeRef)}</p:nvPr></p:nvSpPr>${spPrXml}</p:sp>`,
   };
@@ -387,9 +408,49 @@ export const placeholderCapability = {
     const contract = parseCapabilityLayoutContract({
       nativeKind: "sp",
       props: input.props,
-      allowedStyleKeys: new Set<string>(layoutStyleKeys),
+      allowedStyleKeys: new Set<string>([
+        ...layoutStyleKeys,
+        ...visualStyleKeys,
+      ]),
       allowPadding: false,
       path: context.path,
+    });
+
+    const rawSlideStyle =
+      typeof input.props["style"] === "object" &&
+      input.props["style"] !== null &&
+      !Array.isArray(input.props["style"])
+        ? (input.props["style"] as Readonly<Record<string, unknown>>)
+        : undefined;
+    const inheritedPlaceholderGeometry =
+      placeholder?.layoutPlaceholder?.geometry ??
+      placeholder?.masterPlaceholder?.geometry;
+    const inheritedPlaceholderFlipH =
+      placeholder?.layoutPlaceholder?.flipH ??
+      placeholder?.masterPlaceholder?.flipH;
+    const inheritedPlaceholderFlipV =
+      placeholder?.layoutPlaceholder?.flipV ??
+      placeholder?.masterPlaceholder?.flipV;
+    const visualStyle =
+      placeholder !== undefined
+        ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
+        : rawSlideStyle !== undefined
+          ? { ...rawSlideStyle }
+          : {};
+    resolveVisualModel({
+      theme: placeholder?.masterTheme ?? context.theme,
+      style: visualStyle,
+      box: { x: 0, y: 0, width: 100, height: 100 },
+      ...(inheritedPlaceholderGeometry === undefined
+        ? {}
+        : { geometry: inheritedPlaceholderGeometry }),
+      ...(inheritedPlaceholderFlipH === undefined
+        ? {}
+        : { flipH: inheritedPlaceholderFlipH }),
+      ...(inheritedPlaceholderFlipV === undefined
+        ? {}
+        : { flipV: inheritedPlaceholderFlipV }),
+      layoutOnlyWhenInvisible: true,
     });
 
     const placeholderGeometry =
@@ -443,14 +504,53 @@ export const placeholderCapability = {
             "Placeholder.name contains characters not allowed in XML 1.0",
           );
         }
-        const omitSpPrTransform =
-          placeholder !== undefined &&
-          placeholderGeometry?.hasLocalBoxOverride !== true;
+        const hasBox =
+          placeholder === undefined ||
+          placeholderGeometry?.hasLocalBoxOverride === true;
+        const visual = resolveVisualModel({
+          theme: placeholder?.masterTheme ?? resolveContext.theme,
+          style: visualStyle,
+          box,
+          ...(inheritedPlaceholderGeometry === undefined
+            ? {}
+            : { geometry: inheritedPlaceholderGeometry }),
+          ...(inheritedPlaceholderFlipH === undefined
+            ? {}
+            : { flipH: inheritedPlaceholderFlipH }),
+          ...(inheritedPlaceholderFlipV === undefined
+            ? {}
+            : { flipV: inheritedPlaceholderFlipV }),
+          layoutOnlyWhenInvisible: !hasBox,
+        });
+        const spPrFlags: PlaceholderSpPrFlags = {
+          hasBox,
+          hasRotate: hasLocalDeclaration(rawSlideStyle, "rotate"),
+          hasFlipH: hasLocalDeclaration(rawSlideStyle, "flipH"),
+          hasFlipV: hasLocalDeclaration(rawSlideStyle, "flipV"),
+          hasGeometryOrRadius: hasLocalDeclaration(
+            rawSlideStyle,
+            "borderRadius",
+          ),
+          hasFill:
+            hasLocalDeclaration(rawSlideStyle, "background") ||
+            hasLocalDeclaration(rawSlideStyle, "backgroundColor") ||
+            hasLocalDeclaration(rawSlideStyle, "backgroundImage"),
+          hasBorder:
+            hasLocalDeclaration(rawSlideStyle, "border") ||
+            hasLocalDeclaration(rawSlideStyle, "borderColor") ||
+            hasLocalDeclaration(rawSlideStyle, "borderWidth") ||
+            hasLocalDeclaration(rawSlideStyle, "borderStyle"),
+          hasEffects:
+            hasLocalDeclaration(rawSlideStyle, "boxShadow") ||
+            hasLocalDeclaration(rawSlideStyle, "softEdge"),
+          includeDefaultRectWhenHasBox: true,
+        };
         const model: ResolvedPlaceholderModel = {
           box,
           name,
           nativeRef,
-          omitSpPrTransform,
+          visual,
+          spPrFlags,
         };
         return {
           observation: {

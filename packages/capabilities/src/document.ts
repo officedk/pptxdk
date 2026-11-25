@@ -438,8 +438,22 @@ export function box(props: BoxAuthorProps = {}): BoxNode {
 }
 
 /** Creates a native shape whose geometry, visuals, and rich text remain editable after attachment. */
-export function shape(props: ShapeAuthorProps = {}): ShapeNode {
-  return createShapeNode(props);
+export function shape(props?: ShapeAuthorProps): ShapeNode;
+export function shape(
+  content?: TextContent,
+  props?: ShapeAuthorProps,
+): ShapeNode;
+export function shape(...content: readonly TextContent[]): ShapeNode;
+export function shape(
+  ...args: [...(readonly TextContent[]), ShapeAuthorProps]
+): ShapeNode;
+export function shape(
+  ...args: readonly (TextContent | ShapeAuthorProps | undefined)[]
+): ShapeNode {
+  const { content, props } = splitContent<ShapeAuthorProps>(args);
+  const node = createShapeNode(props ?? {});
+  node.content(...content);
+  return node;
 }
 
 /** Creates an unpopulated native content placeholder bound to a layout placeholder slot. */

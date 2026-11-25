@@ -986,6 +986,8 @@ function resolveSlides(
           layoutSlideProps[prop] = effectiveLayoutProps[prop];
         }
       }
+      const effectiveLayoutBackground =
+        parsedLayout.data.style?.background ?? parsedLayout.data.background;
       resolvedLayouts.push({
         node: layoutNode,
         key: layoutKey,
@@ -1001,9 +1003,9 @@ function resolveSlides(
                 Record<string, unknown>
               >,
             }),
-        ...(parsedLayout.data.background === undefined
+        ...(effectiveLayoutBackground === undefined
           ? {}
-          : { background: parsedLayout.data.background }),
+          : { background: effectiveLayoutBackground }),
         ...(parsedLayout.data.headerFooter === undefined
           ? {}
           : { headerFooter: parsedLayout.data.headerFooter }),
@@ -1037,6 +1039,8 @@ function resolveSlides(
       }
     }
     const masterStyleProp = masterNode.props["style"];
+    const effectiveMasterBackground =
+      parsedMaster.data.style?.background ?? parsedMaster.data.background;
     masters.push({
       node: masterNode,
       canvasChildren: masterCanvasNodes,
@@ -1066,9 +1070,9 @@ function resolveSlides(
       ...(parsedMaster.data.textStyles === undefined
         ? {}
         : { textStyles: parsedMaster.data.textStyles }),
-      ...(parsedMaster.data.background === undefined
+      ...(effectiveMasterBackground === undefined
         ? {}
-        : { background: parsedMaster.data.background }),
+        : { background: effectiveMasterBackground }),
       ...(parsedMaster.data.headerFooter === undefined
         ? {}
         : { headerFooter: parsedMaster.data.headerFooter }),
@@ -2856,9 +2860,18 @@ function resolveSlideDeclaration(
     const slideProps =
       module.slideProps ??
       (module.slideProp === undefined ? [] : [module.slideProp]);
-    const hasSlideProps = slideProps.some((property) =>
-      Object.hasOwn(node.props, property),
-    );
+    const slideStyle = node.props["style"];
+    const hasStyleBackground =
+      module.declaration === "slide-background" &&
+      typeof slideStyle === "object" &&
+      slideStyle !== null &&
+      !Array.isArray(slideStyle) &&
+      Object.hasOwn(slideStyle, "background") &&
+      (slideStyle as Readonly<Record<string, unknown>>)["background"] !==
+        undefined;
+    const hasSlideProps =
+      slideProps.some((property) => Object.hasOwn(node.props, property)) ||
+      hasStyleBackground;
     if (!module.always && !hasSlideProps) {
       if (inheritedContinuity?.get(module.declaration) === true) {
         slide.matchContinuityKinds = true;
@@ -3904,9 +3917,18 @@ function resolveDocument(
     const parsedMaster = parsedOwner?.master;
     const parsedLayout = parsedOwner?.layout;
 
+    const slideStyleObj = parsedSlide.node.props["style"];
+    const hasSlideStyleBackground =
+      typeof slideStyleObj === "object" &&
+      slideStyleObj !== null &&
+      !Array.isArray(slideStyleObj) &&
+      Object.hasOwn(slideStyleObj, "background") &&
+      (slideStyleObj as Readonly<Record<string, unknown>>)["background"] !==
+        undefined;
     let inheritedBackground: ResolvedSlideCapabilityRecord | undefined;
     if (
       !Object.hasOwn(parsedSlide.node.props, "background") &&
+      !hasSlideStyleBackground &&
       parsedSlide.layoutKey !== undefined &&
       bgModule !== undefined
     ) {

@@ -271,6 +271,7 @@ function projectEffectObservation(
       ? {}
       : { intervalMs: source.intervalMs }),
     ...(source.from === undefined ? {} : { from: source.from }),
+    ...(source.to === undefined ? {} : { to: source.to }),
     ...(source.fromColor === undefined ? {} : { fromColor: source.fromColor }),
     ...(source.toColor === undefined ? {} : { toColor: source.toColor }),
     ...(source.easing === undefined

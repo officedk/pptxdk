@@ -21,6 +21,8 @@ const groupStyleObjectSchema = z.strictObject({
   ...layoutStyleSchema.unwrap().shape,
   ...textStyleSchema.unwrap().shape,
   rotate: visualStyleSchema.unwrap().shape.rotate,
+  flipH: visualStyleSchema.unwrap().shape.flipH,
+  flipV: visualStyleSchema.unwrap().shape.flipV,
 });
 
 export const groupStyleSchema = groupStyleObjectSchema.readonly();

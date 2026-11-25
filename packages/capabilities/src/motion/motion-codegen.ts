@@ -488,12 +488,16 @@ function serializeEffectCall(
   }
 
   if (effect.preset === "spin") {
+    const hasNonZeroTo = effect.to !== undefined && effect.to !== 0;
     const omitDefaultFrom =
-      typeof effect.by !== "number" && effect.from === 360;
+      typeof effect.by !== "number" &&
+      ((!hasNonZeroTo && effect.from === 360) ||
+        (hasNonZeroTo && effect.from === 0));
     const candidate = {
       ...(effect.from === undefined || omitDefaultFrom
         ? {}
         : { from: effect.from }),
+      ...(!hasNonZeroTo ? {} : { to: effect.to }),
       ...(effect.duration === 1000 ? {} : { duration: effect.duration }),
       ...(effect.delay === 0 ? {} : { delay: effect.delay }),
       ...(effect.by === undefined ? {} : { by: effect.by }),
@@ -512,20 +516,29 @@ function serializeEffectCall(
     }
     const fn = ctx.useImport("spin");
     const entries: [string, unknown][] = [];
-    if (parsed.data.from !== undefined)
-      entries.push(["from", parsed.data.from]);
-    if (parsed.data.by !== undefined) entries.push(["by", parsed.data.by]);
-    if (parsed.data.duration !== undefined) {
-      entries.push(["duration", parsed.data.duration]);
+    const spinData = parsed.data as {
+      readonly from?: number;
+      readonly to?: number;
+      readonly by?: unknown;
+      readonly duration?: number;
+      readonly delay?: number;
+      readonly intervalMs?: number;
+      readonly easing?: unknown;
+    };
+    if (spinData.from !== undefined) entries.push(["from", spinData.from]);
+    if (spinData.to !== undefined) entries.push(["to", spinData.to]);
+    if (spinData.by !== undefined) entries.push(["by", spinData.by]);
+    if (spinData.duration !== undefined) {
+      entries.push(["duration", spinData.duration]);
     }
-    if (parsed.data.delay !== undefined && parsed.data.delay !== 0) {
-      entries.push(["delay", parsed.data.delay]);
+    if (spinData.delay !== undefined && spinData.delay !== 0) {
+      entries.push(["delay", spinData.delay]);
     }
-    if (parsed.data.intervalMs !== undefined) {
-      entries.push(["intervalMs", parsed.data.intervalMs]);
+    if (spinData.intervalMs !== undefined) {
+      entries.push(["intervalMs", spinData.intervalMs]);
     }
-    if (parsed.data.easing !== undefined) {
-      entries.push(["easing", parsed.data.easing]);
+    if (spinData.easing !== undefined) {
+      entries.push(["easing", spinData.easing]);
     }
     return expr(
       entries.length === 0 ? `${fn}()` : `${fn}(${ctx.formatProps(entries)})`,
@@ -533,6 +546,13 @@ function serializeEffectCall(
   }
 
   // Remaining 8 entrance presets
+  if (effect.to !== undefined) {
+    failAtSubPath(
+      ctx,
+      `${effect.preset}() does not accept to parameter`,
+      `${effectPath}.to`,
+    );
+  }
   const acceptsDirection = effect.preset === "wipe" || effect.preset === "fly";
   if (!acceptsDirection && effect.from !== undefined) {
     failAtSubPath(

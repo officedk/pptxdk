@@ -257,7 +257,7 @@ function declaration(
     readonly by?: Effect["by"];
   } & object,
   defaults: { readonly duration: number },
-  extra: Partial<Pick<Effect, "from">> = {},
+  extra: Partial<Pick<Effect, "from" | "to">> = {},
 ): Effect {
   const easing = options.easing as unknown;
   const normalizedEasing =
@@ -349,18 +349,25 @@ export function stretch(options: EffectOptions = {}): EntranceEffect {
   }) as EntranceEffect;
 }
 
-/** Rotates back to initial orientation from specified angle, or rotates relative to initial angle using signed by; default from is 360 degrees. */
+/** Rotates between specified `from`/`to` endpoint angles (defaulting to 360 -> 0, or 0 -> `to` when only `to` is declared), or rotates relative to initial angle using signed `by`. */
 export function spin(options: SpinOptions = {}): EmphasisEffect {
+  const rawFrom = (options as { readonly from?: number }).from;
+  const rawTo = (options as { readonly to?: number }).to;
   return declaration(
     "emphasis",
     "spin",
     options,
     { duration: 1000 },
     typeof options.by === "number"
-      ? options.from === undefined
-        ? {}
-        : { from: options.from }
-      : { from: options.from === undefined ? 360 : options.from },
+      ? {
+          ...(rawFrom === undefined ? {} : { from: rawFrom }),
+          ...(rawTo === undefined ? {} : { to: rawTo }),
+        }
+      : {
+          from:
+            rawFrom === undefined ? (rawTo === undefined ? 360 : 0) : rawFrom,
+          ...(rawTo === undefined ? {} : { to: rawTo }),
+        },
   ) as EmphasisEffect;
 }
 
@@ -503,6 +510,7 @@ export type MotionEffectObservation = {
   readonly by?: MotionGranularity | number;
   readonly intervalMs?: number;
   readonly from?: MotionDirection | number;
+  readonly to?: number;
   readonly fromColor?: string;
   readonly toColor?: string;
   readonly easing?: Easing;
@@ -728,10 +736,10 @@ function validatedEffect(
         "spin by converted value must fall within signed 32-bit angle range",
       );
     }
-    if (effectValue["from"] !== undefined) {
+    if (effectValue["from"] !== undefined || effectValue["to"] !== undefined) {
       return fail(
         "invalid-motion",
-        "spin from and by cannot be declared simultaneously",
+        "spin from/to and by cannot be declared simultaneously",
       );
     }
   } else if (
@@ -764,10 +772,21 @@ function validatedEffect(
   }
   if (preset === "spin") {
     const from = effectValue["from"];
+    const to = effectValue["to"];
     if (typeof by !== "number" && !spinAngleSchema.safeParse(from).success) {
       return fail(
         "invalid-rotation",
         "spin from converted value must fall within signed 32-bit angle range",
+      );
+    }
+    if (
+      typeof by !== "number" &&
+      to !== undefined &&
+      !spinAngleSchema.safeParse(to).success
+    ) {
+      return fail(
+        "invalid-rotation",
+        "spin to converted value must fall within signed 32-bit angle range",
       );
     }
   }
@@ -778,6 +797,9 @@ function validatedEffect(
     effectValue["from"] !== undefined
   ) {
     return fail("invalid-motion", `${preset} does not accept from parameter`);
+  }
+  if (preset !== "spin" && effectValue["to"] !== undefined) {
+    return fail("invalid-motion", `${preset} does not accept to parameter`);
   }
   const easing = effectValue["easing"];
   if (easing !== undefined) {

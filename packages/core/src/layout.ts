@@ -445,7 +445,7 @@ export class LayoutPass {
       parentPath,
       true,
       true,
-      textStyleKeys,
+      new Set([...textStyleKeys, "background"]),
     );
     const root = this.#solver.createRoot({
       path: parentPath,

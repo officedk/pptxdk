@@ -1,10 +1,13 @@
 import {
   CapabilityError,
+  backgroundValueSchema,
+  borderValueSchema,
   colorValueSchema,
   layoutStyleSchema,
   linkTargetSchema,
   nativePlaceholderRefSchema,
   textStyleSchema,
+  type ColorValue,
   type ResolvedColor,
   type ThemeContext,
 } from "@pptxdk/core/capability";
@@ -25,7 +28,11 @@ import {
   textPaddingValueSchema,
   textPositiveSizeSchema,
 } from "../shared/text-schemas.ts";
-import type { TableCellBorder, TableCellPadding } from "./table-xml.ts";
+import type {
+  TableCellBorder,
+  TableCellBorders,
+  TableCellPadding,
+} from "./table-xml.ts";
 
 const frColumnPattern = /^\d+(?:\.\d+)?fr$/u;
 const maximumExtentEmu = 2_147_483_647;
@@ -100,6 +107,8 @@ export const tableStyleSchema = z
   .strictObject({
     ...tableTextStyleObjectSchema.shape,
     ...layoutStyleSchema.unwrap().shape,
+    background: backgroundValueSchema.optional(),
+    border: borderValueSchema.optional(),
   })
   .readonly();
 export type TableStyle = z.infer<typeof tableStyleSchema>;
@@ -107,7 +116,9 @@ export type TableStyle = z.infer<typeof tableStyleSchema>;
 const tableRowOwnStyleObjectSchema = z.strictObject({
   /** When unspecified, row height is determined from text measurement of unmerged cells in this row. */
   height: textPositiveSizeSchema.optional(),
+  background: backgroundValueSchema.optional(),
   backgroundColor: colorValueSchema.optional(),
+  border: borderValueSchema.optional(),
 });
 
 export const tableRowStyleSchema = z
@@ -122,7 +133,13 @@ export const tableBorderStyleSchema = z.enum(["solid", "dashed", "dotted"]);
 export type TableBorderStyle = z.infer<typeof tableBorderStyleSchema>;
 
 const tableCellOwnStyleObjectSchema = z.strictObject({
+  background: backgroundValueSchema.optional(),
   backgroundColor: colorValueSchema.optional(),
+  border: borderValueSchema.optional(),
+  borderTop: borderValueSchema.optional(),
+  borderRight: borderValueSchema.optional(),
+  borderBottom: borderValueSchema.optional(),
+  borderLeft: borderValueSchema.optional(),
   borderColor: colorValueSchema.optional(),
   borderWidth: z.number().finite().nonnegative().optional(),
   borderStyle: tableBorderStyleSchema.optional(),
@@ -498,5 +515,138 @@ export function parseTableCellBorder(
         : styleValue === "dotted"
           ? "dot"
           : "solid",
+  };
+}
+
+/** Validates a single unified `BorderValue` (`"none"` or `{ color, width?, style? }`) on Table, Row, or Cell. */
+export function parseTableBorderValue(
+  value: unknown,
+  label: string,
+  theme: ThemeContext,
+  path?: string,
+): TableCellBorder | undefined {
+  if (value === "none") return undefined;
+  const parsed = borderValueSchema.safeParse(value);
+  if (!parsed.success || parsed.data === "none") {
+    const issue = parsed.success ? undefined : parsed.error.issues[0];
+    throw new CapabilityError(
+      "invalid-table-border",
+      issue?.message ?? `${label} must be "none" or { color, width?, style? }`,
+      path,
+    );
+  }
+  const width = parsed.data.width ?? 1;
+  if (width === 0) return undefined;
+  assertTableEmuExtent(width, `${label}.width`, path);
+  let resolvedColor: ResolvedColor;
+  try {
+    resolvedColor = theme.resolveColor(parsed.data.color as ColorValue);
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      throw new CapabilityError(
+        error.code,
+        `${label}.color: ${error.message}`,
+        path,
+      );
+    }
+    throw error;
+  }
+  return {
+    color: resolvedColor,
+    width,
+    dash:
+      parsed.data.style === "dashed"
+        ? "dash"
+        : parsed.data.style === "dotted"
+          ? "dot"
+          : "solid",
+  };
+}
+
+/** Parses optional `border` declaration on a Table or Row layer. */
+export function parseTableLayerBorder(
+  style: Readonly<Record<string, unknown>>,
+  label: "Table" | "Row",
+  theme: ThemeContext,
+  path?: string,
+): { readonly declared: boolean; readonly border?: TableCellBorder } {
+  if (!Object.hasOwn(style, "border") || style["border"] === undefined) {
+    return { declared: false };
+  }
+  const border = parseTableBorderValue(
+    style["border"],
+    `${label}.style.border`,
+    theme,
+    path,
+  );
+  return {
+    declared: true,
+    ...(border === undefined ? {} : { border }),
+  };
+}
+
+/** Resolves final 4-side borders for a Cell by cascading Table -> Row -> Cell.border -> Cell.border{Side}. */
+export function resolveTableCellBorders(
+  style: Readonly<Record<string, unknown>>,
+  inheritedBorder: TableCellBorder | undefined,
+  resolveColor: (
+    value: unknown,
+    label: string,
+    path?: string,
+  ) => ResolvedColor | undefined,
+  theme: ThemeContext,
+  path: string,
+): TableCellBorders {
+  const hasNewBorder =
+    Object.hasOwn(style, "border") && style["border"] !== undefined;
+  const hasLegacyBorder =
+    (Object.hasOwn(style, "borderColor") &&
+      style["borderColor"] !== undefined) ||
+    (Object.hasOwn(style, "borderWidth") &&
+      style["borderWidth"] !== undefined) ||
+    (Object.hasOwn(style, "borderStyle") && style["borderStyle"] !== undefined);
+  if (hasNewBorder && hasLegacyBorder) {
+    throw new CapabilityError(
+      "unsupported-style-combination",
+      "Cell.style.border cannot be set together with borderColor, borderWidth, or borderStyle",
+      path,
+    );
+  }
+
+  let baseBorder = inheritedBorder;
+  if (hasNewBorder) {
+    baseBorder = parseTableBorderValue(
+      style["border"],
+      "Cell.style.border",
+      theme,
+      path,
+    );
+  } else if (hasLegacyBorder) {
+    baseBorder = parseTableCellBorder(style, resolveColor, theme, path);
+  }
+
+  const sideBorder = (
+    sideKey: "borderTop" | "borderRight" | "borderBottom" | "borderLeft",
+  ): TableCellBorder | undefined => {
+    if (Object.hasOwn(style, sideKey) && style[sideKey] !== undefined) {
+      return parseTableBorderValue(
+        style[sideKey],
+        `Cell.style.${sideKey}`,
+        theme,
+        path,
+      );
+    }
+    return baseBorder;
+  };
+
+  const top = sideBorder("borderTop");
+  const right = sideBorder("borderRight");
+  const bottom = sideBorder("borderBottom");
+  const left = sideBorder("borderLeft");
+  return {
+    ...(top === undefined ? {} : { top }),
+    ...(right === undefined ? {} : { right }),
+    ...(bottom === undefined ? {} : { bottom }),
+    ...(left === undefined ? {} : { left }),
   };
 }

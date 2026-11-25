@@ -5,16 +5,14 @@ import { BuildError, CapabilityError } from "#/diagnostics.ts";
 import { layoutStyleSchema, slideLayoutStyleShape } from "#/layout-schemas.ts";
 import { placeholderSizeSchema, type PlaceholderSize } from "#/placeholders.ts";
 import {
+  backgroundValueSchema,
   colorMapOverrideSchema,
   colorValueSchema,
-  linearGradientSchema,
-  radialGradientSchema,
   textStyleSchema,
   textStyleShape,
   themeInputSchema,
   themeOverrideSchema,
   themeScopeSchema,
-  uint8ArraySchema,
   type ColorMapOverride,
   type ThemeOverride,
 } from "#/theme.ts";
@@ -65,16 +63,9 @@ export const backgroundRefSchema = z
   .readonly();
 export type BackgroundRef = z.infer<typeof backgroundRefSchema>;
 
-/** Slide background can use theme colors, gradients supported by the shared visual writer, formal image resource inputs, or theme background fill references (`p:bgRef`). */
+/** Slide background can use theme colors, gradients supported by the shared visual writer, formal image resource inputs, `"none"`, or theme background fill references (`p:bgRef`). */
 export const slideBackgroundSchema = z.union([
-  colorValueSchema,
-  linearGradientSchema,
-  radialGradientSchema,
-  z
-    .strictObject({
-      image: z.union([z.string(), z.instanceof(URL), uint8ArraySchema]),
-    })
-    .readonly(),
+  backgroundValueSchema,
   backgroundRefSchema,
 ]);
 export type SlideBackground = z.infer<typeof slideBackgroundSchema>;
@@ -93,6 +84,7 @@ export const slideStyleSchema = z
   .strictObject({
     ...textStyleShape,
     ...slideLayoutStyleShape,
+    background: slideBackgroundSchema.optional(),
   })
   .readonly();
 export type SlideStyle = z.infer<typeof slideStyleSchema>;

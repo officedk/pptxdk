@@ -1,7 +1,6 @@
 import {
   assertValidLang,
   CapabilityError,
-  layoutStyleKeys,
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
@@ -51,6 +50,12 @@ import {
   type ResolvedTextBody,
   type ResolvedTextStyle,
 } from "../shared/text-service.ts";
+import {
+  gradientDefSvg,
+  paintImageFillSvg,
+  resolveBackgroundValue,
+  type ResolvedFill,
+} from "../shared/visual.ts";
 import { tableCodegen } from "./table-codegen.ts";
 import type { TableVerticalAlign } from "./table-declaration.ts";
 import {
@@ -63,13 +68,14 @@ import {
   cellAllowedParameters,
   cellStyleKeys,
   parseOptionalTableId,
-  parseTableCellBorder,
   parseTableCellPadding,
   parseTableColumns,
   parseTableCoordinate,
+  parseTableLayerBorder,
   parseTableMergeSpan,
   parseTablePositiveSize,
   parseTableVerticalAlign,
+  resolveTableCellBorders,
   rowAllowedParameters,
   rowStyleKeys,
   tableAllowedParameters,
@@ -82,6 +88,7 @@ import {
   tableCellPropertiesXml,
   tableFrameXml,
   type TableCellBorder,
+  type TableCellBorders,
   type TableCellPadding,
 } from "./table-xml.ts";
 
@@ -118,8 +125,8 @@ type ParsedCell = {
   readonly textStyle: ResolvedTextStyle;
   readonly verticalAlign: TableVerticalAlign;
   readonly padding: Edges;
-  readonly fill?: ResolvedColor;
-  readonly border?: TableCellBorder;
+  readonly backgroundRaw?: unknown;
+  readonly borders: TableCellBorders;
 };
 
 type ParsedRow = {
@@ -128,7 +135,8 @@ type ParsedRow = {
   readonly height?: number;
   readonly textStyle: Record<string, unknown>;
   readonly verticalAlign?: TableVerticalAlign;
-  readonly fill?: ResolvedColor;
+  readonly backgroundRaw?: unknown;
+  readonly border?: TableCellBorder;
 };
 const maximumExtentEmu = 2_147_483_647;
 
@@ -213,6 +221,42 @@ function mergeTextStyle(
   return { ...parent, ...child };
 }
 
+function parseLayerBackground(
+  style: Readonly<Record<string, unknown>>,
+  label: string,
+  theme: ThemeContext,
+  path?: string,
+): { readonly declared: boolean; readonly value?: unknown } {
+  const hasNewBg =
+    Object.hasOwn(style, "background") && style["background"] !== undefined;
+  const hasOldBg =
+    Object.hasOwn(style, "backgroundColor") &&
+    style["backgroundColor"] !== undefined;
+  if (hasNewBg && hasOldBg) {
+    fail(
+      "unsupported-style-combination",
+      `${label}.style.background cannot be set together with backgroundColor`,
+      path,
+    );
+  }
+  if (!hasNewBg && !hasOldBg) {
+    return { declared: false };
+  }
+  const raw = hasNewBg ? style["background"] : style["backgroundColor"];
+  const fieldLabel = hasNewBg
+    ? `${label}.style.background`
+    : `${label}.style.backgroundColor`;
+  try {
+    resolveBackgroundValue(theme, raw, undefined);
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      fail(error.code, `${fieldLabel}: ${error.message}`, path);
+    }
+    throw error;
+  }
+  return { declared: true, value: raw };
+}
+
 function trackStyle(
   input: CapabilityInput,
   type: "table" | "row" | "cell",
@@ -223,7 +267,7 @@ function trackStyle(
 } {
   const additional =
     type === "table"
-      ? layoutStyleKeys
+      ? tableStyleKeys
       : type === "row"
         ? rowStyleKeys
         : cellStyleKeys;
@@ -276,6 +320,8 @@ function prepareRows(
   columns: readonly Track[],
   tableTextStyle: Record<string, unknown>,
   tableVerticalAlign: TableVerticalAlign,
+  tableBackgroundRaw: unknown,
+  tableBorder: TableCellBorder | undefined,
   theme: ThemeContext,
   slideNumber: number,
 ): {
@@ -309,12 +355,24 @@ function prepareRows(
       heightValue === undefined
         ? undefined
         : parseTablePositiveSize(heightValue, "Row.style.height", rowPath);
-    const rowFill = color(
-      rowStyle.style["backgroundColor"],
-      "Row.style.backgroundColor",
+    const rowBgParsed = parseLayerBackground(
+      rowStyle.style,
+      "Row",
       theme,
       rowPath,
     );
+    const rowBackgroundRaw = rowBgParsed.declared
+      ? rowBgParsed.value
+      : tableBackgroundRaw;
+    const rowBorderParsed = parseTableLayerBorder(
+      rowStyle.style,
+      "Row",
+      theme,
+      rowPath,
+    );
+    const rowBorder = rowBorderParsed.declared
+      ? rowBorderParsed.border
+      : tableBorder;
     const rowVerticalAlign =
       parseTableVerticalAlign(rowStyle.style["verticalAlign"], rowPath) ??
       tableVerticalAlign;
@@ -324,7 +382,10 @@ function prepareRows(
       ...(height === undefined ? {} : { height }),
       textStyle: mergeTextStyle(tableTextStyle, rowStyle.textStyle),
       verticalAlign: rowVerticalAlign,
-      ...(rowFill === undefined ? {} : { fill: rowFill }),
+      ...(rowBackgroundRaw === undefined
+        ? {}
+        : { backgroundRaw: rowBackgroundRaw }),
+      ...(rowBorder === undefined ? {} : { border: rowBorder }),
     };
     rows.push(row);
     let column = 0;
@@ -401,18 +462,21 @@ function prepareRows(
         }
       }
       const cellStyle = trackStyle(cellChild, "cell", cellPath);
-      const fill =
-        color(
-          cellStyle.style["backgroundColor"],
-          "Cell.style.backgroundColor",
-          theme,
-          cellPath,
-        ) ?? row.fill;
+      const cellBgParsed = parseLayerBackground(
+        cellStyle.style,
+        "Cell",
+        theme,
+        cellPath,
+      );
+      const cellBackgroundRaw = cellBgParsed.declared
+        ? cellBgParsed.value
+        : row.backgroundRaw;
       const cellVerticalAlign =
         parseTableVerticalAlign(cellStyle.style["verticalAlign"], cellPath) ??
         rowVerticalAlign;
-      const border = parseTableCellBorder(
+      const borders = resolveTableCellBorders(
         cellStyle.style,
+        row.border,
         (value, label, itemPath) => color(value, label, theme, itemPath),
         theme,
         cellPath,
@@ -450,8 +514,10 @@ function prepareRows(
         textStyle: parsedTextStyle,
         verticalAlign: cellVerticalAlign,
         padding: parseTableCellPadding(cellStyle.style, cellPath),
-        ...(fill === undefined ? {} : { fill }),
-        ...(border === undefined ? {} : { border }),
+        ...(cellBackgroundRaw === undefined
+          ? {}
+          : { backgroundRaw: cellBackgroundRaw }),
+        borders,
       };
       cells.push(cell);
       for (let row = rowIndex; row < rowIndex + rowSpan; row += 1) {
@@ -483,7 +549,7 @@ function prepareRows(
 type ResolvedTableCell = {
   readonly cell: ParsedCell;
   readonly box: GeometryBox;
-  readonly fill?: ResolvedColor;
+  readonly fill: ResolvedFill;
   readonly body: ResolvedTextBody;
   readonly hasText: boolean;
   readonly hasOverflow: boolean;
@@ -596,8 +662,10 @@ function emitTableModel(
       const properties = tableCellPropertiesXml(
         cell.padding,
         cell.verticalAlign,
-        cell.border,
+        cell.borders,
         fill,
+        (resource) => emitContext.registerResource(resource),
+        entry.box,
       );
       rowCells.push(`<a:tc${attributes}>${emittedXml}${properties}</a:tc>`);
     }
@@ -635,13 +703,28 @@ function paintTableModel(
   const borders: string[] = [];
   for (const entry of model.resolvedCells) {
     const { cell, box: cellBox, fill, body, hasText, hasOverflow } = entry;
-    if (fill !== undefined) {
+    const idPrefix = `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`;
+    if (fill.kind === "solid") {
       fills.push(
-        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="#${fill.hex}" fill-opacity="${roundSvgNumber(fill.alpha ?? 1)}" stroke="none"/>`,
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="#${fill.color.hex}" fill-opacity="${roundSvgNumber(fill.color.alpha ?? 1)}" stroke="none"/>`,
+      );
+    } else if (
+      fill.kind === "linear-gradient" ||
+      fill.kind === "radial-gradient"
+    ) {
+      const fillDefId = `${idPrefix}-fill`;
+      defs.push(gradientDefSvg(fillDefId, fill));
+      fills.push(
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="url(#${fillDefId})" stroke="none"/>`,
+      );
+    } else if (fill.kind === "image") {
+      const fillDefId = `${idPrefix}-fill`;
+      defs.push(paintImageFillSvg(fill, fillDefId, cellBox));
+      fills.push(
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="url(#${fillDefId})" stroke="none"/>`,
       );
     }
     if (hasText) {
-      const idPrefix = `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`;
       try {
         const glyphs = renderTextOutlinesSvg({
           paragraphs: body.paragraphs,
@@ -674,10 +757,49 @@ function paintTableModel(
         throw error;
       }
     }
-    if (cell.border !== undefined) {
-      borders.push(
-        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" ${tableBorderAttributes(cell.border)}/>`,
-      );
+    const { top, right, bottom, left } = cell.borders;
+    const sameSide = (
+      a: TableCellBorder | undefined,
+      b: TableCellBorder | undefined,
+    ): boolean =>
+      a === b ||
+      (a !== undefined &&
+        b !== undefined &&
+        a.width === b.width &&
+        a.dash === b.dash &&
+        a.color.hex === b.color.hex &&
+        a.color.alpha === b.color.alpha);
+    if (sameSide(top, right) && sameSide(top, bottom) && sameSide(top, left)) {
+      if (top !== undefined) {
+        borders.push(
+          `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" ${tableBorderAttributes(top)}/>`,
+        );
+      }
+    } else {
+      const x1 = roundSvgNumber(cellBox.x);
+      const y1 = roundSvgNumber(cellBox.y);
+      const x2 = roundSvgNumber(cellBox.x + cellBox.width);
+      const y2 = roundSvgNumber(cellBox.y + cellBox.height);
+      if (top !== undefined) {
+        borders.push(
+          `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y1}" ${tableBorderAttributes(top)}/>`,
+        );
+      }
+      if (right !== undefined) {
+        borders.push(
+          `<line x1="${x2}" y1="${y1}" x2="${x2}" y2="${y2}" ${tableBorderAttributes(right)}/>`,
+        );
+      }
+      if (bottom !== undefined) {
+        borders.push(
+          `<line x1="${x1}" y1="${y2}" x2="${x2}" y2="${y2}" ${tableBorderAttributes(bottom)}/>`,
+        );
+      }
+      if (left !== undefined) {
+        borders.push(
+          `<line x1="${x1}" y1="${y1}" x2="${x1}" y2="${y2}" ${tableBorderAttributes(left)}/>`,
+        );
+      }
     }
   }
   const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
@@ -979,6 +1101,18 @@ export const tableCapability = {
 
     const columns = parseTableColumns(input.props["columns"]);
     const tableStyle = trackStyle(input, "table");
+    const tableBgParsed = parseLayerBackground(
+      tableStyle.style,
+      "Table",
+      context.theme,
+      context.path,
+    );
+    const tableBorderParsed = parseTableLayerBorder(
+      tableStyle.style,
+      "Table",
+      context.theme,
+      context.path,
+    );
     const tableVerticalAlign =
       parseTableVerticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
     const { rows, cells } = prepareRows(
@@ -986,6 +1120,8 @@ export const tableCapability = {
       columns,
       tableStyle.textStyle,
       tableVerticalAlign,
+      tableBgParsed.value,
+      tableBorderParsed.border,
       context.theme,
       context.slideNumber,
     );
@@ -1263,12 +1399,15 @@ export const tableCapability = {
               fontUsages.push({ ...usage, path: cell.path });
             }
             matrix[rowIndex]![column] = body.text;
-            const rowFill = rows[cell.row]?.fill;
-            const fill = cell.fill ?? rowFill;
+            const fill = resolveBackgroundValue(
+              resolveContext.theme,
+              cell.backgroundRaw,
+              undefined,
+            );
             const entry: ResolvedTableCell = {
               cell,
               box: cellBoxes.get(cell)!,
-              ...(fill === undefined ? {} : { fill }),
+              fill,
               body,
               hasText: cell.paragraphs.some(
                 (paragraph) =>
@@ -1405,15 +1544,11 @@ export const tableCapability = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: true,
-          filled: cells.some(
-            (cell) =>
-              cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
-          ),
+          filled: resolvedCells.some((entry) => entry.fill.kind !== "none"),
           box,
           rotationDegrees: 0,
-          hasBackground: cells.some(
-            (cell) =>
-              cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
+          hasBackground: resolvedCells.some(
+            (entry) => entry.fill.kind !== "none",
           ),
         });
         const resolvedModel: ResolvedTableModel = {

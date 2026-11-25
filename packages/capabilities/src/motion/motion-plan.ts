@@ -3102,6 +3102,10 @@ function motionPlan(
             typeof effect.from === "number"
               ? Math.round(effect.from * 60000) / 60000
               : effect.from;
+          const to =
+            typeof effect.to === "number"
+              ? Math.round(effect.to * 60000) / 60000
+              : undefined;
           const by =
             typeof effect.by === "number"
               ? Math.round(effect.by * 60000) / 60000
@@ -3128,6 +3132,7 @@ function motionPlan(
               ? { intervalMs: expansion.intervalMs }
               : {}),
             ...(from === undefined ? {} : { from }),
+            ...(to === undefined ? {} : { to }),
             ...(easing === undefined ? {} : { easing }),
             ...(knownStart === undefined ? {} : { startMs: knownStart }),
             ...(effect.preset === "breathe" || effect.preset === "fillColor"

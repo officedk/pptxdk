@@ -89,6 +89,7 @@ type ParsedBehavior = {
   readonly fromColor?: string;
   readonly toColor?: string;
   readonly rotationFrom?: number;
+  readonly rotationTo?: number;
   readonly rotationBy?: number;
 };
 
@@ -176,6 +177,7 @@ type ImportedMotionEffect = {
   readonly easing?: Easing;
   readonly repeatCount?: RepeatCount;
   readonly from?: MotionDirection | number;
+  readonly to?: number;
   readonly by?: MotionGranularity | number;
   readonly intervalMs?: number;
   readonly fromColor?: string;
@@ -405,11 +407,10 @@ function readBehaviorElement(behavior: XmlElementCursor): ParsedBehavior {
 
   const rawRotFrom =
     localName === "animRot" ? behavior.attr("from") : undefined;
+  const rawRotTo = localName === "animRot" ? behavior.attr("to") : undefined;
   const rawRotBy = localName === "animRot" ? behavior.attr("by") : undefined;
-  if (localName === "animRot") {
-    behavior.consumeAttr("to");
-  }
   const rotationFrom = parseSignedInt(rawRotFrom);
+  const rotationTo = parseSignedInt(rawRotTo);
   const rotationBy = parseSignedInt(rawRotBy);
 
   const cBhvr = behavior.child(P_NS, "cBhvr");
@@ -466,6 +467,7 @@ function readBehaviorElement(behavior: XmlElementCursor): ParsedBehavior {
     ...(fromColor === undefined ? {} : { fromColor }),
     ...(toColor === undefined ? {} : { toColor }),
     ...(rotationFrom === undefined ? {} : { rotationFrom }),
+    ...(rotationTo === undefined ? {} : { rotationTo }),
     ...(rotationBy === undefined ? {} : { rotationBy }),
   };
 }
@@ -476,6 +478,7 @@ function buildEffectDeclaration(args: {
   readonly durationMs: number;
   readonly delayMs: number;
   readonly from?: MotionDirection | number;
+  readonly to?: number;
   readonly fromColor?: string;
   readonly toColor?: string;
   readonly easing?: Easing;
@@ -529,11 +532,17 @@ function buildEffectDeclaration(args: {
       effect = stretch(granularityOptions);
       break;
     case "spin":
-      effect = spin({
-        ...baseOptions,
-        ...(typeof args.by === "number" ? { by: args.by } : {}),
-        ...(typeof args.from === "number" ? { from: args.from } : {}),
-      });
+      effect =
+        typeof args.by === "number"
+          ? spin({
+              ...baseOptions,
+              by: args.by,
+            })
+          : spin({
+              ...granularityOptions,
+              ...(typeof args.from === "number" ? { from: args.from } : {}),
+              ...(typeof args.to === "number" ? { to: args.to } : {}),
+            });
       break;
     case "breathe":
       effect = breathe({
@@ -567,6 +576,7 @@ function commonEffectPropsMatch(
     left.effect.kind === right.effect.kind &&
     left.effect.duration === right.effect.duration &&
     left.from === right.from &&
+    left.to === right.to &&
     left.repeatCount === right.repeatCount &&
     JSON.stringify(left.easing ?? null) === JSON.stringify(right.easing ?? null)
   );
@@ -1199,13 +1209,22 @@ export function readSlideMotionImport(
           : directionBySubtype[node.presetSubtype];
     }
 
+    let to: number | undefined;
     let by: MotionGranularity | number | undefined = node.iterateBy;
     if (preset === "spin") {
       const rotBehavior = node.behaviors.find((b) => b.localName === "animRot");
       if (rotBehavior?.rotationBy !== undefined) {
         by = rotBehavior.rotationBy / 60_000;
-      } else if (rotBehavior?.rotationFrom !== undefined) {
-        from = rotBehavior.rotationFrom / 60_000;
+      } else {
+        if (rotBehavior?.rotationFrom !== undefined) {
+          from = rotBehavior.rotationFrom / 60_000;
+        }
+        if (
+          rotBehavior?.rotationTo !== undefined &&
+          rotBehavior.rotationTo !== 0
+        ) {
+          to = rotBehavior.rotationTo / 60_000;
+        }
       }
     }
 
@@ -1230,6 +1249,7 @@ export function readSlideMotionImport(
       durationMs,
       delayMs: effectiveDelayMs,
       ...(from === undefined ? {} : { from }),
+      ...(to === undefined ? {} : { to }),
       ...(fromColor === undefined ? {} : { fromColor }),
       ...(toColor === undefined ? {} : { toColor }),
       ...(easing === undefined ? {} : { easing }),
@@ -1269,6 +1289,7 @@ export function readSlideMotionImport(
         ? {}
         : { repeatCount: node.repeatCount }),
       ...(from === undefined ? {} : { from }),
+      ...(to === undefined ? {} : { to }),
       ...(by === undefined ? {} : { by }),
       ...(node.iterateIntervalMs === undefined
         ? {}
@@ -1379,6 +1400,7 @@ export function readSlideMotionImport(
         durationMs: head.effect.duration,
         delayMs: baseDelay,
         ...(head.from === undefined ? {} : { from: head.from }),
+        ...(head.to === undefined ? {} : { to: head.to }),
         ...(head.fromColor === undefined ? {} : { fromColor: head.fromColor }),
         ...(head.toColor === undefined ? {} : { toColor: head.toColor }),
         ...(head.easing === undefined ? {} : { easing: head.easing }),
@@ -1432,6 +1454,7 @@ export function readSlideMotionImport(
           durationMs: head.effect.duration,
           delayMs: baseDelay,
           ...(head.from === undefined ? {} : { from: head.from }),
+          ...(head.to === undefined ? {} : { to: head.to }),
           ...(head.fromColor === undefined
             ? {}
             : { fromColor: head.fromColor }),
@@ -1552,6 +1575,7 @@ export function readSlideMotionImport(
             other.effect.duration === candidate.effect.duration &&
             other.by === candidate.by &&
             other.from === candidate.from &&
+            other.to === candidate.to &&
             other.startAfterTimingId === candidate.startAfterTimingId &&
             other.startAfterOffsetMs === candidate.startAfterOffsetMs,
         );

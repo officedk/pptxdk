@@ -749,61 +749,57 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
       );
     });
 
-    it("rejects TextStyle and padding in style when Shape bears no text", async () => {
-      // 1. fontSize on Shape without text
-      await assert.rejects(
-        build(
-          <Deck width={960} height={540}>
-            <Slide id="textless-shape-font-slide">
-              <Shape
-                id="textless-font-shape"
-                width={100}
-                height={100}
-                style={{ fontSize: 24 }}
-              />
-            </Slide>
-          </Deck>,
-        ),
-        (error: unknown) => {
-          assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-style",
-          );
-          assert(
-            diag !== undefined,
-            "Expected unknown-style diagnostic for fontSize on textless shape",
-          );
-          return true;
-        },
+    it("accepts and retains TextStyle and padding in style when Shape has empty or omitted text", async () => {
+      const built = await build(
+        <Deck width={960} height={540}>
+          <Slide id="textless-shape-styled-slide">
+            <Shape
+              id="textless-font-shape"
+              x={20}
+              y={20}
+              width={100}
+              height={100}
+              style={{ fontSize: 32, color: "#FF0000" }}
+            />
+            <Shape
+              id="empty-string-padding-shape"
+              x={140}
+              y={20}
+              width={100}
+              height={100}
+              style={{ fontSize: 20, padding: 16 }}
+            >
+              {""}
+            </Shape>
+            <Shape
+              id="pure-geometric-shape"
+              x={260}
+              y={20}
+              width={100}
+              height={100}
+              style={{ background: "#3B82F6" }}
+            />
+          </Slide>
+        </Deck>,
       );
 
-      // 2. padding on Shape without text
-      await assert.rejects(
-        build(
-          <Deck width={960} height={540}>
-            <Slide id="textless-shape-padding-slide">
-              <Shape
-                id="textless-padding-shape"
-                width={100}
-                height={100}
-                style={{ padding: 16 }}
-              />
-            </Slide>
-          </Deck>,
-        ),
-        (error: unknown) => {
-          assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) =>
-              d.code === "invalid-layout-context" || d.code === "unknown-style",
-          );
-          assert(
-            diag !== undefined,
-            "Expected invalid padding diagnostic on textless shape",
-          );
-          return true;
-        },
+      const validated = await validatePptx(built.pptx);
+      assert.deepEqual(validated.errors, []);
+
+      const files = unzipSync(built.pptx);
+      const slide1Xml = strFromU8(files["ppt/slides/slide1.xml"]!);
+      assert.match(
+        slide1Xml,
+        /<a:defRPr[^>]*sz="2400"[^>]*><a:solidFill><a:srgbClr val="FF0000"\/>/u,
       );
+      assert.match(
+        slide1Xml,
+        /lIns="152400" tIns="152400" rIns="152400" bIns="152400"/u,
+      );
+      const pureShape = validated.slides[0]?.objects.find(
+        (obj) => obj.boxEmu.x === 260 * 9525,
+      );
+      assert.equal(pureShape?.text, undefined);
     });
 
     it("calls shapeCapability.bind once during layout and reuses the bound handle for measureLayout and resolve", async () => {

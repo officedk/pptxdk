@@ -572,6 +572,7 @@ function readParagraph(
   let list: TextList | undefined;
   let lnSpcNode: XmlElementCursor | undefined;
   let spcAftNode: XmlElementCursor | undefined;
+  let defParaSizePt: number | undefined;
 
   if (pPr !== undefined) {
     const rawPPr = pPr.attrsObject([
@@ -676,6 +677,17 @@ function readParagraph(
         };
       }
     }
+
+    const defRPr = pPr.child(A_NS, "defRPr");
+    if (defRPr !== undefined) {
+      const parsedDef = readRunProperties(
+        defRPr,
+        part,
+        slideIndex,
+        diagnostics,
+      );
+      defParaSizePt = parsedDef.sizePt;
+    }
   }
 
   const runs: ImportedRun[] = [];
@@ -761,7 +773,10 @@ function readParagraph(
   }
 
   const baseFontPt =
-    runs.find((run) => run.sizePt !== undefined)?.sizePt ?? endParaSizePt ?? 18;
+    runs.find((run) => run.sizePt !== undefined)?.sizePt ??
+    endParaSizePt ??
+    defParaSizePt ??
+    18;
 
   let lineHeight: ParagraphStyle["lineHeight"] | undefined;
   if (lnSpcNode !== undefined) {

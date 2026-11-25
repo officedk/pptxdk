@@ -237,30 +237,8 @@ export function readGroupSp(
     return { diagnostics };
   }
 
-  if (parsedXfrm.success) {
-    if (parsedXfrm.data.flipH === true) {
-      diagnostics.push({
-        code: "unsupported-mechanism",
-        category: "unsupported",
-        disposition: "omitted",
-        location: { ...location, xpath: `${xfrm.xpath}/@flipH` },
-        namespaceUri: A_NS,
-        localName: "flipH",
-        mechanismHint: "group-flipH",
-      });
-    }
-    if (parsedXfrm.data.flipV === true) {
-      diagnostics.push({
-        code: "unsupported-mechanism",
-        category: "unsupported",
-        disposition: "omitted",
-        location: { ...location, xpath: `${xfrm.xpath}/@flipV` },
-        namespaceUri: A_NS,
-        localName: "flipV",
-        mechanismHint: "group-flipV",
-      });
-    }
-  }
+  const flipH = parsedXfrm.success && parsedXfrm.data.flipH === true;
+  const flipV = parsedXfrm.success && parsedXfrm.data.flipV === true;
 
   const rotate =
     parsedXfrm.success &&
@@ -435,7 +413,15 @@ export function readGroupSp(
           },
         }
       : {}),
-    ...(rotate === undefined ? {} : { style: { rotate } }),
+    ...(rotate !== undefined || flipH || flipV
+      ? {
+          style: {
+            ...(rotate === undefined ? {} : { rotate }),
+            ...(flipH ? { flipH: true } : {}),
+            ...(flipV ? { flipV: true } : {}),
+          },
+        }
+      : {}),
   };
 
   const node = createGroupNode(props);

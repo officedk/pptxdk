@@ -1292,25 +1292,32 @@ function paragraphXml(
       }
     }
   }
-  const pPr =
-    attributes.length +
-      lineSpacing.length +
-      spacingAfter.length +
-      list.length ===
-    0
-      ? ""
-      : `<a:pPr${attributes.length === 0 ? "" : ` ${attributes.join(" ")}`}${lineSpacing.length + spacingAfter.length + list.length === 0 ? "/>" : `>${lineSpacing}${spacingAfter}${list}</a:pPr>`}`;
   const endStyle = differential
     ? (paragraph.localEndStyle ?? {})
     : paragraph.endStyle;
+  let defRPr = "";
+  if (runs.length === 0) {
+    const candidate = runPropertiesXml(
+      endStyle,
+      "a:defRPr",
+      theme,
+      differential,
+    );
+    defRPr = differential && candidate === "<a:defRPr/>" ? "" : candidate;
+  }
+  const pPrChildren = `${lineSpacing}${spacingAfter}${list}${defRPr}`;
+  const pPr =
+    attributes.length + pPrChildren.length === 0
+      ? ""
+      : `<a:pPr${attributes.length === 0 ? "" : ` ${attributes.join(" ")}`}${pPrChildren.length === 0 ? "/>" : `>${pPrChildren}</a:pPr>`}`;
   const endProperties =
     runs.length === 0
-      ? differential
-        ? runPropertiesXml(endStyle, "a:rPr" as const, theme, true).replace(
-            /<(\/?)a:rPr\b/gu,
-            "<$1a:endParaRPr",
-          )
-        : `<a:endParaRPr${endStyle.lang !== undefined ? ` lang="${escapedXml(endStyle.lang)}"` : ""} sz="${centipoints(fontSizePoints(endStyle.fontSize))}"/>`
+      ? runPropertiesXml(
+          endStyle,
+          "a:rPr" as const,
+          theme,
+          differential,
+        ).replace(/<(\/?)a:rPr\b/gu, "<$1a:endParaRPr")
       : "";
   return `<a:p>${pPr}${runs.map((run) => runXml(run, theme, differential)).join("")}${endProperties}</a:p>`;
 }
@@ -3312,8 +3319,17 @@ function validateEmittableParagraphs(
       escapedXml(paragraph.style.list.character ?? "•");
     }
     if (paragraph.runs.length === 0) {
+      for (const font of normalizedFonts(paragraph.endStyle)) {
+        escapedXml(font.family);
+      }
       if (paragraph.endStyle.lang !== undefined) {
         escapedXml(paragraph.endStyle.lang);
+      }
+      if (
+        paragraph.endStyle.textShadow !== undefined &&
+        paragraph.endStyle.textShadow !== "none"
+      ) {
+        textShadowXml(theme, paragraph.endStyle.textShadow);
       }
       centipoints(fontSizePoints(paragraph.endStyle.fontSize));
       continue;

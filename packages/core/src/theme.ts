@@ -280,6 +280,97 @@ export const radialGradientSchema = z
   .readonly();
 export type RadialGradient = z.infer<typeof radialGradientSchema>;
 
+export const imageBackgroundFitSchema = z.enum(["fill", "cover", "contain"]);
+export type ImageBackgroundFit = z.infer<typeof imageBackgroundFitSchema>;
+
+const percentPositionPattern = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u;
+const positionPercentSchema = z
+  .string()
+  .regex(percentPositionPattern) as unknown as z.ZodType<`${number}%`>;
+const positionCoordinateSchema = z.union([
+  z.number().finite(),
+  positionPercentSchema,
+]);
+
+export const imageBackgroundPositionKeywordSchema = z.enum([
+  "center",
+  "top",
+  "bottom",
+  "left",
+  "right",
+  "top left",
+  "top right",
+  "bottom left",
+  "bottom right",
+]);
+
+export const imageBackgroundPositionSchema = z.union([
+  imageBackgroundPositionKeywordSchema,
+  z
+    .strictObject({
+      x: positionCoordinateSchema.optional(),
+      y: positionCoordinateSchema.optional(),
+    })
+    .readonly(),
+]);
+export type ImageBackgroundPosition = z.infer<
+  typeof imageBackgroundPositionSchema
+>;
+
+export const externalImageFillSourceSchema = z
+  .strictObject({
+    externalUrl: z.string().min(1),
+  })
+  .readonly();
+export type ExternalImageFillSource = z.infer<
+  typeof externalImageFillSourceSchema
+>;
+
+export const imageFillSourceSchema = z.union([
+  z.string(),
+  z.instanceof(URL),
+  uint8ArraySchema,
+  externalImageFillSourceSchema,
+]);
+export type ImageFillSource = z.infer<typeof imageFillSourceSchema>;
+
+export const imageBackgroundSchema = z
+  .strictObject({
+    image: imageFillSourceSchema,
+    fit: imageBackgroundFitSchema.optional(),
+    position: imageBackgroundPositionSchema.optional(),
+    opacity: z.number().finite().min(0).max(1).optional(),
+  })
+  .readonly();
+export type ImageBackground = z.infer<typeof imageBackgroundSchema>;
+
+export const backgroundValueSchema = z.union([
+  z.literal("none"),
+  colorValueSchema,
+  linearGradientSchema,
+  radialGradientSchema,
+  imageBackgroundSchema,
+]);
+export type BackgroundValue = z.infer<typeof backgroundValueSchema>;
+
+export const borderStyleSchema = z.enum(["solid", "dashed", "dotted"]);
+export type BorderStyle = z.infer<typeof borderStyleSchema>;
+
+export const borderObjectSchema = z
+  .strictObject({
+    color: colorValueSchema,
+    width: z.number().finite().nonnegative().optional(),
+    style: borderStyleSchema.optional(),
+  })
+  .readonly();
+export type BorderObject = z.infer<typeof borderObjectSchema>;
+
+export const borderValueSchema = z.union([
+  z.literal("none"),
+  borderObjectSchema,
+]);
+export type BorderValue = z.infer<typeof borderValueSchema>;
+
 export const shadowSchema = z
   .strictObject({
     color: colorValueSchema.optional(),
@@ -290,29 +381,32 @@ export const shadowSchema = z
   .readonly();
 export type Shadow = z.infer<typeof shadowSchema>;
 
+export const boxShadowValueSchema = z.union([z.literal("none"), shadowSchema]);
+export type BoxShadowValue = z.infer<typeof boxShadowValueSchema>;
+
 /** Visual fields shared across native DrawingML shapes, images, text boxes, and visible Boxes. */
 export const visualStyleSchema = z
   .strictObject({
+    background: backgroundValueSchema.optional(),
     backgroundColor: colorValueSchema.optional(),
     backgroundImage: z
       .union([
         linearGradientSchema,
         radialGradientSchema,
-        z
-          .strictObject({
-            image: z.union([z.string(), z.instanceof(URL), uint8ArraySchema]),
-          })
-          .readonly(),
+        imageBackgroundSchema,
       ])
       .optional(),
+    border: borderValueSchema.optional(),
     borderColor: colorValueSchema.optional(),
     borderWidth: z.number().finite().optional(),
-    borderStyle: z.enum(["solid", "dashed", "dotted"]).optional(),
+    borderStyle: borderStyleSchema.optional(),
     borderRadius: z.number().finite().optional(),
     opacity: z.number().finite().optional(),
-    boxShadow: shadowSchema.optional(),
+    boxShadow: boxShadowValueSchema.optional(),
     softEdge: z.number().finite().optional(),
     rotate: z.number().finite().optional(),
+    flipH: z.boolean().optional(),
+    flipV: z.boolean().optional(),
   })
   .readonly();
 export type VisualStyle = z.infer<typeof visualStyleSchema>;

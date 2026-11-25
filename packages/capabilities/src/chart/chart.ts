@@ -3,6 +3,7 @@ import {
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
+  type CapabilityFontUsageClaim,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
@@ -1391,6 +1392,7 @@ export const chartCapability = {
           textStyles,
           resourceClaims,
           fontUses,
+          fontUsages,
           warnings,
           missingGlyphErrors,
         } = chartResourceClaims(parsed, resolveContext.theme);
@@ -1423,6 +1425,7 @@ export const chartCapability = {
           extensions: usesCategoryLabelRange ? ["c15"] : [],
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims,
+          ...(fontUsages.length === 0 ? {} : { fontUsages }),
           ...(warnings.length === 0 ? {} : { warnings }),
           emit(emitContext: EmitContext): EmitOutput {
             return primaryMechanism.emit(resolvedModel, emitContext);
@@ -1816,6 +1819,7 @@ function chartResourceClaims(
   readonly textStyles: ChartTextStyleXml;
   readonly resourceClaims: readonly TextResourceClaim[];
   readonly fontUses: readonly FontEmbeddingUse[];
+  readonly fontUsages: readonly CapabilityFontUsageClaim[];
   readonly warnings: readonly {
     readonly code: string;
     readonly message: string;
@@ -1885,6 +1889,7 @@ function chartResourceClaims(
     ...use,
     path: "Chart.style",
   }));
+  const fontUsages: CapabilityFontUsageClaim[] = [...chart.fontUsages];
   const warnings: { readonly code: string; readonly message: string }[] = [];
   const missingGlyphErrors: string[] = [...chart.missingGlyphErrors];
   const warningKeys = new Set<string>();
@@ -1920,6 +1925,7 @@ function chartResourceClaims(
     fontUses.push(
       ...output.fontUses.map((use) => ({ ...use, path: "Chart.title" })),
     );
+    fontUsages.push(...output.fontUsages);
     addWarnings(output.warnings);
     missingGlyphErrors.push(...output.missingGlyphErrors);
   }
@@ -1942,6 +1948,7 @@ function chartResourceClaims(
           path: `Chart.axes.${name}.style`,
         })),
       );
+      fontUsages.push(...output.fontUsages);
       addWarnings(output.warnings);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
@@ -1965,6 +1972,7 @@ function chartResourceClaims(
           path: `Chart.axes.${name}.title`,
         })),
       );
+      fontUsages.push(...output.fontUsages);
       addWarnings(output.warnings);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
@@ -1991,6 +1999,7 @@ function chartResourceClaims(
           path: `Chart.groups[${groupIndex}].dataLabels.style`,
         })),
       );
+      fontUsages.push(...output.fontUsages);
       addWarnings(output.warnings);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
@@ -2032,6 +2041,7 @@ function chartResourceClaims(
             path: "Chart.dataLabels.point.style",
           })),
         );
+        fontUsages.push(...output.fontUsages);
         addWarnings(output.warnings);
         missingGlyphErrors.push(...output.missingGlyphErrors);
       }
@@ -2047,6 +2057,7 @@ function chartResourceClaims(
     textStyles,
     resourceClaims,
     fontUses,
+    fontUsages,
     warnings: [...uniqueWarnings.values()],
     missingGlyphErrors,
   };

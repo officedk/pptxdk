@@ -211,8 +211,35 @@ describe("tableCapability resolved contract", () => {
       false,
     );
 
-    // Missing glyph in a cell produces cell-located warning during resolve,
-    // allows paint and non-embedded emit, and fails with cell path on embedded emit.
+    // Missing glyph in a fixed-height cell produces cell-located warning during resolve,
+    // allows paint and non-embedded emit, and fails with cell path on embedded emit;
+    // auto-height row with missing glyphs fails immediately in resolve.
+    const autoMissingGlyphDoc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "cover" }).append(
+        table({
+          id: "tbl-auto",
+          x: 20,
+          y: 20,
+          columns: [120],
+          style: { fontFamily: impJostFont, fontSize: 14 },
+        }).append(
+          row({ id: "r1" }).append(
+            cell("中文", { id: "c1", style: { padding: 4 } }),
+          ),
+        ),
+      ),
+    );
+    assert.throws(
+      () => resolve(autoMissingGlyphDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code, path }) =>
+            code === "font-missing-glyph" &&
+            path === "deck/slide[cover]/table[tbl-auto]/row[r1]/cell[c1]",
+        ),
+    );
+
     const missingGlyphDoc = deck({ width: 480, height: 270 }).append(
       slide({ id: "cover" }).append(
         table({
@@ -222,7 +249,7 @@ describe("tableCapability resolved contract", () => {
           columns: [120],
           style: { fontFamily: impJostFont, fontSize: 14 },
         }).append(
-          row({ id: "r1" }).append(
+          row({ id: "r1", style: { height: 32 } }).append(
             cell("中文", { id: "c1", style: { padding: 4 } }),
           ),
         ),
@@ -321,7 +348,11 @@ describe("tableCapability resolved contract", () => {
           y: 20,
           columns: [120],
           style: { fontFamily: impJostFont, fontSize: 14 },
-        }).append(row({ id: "r1" }).append(cell("汉", { id: "c1" }))),
+        }).append(
+          row({ id: "r1", style: { height: 28 } }).append(
+            cell("汉", { id: "c1" }),
+          ),
+        ),
       ),
     );
     const paintErrorsResolution = resolve(paintErrorsDoc);

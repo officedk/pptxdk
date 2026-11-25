@@ -5,6 +5,7 @@ import {
   paddingStyleKeys,
   textStyleKeys,
   validateTextStyle,
+  type CapabilityFontUsageClaim,
   type CapabilityPresentationContribution,
   type ColorValue,
   type Font,
@@ -16,8 +17,10 @@ import {
   type ResolvedColor,
   type Shadow,
   type TextAlignment,
+  type TextMetrics,
   type TextStyle,
   type ThemeContext,
+  type UnmeasuredFontIssue,
 } from "@pptxdk/core/capability";
 import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
 import * as fontkit from "fontkit";
@@ -27,7 +30,9 @@ import LineBreakerImplementation from "linebreak";
 
 import {
   fontPresentationContributions,
+  isFontEmbeddable,
   requiresFontGlyph,
+  requiresVisibleFontGlyph,
   type FontEmbeddingMode,
   type FontEmbeddingUse,
 } from "../font/font-embedding.ts";
@@ -90,6 +95,13 @@ export type ResolvedTextBody = {
     readonly message: string;
   }[];
   readonly missingGlyphErrors: readonly string[];
+  readonly textMetrics?: TextMetrics;
+  readonly fontUsages: readonly CapabilityFontUsageClaim[];
+  readonly unmeasuredIssues: {
+    readonly missingResourceFonts: readonly UnmeasuredFontIssue[];
+    readonly missingGlyphFonts: readonly UnmeasuredFontIssue[];
+    readonly referencedFonts: readonly UnmeasuredFontIssue[];
+  };
 };
 
 export type EmittedTextBody = {
@@ -1057,8 +1069,14 @@ function runXml(run: Run, theme: ThemeContext, differential = false): string {
 function textResourceClaims(runs: readonly Run[]): {
   readonly resourceClaims: TextResourceClaim[];
   readonly fontUses: FontEmbeddingUse[];
+  readonly fontUsages: CapabilityFontUsageClaim[];
   readonly warnings: { readonly code: string; readonly message: string }[];
   readonly missingGlyphErrors: string[];
+  readonly unmeasuredIssues: {
+    readonly missingResourceFonts: readonly UnmeasuredFontIssue[];
+    readonly missingGlyphFonts: readonly UnmeasuredFontIssue[];
+    readonly referencedFonts: readonly UnmeasuredFontIssue[];
+  };
 } {
   const used = new Map<
     string,
@@ -1091,8 +1109,20 @@ function textResourceClaims(runs: readonly Run[]): {
   }
   const resourceClaims: TextResourceClaim[] = [];
   const fontUses: FontEmbeddingUse[] = [];
+  const fontUsages: CapabilityFontUsageClaim[] = [];
   const warnings: { code: string; message: string }[] = [];
   const missingGlyphErrors: string[] = [];
+  const missingResourceMap = new Map<string, UnmeasuredFontIssue>();
+  const missingGlyphSets = new Map<string, Set<string>>();
+  const missingGlyphFonts = new Map<
+    string,
+    {
+      readonly family: string;
+      readonly weight: number;
+      readonly style: "normal" | "italic";
+    }
+  >();
+  const referencedFontMap = new Map<string, UnmeasuredFontIssue>();
   for (const [key, entry] of used) {
     for (const font of entry.fontPolicies.values()) {
       fontUses.push({
@@ -1109,7 +1139,28 @@ function textResourceClaims(runs: readonly Run[]): {
       });
     }
     for (const font of entry.fonts) {
+      if (!referencedFontMap.has(key)) {
+        referencedFontMap.set(key, {
+          family: font.family,
+          weight: font.weight,
+          style: font.style,
+        });
+      }
       if (!font.hasResource) {
+        fontUsages.push({
+          family: font.family,
+          weight: font.weight,
+          style: font.style,
+          hasResource: false,
+          ...(font.substitute ? { substitute: true } : {}),
+        });
+        if (!missingResourceMap.has(key)) {
+          missingResourceMap.set(key, {
+            family: font.family,
+            weight: font.weight,
+            style: font.style,
+          });
+        }
         warnings.push({
           code: "font-measurement-unavailable",
           message: `Explicit font resource is not provided for ${font.family} ${font.weight} ${font.style}; fixed-area text will not verify actual line wrapping or fitting`,
@@ -1122,23 +1173,65 @@ function textResourceClaims(runs: readonly Run[]): {
           characters: entry.text.join(""),
         });
         const face = fontkitFace(font);
-        if (face !== undefined) {
-          const missing = missingCharacters(face, entry.text.join(""));
-          if (missing.length > 0) {
-            const shown = missing.slice(0, 10).join(" ");
-            const extra = missing.length - 10;
-            const message = `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`;
-            warnings.push({
-              code: "font-missing-glyph",
-              message,
+        const missing =
+          face !== undefined
+            ? missingCharacters(face, entry.text.join(""))
+            : [];
+        const embeddable = isFontEmbeddable(
+          font.data!,
+          font.substitute,
+          font.embeddable,
+        );
+        fontUsages.push({
+          family: font.family,
+          weight: font.weight,
+          style: font.style,
+          hasResource: true,
+          ...(font.substitute ? { substitute: true } : {}),
+          embeddable,
+          ...(missing.length > 0 ? { missingGlyphs: missing } : {}),
+        });
+        if (missing.length > 0) {
+          const set = missingGlyphSets.get(key) ?? new Set<string>();
+          for (const ch of missing) set.add(ch);
+          missingGlyphSets.set(key, set);
+          if (!missingGlyphFonts.has(key)) {
+            missingGlyphFonts.set(key, {
+              family: font.family,
+              weight: font.weight,
+              style: font.style,
             });
-            missingGlyphErrors.push(message);
           }
+          const shown = missing.slice(0, 10).join(" ");
+          const extra = missing.length - 10;
+          const message = `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`;
+          warnings.push({
+            code: "font-missing-glyph",
+            message,
+          });
+          missingGlyphErrors.push(message);
         }
       }
     }
   }
-  return { resourceClaims, fontUses, warnings, missingGlyphErrors };
+  const unmeasuredIssues = {
+    missingResourceFonts: [...missingResourceMap.values()],
+    missingGlyphFonts: [...missingGlyphFonts.entries()].map(
+      ([key, descriptor]) => ({
+        ...descriptor,
+        missingGlyphs: [...(missingGlyphSets.get(key) ?? [])],
+      }),
+    ),
+    referencedFonts: [...referencedFontMap.values()],
+  };
+  return {
+    resourceClaims,
+    fontUses,
+    fontUsages,
+    warnings,
+    missingGlyphErrors,
+    unmeasuredIssues,
+  };
 }
 
 function alignmentValue(value: TextAlignment | undefined): string | undefined {
@@ -1576,9 +1669,13 @@ function missingCharacters(
   const font = "font" in face ? face.font : face;
   const missing = new Set<string>();
   for (const character of text) {
-    if (!requiresFontGlyph(character)) continue;
+    if (!requiresVisibleFontGlyph(character)) continue;
     const codePoint = character.codePointAt(0);
-    if (codePoint !== undefined && !font.hasGlyphForCodePoint(codePoint)) {
+    if (
+      codePoint !== undefined &&
+      (!font.hasGlyphForCodePoint(codePoint) ||
+        font.glyphForCodePoint(codePoint).id === 0)
+    ) {
       missing.add(character);
     }
   }
@@ -1954,10 +2051,52 @@ function paragraphMeasurement(
   };
 }
 
+function assertParagraphsHaveVisibleGlyphs(
+  paragraphs: readonly Paragraph[],
+): void {
+  for (const paragraph of paragraphs) {
+    for (const run of paragraph.runs) {
+      const textToCheck =
+        displayedText(run) +
+        (run.field?.type === "slidenum" ? "0123456789" : "");
+      if (!Array.from(textToCheck).some(requiresVisibleFontGlyph)) continue;
+      const face = measureRunFace(run.style);
+      const missing = missingCharacters(face, textToCheck);
+      if (missing.length > 0) {
+        const family = normalizedFonts(run.style)[0]?.family ?? "Font";
+        const shown = missing.slice(0, 10).join(" ");
+        const extra = missing.length - 10;
+        throw new CapabilityError(
+          "font-missing-glyph",
+          `${family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+        );
+      }
+    }
+    const list = paragraph.style.list;
+    if (list !== undefined) {
+      const markerText =
+        list.type === "bullet" ? (list.character ?? "•") : "0123456789.";
+      const markerStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
+      const face = measureRunFace(markerStyle);
+      const missing = missingCharacters(face, markerText);
+      if (missing.length > 0) {
+        const family = normalizedFonts(markerStyle)[0]?.family ?? "Font";
+        const shown = missing.slice(0, 10).join(" ");
+        const extra = missing.length - 10;
+        throw new CapabilityError(
+          "font-missing-glyph",
+          `${family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+        );
+      }
+    }
+  }
+}
+
 function measureParagraphs(
   paragraphs: readonly Paragraph[],
   width: number,
 ): MeasuredTextLayout {
+  assertParagraphsHaveVisibleGlyphs(paragraphs);
   const measured = paragraphs.map((paragraph) =>
     paragraphMeasurement(paragraph, width),
   );
@@ -3197,6 +3336,60 @@ function validateEmittableParagraphs(
   }
 }
 
+const TEXT_FIT_EPSILON = 0.01;
+
+/** Computes tri-state TextMetrics from a resolved text body and its finalized available content dimensions. */
+export function computeTextMetrics(
+  resolved: Pick<ResolvedTextBody, "measuredLayout" | "unmeasuredIssues">,
+  availableWidth: number,
+  availableHeight: number,
+): TextMetrics {
+  const { missingResourceFonts, missingGlyphFonts, referencedFonts } =
+    resolved.unmeasuredIssues;
+  if (missingResourceFonts.length > 0) {
+    return {
+      status: "unmeasured",
+      reason: "missing-font-resource",
+      fonts: missingResourceFonts,
+    };
+  }
+  if (missingGlyphFonts.length > 0) {
+    return {
+      status: "unmeasured",
+      reason: "missing-glyphs",
+      fonts: missingGlyphFonts,
+    };
+  }
+  if (resolved.measuredLayout === undefined) {
+    return {
+      status: "unmeasured",
+      reason: "missing-font-resource",
+      fonts: referencedFonts,
+    };
+  }
+  const available = {
+    width: Math.max(0, availableWidth),
+    height: Math.max(0, availableHeight),
+  };
+  const content = {
+    width: resolved.measuredLayout.width,
+    height: resolved.measuredLayout.height,
+    lineCount: resolved.measuredLayout.paragraphs.reduce(
+      (sum, paragraph) => sum + paragraph.lineCount,
+      0,
+    ),
+  };
+  const fits =
+    content.width <= available.width + TEXT_FIT_EPSILON &&
+    content.height <= available.height + TEXT_FIT_EPSILON;
+  return {
+    status: "measured",
+    available,
+    content,
+    fits,
+  };
+}
+
 /**
  * Resolves text layout, wrapping metrics, overset diagnostics, plain-text observations,
  * and font resource claims from pre-parsed paragraphs without assigning emit-only field IDs.
@@ -3230,8 +3423,14 @@ export function resolveTextBody(
       },
     ];
   });
-  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
-    textResourceClaims([...runs, ...listRuns]);
+  const {
+    resourceClaims,
+    fontUses,
+    fontUsages,
+    warnings,
+    missingGlyphErrors,
+    unmeasuredIssues,
+  } = textResourceClaims([...runs, ...listRuns]);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
   if (layout !== undefined) {
     try {
@@ -3291,6 +3490,19 @@ export function resolveTextBody(
       paragraphRuns.map(({ text: part }) => part).join(""),
     )
     .join("\n");
+  const textMetrics =
+    layout === undefined
+      ? undefined
+      : computeTextMetrics(
+          {
+            ...(measured === undefined ? {} : { measuredLayout: measured }),
+            unmeasuredIssues,
+          },
+          layout.width === "max-content"
+            ? (measured?.width ?? 0)
+            : layout.width,
+          layout.height ?? measured?.height ?? 0,
+        );
   return {
     paragraphs: outputParagraphs,
     style,
@@ -3307,6 +3519,7 @@ export function resolveTextBody(
     paragraphCount: outputParagraphs.length,
     resourceClaims,
     fontUses,
+    fontUsages,
     ...(measured === undefined
       ? {}
       : {
@@ -3315,6 +3528,8 @@ export function resolveTextBody(
         }),
     warnings,
     missingGlyphErrors,
+    unmeasuredIssues,
+    ...(textMetrics === undefined ? {} : { textMetrics }),
   };
 }
 
@@ -3407,6 +3622,7 @@ type ChartTextResult = {
   readonly text: string;
   readonly resourceClaims: readonly TextResourceClaim[];
   readonly fontUses: readonly FontEmbeddingUse[];
+  readonly fontUsages: readonly CapabilityFontUsageClaim[];
   readonly warnings: readonly {
     readonly code: string;
     readonly message: string;
@@ -3438,7 +3654,7 @@ export function writeChartTextProperties(
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
-  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
+  const { resourceClaims, fontUses, fontUsages, warnings, missingGlyphErrors } =
     textResourceClaims(runs);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
@@ -3460,6 +3676,7 @@ export function writeChartTextProperties(
     text: outputText,
     resourceClaims,
     fontUses,
+    fontUsages,
     warnings,
     missingGlyphErrors,
   };
@@ -3488,7 +3705,7 @@ export function writeChartTitle(
   };
   validateRunStyle(runStyle);
   const escapedText = escapedXml(text);
-  const { resourceClaims, fontUses, warnings, missingGlyphErrors } =
+  const { resourceClaims, fontUses, fontUsages, warnings, missingGlyphErrors } =
     textResourceClaims([{ text, style: runStyle }]);
   const runProperties = runPropertiesXml(runStyle, "a:rPr", theme);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
@@ -3511,6 +3728,7 @@ export function writeChartTitle(
     text,
     resourceClaims,
     fontUses,
+    fontUsages,
     warnings,
     missingGlyphErrors,
   };

@@ -2121,15 +2121,41 @@ describe("public build entry", () => {
     );
   });
 
-  it("content-sized text records warning without embedFonts, and fails with font-missing-glyph when embedding", async () => {
-    const result = await build(
+  it("content-sized text fails resolve on missing glyphs, while fixed-height text records warning without embedFonts and fails when embedding", async () => {
+    await assert.rejects(
+      build(
+        deck(
+          createElement(Text, {
+            id: "content-sized-missing-glyph",
+            x: 0,
+            y: 0,
+            width: 100,
+            height: "auto",
+            style: {
+              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+              fontSize: 20,
+            },
+            children: "中文",
+          }),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code, path }) =>
+            code === "font-missing-glyph" &&
+            path === "deck/slide[cover]/text[content-sized-missing-glyph]",
+        ),
+    );
+
+    const fixedResult = await build(
       deck(
         createElement(Text, {
-          id: "content-sized-missing-glyph",
+          id: "fixed-missing-glyph-warn",
           x: 0,
           y: 0,
           width: 100,
-          height: "auto",
+          height: 40,
           style: {
             fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
             fontSize: 20,
@@ -2138,8 +2164,8 @@ describe("public build entry", () => {
         }),
       ),
     );
-    assert.ok(result.pptx.byteLength > 0);
-    const warning = result.report.diagnostics.find(
+    assert.ok(fixedResult.pptx.byteLength > 0);
+    const warning = fixedResult.report.diagnostics.find(
       ({ code }) => code === "font-missing-glyph",
     );
     assert.ok(
@@ -2149,7 +2175,7 @@ describe("public build entry", () => {
     assert.equal(warning.severity, "warning");
     assert.equal(
       warning.path,
-      "deck/slide[cover]/text[content-sized-missing-glyph]",
+      "deck/slide[cover]/text[fixed-missing-glyph-warn]",
     );
     assert.ok(warning.message.includes("中"));
     assert.ok(warning.message.includes("文"));
@@ -2404,8 +2430,38 @@ describe("public build entry", () => {
       assert.equal(missingGlyph, undefined);
     });
 
-    it("reports font-missing-glyph error for Table when embedFonts is full, and warning without embedding", async () => {
+    it("reports font-missing-glyph error for fixed Table when embedFonts is full, warning without embedding, and fails resolve for auto-height rows", async () => {
       const jost = font("Jost*", [{ weight: 400, data: jostBook }]);
+
+      await assert.rejects(
+        build(
+          deck(
+            createElement(
+              Table,
+              {
+                id: "table-auto-missing-glyph",
+                x: 0,
+                y: 0,
+                columns: [100],
+                style: { fontFamily: jost, fontSize: 14 },
+              },
+              createElement(
+                Row,
+                { id: "r1" },
+                createElement(Cell, { id: "c1" }, "中文"),
+              ),
+            ),
+          ),
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some(
+            ({ code, path }) =>
+              code === "font-missing-glyph" &&
+              path ===
+                "deck/slide[cover]/table[table-auto-missing-glyph]/row[r1]/cell[c1]",
+          ),
+      );
 
       await assert.rejects(
         build(
@@ -2421,7 +2477,7 @@ describe("public build entry", () => {
               },
               createElement(
                 Row,
-                { id: "r1" },
+                { id: "r1", style: { height: 32 } },
                 createElement(Cell, { id: "c1" }, "中文"),
               ),
             ),
@@ -2451,7 +2507,7 @@ describe("public build entry", () => {
             },
             createElement(
               Row,
-              { id: "r1" },
+              { id: "r1", style: { height: 32 } },
               createElement(Cell, { id: "c1" }, "中文"),
             ),
           ),

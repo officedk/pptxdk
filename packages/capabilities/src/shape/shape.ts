@@ -60,6 +60,7 @@ export type {
 export type { PaddingStyle, VisualStyle } from "@pptxdk/core/capability";
 import { motionAnnotations } from "../motion/motion-api.ts";
 import {
+  computeTextMetrics,
   emitTextBody,
   measureTextLayoutFromParagraphs,
   parseTextContent,
@@ -529,7 +530,9 @@ export const shapeCapability = {
           if (
             hasFixedSize &&
             error instanceof CapabilityError &&
-            error.code === "font-measurement-unavailable"
+            (error.code === "font-measurement-unavailable" ||
+              (error.code === "font-missing-glyph" &&
+                request.purpose !== "baseline"))
           ) {
             return {
               baseline: "unavailable",
@@ -576,6 +579,8 @@ export const shapeCapability = {
             {
               width: Math.max(0, textRect.width - insets.left - insets.right),
               height: Math.max(0, textRect.height - insets.top - insets.bottom),
+              contentSized:
+                declaredHeight === undefined || declaredHeight === "auto",
               insets,
             },
             "text-box",
@@ -654,7 +659,12 @@ export const shapeCapability = {
               ? explicitText === undefined
                 ? {}
                 : { text: explicitText }
-              : { text: resolvedText.text }),
+              : {
+                  text: resolvedText.text,
+                  textMetrics:
+                    resolvedText.textMetrics ??
+                    computeTextMetrics(resolvedText, 0, 0),
+                }),
           },
           transform,
           extensions: [],
@@ -662,7 +672,10 @@ export const shapeCapability = {
           ...(annotations.length === 0 ? {} : { annotations }),
           ...(resolvedText === undefined
             ? {}
-            : { resourceClaims: resolvedText.resourceClaims }),
+            : {
+                resourceClaims: resolvedText.resourceClaims,
+                fontUsages: resolvedText.fontUsages,
+              }),
           emit(emitContext: EmitContext): EmitOutput {
             return resolvedModel.visual.geometry.kind === "custom"
               ? customGeometryShapeMechanism.emit(resolvedModel, emitContext)

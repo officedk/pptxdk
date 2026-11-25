@@ -8,6 +8,8 @@ import {
   type GeometryBox,
   type HeaderFooter,
   type PlaceholderSize,
+  type ResolvedFooter,
+  type ResolvedFooterSlot,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
   type SlideEmitContext,
@@ -1043,10 +1045,37 @@ export const footerPlaceholderCapability = {
     return {
       resolveSlide() {
         const claims = model.items.flatMap((item) => item.text.resourceClaims);
+        const fontUsages = model.items.flatMap((item) =>
+          item.text.fontUsages.map((usage) => ({
+            ...usage,
+            path: `footerPlaceholders.${item.slot}`,
+          })),
+        );
         const warnings = model.items.flatMap((item) => item.text.warnings);
+        let footer: ResolvedFooter | undefined;
+        if (input.type === "slide" && model.items.length > 0) {
+          const slots: {
+            dateTime?: ResolvedFooterSlot;
+            footer?: ResolvedFooterSlot;
+            slideNumber?: ResolvedFooterSlot;
+          } = {};
+          for (const item of model.items) {
+            if (item.text.textMetrics === undefined) continue;
+            slots[item.slot] = {
+              box: item.box,
+              text: item.text.text,
+              textMetrics: item.text.textMetrics,
+            };
+          }
+          if (Object.keys(slots).length > 0) {
+            footer = slots;
+          }
+        }
         return {
           extensions: [],
+          ...(footer === undefined ? {} : { footer }),
           ...(claims.length === 0 ? {} : { resourceClaims: claims }),
+          ...(fontUsages.length === 0 ? {} : { fontUsages }),
           ...(warnings.length === 0 ? {} : { warnings }),
           emit: (emitContext: SlideEmitContext) =>
             footerPlaceholderMechanism.emit(model, emitContext),

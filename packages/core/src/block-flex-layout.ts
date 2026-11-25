@@ -875,12 +875,13 @@ export function createBlockFlexLayoutSolver(options: {
     const padding = expandedSpacing(node.style, "padding");
     const measurement = node.measure(
       availableWidth === undefined
-        ? {}
+        ? { purpose: "baseline" }
         : {
             availableWidth: Math.max(
               0,
               availableWidth - padding.left - padding.right,
             ),
+            purpose: "baseline",
           },
     );
     if (measurement?.baseline === undefined) {

@@ -637,6 +637,7 @@ export class LayoutPass {
     request: {
       readonly availableWidth?: number;
       readonly widthMode?: "at-most" | "exactly";
+      readonly purpose?: "baseline" | "layout";
     },
   ): CapabilityLayoutMeasurement | undefined {
     if (bound.measureLayout === undefined) {

@@ -31,9 +31,17 @@ export type {
   BuildResult,
   CapabilityModule,
   EmitResult,
+  FontStyleDescriptor,
+  FontUsage,
+  GeometryBox,
+  Rect,
   Resolution,
   ResolutionReport,
+  ResolvedFooter,
+  ResolvedFooterSlot,
   ResourceObservation,
+  TextMetrics,
+  UnmeasuredFontIssue,
 } from "#/types.ts";
 export type {
   DeclarationChild,

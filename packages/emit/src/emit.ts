@@ -2051,6 +2051,7 @@ export function emit(
       extensions: Object.freeze([...target.extensions]),
     }),
     extensions: Object.freeze([...docEmit.usedExtensions]),
+    fonts: resolution.report.fonts,
     ...(resolution.report.masters === undefined
       ? {}
       : { masters: resolution.report.masters }),

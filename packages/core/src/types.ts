@@ -126,11 +126,70 @@ export type {
 
 // SlideBackground is derived from slideBackgroundSchema in author-schemas.ts.
 
-export type GeometryBox = {
+export type Rect = {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
+};
+
+/** Transitional alias retained until Ticket 11. */
+export type GeometryBox = Rect;
+
+export type FontStyleDescriptor = {
+  readonly family: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic";
+};
+
+export type UnmeasuredFontIssue = FontStyleDescriptor & {
+  /** Present when reason === "missing-glyphs": deduplicated visible non-whitespace characters mapped to .notdef. */
+  readonly missingGlyphs?: readonly string[];
+};
+
+/** Tri-state text layout metrics distinguishing measured fit/overflow from unmeasured font or glyph gaps. */
+export type TextMetrics =
+  | {
+      readonly status: "measured";
+      readonly available: {
+        readonly width: number;
+        readonly height: number;
+      };
+      readonly content: {
+        readonly width: number;
+        readonly height: number;
+        readonly lineCount: number;
+      };
+      readonly fits: boolean;
+    }
+  | {
+      readonly status: "unmeasured";
+      readonly reason: "missing-font-resource" | "missing-glyphs";
+      readonly fonts: readonly UnmeasuredFontIssue[];
+    };
+
+/** Document-level summary of a referenced font face style, its resource status, glyph gaps, and reference paths. */
+export type FontUsage = {
+  readonly family: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic";
+  readonly hasResource: boolean;
+  readonly substitute?: boolean;
+  readonly embeddable?: boolean;
+  readonly missingGlyphs?: readonly string[];
+  readonly paths: readonly string[];
+};
+
+export type ResolvedFooterSlot = {
+  readonly box: Rect;
+  readonly text: string;
+  readonly textMetrics: TextMetrics;
+};
+
+export type ResolvedFooter = {
+  readonly dateTime?: ResolvedFooterSlot;
+  readonly footer?: ResolvedFooterSlot;
+  readonly slideNumber?: ResolvedFooterSlot;
 };
 
 // LayoutLength, LayoutSpacing, LayoutStyle, PaddingStyle, and LinkTarget are derived from Zod schemas.
@@ -151,6 +210,7 @@ export type ObjectObservation = {
   readonly geometry?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
+  readonly textMetrics?: TextMetrics;
   readonly link?: string;
   readonly table?: NativeTableObservation;
   readonly members?: readonly ObjectObservation[];
@@ -193,6 +253,7 @@ export type NativeTablePartObservation = {
   readonly colSpan?: number;
   readonly box: GeometryBox;
   readonly text: string;
+  readonly textMetrics?: TextMetrics;
 };
 
 export type SlideObservation = {
@@ -207,6 +268,7 @@ export type SlideObservation = {
   readonly showMasterPlaceholderAnimations?: boolean;
   readonly objects: readonly ObjectObservation[];
   readonly layouts?: readonly LayoutObservation[];
+  readonly footer?: ResolvedFooter;
   readonly capabilities?: Readonly<Record<string, unknown>>;
 };
 
@@ -214,6 +276,7 @@ export type ResolutionReport = {
   readonly evidence: "generation";
   readonly title?: string;
   readonly extensions: readonly Extension[];
+  readonly fonts: readonly FontUsage[];
   readonly masters?: readonly SlideMasterObservation[];
   readonly slides: readonly SlideObservation[];
   readonly diagnostics: readonly Diagnostic[];
@@ -233,6 +296,7 @@ export type BuildReport = {
     readonly extensions: readonly Extension[];
   };
   readonly extensions: readonly Extension[];
+  readonly fonts: readonly FontUsage[];
   readonly masters?: readonly SlideMasterObservation[];
   readonly slides: readonly SlideObservation[];
   readonly diagnostics: readonly Diagnostic[];
@@ -254,6 +318,7 @@ export type LocatorObservation = {
   readonly authorId?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
+  readonly textMetrics?: TextMetrics;
   readonly objects: readonly ObjectObservation[];
   readonly resources?: readonly LocatorResourceObservation[];
 };
@@ -472,6 +537,8 @@ export type CapabilityLayoutRequest = {
   readonly availableWidth?: number;
   /** Whether available width is a shrinkable upper bound or an exact width the layout must allocate. */
   readonly widthMode?: "at-most" | "exactly";
+  /** Distinguishes baseline queries from general intrinsic sizing queries. */
+  readonly purpose?: "baseline" | "layout";
   /** Theme, local scope, and container text defaults shared between measurement and object compilation. */
   readonly theme: ThemeContext;
   /** 1-based slide number in the deck, used by shared text service to measure native slide number fields. */
@@ -530,7 +597,20 @@ export type CapabilitySubPartObservation = {
   readonly authorId?: string;
   readonly box?: GeometryBox;
   readonly text?: string;
+  readonly textMetrics?: TextMetrics;
   readonly parts?: readonly CapabilitySubPartObservation[];
+};
+
+/** Font usage claim reported by capability modules to assemble document-level FontUsage summaries. */
+export type CapabilityFontUsageClaim = {
+  readonly family: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic";
+  readonly hasResource: boolean;
+  readonly substitute?: boolean;
+  readonly embeddable?: boolean;
+  readonly missingGlyphs?: readonly string[];
+  readonly path?: string;
 };
 
 /** Claim provided by capability to deck-scoped resource processing; character content is generated by the shared text service. */
@@ -671,6 +751,7 @@ export type ResolvedObject = {
   readonly extensions: readonly Extension[];
   readonly annotations?: readonly CapabilityAnnotation[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];
+  readonly fontUsages?: readonly CapabilityFontUsageClaim[];
   readonly warnings?: readonly CapabilityWarning[];
   emit(context: EmitContext): EmitOutput;
   paint?(context: PaintContext): PaintOutput;
@@ -811,8 +892,10 @@ export type SlidePaintOutput = {
 
 export type ResolvedSlide = {
   readonly observation?: unknown;
+  readonly footer?: ResolvedFooter;
   readonly extensions: readonly Extension[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];
+  readonly fontUsages?: readonly CapabilityFontUsageClaim[];
   readonly warnings?: readonly CapabilityWarning[];
   emit(context: SlideEmitContext): SlideEmitOutput;
   paint?(context: SlidePaintContext): SlidePaintOutput;

@@ -9,6 +9,7 @@ import type {
   ResourceObservation,
   SlideObservation,
   SlideQuery,
+  TextMetrics,
 } from "#/types.ts";
 
 export class BuildQueryError extends Error {
@@ -39,6 +40,7 @@ export type QueryContentReference =
       readonly kind: "part";
       readonly box?: GeometryBox;
       readonly text?: string;
+      readonly textMetrics?: TextMetrics;
     };
 
 export type QueryContentNode = {
@@ -242,6 +244,12 @@ function makeLocator(
     const selectedText = text.length === 0 ? undefined : text.join("\n");
     const box = partRef !== undefined ? partRef.box : (layoutBox ?? objectBox);
     const observedText = partRef !== undefined ? partRef.text : selectedText;
+    const textMetrics =
+      partRef !== undefined
+        ? partRef.textMetrics
+        : entry.node.reference?.kind === "object"
+          ? objectsById.get(entry.node.reference.id)?.textMetrics
+          : undefined;
     const resources: LocatorResourceObservation[] = objects.flatMap((object) =>
       (resourcesByObjectId.get(object.id) ?? []).map((resource) =>
         Object.freeze({ objectId: object.id, ...resource }),
@@ -254,6 +262,7 @@ function makeLocator(
         : { authorId: entry.node.authorId }),
       ...(box === undefined ? {} : { box }),
       ...(observedText === undefined ? {} : { text: observedText }),
+      ...(textMetrics === undefined ? {} : { textMetrics }),
       objects: Object.freeze(objects),
       ...(resources.length === 0
         ? {}

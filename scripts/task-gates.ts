@@ -599,6 +599,11 @@ export async function runTaskGate(
     const status = await runVisible(cwd, [
       "run",
       ...plan.tasks.map((task) => task.fullName),
+      // Hosted runners share limited CPU across the rendering and CLI test processes.
+      ...(process.env.GITHUB_ACTIONS === "true" &&
+      plan.layer.role === "quality:heavy"
+        ? ["--concurrency=1"]
+        : []),
       "--continue=dependencies-successful",
       gate === "fix" ? "--output-logs=full" : "--output-logs=errors-only",
       "--log-order=grouped",

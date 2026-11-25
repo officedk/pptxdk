@@ -540,7 +540,7 @@ process.stdout.write("ok");
           columns: [120],
           style: { fontFamily: jostFont, fontSize: 14 },
         }).append(
-          row({ id: "bad-row" }).append(
+          row({ id: "bad-row", style: { height: 30 } }).append(
             cell("مرحبا", {
               id: "bad-cell",
             }),

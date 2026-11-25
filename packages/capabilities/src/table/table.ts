@@ -749,6 +749,17 @@ function tableLayoutModel(
         false,
       );
       addTextResult(measured, cell.path);
+      if (
+        measured.textMetrics?.status === "unmeasured" &&
+        measured.textMetrics.reason === "missing-glyphs"
+      ) {
+        fail(
+          "font-missing-glyph",
+          measured.missingGlyphErrors[0] ??
+            "auto columns require glyphs for all visible characters",
+          cell.path,
+        );
+      }
       if (measured.measurement === undefined && measured.text.trim() !== "") {
         fail(
           "font-measurement-unavailable",
@@ -835,6 +846,17 @@ function tableLayoutModel(
     );
     const result = resolveCellBody(cell, theme, innerWidth, undefined, false);
     addTextResult(result, cell.path);
+    if (
+      result.textMetrics?.status === "unmeasured" &&
+      result.textMetrics.reason === "missing-glyphs"
+    ) {
+      fail(
+        "font-missing-glyph",
+        result.missingGlyphErrors[0] ??
+          "Automatic row height requires glyphs for all visible characters",
+        cell.path,
+      );
+    }
     if (result.measurement === undefined && result.text.trim() !== "") {
       fail(
         "font-measurement-unavailable",
@@ -1167,6 +1189,16 @@ export const tableCapability = {
         );
         const resolvedCells: ResolvedTableCell[] = [];
         const resolvedAnchors = new Map<string, ResolvedTableCell>();
+        const fontUsages: {
+          readonly family: string;
+          readonly weight: number;
+          readonly style: "normal" | "italic";
+          readonly hasResource: boolean;
+          readonly substitute?: boolean;
+          readonly embeddable?: boolean;
+          readonly missingGlyphs?: readonly string[];
+          readonly path: string;
+        }[] = [];
         for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
           for (let column = 0; column < columns.length; column += 1) {
             const cell = anchors.get(`${rowIndex}:${column}`);
@@ -1198,6 +1230,9 @@ export const tableCapability = {
               contentSized,
             );
             addTextResult(body, cell.path);
+            for (const usage of body.fontUsages) {
+              fontUsages.push({ ...usage, path: cell.path });
+            }
             matrix[rowIndex]![column] = body.text;
             const rowFill = rows[cell.row]?.fill;
             const fill = cell.fill ?? rowFill;
@@ -1211,9 +1246,9 @@ export const tableCapability = {
                   paragraph.style.list !== undefined ||
                   paragraph.runs.some((run) => run.text.length > 0),
               ),
-              hasOverflow: body.warnings.some(
-                (warning) => warning.code === "overset",
-              ),
+              hasOverflow:
+                body.textMetrics?.status === "measured" &&
+                !body.textMetrics.fits,
             };
             resolvedCells.push(entry);
             resolvedAnchors.set(`${rowIndex}:${column}`, entry);
@@ -1250,16 +1285,23 @@ export const tableCapability = {
             },
             text: matrix[rowIndex]?.join("\t") ?? "",
           })),
-          ...cells.map((cell) => ({
-            kind: "cell" as const,
-            ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
-            row: cell.row,
-            column: cell.column,
-            rowSpan: cell.rowSpan,
-            colSpan: cell.colSpan,
-            box: cellBoxes.get(cell)!,
-            text: matrix[cell.row]?.[cell.column] ?? "",
-          })),
+          ...cells.map((cell) => {
+            const anchor = resolvedAnchors.get(`${cell.row}:${cell.column}`);
+            const textMetrics = anchor?.body.textMetrics;
+            return {
+              kind: "cell" as const,
+              ...(cell.authorId === undefined
+                ? {}
+                : { authorId: cell.authorId }),
+              row: cell.row,
+              column: cell.column,
+              rowSpan: cell.rowSpan,
+              colSpan: cell.colSpan,
+              box: cellBoxes.get(cell)!,
+              text: matrix[cell.row]?.[cell.column] ?? "",
+              ...(textMetrics === undefined ? {} : { textMetrics }),
+            };
+          }),
         ];
         const subParts: CapabilitySubPartObservation[] = rows.map(
           (row, rowIndex) => ({
@@ -1273,13 +1315,20 @@ export const tableCapability = {
             text: matrix[rowIndex]?.join("\t") ?? "",
             parts: cells
               .filter((cell) => cell.row === rowIndex)
-              .map((cell) => ({
-                ...(cell.authorId === undefined
-                  ? {}
-                  : { authorId: cell.authorId }),
-                box: cellBoxes.get(cell)!,
-                text: matrix[cell.row]?.[cell.column] ?? "",
-              })),
+              .map((cell) => {
+                const anchor = resolvedAnchors.get(
+                  `${cell.row}:${cell.column}`,
+                );
+                const textMetrics = anchor?.body.textMetrics;
+                return {
+                  ...(cell.authorId === undefined
+                    ? {}
+                    : { authorId: cell.authorId }),
+                  box: cellBoxes.get(cell)!,
+                  text: matrix[cell.row]?.[cell.column] ?? "",
+                  ...(textMetrics === undefined ? {} : { textMetrics }),
+                };
+              }),
           }),
         );
         const observation: NativeTableObservation = {
@@ -1294,9 +1343,7 @@ export const tableCapability = {
               rowSpan,
               colSpan,
             })),
-          ...(tableParts.some(({ authorId }) => authorId !== undefined)
-            ? { parts: tableParts }
-            : {}),
+          parts: tableParts,
         };
         const annotations = motionAnnotations(motionProps, {
           kind: "table",
@@ -1346,6 +1393,7 @@ export const tableCapability = {
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: claims,
+          ...(fontUsages.length === 0 ? {} : { fontUsages }),
           ...(warnings.length === 0 ? {} : { warnings }),
 
           emit(emitContext: EmitContext): EmitOutput {

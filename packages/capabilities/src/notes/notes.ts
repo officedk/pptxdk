@@ -313,6 +313,10 @@ export const notesCapability: SlideCapabilityModule & {
           observation: notesObservation(resolvedBody.text, entry.paragraphs),
           extensions: [],
           resourceClaims: resolvedBody.resourceClaims,
+          fontUsages: resolvedBody.fontUsages.map((usage) => ({
+            ...usage,
+            path: contribution.path,
+          })),
           ...(resolvedBody.warnings.length === 0
             ? {}
             : { warnings: resolvedBody.warnings }),

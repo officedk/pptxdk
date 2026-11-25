@@ -807,22 +807,26 @@ describe("native tables", () => {
     );
 
     assert.deepEqual(result.report.diagnostics, []);
-    assert.deepEqual(result.report.slides[0]?.objects[0], {
-      id: 2,
-      kind: "table",
-      name: "plans",
-      authorId: "plans",
-      box: { x: 12, y: 8, width: 160, height: 56 },
-      table: {
-        columnWidths: [80, 80],
-        rowHeights: [28, 28],
-        cells: [
-          ["方案", "说明"],
-          ["团队", "可编辑"],
-        ],
-        merges: [],
-      },
-    });
+    const tableObj = result.report.slides[0]?.objects[0];
+    assert.equal(tableObj?.id, 2);
+    assert.equal(tableObj?.kind, "table");
+    assert.equal(tableObj?.name, "plans");
+    assert.equal(tableObj?.authorId, "plans");
+    assert.deepEqual(tableObj?.box, { x: 12, y: 8, width: 160, height: 56 });
+    assert.deepEqual(tableObj?.table?.columnWidths, [80, 80]);
+    assert.deepEqual(tableObj?.table?.rowHeights, [28, 28]);
+    assert.deepEqual(tableObj?.table?.cells, [
+      ["方案", "说明"],
+      ["团队", "可编辑"],
+    ]);
+    assert.deepEqual(tableObj?.table?.merges, []);
+    const cellParts = tableObj?.table?.parts?.filter(
+      (part) => part.kind === "cell",
+    );
+    assert.equal(cellParts?.length, 4);
+    assert.ok(
+      cellParts?.every((part) => part.textMetrics?.status === "measured"),
+    );
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);

@@ -74,6 +74,7 @@ import type {
   CapabilityChild,
   CapabilityContribution,
   CapabilityElement,
+  CapabilityFontUsageClaim,
   CapabilityInput,
   CapabilityLayoutContract,
   CapabilityModule,
@@ -82,6 +83,7 @@ import type {
   CapabilityWarning,
   Diagnostic,
   Extension,
+  FontUsage,
   GeometryBox,
   LayoutChildReference,
   LayoutObservation,
@@ -94,6 +96,7 @@ import type {
   Resolution,
   ResolutionReport,
   ResolveOptions,
+  ResolvedFooter,
   ResolvedLink,
   ResolvedObjectChildren,
   ResolvedSlide as ResolvedSlideCapabilityOutput,
@@ -174,6 +177,17 @@ type MorphObject = {
   readonly path: string;
 };
 
+type FontUsageAccumulator = {
+  readonly family: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic";
+  hasResource: boolean;
+  substitute?: boolean;
+  embeddable?: boolean;
+  readonly missingGlyphs: Set<string>;
+  readonly paths: Set<string>;
+};
+
 type DocumentResolveState = {
   readonly usedExtensions: Set<Extension>;
   readonly warnings: Diagnostic[];
@@ -181,6 +195,7 @@ type DocumentResolveState = {
     string,
     { identity: string; path: string; characters: string }
   >;
+  readonly fontUsages: Map<string, FontUsageAccumulator>;
   readonly morphNames: Map<MorphKey, string>;
   nextMorphName: number;
   readonly reservedObjectNames: ReadonlySet<string>;
@@ -1260,6 +1275,71 @@ function recordResourceClaims(
   }
 }
 
+function recordFontUsages(
+  claims: readonly CapabilityFontUsageClaim[] | undefined,
+  document: DocumentResolveState,
+  ownerPath: string,
+): void {
+  for (const claim of claims ?? []) {
+    const key = `${claim.family.trim().toLowerCase()}\u0000${claim.weight}\u0000${claim.style}`;
+    const claimPath =
+      claim.path === undefined
+        ? ownerPath
+        : claim.path.startsWith("deck/")
+          ? claim.path
+          : `${ownerPath}/${claim.path}`;
+    const existing = document.fontUsages.get(key);
+    if (existing === undefined) {
+      document.fontUsages.set(key, {
+        family: claim.family,
+        weight: claim.weight,
+        style: claim.style,
+        hasResource: claim.hasResource,
+        ...(claim.substitute ? { substitute: true } : {}),
+        ...(claim.embeddable === undefined
+          ? {}
+          : { embeddable: claim.embeddable }),
+        missingGlyphs: new Set(claim.missingGlyphs ?? []),
+        paths: new Set([claimPath]),
+      });
+      continue;
+    }
+    if (claim.hasResource && !existing.hasResource) {
+      existing.hasResource = true;
+      if (claim.embeddable !== undefined) {
+        existing.embeddable = claim.embeddable;
+      }
+    } else if (claim.embeddable === false && existing.embeddable !== false) {
+      existing.embeddable = false;
+    }
+    if (claim.substitute) {
+      existing.substitute = true;
+      existing.embeddable = false;
+    }
+    for (const glyph of claim.missingGlyphs ?? []) {
+      existing.missingGlyphs.add(glyph);
+    }
+    existing.paths.add(claimPath);
+  }
+}
+
+function summarizeDocumentFonts(
+  fontUsages: ReadonlyMap<string, FontUsageAccumulator>,
+): readonly FontUsage[] {
+  return [...fontUsages.values()].map((entry) => ({
+    family: entry.family,
+    weight: entry.weight,
+    style: entry.style,
+    hasResource: entry.hasResource,
+    ...(entry.substitute ? { substitute: true } : {}),
+    ...(entry.embeddable === undefined ? {} : { embeddable: entry.embeddable }),
+    ...(entry.missingGlyphs.size > 0
+      ? { missingGlyphs: [...entry.missingGlyphs] }
+      : {}),
+    paths: [...entry.paths],
+  }));
+}
+
 function recordCapabilityWarnings(
   warnings: readonly CapabilityWarning[] | undefined,
   document: DocumentResolveState,
@@ -1634,6 +1714,7 @@ function resolveChildrenPass(
         context.slide.diagnostics,
         path,
       );
+      recordFontUsages(resolvedObj.fontUsages, context.document, path);
       recordCapabilityWarnings(resolvedObj.warnings, context.document, path);
       for (const annotation of resolvedObj.annotations ?? []) {
         context.slide.contributions.push({
@@ -1905,6 +1986,7 @@ function resolveBoundContainer(args: {
         context.slide.diagnostics,
         path,
       );
+      recordFontUsages(resolvedObj.fontUsages, context.document, path);
     } else if (morphKey !== undefined) {
       context.slide.diagnostics.push(
         diagnostic(
@@ -2089,6 +2171,9 @@ function subPartContentNodes(
       kind: "part",
       ...(part.box === undefined ? {} : { box: part.box }),
       ...(part.text === undefined ? {} : { text: part.text }),
+      ...(part.textMetrics === undefined
+        ? {}
+        : { textMetrics: part.textMetrics }),
     },
     children: subPartContentNodes(part.parts),
   }));
@@ -2498,6 +2583,7 @@ function resolveOwnerSlideCapabilities(args: {
         diagnostics,
         path,
       );
+      recordFontUsages(resolvedSlideCap.fontUsages, document, path);
       recordCapabilityWarnings(resolvedSlideCap.warnings, document, path);
       slideCapabilities.push({
         declaration: module.declaration,
@@ -2664,6 +2750,7 @@ function resolveSlideDeclaration(
   }
 
   const capabilities: Record<string, unknown> = {};
+  let footer: ResolvedFooter | undefined;
   const slideCapabilities: ResolvedSlideCapabilityRecord[] = [];
   const input: CapabilityInput = {
     type: node.type,
@@ -2716,6 +2803,9 @@ function resolveSlideDeclaration(
       if (resolvedSlideCap.observation !== undefined) {
         capabilities[module.declaration] = resolvedSlideCap.observation;
       }
+      if (resolvedSlideCap.footer !== undefined) {
+        footer = resolvedSlideCap.footer;
+      }
       for (const extension of resolvedSlideCap.extensions) {
         document.usedExtensions.add(extension);
       }
@@ -2725,6 +2815,7 @@ function resolveSlideDeclaration(
         slide.diagnostics,
         path,
       );
+      recordFontUsages(resolvedSlideCap.fontUsages, document, path);
       recordCapabilityWarnings(resolvedSlideCap.warnings, document, path);
       slideCapabilities.push({
         declaration: module.declaration,
@@ -2798,6 +2889,7 @@ function resolveSlideDeclaration(
         }),
     objects: projectedObjects,
     ...(sortedLayouts.length > 0 && { layouts: sortedLayouts }),
+    ...(footer !== undefined && { footer }),
     ...(Object.keys(capabilities).length > 0 && { capabilities }),
   };
 
@@ -2991,6 +3083,7 @@ function resolveMasterOrLayoutSlideCapability(args: {
       claimDiagnostics,
       path,
     );
+    recordFontUsages(resolvedCap.fontUsages, document, path);
     if (claimDiagnostics.length > 0) {
       throw new BuildError(claimDiagnostics);
     }
@@ -3212,6 +3305,7 @@ function resolveDocument(
     usedExtensions: new Set(boundSections?.extensions ?? []),
     warnings: [],
     resourceClaims: new Map(),
+    fontUsages: new Map(),
     morphNames: new Map(),
     nextMorphName: 1,
     reservedObjectNames: collectExplicitObjectNames(
@@ -3743,6 +3837,7 @@ function resolveDocument(
     evidence: "generation",
     ...(typeof title === "string" ? { title } : {}),
     extensions: [...document.usedExtensions],
+    fonts: summarizeDocumentFonts(document.fontUsages),
     ...(masterObservations.length > 0 ? { masters: masterObservations } : {}),
     slides: slideObservations,
     diagnostics: document.warnings,

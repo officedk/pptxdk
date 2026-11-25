@@ -49,6 +49,7 @@ import {
   textBoxStyleSchema,
 } from "../shared/text-schemas.ts";
 import {
+  computeTextMetrics,
   emitSlideNumberRunXml,
   emitTextBody,
   measureTextLayoutFromParagraphs,
@@ -499,7 +500,9 @@ export const textCapability = {
           if (
             !isContentSized &&
             error instanceof CapabilityError &&
-            error.code === "font-measurement-unavailable"
+            (error.code === "font-measurement-unavailable" ||
+              (error.code === "font-missing-glyph" &&
+                request.purpose !== "baseline"))
           ) {
             return {
               baseline: "unavailable",
@@ -568,6 +571,11 @@ export const textCapability = {
             "height",
           ),
         };
+        const textMetrics = computeTextMetrics(
+          resolvedText,
+          Math.max(0, box.width - insets.left - insets.right),
+          Math.max(0, box.height - insets.top - insets.bottom),
+        );
         const visual = resolveVisualModel({
           theme: placeholder?.masterTheme ?? resolveContext.theme,
           style: visualStyle,
@@ -664,12 +672,14 @@ export const textCapability = {
             name,
             box,
             text: resolvedText.text,
+            textMetrics,
           },
           transform,
           extensions: [],
           ...(warnings.length === 0 ? {} : { warnings }),
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: resolvedText.resourceClaims,
+          fontUsages: resolvedText.fontUsages,
           emit(emitContext: EmitContext): EmitOutput {
             return placeholder !== undefined
               ? textPlaceholderMechanism.emit(model, emitContext)

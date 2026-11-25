@@ -17,6 +17,7 @@ export type LayoutEdges = {
 export type LayoutMeasurementRequest = {
   readonly availableWidth?: number;
   readonly widthMode?: "at-most" | "exactly";
+  readonly purpose?: "baseline" | "layout";
 };
 
 export type LayoutNodeMeasure = (

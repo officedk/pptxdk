@@ -19,7 +19,7 @@ import {
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintOutput,
-  type ResolvedObject,
+  type ObjectResolution,
 } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 import {
@@ -413,7 +413,7 @@ export const placeholderCapability = {
         ? { native }
         : {}),
 
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const box: GeometryBox = {
           x:
             resolveContext.layoutBox?.x ??

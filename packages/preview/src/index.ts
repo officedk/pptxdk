@@ -5,13 +5,15 @@ import {
   type BuildQuery,
   type Resolution,
   type ResolutionReport,
+  type SlideLocator,
 } from "@pptxdk/core/build";
 import type {
   GeometryBox,
-  LayoutObservation,
-  ObjectObservation,
   PreviewTransform,
   PreviewWarning,
+  Rect,
+  ResolvedLayout,
+  ResolvedObject,
 } from "@pptxdk/core/capability";
 import {
   getInternalResolution,
@@ -60,19 +62,24 @@ export type {
   ScreenPoint,
 };
 
-export type PreviewNodeObservation = ObjectObservation & {
-  readonly path: string | undefined;
+export type PreviewNode = Omit<ResolvedObject, "corners"> & {
+  readonly path: string;
+  readonly bounds?: Rect;
   readonly corners?: readonly ScreenPoint[];
-  readonly screenBox?: GeometryBox;
+  /** Transitional alias retained until Ticket 11. */
+  readonly screenBox?: Rect;
 };
+
+/** Transitional alias retained until Ticket 11. */
+export type PreviewNodeObservation = PreviewNode;
 
 export type PreviewPageResult = {
   readonly id: string;
   readonly page: number;
   readonly svg?: string;
   readonly png?: Uint8Array;
-  readonly nodes: readonly PreviewNodeObservation[];
-  readonly layouts: readonly LayoutObservation[];
+  readonly nodes: readonly PreviewNode[];
+  readonly layouts: readonly ResolvedLayout[];
   readonly diagnostics: readonly PreviewDiagnostic[];
 };
 
@@ -82,12 +89,20 @@ export type PaintResult = {
 
 export type PreviewResult = {
   readonly report: ResolutionReport;
-  readonly query: BuildQuery;
   readonly pages: readonly PreviewPageResult[];
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
+  /** Transitional property retained until Ticket 11. */
+  readonly query: BuildQuery;
 };
 
 const defaultCanvasBackground =
   '<rect width="100%" height="100%" fill="white"/>';
+
+function roundScreenMetric(value: number): number {
+  const rounded = Math.round(value * 1e9) / 1e9;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
 
 /**
  * Computes transformed screen corners and axis-aligned screen bounds for a layout box.
@@ -114,15 +129,23 @@ export function screenGeometry(
       point.y = cy + x * Math.sin(angle) + y * Math.cos(angle);
     }
   }
-  const left = Math.min(...corners.map((point) => point.x));
-  const top = Math.min(...corners.map((point) => point.y));
+  const rounded = corners.map((point) =>
+    Object.freeze({
+      x: roundScreenMetric(point.x),
+      y: roundScreenMetric(point.y),
+    }),
+  );
+  const left = Math.min(...rounded.map((point) => point.x));
+  const top = Math.min(...rounded.map((point) => point.y));
+  const right = Math.max(...rounded.map((point) => point.x));
+  const bottom = Math.max(...rounded.map((point) => point.y));
   return {
-    corners: Object.freeze(corners.map((point) => Object.freeze({ ...point }))),
+    corners: Object.freeze(rounded),
     screenBox: Object.freeze({
       x: left,
       y: top,
-      width: Math.max(...corners.map((point) => point.x)) - left,
-      height: Math.max(...corners.map((point) => point.y)) - top,
+      width: roundScreenMetric(right - left),
+      height: roundScreenMetric(bottom - top),
     }),
   };
 }
@@ -435,21 +458,29 @@ export function paint(
       }
     }
 
-    const nodes: PreviewNodeObservation[] = [];
+    const nodes: PreviewNode[] = [];
     const collect = (
-      objects: readonly ObjectObservation[],
+      objects: readonly ResolvedObject[],
       ancestors: readonly PreviewTransform[] = [],
     ): void => {
       for (const object of objects) {
         const own = transforms.get(object.id);
         const chain = own === undefined ? ancestors : [own, ...ancestors];
+        const screen =
+          object.box === undefined
+            ? undefined
+            : screenGeometry(object.box, chain);
         nodes.push(
           Object.freeze({
             ...object,
-            ...(object.box === undefined
+            ...(screen === undefined
               ? {}
-              : screenGeometry(object.box, chain)),
-            path: nodePaths.get(object.id),
+              : {
+                  corners: screen.corners,
+                  bounds: screen.screenBox,
+                  screenBox: screen.screenBox,
+                }),
+            path: nodePaths.get(object.id) ?? object.path,
           }),
         );
         if (object.members !== undefined) collect(object.members, chain);

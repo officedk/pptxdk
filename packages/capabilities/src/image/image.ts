@@ -15,7 +15,7 @@ import {
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedObject,
+  type ObjectResolution,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -689,7 +689,7 @@ export const imageCapability = {
         };
       },
 
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const x = dimension(resolveContext.layoutBox?.x ?? declaredX, "x", 0);
         const y = dimension(resolveContext.layoutBox?.y ?? declaredY, "y", 0);
         let width: number;

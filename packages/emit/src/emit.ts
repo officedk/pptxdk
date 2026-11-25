@@ -2045,6 +2045,7 @@ export function emit(
   const report: BuildReport = Object.freeze({
     evidence: "generation",
     ...(typeof internal.title === "string" ? { title: internal.title } : {}),
+    dimensions: resolution.report.dimensions,
     target: Object.freeze({
       name: target.name,
       format: target.format,
@@ -2063,6 +2064,7 @@ export function emit(
   const query = createBuildQuery(
     internal.slides.map((slide, index) => ({
       observation: report.slides[index]!,
+      dimensions: report.dimensions,
       content: slide.content,
       resources: emittedSlides[index]!.resourceObservations,
     })),

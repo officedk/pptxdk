@@ -18,7 +18,7 @@ import {
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedObject,
+  type ObjectResolution,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -1339,7 +1339,7 @@ export const chartCapability = {
           minContentHeight: declaredHeight ?? 0,
         };
       },
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const x = resolveContext.layoutBox?.x ?? declaredX ?? 0;
         const y = resolveContext.layoutBox?.y ?? declaredY ?? 0;
         const width =

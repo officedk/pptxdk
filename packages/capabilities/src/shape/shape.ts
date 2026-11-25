@@ -18,7 +18,7 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedObject,
+  type ObjectResolution,
 } from "@pptxdk/core/capability";
 import { xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -541,7 +541,7 @@ export const shapeCapability = {
           throw error;
         }
       },
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const box =
           resolveContext.layoutBox === undefined
             ? {

@@ -14,7 +14,7 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedObject,
+  type ObjectResolution,
   type ThemeScope,
 } from "@pptxdk/core/capability";
 import { xmlEscape } from "@pptxdk/emit";
@@ -148,7 +148,7 @@ export const boxCapability: ObjectCapabilityModule = {
       contract,
       container,
       ...(morphKey !== undefined || link !== undefined ? { native } : {}),
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const box = resolveContext.layoutBox;
         if (box === undefined) {
           throw new CapabilityError(

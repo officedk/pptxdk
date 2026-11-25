@@ -6,7 +6,7 @@ import {
   type ColorValue,
   type FormatColorTransform,
   type ResolvedColor,
-  type ResolvedSlide,
+  type SlideResolution,
   type SlideBackground,
   type SlideCapabilityModule,
   type SlideEmitContext,
@@ -397,7 +397,7 @@ export const slideBackgroundCapability = {
     }
 
     return {
-      resolveSlide(resolveContext: SlideResolveContext): ResolvedSlide {
+      resolveSlide(resolveContext: SlideResolveContext): SlideResolution {
         const resolved = resolveSlideBackground(
           resolveContext.theme,
           background,

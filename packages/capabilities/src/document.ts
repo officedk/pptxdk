@@ -582,7 +582,7 @@ export {
   wipe,
   zoom,
 } from "./motion/motion-api.ts";
-export { observeMotion } from "./motion/motion-query.ts";
+export { motionSchedule, observeMotion } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
 export { font, transitions };
@@ -646,6 +646,7 @@ export type {
   MotionMomentObservation,
   MotionMomentRef,
   MotionQuery,
+  MotionSchedule,
   MotionScopeQueryMember,
   MotionScopeQueryObservation,
   MotionScopeRef,

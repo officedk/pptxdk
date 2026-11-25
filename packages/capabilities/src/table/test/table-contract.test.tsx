@@ -129,10 +129,20 @@ describe("tableCapability resolved contract", () => {
     assert.deepEqual(observed.table?.merges, [
       { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
     ]);
-    assert.deepEqual(observed.table?.cells, [
-      ["Plan Overview", "", "Page 1"],
-      ["Pro", "Wraps inside flexible middle track", "$49"],
-    ]);
+    assert.deepEqual(
+      observed.table?.cells.map((c) => ({
+        row: c.row,
+        column: c.column,
+        text: c.text,
+      })),
+      [
+        { row: 0, column: 0, text: "Plan Overview" },
+        { row: 0, column: 2, text: "Page 1" },
+        { row: 1, column: 0, text: "Pro" },
+        { row: 1, column: 1, text: "Wraps inside flexible middle track" },
+        { row: 1, column: 2, text: "$49" },
+      ],
+    );
 
     const tableQuery = resolution.query.getSlide("cover").get("pricing");
     const titleSpanBox = tableQuery

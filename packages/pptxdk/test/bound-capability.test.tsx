@@ -55,8 +55,8 @@ import {
   type MorphKey,
   type ObjectResolveContext,
   type PaintContext,
-  type ResolvedObject,
-  type ResolvedSlide,
+  type ObjectResolution,
+  type SlideResolution,
   type SlideCapabilityModule,
   type SlideEmitContext,
   type SlideResolveContext,
@@ -1805,7 +1805,7 @@ describe("bound object capability contract", () => {
         return {
           contract,
           ...(link === undefined ? {} : { native: { link } }),
-          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          resolve(resolveContext: ObjectResolveContext): ObjectResolution {
             resolveKeysSeen.push(Object.keys(resolveContext));
             const resolvedBox = resolveContext.layoutBox ?? box;
             return {
@@ -1900,7 +1900,7 @@ describe("bound object capability contract", () => {
             propagatesBaseline: false,
             checksCanvasOverflow: false,
           },
-          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          resolve(resolveContext: ObjectResolveContext): ObjectResolution {
             const members = resolveContext.resolveChildren(input.children);
             const boxes = members.objects
               .map((m) => m.box)
@@ -1946,7 +1946,7 @@ describe("bound object capability contract", () => {
       bindSlide(input) {
         const enabled = input.props["slideMeta"] === true;
         return {
-          resolveSlide(resolveContext: SlideResolveContext): ResolvedSlide {
+          resolveSlide(resolveContext: SlideResolveContext): SlideResolution {
             assert.equal("registerSharedPart" in resolveContext, false);
             assert.equal("registerPackagePart" in resolveContext, false);
             assert.equal("registerResource" in resolveContext, false);
@@ -1983,7 +1983,7 @@ describe("bound object capability contract", () => {
         });
         return {
           contract,
-          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          resolve(resolveContext: ObjectResolveContext): ObjectResolution {
             const box = { x: 10, y: 10, width: 50, height: 25 };
             return {
               observation: {
@@ -2111,7 +2111,12 @@ describe("bound object capability contract", () => {
     const resolution = resolve({ children: [deckNode] });
 
     assert.equal(Object.isFrozen(resolution), true);
-    assert.deepEqual(Object.keys(resolution), ["report", "query"]);
+    assert.deepEqual(Object.keys(resolution), [
+      "report",
+      "slides",
+      "slide",
+      "query",
+    ]);
     assert.equal(Object.getOwnPropertySymbols(resolution).length, 0);
 
     // Neither emit nor paint ran during resolve.
@@ -2224,7 +2229,7 @@ describe("bound object capability contract", () => {
             ? input.props["newBg"]
             : "#ffffff";
         return {
-          resolveSlide(): ResolvedSlide {
+          resolveSlide(): SlideResolution {
             return {
               extensions: [],
               emit: () => ({ xml: "" }),
@@ -2242,7 +2247,7 @@ describe("bound object capability contract", () => {
       slot: "background",
       bindSlide() {
         return {
-          resolveSlide(): ResolvedSlide {
+          resolveSlide(): SlideResolution {
             return {
               extensions: [],
               emit: () => ({ xml: "" }),

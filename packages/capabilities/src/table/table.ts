@@ -16,13 +16,15 @@ import {
   type EmitOutput,
   type GeometryBox,
   type NativePlaceholderRef,
-  type NativeTableObservation,
   type ObjectCapabilityModule,
+  type ObjectResolution,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
   type ResolvedColor,
-  type ResolvedObject,
+  type ResolvedTable,
+  type ResolvedTableCell as ResolvedTableCellObservation,
+  type ResolvedTableRow,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -1075,7 +1077,7 @@ export const tableCapability = {
         };
       },
 
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const requestedWidth =
           resolveContext.layoutBox?.width ??
           (typeof parsed.declaredWidth === "number"
@@ -1272,69 +1274,93 @@ export const tableCapability = {
             "Table.name contains characters not allowed in XML 1.0",
           );
         }
-        const tableParts = [
-          ...rows.map((row, rowIndex) => ({
-            kind: "row" as const,
-            ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
-            row: rowIndex,
-            box: {
-              x,
-              y: rowOffsets[rowIndex] ?? y,
-              width,
-              height: heights[rowIndex] ?? 0,
-            },
-            text: matrix[rowIndex]?.join("\t") ?? "",
-          })),
-          ...cells.map((cell) => {
+        const resolvedRowObservations: ResolvedTableRow[] = rows.map(
+          (row, rowIndex) => {
+            const rowY = rowOffsets[rowIndex] ?? y;
+            const rowHeight = heights[rowIndex] ?? 0;
+            const rowPath = `${resolveContext.path}/row[${row.authorId ?? rowIndex}]`;
+            return {
+              index: rowIndex,
+              ...(row.authorId === undefined ? {} : { id: row.authorId }),
+              path: rowPath,
+              y: rowY,
+              height: rowHeight,
+              box: {
+                x,
+                y: rowY,
+                width,
+                height: rowHeight,
+              },
+            };
+          },
+        );
+        const resolvedCellObservations: ResolvedTableCellObservation[] =
+          cells.map((cell) => {
             const anchor = resolvedAnchors.get(`${cell.row}:${cell.column}`);
             const textMetrics = anchor?.body.textMetrics;
+            if (textMetrics === undefined) {
+              throw new Error(
+                `Missing textMetrics for table cell (${cell.row}, ${cell.column})`,
+              );
+            }
+            const rowPath =
+              resolvedRowObservations[cell.row]?.path ??
+              `${resolveContext.path}/row[${cell.row}]`;
+            const cellPath = `${rowPath}/cell[${cell.authorId ?? cell.column}]`;
             return {
-              kind: "cell" as const,
-              ...(cell.authorId === undefined
-                ? {}
-                : { authorId: cell.authorId }),
               row: cell.row,
               column: cell.column,
               rowSpan: cell.rowSpan,
               colSpan: cell.colSpan,
+              ...(cell.authorId === undefined ? {} : { id: cell.authorId }),
+              path: cellPath,
               box: cellBoxes.get(cell)!,
               text: matrix[cell.row]?.[cell.column] ?? "",
-              ...(textMetrics === undefined ? {} : { textMetrics }),
+              textMetrics,
             };
-          }),
+          });
+        const tableParts = [
+          ...resolvedRowObservations.map((rowObs) => ({
+            kind: "row" as const,
+            ...(rowObs.id === undefined ? {} : { authorId: rowObs.id }),
+            row: rowObs.index,
+            box: rowObs.box,
+            text: matrix[rowObs.index]?.join("\t") ?? "",
+          })),
+          ...resolvedCellObservations.map((cellObs) => ({
+            kind: "cell" as const,
+            ...(cellObs.id === undefined ? {} : { authorId: cellObs.id }),
+            row: cellObs.row,
+            column: cellObs.column,
+            rowSpan: cellObs.rowSpan,
+            colSpan: cellObs.colSpan,
+            box: cellObs.box,
+            text: cellObs.text,
+            textMetrics: cellObs.textMetrics,
+          })),
         ];
-        const subParts: CapabilitySubPartObservation[] = rows.map(
-          (row, rowIndex) => ({
-            ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
-            box: {
-              x,
-              y: rowOffsets[rowIndex] ?? y,
-              width,
-              height: heights[rowIndex] ?? 0,
-            },
-            text: matrix[rowIndex]?.join("\t") ?? "",
-            parts: cells
-              .filter((cell) => cell.row === rowIndex)
-              .map((cell) => {
-                const anchor = resolvedAnchors.get(
-                  `${cell.row}:${cell.column}`,
-                );
-                const textMetrics = anchor?.body.textMetrics;
-                return {
-                  ...(cell.authorId === undefined
-                    ? {}
-                    : { authorId: cell.authorId }),
-                  box: cellBoxes.get(cell)!,
-                  text: matrix[cell.row]?.[cell.column] ?? "",
-                  ...(textMetrics === undefined ? {} : { textMetrics }),
-                };
-              }),
-          }),
-        );
-        const observation: NativeTableObservation = {
-          columnWidths: [...widths],
-          rowHeights: [...heights],
-          cells: matrix,
+        const subParts: CapabilitySubPartObservation[] =
+          resolvedRowObservations.map((rowObs) => ({
+            kind: "row",
+            ...(rowObs.id === undefined ? {} : { authorId: rowObs.id }),
+            path: rowObs.path,
+            box: rowObs.box,
+            text: matrix[rowObs.index]?.join("\t") ?? "",
+            parts: resolvedCellObservations
+              .filter((cellObs) => cellObs.row === rowObs.index)
+              .map((cellObs) => ({
+                kind: "cell" as const,
+                ...(cellObs.id === undefined ? {} : { authorId: cellObs.id }),
+                path: cellObs.path,
+                box: cellObs.box,
+                text: cellObs.text,
+                textMetrics: cellObs.textMetrics,
+              })),
+          }));
+        const observation: ResolvedTable = {
+          columns: [...widths],
+          rows: resolvedRowObservations,
+          cells: resolvedCellObservations,
           merges: cells
             .filter((cell) => cell.colSpan > 1 || cell.rowSpan > 1)
             .map(({ row, column, rowSpan, colSpan }) => ({
@@ -1343,6 +1369,8 @@ export const tableCapability = {
               rowSpan,
               colSpan,
             })),
+          columnWidths: [...widths],
+          rowHeights: [...heights],
           parts: tableParts,
         };
         const annotations = motionAnnotations(motionProps, {

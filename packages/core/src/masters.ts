@@ -11,6 +11,8 @@ import {
   masterPlaceholderMapSchema,
   masterTextStylesSchema,
   placeholderMapSchema,
+  placeholderRoleSchema,
+  placeholderSzSchema,
   type EmptyPlaceholderMap,
   type MasterPlaceholderMap,
   type MasterTextStyles,
@@ -27,6 +29,7 @@ import {
   type ThemeInput,
   type ThemeOverride,
 } from "#/theme.ts";
+import type { ResolvedObject } from "#/types.ts";
 
 /** OOXML `<p:hf>` header/footer visibility flags on SlideMaster and SlideLayout (ECMA-376 §19.3.1.24). */
 export const headerFooterSchema = z
@@ -166,7 +169,28 @@ export type SlideLayoutDataProps<
   readonly placeholders?: P | undefined;
 };
 
-export const slideLayoutObservationSchema = z
+const rectObservationSchema = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  })
+  .readonly();
+
+export const resolvedPlaceholderSchema = z
+  .object({
+    key: z.string().min(1),
+    type: placeholderRoleSchema,
+    idx: z.number().int().nonnegative().optional(),
+    size: placeholderSzSchema.optional(),
+    box: rectObservationSchema.optional(),
+    style: z.record(z.string(), z.unknown()).readonly().optional(),
+  })
+  .readonly();
+export type ResolvedPlaceholder = z.infer<typeof resolvedPlaceholderSchema>;
+
+export const resolvedSlideLayoutSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().optional(),
@@ -180,27 +204,35 @@ export const slideLayoutObservationSchema = z
     themeOverride: themeOverrideSchema.optional(),
     background: slideBackgroundSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
+    objects: z.array(z.custom<ResolvedObject>()).readonly(),
+    placeholders: z.array(resolvedPlaceholderSchema).readonly(),
     capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
   })
   .readonly();
-export type SlideLayoutObservation = z.infer<
-  typeof slideLayoutObservationSchema
->;
+export type ResolvedSlideLayout = z.infer<typeof resolvedSlideLayoutSchema>;
 
-export const slideMasterObservationSchema = z
+/** Transitional aliases retained until Ticket 11. */
+export const slideLayoutObservationSchema = resolvedSlideLayoutSchema;
+export type SlideLayoutObservation = ResolvedSlideLayout;
+
+export const resolvedMasterSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
     colorMap: colorMapSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
+    objects: z.array(z.custom<ResolvedObject>()).readonly(),
+    placeholders: z.array(resolvedPlaceholderSchema).readonly(),
     capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
-    layouts: z.array(slideLayoutObservationSchema).readonly(),
+    layouts: z.array(resolvedSlideLayoutSchema).readonly(),
   })
   .readonly();
-export type SlideMasterObservation = z.infer<
-  typeof slideMasterObservationSchema
->;
+export type ResolvedMaster = z.infer<typeof resolvedMasterSchema>;
+
+/** Transitional aliases retained until Ticket 11. */
+export const slideMasterObservationSchema = resolvedMasterSchema;
+export type SlideMasterObservation = ResolvedMaster;
 
 const slideLayoutDefinitionSymbol = Symbol.for(
   "@pptxdk/core/slide-layout-definition",

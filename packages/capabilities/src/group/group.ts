@@ -15,7 +15,7 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedObject,
+  type ObjectResolution,
   type ThemeScope,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
@@ -326,7 +326,7 @@ export const groupCapability = {
       link !== undefined
         ? { native }
         : {}),
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const resolvedChildren = resolveContext.resolveChildren(input.children);
         const geometry = bounds(resolvedChildren.objects);
         const outputGeometry =

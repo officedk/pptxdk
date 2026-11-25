@@ -332,6 +332,8 @@ export async function runScenarioRoundtrip(
   const { pages } = paint(resolution, previewOptions);
   const preview: PreviewResult = Object.freeze({
     report: resolution.report,
+    slides: resolution.slides,
+    slide: (id: string) => resolution.slide(id),
     query: resolution.query,
     pages,
   });
@@ -558,6 +560,8 @@ export async function runCapabilityScenario(
     const { pages } = paint(resolution, previewOptions);
     const preview: PreviewResult = Object.freeze({
       report: resolution.report,
+      slides: resolution.slides,
+      slide: (id: string) => resolution.slide(id),
       query: resolution.query,
       pages,
     });

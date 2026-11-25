@@ -1,19 +1,27 @@
-import { BuildError, type Diagnostic } from "@pptxdk/core";
+import {
+  BuildError,
+  toBuildDiagnostic,
+  type BuildDiagnostic,
+} from "@pptxdk/core";
 import type { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
 import { assertAppendableAuthorIds } from "#/append.ts";
 import { expandReactDocument, expandReactFragment } from "#/reconciler.ts";
 
-function diagnostic(path: string, code: string, message: string): Diagnostic {
-  return { severity: "error", path, code, message };
+function diagnostic(
+  path: string,
+  code: string,
+  message: string,
+): BuildDiagnostic {
+  return toBuildDiagnostic(path, code, message);
 }
 
 function reactFailure(error: unknown, path = "deck"): BuildError {
   return new BuildError([
     diagnostic(
       path,
-      "react-render",
+      path === "fragment" ? "append" : "react-render",
       error instanceof Error ? error.message : String(error),
     ),
   ]);

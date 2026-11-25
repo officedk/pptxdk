@@ -782,7 +782,7 @@ describe("object motion", () => {
       build(createElement(InfiniteSequenceTail, { blockAfter: true })),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "no-natural-completion");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /shape\[blocked-follower\]/u,
@@ -907,7 +907,7 @@ describe("object motion", () => {
             to: "#4ADE80",
           }),
         },
-        code: "invalid-breathe-period",
+        code: "invalid-prop",
       },
       {
         id: "dark-breathe-endpoint",
@@ -919,7 +919,7 @@ describe("object motion", () => {
             to: "#000000",
           }),
         },
-        code: "invalid-breathe-colors",
+        code: "invalid-prop",
       },
       {
         id: "unfilled-breathe-target",
@@ -930,7 +930,7 @@ describe("object motion", () => {
             to: "#4ADE80",
           }),
         },
-        code: "invalid-breathe-target",
+        code: "invalid-prop",
       },
     ] as const;
 
@@ -1000,7 +1000,7 @@ describe("object motion", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-breathe-target");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /group\[group-breathe\]/u,
@@ -7163,19 +7163,16 @@ describe("object motion", () => {
 
   it("rejects invalid effect parameters, missing motion capabilities, and non-existent file targets", async () => {
     for (const [effect, code] of [
-      [fade({ duration: 0 }), "invalid-duration"],
-      [fade({ duration: null } as never), "invalid-duration"],
-      [fade({ delay: -1 }), "invalid-delay"],
-      [fade({ unexpected: true } as never), "unknown-parameter"],
-      [fade({ easing: null } as never), "invalid-easing"],
-      [fade({ by: "letter", intervalMs: 0 }), "invalid-motion-interval"],
-      [
-        fade({ easing: { accelerate: 0.8, decelerate: 0.4 } }),
-        "invalid-easing",
-      ],
-      [wipe({ from: null } as never), "invalid-direction"],
-      [floatDown({ from: "top" } as never), "invalid-motion"],
-      [fade({ by: "paragraph" }), "invalid-motion-granularity"],
+      [fade({ duration: 0 }), "invalid-prop"],
+      [fade({ duration: null } as never), "invalid-prop"],
+      [fade({ delay: -1 }), "invalid-prop"],
+      [fade({ unexpected: true } as never), "unknown-prop"],
+      [fade({ easing: null } as never), "invalid-prop"],
+      [fade({ by: "letter", intervalMs: 0 }), "invalid-prop"],
+      [fade({ easing: { accelerate: 0.8, decelerate: 0.4 } }), "invalid-prop"],
+      [wipe({ from: null } as never), "invalid-prop"],
+      [floatDown({ from: "top" } as never), "invalid-prop"],
+      [fade({ by: "paragraph" }), "invalid-prop"],
     ] as const) {
       await assert.rejects(
         build(
@@ -7334,7 +7331,7 @@ describe("object motion", () => {
     const invalidInputs = [
       {
         element: scopeDeck({ motion: "false" }),
-        code: "invalid-motion",
+        code: "invalid-prop",
         path: /motion-scope/u,
       },
       {
@@ -7348,12 +7345,12 @@ describe("object motion", () => {
             animatedShape("box-child"),
           ),
         ),
-        code: "invalid-motion",
+        code: "invalid-prop",
         path: /box/u,
       },
       {
         element: scopeDeck({ delayMs: 800 }),
-        code: "unknown-parameter",
+        code: "unknown-prop",
         path: /motion-scope/u,
       },
       {
@@ -7364,7 +7361,7 @@ describe("object motion", () => {
             animatedShape("step-child"),
           ),
         ),
-        code: "unknown-parameter",
+        code: "unknown-prop",
         path: /motion-step/u,
       },
     ] as const;

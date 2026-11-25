@@ -251,9 +251,7 @@ describe("scoped author ids", () => {
     );
     await assert.rejects(build(duplicatedParagraph), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.ok(
-        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
-      );
+      assert.ok(error.diagnostics.some(({ code }) => code === "duplicate-id"));
       return true;
     });
 
@@ -269,9 +267,7 @@ describe("scoped author ids", () => {
     );
     await assert.rejects(build(duplicatedSpan), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.ok(
-        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
-      );
+      assert.ok(error.diagnostics.some(({ code }) => code === "duplicate-id"));
       return true;
     });
 
@@ -305,7 +301,7 @@ describe("scoped author ids", () => {
       await assert.rejects(build(document), (error: unknown) => {
         assert.ok(error instanceof BuildError);
         const message =
-          error.diagnostics.find(({ code }) => code === "unknown-parameter")
+          error.diagnostics.find(({ code }) => code === "unknown-prop")
             ?.message ?? "";
         assert.match(
           message,
@@ -332,9 +328,7 @@ describe("scoped author ids", () => {
     );
     await assert.rejects(build(duplicated), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.ok(
-        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
-      );
+      assert.ok(error.diagnostics.some(({ code }) => code === "duplicate-id"));
       return true;
     });
 

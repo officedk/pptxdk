@@ -64,9 +64,7 @@ describe("Placeholder capability acceptance & isolation", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          (diag) => diag.code === "missing-placeholder-binding",
-        ),
+        error.diagnostics.some((diag) => diag.code === "broken-reference"),
     );
 
     assert.throws(
@@ -84,7 +82,7 @@ describe("Placeholder capability acceptance & isolation", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "unknown-parameter"),
+        error.diagnostics.some((diag) => diag.code === "unknown-prop"),
     );
 
     const badChildDoc = await expandDocument(
@@ -116,7 +114,7 @@ describe("Placeholder capability acceptance & isolation", () => {
       () => resolveDocument(badChildDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "unsupported-children"),
+        error.diagnostics.some((diag) => diag.code === "invalid-structure"),
     );
   });
 

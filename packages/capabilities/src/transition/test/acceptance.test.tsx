@@ -138,7 +138,7 @@ describe("Transition capability acceptance & bound slide contract", () => {
       () => emit(resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+        error.diagnostics.some((diag) => diag.code === "target-violation"),
     );
 
     const emitted = emit(resolution, { target: targets.transitional });
@@ -189,7 +189,9 @@ describe("Transition capability acceptance & bound slide contract", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some(
-          (diag) => diag.code === "morph-object-kind-mismatch",
+          (diag) =>
+            diag.code === "invalid-continuity" &&
+            diag.reason === "kind-mismatch",
         ),
     );
   });

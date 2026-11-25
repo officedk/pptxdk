@@ -2,29 +2,41 @@ import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
 import {
+  BuildError,
   CodegenError,
   CommonNode,
   build,
+  buildDiagnosticSchema,
   codegen,
   codegenDiagnosticSchema,
+  createMorphScope,
+  emit,
   font,
   preset,
   previewErrorSchema,
   previewPlaceholderSchema,
   resolve,
   shapeCapability,
+  targets,
+  type BuildDiagnostic,
   type CodegenDiagnostic,
   type PreviewError,
 } from "@officedk/pptxdk";
 import {
+  buildDiagnosticSchema as buildSubpathDiagnosticSchema,
   createCodegen,
   createResolver,
   previewErrorSchema as buildPreviewErrorSchema,
   previewPlaceholderSchema as buildPreviewPlaceholderSchema,
+  selectCapabilities,
+  type BuildDiagnostic as BuildSubpathDiagnostic,
 } from "@officedk/pptxdk/build";
 import {
+  buildDiagnosticSchema as nodeBuildDiagnosticSchema,
+  buildFromSource,
   previewErrorSchema as nodePreviewErrorSchema,
   previewPlaceholderSchema as nodePreviewPlaceholderSchema,
+  type BuildDiagnostic as NodeSubpathDiagnostic,
 } from "@officedk/pptxdk/node";
 import {
   paint,
@@ -32,19 +44,37 @@ import {
   previewErrorSchema as previewSubpathErrorSchema,
   previewPlaceholderSchema as previewSubpathPlaceholderSchema,
 } from "@officedk/pptxdk/preview";
-import { Deck, Image, Shape, Slide, Text } from "@officedk/pptxdk/react";
+import {
+  Deck,
+  Image,
+  Shape,
+  Slide,
+  Text,
+  appendJSX,
+  buildDiagnosticSchema as reactBuildDiagnosticSchema,
+  expandDocument,
+  type BuildDiagnostic as ReactSubpathDiagnostic,
+} from "@officedk/pptxdk/react";
 import {
   box,
+  buildDiagnosticSchema as vanillaBuildDiagnosticSchema,
   cell,
   chart,
   deck,
+  defineSlideLayout,
+  group,
   image,
   notes,
+  placeholder,
   row,
+  section,
   shape,
   slide,
+  slideLayout,
+  slideMaster,
   table,
   text,
+  type BuildDiagnostic as VanillaSubpathDiagnostic,
 } from "@officedk/pptxdk/vanilla";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
@@ -810,5 +840,598 @@ describe("typed stage errors & schemas — PreviewError, PreviewPlaceholder, and
     expect(paintedPage1.pages[0]?.diagnostics).toEqual([]);
     expect(paintedPage1.pages[0]?.svg).toContain("<clipPath");
     expect(paintedPage1.pages[0]?.png).toBeInstanceOf(Uint8Array);
+  });
+});
+
+function captureBuildDiagnostic(fn: () => unknown): BuildDiagnostic {
+  try {
+    fn();
+    expect.unreachable("Expected BuildError to be thrown");
+  } catch (error) {
+    expect(error).toBeInstanceOf(BuildError);
+    const diag = (error as BuildError).diagnostics[0];
+    expect(diag).toBeDefined();
+    expect("severity" in (diag as object)).toBe(false);
+    const parsed = buildDiagnosticSchema.safeParse(diag);
+    expect(parsed.success).toBe(true);
+    return diag!;
+  }
+}
+
+async function captureAsyncBuildDiagnostic(
+  fn: () => Promise<unknown>,
+): Promise<BuildDiagnostic> {
+  try {
+    await fn();
+    expect.unreachable("Expected async BuildError to be thrown");
+  } catch (error) {
+    expect(error).toBeInstanceOf(BuildError);
+    const diag = (error as BuildError).diagnostics[0];
+    expect(diag).toBeDefined();
+    expect("severity" in (diag as object)).toBe(false);
+    const parsed = buildDiagnosticSchema.safeParse(diag);
+    expect(parsed.success).toBe(true);
+    return diag!;
+  }
+}
+
+describe("typed stage errors & schemas — BuildDiagnostic discriminated union", () => {
+  it("exports identical buildDiagnosticSchema and BuildDiagnostic across ., ./build, ./node, ./vanilla, and ./react and rejects legacy severity", () => {
+    expect(buildDiagnosticSchema).toBeDefined();
+    expect(buildSubpathDiagnosticSchema).toBe(buildDiagnosticSchema);
+    expect(nodeBuildDiagnosticSchema).toBe(buildDiagnosticSchema);
+    expect(vanillaBuildDiagnosticSchema).toBe(buildDiagnosticSchema);
+    expect(reactBuildDiagnosticSchema).toBe(buildDiagnosticSchema);
+
+    const sample: BuildDiagnostic = {
+      code: "invalid-options",
+      path: "build",
+      message: "Build options must be an object",
+    };
+    const asBuild: BuildSubpathDiagnostic = sample;
+    const asNode: NodeSubpathDiagnostic = asBuild;
+    const asVanilla: VanillaSubpathDiagnostic = asNode;
+    const asReact: ReactSubpathDiagnostic = asVanilla;
+    expect(buildDiagnosticSchema.parse(asReact)).toEqual(sample);
+
+    expect(
+      buildDiagnosticSchema.safeParse({
+        severity: "error",
+        code: "invalid-options",
+        path: "build",
+        message: "Legacy severity field must be rejected",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("produces unknown-prop, invalid-prop, invalid-style, invalid-structure, duplicate-id, broken-reference, and invalid-continuity with field and branch payloads", () => {
+    // 1. unknown-prop on props, style, and options
+    const unknownNodeProp = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            new CommonNode("shape", "shape", {
+              id: "sh1",
+              bogusProp: 123,
+              style: { width: 80, height: 40 },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (unknownNodeProp.code === "unknown-prop") {
+      expect(unknownNodeProp.path).toBe("deck/slide[s1]/shape[sh1]");
+      expect(unknownNodeProp.prop).toBe("bogusProp");
+      expect(unknownNodeProp.field).toBe("bogusProp");
+      expect(unknownNodeProp.scope).toBe("props");
+    } else {
+      expect.unreachable(`Expected unknown-prop, got ${unknownNodeProp.code}`);
+    }
+
+    const unknownStyleProp = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            shape({
+              id: "sh-style",
+              style: {
+                width: 80,
+                height: 40,
+                bogusStyle: "nope",
+              } as never,
+            }),
+          ),
+        ),
+      ),
+    );
+    if (unknownStyleProp.code === "unknown-prop") {
+      expect(unknownStyleProp.path).toBe("deck/slide[s1]/shape[sh-style]");
+      expect(unknownStyleProp.prop).toBe("bogusStyle");
+      expect(unknownStyleProp.field).toBe("style.bogusStyle");
+      expect(unknownStyleProp.scope).toBe("style");
+    } else {
+      expect.unreachable(`Expected unknown-prop, got ${unknownStyleProp.code}`);
+    }
+
+    const validResolution = resolve(
+      deck({ width: 320, height: 180 }).append(slide({ id: "s1" })),
+    );
+    const unknownOptionProp = captureBuildDiagnostic(() =>
+      emit(validResolution, { unexpectedFlag: true } as never),
+    );
+    if (unknownOptionProp.code === "unknown-prop") {
+      expect(unknownOptionProp.path).toBe("build");
+      expect(unknownOptionProp.prop).toBe("unexpectedFlag");
+      expect(unknownOptionProp.field).toBe("unexpectedFlag");
+      expect(unknownOptionProp.scope).toBe("options");
+    } else {
+      expect.unreachable(
+        `Expected unknown-prop, got ${unknownOptionProp.code}`,
+      );
+    }
+
+    // 2. invalid-prop with localized field
+    const invalidDeckWidth = captureBuildDiagnostic(() =>
+      resolve(deck({ width: -10, height: 180 }).append(slide({ id: "s1" }))),
+    );
+    if (invalidDeckWidth.code === "invalid-prop") {
+      expect(invalidDeckWidth.path).toBe("deck");
+      expect(invalidDeckWidth.field).toBe("width");
+    } else {
+      expect.unreachable(`Expected invalid-prop, got ${invalidDeckWidth.code}`);
+    }
+
+    // 3. invalid-style with localized field
+    const invalidWidthStyle = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            shape({
+              id: "bad-w",
+              style: { width: -20, height: 40 },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (invalidWidthStyle.code === "invalid-style") {
+      expect(invalidWidthStyle.path).toBe("deck/slide[s1]/shape[bad-w]");
+      expect(invalidWidthStyle.field).toBe("style.width");
+    } else {
+      expect.unreachable(
+        `Expected invalid-style, got ${invalidWidthStyle.code}`,
+      );
+    }
+
+    const invalidBgStyle = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            shape({
+              id: "bad-bg",
+              style: {
+                width: 80,
+                height: 40,
+                background: "not-a-valid-color" as never,
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (invalidBgStyle.code === "invalid-style") {
+      expect(invalidBgStyle.path).toBe("deck/slide[s1]/shape[bad-bg]");
+      expect(invalidBgStyle.field).toBe("style.background");
+    } else {
+      expect.unreachable(`Expected invalid-style, got ${invalidBgStyle.code}`);
+    }
+
+    // 4. invalid-structure
+    const emptyGroupDiag = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(group({ id: "g-empty" })),
+        ),
+      ),
+    );
+    expect(emptyGroupDiag.code).toBe("invalid-structure");
+    expect(emptyGroupDiag.path).toBe("deck/slide[s1]/group[g-empty]");
+
+    // 5. duplicate-id
+    const duplicateIdDiag = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            shape({ id: "dup", style: { width: 40, height: 40 } }),
+            shape({ id: "dup", style: { width: 40, height: 40 } }),
+          ),
+        ),
+      ),
+    );
+    if (duplicateIdDiag.code === "duplicate-id") {
+      expect(duplicateIdDiag.path).toBe("deck/slide[s1]/shape[dup]");
+      expect(duplicateIdDiag.field).toBe("id");
+      expect(duplicateIdDiag.identifier).toBe("dup");
+    } else {
+      expect.unreachable(`Expected duplicate-id, got ${duplicateIdDiag.code}`);
+    }
+
+    // 6. broken-reference (slide link & unknown layout placeholder)
+    const brokenLinkDiag = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            shape({
+              id: "jump",
+              link: { id: "nonexistent-slide" },
+              style: { width: 80, height: 40 },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (brokenLinkDiag.code === "broken-reference") {
+      expect(brokenLinkDiag.path).toBe("deck/slide[s1]/shape[jump]");
+      expect(brokenLinkDiag.field).toBe("link");
+      expect(brokenLinkDiag.reference).toBe("nonexistent-slide");
+      expect(brokenLinkDiag.targetKind).toBe("slide");
+    } else {
+      expect.unreachable(
+        `Expected broken-reference, got ${brokenLinkDiag.code}`,
+      );
+    }
+
+    const titleLayout = defineSlideLayout({
+      id: "title-only",
+      placeholders: {
+        title: {
+          type: "title",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 200,
+            height: 50,
+          },
+        },
+      },
+    });
+    const brokenPhDiag = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slideMaster({ id: "m1" }).append(slideLayout(titleLayout)),
+          slide({ id: "s1", layout: titleLayout }).append(
+            placeholder({ placeholder: "missingSlot" as never }),
+          ),
+        ),
+      ),
+    );
+    if (brokenPhDiag.code === "broken-reference") {
+      expect(brokenPhDiag.field).toBe("placeholder");
+      expect(brokenPhDiag.reference).toBe("missingSlot");
+      expect(brokenPhDiag.targetKind).toBe("placeholder");
+    } else {
+      expect.unreachable(`Expected broken-reference, got ${brokenPhDiag.code}`);
+    }
+
+    // 7. invalid-continuity
+    const morphScope = createMorphScope();
+    const continuityDiag = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            shape({
+              id: "hero",
+              name: "CustomHero",
+              morphKey: morphScope.handle("hero"),
+              style: { width: 80, height: 40 },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (continuityDiag.code === "invalid-continuity") {
+      expect(continuityDiag.path).toBe("deck/slide[s1]/shape[hero]");
+      expect(continuityDiag.field).toBe("morphKey");
+      expect(continuityDiag.reason).toBe("name-conflict");
+    } else {
+      expect.unreachable(
+        `Expected invalid-continuity, got ${continuityDiag.code}`,
+      );
+    }
+  });
+
+  it("produces font-unavailable and font-missing-glyph across resolve and emit with structured font and character payloads", () => {
+    const unbundledFont = font("Unbundled Display");
+    const nonEmbeddableJost = font(
+      "Jost*",
+      [{ weight: 400, data: jostRegularBytes }],
+      { embeddable: false },
+    );
+
+    // 1. font-unavailable in resolve (content-sized Text)
+    const resolveMissingFont = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            text("Auto-height headline", {
+              id: "t-auto",
+              style: {
+                width: 200,
+                fontFamily: unbundledFont,
+                fontWeight: 700,
+                fontStyle: "italic",
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (resolveMissingFont.code === "font-unavailable") {
+      expect(resolveMissingFont.path).toBe("deck/slide[s1]/text[t-auto]");
+      expect(resolveMissingFont.font).toEqual({
+        family: "Unbundled Display",
+        weight: 700,
+        style: "italic",
+      });
+      expect(resolveMissingFont.reason).toBe("missing-resource");
+    } else {
+      expect.unreachable(
+        `Expected font-unavailable, got ${resolveMissingFont.code}`,
+      );
+    }
+
+    // 2. font-unavailable in emit when embedFonts is requested on fixed-box system font
+    const fixedSystemFontRes = resolve(
+      deck({ width: 320, height: 180 }).append(
+        slide({ id: "s1" }).append(
+          text("Fixed-box headline", {
+            id: "t-fixed",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 200,
+              height: 48,
+              fontFamily: unbundledFont,
+            },
+          }),
+        ),
+      ),
+    );
+    const emitMissingFont = captureBuildDiagnostic(() =>
+      emit(fixedSystemFontRes, { embedFonts: "full" }),
+    );
+    if (emitMissingFont.code === "font-unavailable") {
+      expect(emitMissingFont.path).toBe("deck/slide[s1]/text[t-fixed]");
+      expect(emitMissingFont.font).toEqual({
+        family: "Unbundled Display",
+        weight: 400,
+        style: "normal",
+      });
+      expect(emitMissingFont.reason).toBe("missing-resource");
+    } else {
+      expect.unreachable(
+        `Expected font-unavailable, got ${emitMissingFont.code}`,
+      );
+    }
+
+    const nonEmbeddableRes = resolve(
+      deck({ width: 320, height: 180 }).append(
+        slide({ id: "s1" }).append(
+          text("Non-embeddable", {
+            id: "t-no-embed",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 200,
+              height: 48,
+              fontFamily: nonEmbeddableJost,
+            },
+          }),
+        ),
+      ),
+    );
+    const emitNotEmbeddable = captureBuildDiagnostic(() =>
+      emit(nonEmbeddableRes, { embedFonts: "subset" }),
+    );
+    if (emitNotEmbeddable.code === "font-unavailable") {
+      expect(emitNotEmbeddable.font.family).toBe("Jost*");
+      expect(emitNotEmbeddable.reason).toBe("not-embeddable");
+    } else {
+      expect.unreachable(
+        `Expected font-unavailable, got ${emitNotEmbeddable.code}`,
+      );
+    }
+
+    // 3. font-missing-glyph in content-sized resolve
+    const resolveMissingGlyph = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            text("Hello 汉字", {
+              id: "t-cjk",
+              style: { width: 200, fontFamily: jostFont },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (resolveMissingGlyph.code === "font-missing-glyph") {
+      expect(resolveMissingGlyph.path).toBe("deck/slide[s1]/text[t-cjk]");
+      expect(resolveMissingGlyph.font).toEqual({
+        family: "Jost*",
+        weight: 400,
+        style: "normal",
+      });
+      expect(resolveMissingGlyph.characters).toEqual(["汉", "字"]);
+    } else {
+      expect.unreachable(
+        `Expected font-missing-glyph, got ${resolveMissingGlyph.code}`,
+      );
+    }
+
+    // 4. font-missing-glyph in fixed-box emit with embedFonts ("full" and "subset")
+    const fixedMissingGlyphRes = resolve(
+      deck({ width: 320, height: 180 }).append(
+        slide({ id: "s1" }).append(
+          text("Fixed 汉", {
+            id: "t-fixed-cjk",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 200,
+              height: 48,
+              fontFamily: jostFont,
+            },
+          }),
+        ),
+      ),
+    );
+    for (const mode of ["full", "subset"] as const) {
+      const emitMissingGlyph = captureBuildDiagnostic(() =>
+        emit(fixedMissingGlyphRes, { embedFonts: mode }),
+      );
+      if (emitMissingGlyph.code === "font-missing-glyph") {
+        expect(emitMissingGlyph.path).toBe("deck/slide[s1]/text[t-fixed-cjk]");
+        expect(emitMissingGlyph.font).toEqual({
+          family: "Jost*",
+          weight: 400,
+          style: "normal",
+        });
+        expect(emitMissingGlyph.characters).toEqual(["汉"]);
+      } else {
+        expect.unreachable(
+          `Expected font-missing-glyph for ${mode}, got ${emitMissingGlyph.code}`,
+        );
+      }
+    }
+  });
+
+  it("produces target-violation, missing-capability, invalid-resource, invalid-options, and render-failed across sync and async SDK entries", async () => {
+    // 1. target-violation on baselineOnly target with p14 sections
+    const sectionedRes = resolve(
+      deck({ width: 320, height: 180 }).append(
+        section({ name: "Intro" }).append(slide({ id: "s1" })),
+      ),
+    );
+    const targetDiag = captureBuildDiagnostic(() =>
+      emit(sectionedRes, { target: targets.baselineOnly }),
+    );
+    if (targetDiag.code === "target-violation") {
+      expect(targetDiag.path).toBe("deck/sections");
+      expect(targetDiag.target).toBe("baseline-only");
+      expect(targetDiag.extension).toBe("p14");
+      expect(targetDiag.mechanism).toBe("sections");
+    } else {
+      expect.unreachable(`Expected target-violation, got ${targetDiag.code}`);
+    }
+
+    // 2. missing-capability in selectCapabilities and bare createResolver
+    const unknownCapDiag = await captureAsyncBuildDiagnostic(() =>
+      selectCapabilities(["nonexistent-cap" as never]),
+    );
+    if (unknownCapDiag.code === "missing-capability") {
+      expect(unknownCapDiag.path).toBe("build.capabilities[0]");
+      expect(unknownCapDiag.capability).toBe("nonexistent-cap");
+    } else {
+      expect.unreachable(
+        `Expected missing-capability, got ${unknownCapDiag.code}`,
+      );
+    }
+
+    const bareResolve = createResolver([]);
+    const missingShapeCapDiag = captureBuildDiagnostic(() =>
+      bareResolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            shape({ id: "sh1", style: { width: 50, height: 50 } }),
+          ),
+        ),
+      ),
+    );
+    if (missingShapeCapDiag.code === "missing-capability") {
+      expect(missingShapeCapDiag.path).toBe("deck/slide[s1]/shape[sh1]");
+      expect(missingShapeCapDiag.capability).toBe("shape");
+    } else {
+      expect.unreachable(
+        `Expected missing-capability, got ${missingShapeCapDiag.code}`,
+      );
+    }
+
+    // 3. invalid-resource on empty image bytes
+    const badImageDiag = captureBuildDiagnostic(() =>
+      resolve(
+        deck({ width: 320, height: 180 }).append(
+          slide({ id: "s1" }).append(
+            image({
+              id: "empty-img",
+              src: new Uint8Array(0),
+              style: { width: 64, height: 64 },
+            }),
+          ),
+        ),
+      ),
+    );
+    if (badImageDiag.code === "invalid-resource") {
+      expect(badImageDiag.path).toBe("deck/slide[s1]/image[empty-img]");
+      expect(badImageDiag.resourceKind).toBe("image");
+    } else {
+      expect.unreachable(`Expected invalid-resource, got ${badImageDiag.code}`);
+    }
+
+    // 4. invalid-options on emit and buildFromSource
+    const nullOptionsDiag = captureBuildDiagnostic(() =>
+      emit(sectionedRes, null as never),
+    );
+    expect(nullOptionsDiag.code).toBe("invalid-options");
+    expect(nullOptionsDiag.path).toBe("build");
+
+    const badExportNameDiag = await captureAsyncBuildDiagnostic(() =>
+      buildFromSource(new URL(import.meta.url), { exportName: "" }),
+    );
+    if (badExportNameDiag.code === "invalid-options") {
+      expect(badExportNameDiag.path).toBe("build.exportName");
+      expect(badExportNameDiag.field).toBe("exportName");
+    } else {
+      expect.unreachable(
+        `Expected invalid-options, got ${badExportNameDiag.code}`,
+      );
+    }
+
+    // 5. render-failed on expandDocument and appendJSX
+    const Boom = (): never => {
+      throw new Error("Component exploded");
+    };
+    const expandFailDiag = await captureAsyncBuildDiagnostic(() =>
+      expandDocument(
+        <Deck width={320} height={180}>
+          <Slide id="s1">
+            <Boom />
+          </Slide>
+        </Deck>,
+      ),
+    );
+    if (expandFailDiag.code === "render-failed") {
+      expect(expandFailDiag.path).toBe("deck");
+      expect(expandFailDiag.phase).toBe("expand");
+      expect(expandFailDiag.message).toContain("Component exploded");
+    } else {
+      expect.unreachable(`Expected render-failed, got ${expandFailDiag.code}`);
+    }
+
+    const targetSlide = slide({ id: "s1" });
+    const appendFailDiag = await captureAsyncBuildDiagnostic(() =>
+      appendJSX(targetSlide, <Boom />),
+    );
+    if (appendFailDiag.code === "render-failed") {
+      expect(appendFailDiag.path).toBe("fragment");
+      expect(appendFailDiag.phase).toBe("append");
+      expect(appendFailDiag.message).toContain("Component exploded");
+    } else {
+      expect.unreachable(`Expected render-failed, got ${appendFailDiag.code}`);
+    }
   });
 });

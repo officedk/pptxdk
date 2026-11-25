@@ -339,7 +339,7 @@ describe("line and area depth", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-data");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /Chart\.groups\[0\]\.series\[0\]\.points\[2\]\.color/u,

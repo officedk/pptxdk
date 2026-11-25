@@ -1079,7 +1079,7 @@ describe("mixed layout, layering, and component reflow", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-layout-context",
+        error.diagnostics[0]?.code === "invalid-structure",
     );
   });
 

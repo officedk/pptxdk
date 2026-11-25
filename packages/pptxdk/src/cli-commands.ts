@@ -23,12 +23,13 @@ import {
   importDiagnosticSchema,
   targetNameSchema,
   targets,
+  type BuildDiagnostic,
   type CodegenFileContent,
-  type Diagnostic,
   type FatalImportIssue,
   type ImportDiagnostic,
   type ImportLocation,
   type ImportResult,
+  type LegacyReportDiagnostic,
   type Target,
 } from "@officedk/pptxdk";
 import {
@@ -277,13 +278,13 @@ function isCancelledError(error: unknown, signal?: AbortSignal): boolean {
   );
 }
 
-function extractWarnings(diagnostics: readonly Diagnostic[]) {
+function extractWarnings(diagnostics: readonly LegacyReportDiagnostic[]) {
   return diagnostics
     .filter((diagnostic) => diagnostic.severity === "warning")
     .map(({ path, code, message }) => ({ path, code, message }));
 }
 
-function toBuildFailureDiagnostics(diagnostics: readonly Diagnostic[]) {
+function toBuildFailureDiagnostics(diagnostics: readonly BuildDiagnostic[]) {
   return diagnostics.map(({ path, code, message }) => ({
     path,
     code,

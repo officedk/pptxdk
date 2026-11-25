@@ -1035,7 +1035,7 @@ describe("public theme entry", () => {
     ]) {
       await assert.rejects(build(scopedDeck(scope)), (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-theme-scope");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[invalid-scope]/box[scope]",
@@ -1048,7 +1048,7 @@ describe("public theme entry", () => {
       build(scopedDeck({ colors: { ink: "missing-token" } })),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-color");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[invalid-scope]/box[scope]/text[sample]",

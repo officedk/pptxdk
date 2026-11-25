@@ -51,9 +51,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert.equal(diag.path, "deck");
           return true;
         },
@@ -72,8 +72,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) =>
-              d.code === "invalid-color" || d.code === "unknown-color-token",
+            (d) => d.code === "invalid-style",
           );
           assert(diag !== undefined, "Expected invalid color diagnostic");
           assert.equal(diag.path, "deck");
@@ -94,9 +93,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert.equal(diag.path, "deck/slide[slide-with-invalid-style]");
           return true;
         },
@@ -118,9 +117,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert(
             diag.path.includes("box[invalid-box]"),
             `Expected path to include box[invalid-box], got: ${diag.path}`,
@@ -145,9 +144,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert(
             diag.path.includes("group[invalid-group]"),
             `Expected path to include group[invalid-group], got: ${diag.path}`,
@@ -175,10 +174,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-parameter",
-          );
-          assert(diag !== undefined, "Expected unknown-parameter diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert(
             diag.message.includes("unsupportedProp"),
             `Expected message to mention unsupportedProp, got: ${diag.message}`,
@@ -201,10 +198,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-style",
-          );
-          assert(diag !== undefined, "Expected unknown-style diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert(
             diag.message.includes("invalidStyleProp"),
             `Expected message to mention invalidStyleProp, got: ${diag.message}`,
@@ -371,12 +366,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "baseline-measurement-unavailable",
+            (d) => d.code === "invalid-structure",
           );
-          assert(
-            diag !== undefined,
-            "Expected baseline-measurement-unavailable diagnostic",
-          );
+          assert(diag !== undefined, "Expected invalid-structure diagnostic");
           return true;
         },
       );
@@ -540,12 +532,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "baseline-measurement-unavailable",
+            (d) => d.code === "invalid-structure",
           );
-          assert(
-            diag !== undefined,
-            "Expected baseline-measurement-unavailable diagnostic",
-          );
+          assert(diag !== undefined, "Expected invalid-structure diagnostic");
           assert.match(diag.path ?? "", /shape\[middle-anchor-child-shape\]/u);
           return true;
         },
@@ -595,11 +584,11 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "unsupported-baseline-context",
+            (d) => d.code === "invalid-structure",
           );
           assert(
             diag !== undefined,
-            "Expected unsupported-baseline-context diagnostic for textless shape",
+            "Expected invalid-structure diagnostic for textless shape",
           );
           return true;
         },
@@ -649,11 +638,11 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "baseline-measurement-unavailable",
+            (d) => d.code === "invalid-structure",
           );
           assert(
             diag !== undefined,
-            "Expected baseline-measurement-unavailable diagnostic for middle-aligned text in baseline",
+            "Expected invalid-structure diagnostic for middle-aligned text in baseline",
           );
           return true;
         },
@@ -680,11 +669,11 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "unsupported-baseline-context",
+            (d) => d.code === "invalid-structure",
           );
           assert(
             diag !== undefined,
-            "Expected unsupported-baseline-context diagnostic for direct textless shape in baseline",
+            "Expected invalid-structure diagnostic for direct textless shape in baseline",
           );
           return true;
         },
@@ -707,10 +696,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-parameter",
-          );
-          assert(diag !== undefined, "Expected unknown-parameter diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert.match(
             diag.message,
             /Shape contains unsupported parameter unsupportedParameter/u,
@@ -736,10 +723,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-style",
-          );
-          assert(diag !== undefined, "Expected unknown-style diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert.match(
             diag.message,
             /style contains unsupported property unsupportedStyleProp/u,
@@ -944,11 +929,12 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "morph-object-kind-mismatch",
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "kind-mismatch",
           );
           assert(
             diag !== undefined,
-            "Expected morph-object-kind-mismatch error",
+            "Expected invalid-continuity kind-mismatch error",
           );
           assert.match(diag.message, /grpSp/u);
           assert.match(diag.message, /sp/u);
@@ -1009,13 +995,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-parameter",
-          );
-          assert(
-            diag !== undefined,
-            "Expected unknown-parameter for unknownProp",
-          );
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop for unknownProp");
           return true;
         },
       );

@@ -416,7 +416,8 @@ describe("bound object capability contract", () => {
         assert(error instanceof BuildError);
         assert.ok(
           error.diagnostics.some(
-            (d) => d.code === "morph-object-name-conflict",
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "name-conflict",
           ),
         );
         return true;
@@ -866,7 +867,11 @@ describe("bound object capability contract", () => {
       ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(error.diagnostics.some((d) => d.code === "invalid-link"));
+        assert.ok(
+          error.diagnostics.some(
+            (d) => d.code === "invalid-prop" && d.field === "link",
+          ),
+        );
         return true;
       },
     );
@@ -888,7 +893,11 @@ describe("bound object capability contract", () => {
       ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(error.diagnostics.some((d) => d.code === "invalid-link"));
+        assert.ok(
+          error.diagnostics.some(
+            (d) => d.code === "invalid-prop" && d.field === "link",
+          ),
+        );
         return true;
       },
     );
@@ -1229,7 +1238,7 @@ describe("bound object capability contract", () => {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(
-          error.diagnostics.some((d) => d.code === "link-needs-object"),
+          error.diagnostics.some((d) => d.code === "invalid-structure"),
         );
         return true;
       },
@@ -1248,7 +1257,10 @@ describe("bound object capability contract", () => {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(
-          error.diagnostics.some((d) => d.code === "morph-needs-object"),
+          error.diagnostics.some(
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "needs-object",
+          ),
         );
         return true;
       },
@@ -1758,7 +1770,10 @@ describe("bound object capability contract", () => {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(
-          error.diagnostics.some((d) => d.code === "morph-inside-group"),
+          error.diagnostics.some(
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "inside-group",
+          ),
         );
         return true;
       },
@@ -2192,9 +2207,7 @@ describe("bound object capability contract", () => {
       () => emit(baselineResolution, { target: targets.baselineOnly }),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(
-          error.diagnostics.some((d) => d.code === "forbidden-mechanism"),
-        );
+        assert.ok(error.diagnostics.some((d) => d.code === "target-violation"));
         return true;
       },
     );
@@ -2325,7 +2338,7 @@ describe("bound object capability contract", () => {
         () => resolve({ children: [badDoc] }),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-xml-character");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.equal(error.diagnostics[0]?.path, expectedPath);
           return true;
         },
@@ -2374,7 +2387,7 @@ describe("bound object capability contract", () => {
       () => resolveWithWrapper({ children: [unlaidOutBoxDoc] }),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "layout-unavailable");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[bad-box-slide]/custom-wrapper[wrap]/box[b1]",
@@ -2397,7 +2410,9 @@ describe("bound object capability contract", () => {
         }),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(error.diagnostics.some((d) => d.code === "empty-group"));
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "invalid-structure"),
+        );
         return true;
       },
     );
@@ -2621,7 +2636,7 @@ describe("bound object capability contract", () => {
         () => resolveImages({ children: [badDeck] }),
         (error: unknown) =>
           error instanceof BuildError &&
-          error.diagnostics.some((d) => d.code === "invalid-xml-character"),
+          error.diagnostics.some((d) => d.code === "invalid-prop"),
       );
     }
   });

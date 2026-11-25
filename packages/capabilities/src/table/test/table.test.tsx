@@ -176,7 +176,7 @@ describe("native tables", () => {
     );
     await assert.rejects(build(tableDeck(outOfBounds)), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "invalid-table-merge");
+      assert.equal(error.diagnostics[0]?.code, "invalid-prop");
       assert.equal(
         error.diagnostics[0]?.path,
         "deck/slide[invalid]/table[wide]/row[overflow]/cell[too-wide]",
@@ -202,7 +202,7 @@ describe("native tables", () => {
     );
     await assert.rejects(build(tableDeck(conflicting)), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "conflicting-table-merge");
+      assert.equal(error.diagnostics[0]?.code, "invalid-structure");
       assert.equal(
         error.diagnostics[0]?.path,
         "deck/slide[invalid]/table[conflict]/row[second]/cell[overlap]",
@@ -223,7 +223,7 @@ describe("native tables", () => {
       build(tableDeck(trailingRowSpan)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-table-merge");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[invalid]/table[trailing]/row[last]/cell[too-tall]",
@@ -722,10 +722,7 @@ describe("native tables", () => {
       build(tableDeck(autoWithoutMetrics)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(
-          error.diagnostics[0]?.code,
-          "font-measurement-unavailable",
-        );
+        assert.equal(error.diagnostics[0]?.code, "font-unavailable");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[invalid]/table[measured-auto]/row[1]/cell[1]",
@@ -911,7 +908,7 @@ describe("native tables", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+        error.diagnostics.some(({ code }) => code === "invalid-prop"),
     );
   });
 

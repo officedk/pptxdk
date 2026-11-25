@@ -50,8 +50,20 @@ type FontkitExtras = {
   readonly post?: { readonly isFixedPitch: number };
 };
 
-function fail(use: FontEmbeddingUse, code: string, message: string): never {
-  throw new CapabilityError(code, message, use.path);
+function fail(
+  use: FontEmbeddingUse,
+  code: string,
+  message: string,
+  characters?: readonly string[],
+): never {
+  throw new CapabilityError(code, message, use.path, {
+    font: {
+      family: use.family,
+      weight: use.weight,
+      style: use.style,
+    },
+    ...(characters === undefined ? {} : { characters }),
+  });
 }
 
 /** Checks whether raw font bytes and author policy allow full TrueType font embedding. */
@@ -346,6 +358,7 @@ function subsetBytes(
         use,
         "font-missing-glyph",
         `${use.family} ${use.weight} ${use.style} font is missing glyph for emitted character ${character}`,
+        [character],
       );
     }
   }

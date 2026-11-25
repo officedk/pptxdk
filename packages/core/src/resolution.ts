@@ -12,6 +12,10 @@ import type {
   PlaceholderMap,
 } from "#/placeholders.ts";
 import type { QueryContentNode } from "#/query.ts";
+import {
+  buildDiagnosticSchema,
+  type BuildDiagnostic,
+} from "#/stage-options.ts";
 import type {
   ColorMap,
   ColorMapOverride,
@@ -42,7 +46,9 @@ import type {
   SlidePaintOutput,
 } from "#/types.ts";
 
+export { buildDiagnosticSchema };
 export type {
+  BuildDiagnostic,
   EmittedSlideLayoutSpec,
   EmittedSlideMasterSpec,
   MastersEmitDriver,

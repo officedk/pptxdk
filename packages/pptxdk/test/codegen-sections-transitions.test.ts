@@ -774,7 +774,9 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
           (error: unknown) => {
             assert.ok(error instanceof BuildError);
             const diag = error.diagnostics.find(
-              (item) => item.code === "morph-object-kind-mismatch",
+              (item) =>
+                item.code === "invalid-continuity" &&
+                item.reason === "kind-mismatch",
             );
             assert.ok(diag !== undefined, `${target} mismatch diagnostic`);
             assert.equal(diag.path, "deck/slide[s2-dst]/image[mismatch-b]");
@@ -827,7 +829,9 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
           (error: unknown) => {
             assert.ok(error instanceof BuildError);
             const diag = error.diagnostics.find(
-              (item) => item.code === "morph-inside-group",
+              (item) =>
+                item.code === "invalid-continuity" &&
+                item.reason === "inside-group",
             );
             assert.ok(diag !== undefined, `${target} morph-inside-group`);
             assert.equal(

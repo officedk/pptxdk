@@ -131,7 +131,7 @@ describe("stage option schemas (core + emit)", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "resolve" &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
 
     assert.throws(
@@ -434,21 +434,21 @@ describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "resolve" &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
     await assert.rejects(
       () => resolveTrimmed(doc, { capabilities: "shape" } as never),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build.capabilities" &&
-        error.diagnostics[0]?.code === "invalid-capability-selection",
+        error.diagnostics[0]?.code === "invalid-options",
     );
     await assert.rejects(
       () => resolveTrimmed(doc, { capabilities: ["unknown"] } as never),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build.capabilities[0]" &&
-        error.diagnostics[0]?.code === "unknown-capability",
+        error.diagnostics[0]?.code === "missing-capability",
     );
 
     await assert.rejects(
@@ -467,7 +467,7 @@ describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build" &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
     await assert.rejects(
       () =>
@@ -478,7 +478,7 @@ describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build.embedFonts" &&
-        error.diagnostics[0]?.code === "unsupported-font-embedding",
+        error.diagnostics[0]?.code === "target-violation",
     );
   });
 

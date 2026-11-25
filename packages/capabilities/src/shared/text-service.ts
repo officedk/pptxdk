@@ -2131,12 +2131,22 @@ function assertParagraphsHaveVisibleGlyphs(
       const face = measureRunFace(run.style);
       const missing = missingCharacters(face, textToCheck);
       if (missing.length > 0) {
-        const family = normalizedFonts(run.style)[0]?.family ?? "Font";
+        const fontInfo = normalizedFonts(run.style)[0];
+        const family = fontInfo?.family ?? "Font";
         const shown = missing.slice(0, 10).join(" ");
         const extra = missing.length - 10;
         throw new CapabilityError(
           "font-missing-glyph",
           `${family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+          undefined,
+          {
+            font: {
+              family,
+              weight: fontInfo?.weight ?? 400,
+              style: fontInfo?.style ?? "normal",
+            },
+            characters: missing,
+          },
         );
       }
     }
@@ -2148,12 +2158,22 @@ function assertParagraphsHaveVisibleGlyphs(
       const face = measureRunFace(markerStyle);
       const missing = missingCharacters(face, markerText);
       if (missing.length > 0) {
-        const family = normalizedFonts(markerStyle)[0]?.family ?? "Font";
+        const fontInfo = normalizedFonts(markerStyle)[0];
+        const family = fontInfo?.family ?? "Font";
         const shown = missing.slice(0, 10).join(" ");
         const extra = missing.length - 10;
         throw new CapabilityError(
           "font-missing-glyph",
           `${family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+          undefined,
+          {
+            font: {
+              family,
+              weight: fontInfo?.weight ?? 400,
+              style: fontInfo?.style ?? "normal",
+            },
+            characters: missing,
+          },
         );
       }
     }
@@ -3630,9 +3650,21 @@ export function emitTextBody(
     (embedFonts === "full" || embedFonts === "subset") &&
     resolved.missingGlyphErrors.length > 0
   ) {
+    const missingFont = resolved.unmeasuredIssues.missingGlyphFonts[0];
     throw new CapabilityError(
       "font-missing-glyph",
       resolved.missingGlyphErrors[0]!,
+      undefined,
+      missingFont === undefined
+        ? undefined
+        : {
+            font: {
+              family: missingFont.family,
+              weight: missingFont.weight,
+              style: missingFont.style,
+            },
+            characters: missingFont.missingGlyphs,
+          },
     );
   }
   const emittedParagraphs =

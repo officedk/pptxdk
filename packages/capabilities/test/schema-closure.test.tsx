@@ -484,7 +484,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
     const invalidCases = [
       {
         label: "string width on Text inside Box",
-        expectedCode: "invalid-text-box",
+        expectedCode: "invalid-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -518,7 +518,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unsupported align on Table.style",
-        expectedCode: "unknown-style",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -550,7 +550,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unsupported textWrap on Cell.style",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -586,7 +586,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unknown prop on Image and Chart",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -614,7 +614,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unknown prop on Chart",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -704,7 +704,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
     const invalidCases = [
       {
         label: "unknown easing key",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -738,7 +738,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unknown breathe parameter",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -784,7 +784,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unknown MotionScope parameter",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -824,7 +824,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unknown Step parameter",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -864,7 +864,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unsupported transition kind",
-        expectedCode: "unsupported-transition",
+        expectedCode: "invalid-prop",
         jsx: () =>
           createElement(Deck, { width: 480, height: 270 }, [
             createElement(Slide, {

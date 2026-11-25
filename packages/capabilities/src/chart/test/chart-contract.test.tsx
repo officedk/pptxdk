@@ -147,7 +147,7 @@ describe("chartCapability resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-xml-character" &&
+            code === "invalid-prop" &&
             path === "deck/slide[s1]/chart[bad-name]",
         ),
     );
@@ -179,7 +179,7 @@ describe("chartCapability resolved contract", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+        error.diagnostics.some(({ code }) => code === "invalid-prop"),
     );
 
     assert.throws(
@@ -207,7 +207,7 @@ describe("chartCapability resolved contract", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-font-size"),
+        error.diagnostics.some(({ code }) => code === "invalid-style"),
     );
 
     assert.throws(
@@ -234,7 +234,7 @@ describe("chartCapability resolved contract", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-color"),
+        error.diagnostics.some(({ code }) => code === "invalid-style"),
     );
 
     assert.throws(
@@ -264,7 +264,7 @@ describe("chartCapability resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-plot-area" &&
+            code === "invalid-prop" &&
             path === "deck/slide[s1]/chart[bad-plot-area]",
         ),
     );
@@ -330,7 +330,7 @@ describe("chartCapability resolved contract", () => {
       () => emit(resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "forbidden-mechanism"),
+        error.diagnostics.some(({ code }) => code === "target-violation"),
     );
 
     const emittedFirst = emit(resolution, { target: targets.transitional });

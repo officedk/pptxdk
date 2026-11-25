@@ -1,6 +1,13 @@
 export { createResolver } from "#/resolve.ts";
-export { BuildError, CapabilityError } from "#/diagnostics.ts";
 export {
+  BuildError,
+  CapabilityError,
+  capabilityErrorToDiagnostic,
+  toBuildDiagnostic,
+} from "#/diagnostics.ts";
+export {
+  buildDiagnosticFontUnavailableReasonSchema,
+  buildDiagnosticSchema,
   buildOptionsSchema,
   diagnosticSchema,
   diagnosticSeveritySchema,
@@ -17,6 +24,8 @@ export {
   targets,
 } from "#/stage-options.ts";
 export type {
+  BuildDiagnostic,
+  BuildDiagnosticFontUnavailableReason,
   BuildOptions,
   Diagnostic,
   DiagnosticSeverity,
@@ -39,6 +48,7 @@ export type {
   FontUsage,
   GeometryBox,
   LayoutObservation,
+  LegacyReportDiagnostic,
   Locator,
   LocatorObservation,
   LocatorResourceObservation,

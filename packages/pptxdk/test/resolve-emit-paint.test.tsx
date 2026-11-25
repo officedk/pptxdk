@@ -539,12 +539,12 @@ process.stdout.write("ok");
       ),
     );
 
-    // Runtime callers passing target to resolve() must fail immediately with unknown-parameter.
+    // Runtime callers passing target to resolve() must fail immediately with unknown-prop.
     assert.throws(
       () => resolve(doc, { target: targets.baselineOnly } as never),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
 
     const resolution = resolve(doc);
@@ -674,7 +674,7 @@ process.stdout.write("ok");
       () => emit(resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+        error.diagnostics.some((diag) => diag.code === "target-violation"),
     );
 
     const emitted = emit(resolution, { target: targets.transitional });
@@ -712,7 +712,7 @@ process.stdout.write("ok");
       () => emit(c15Resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+        error.diagnostics.some((diag) => diag.code === "target-violation"),
     );
     assert.throws(
       () =>
@@ -725,7 +725,7 @@ process.stdout.write("ok");
         }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+        error.diagnostics.some((diag) => diag.code === "target-violation"),
     );
     const c15Emitted = emit(c15Resolution, {
       target: targets.transitional,
@@ -748,7 +748,7 @@ process.stdout.write("ok");
       () => resolve(invalidParseDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-transition-duration",
+        error.diagnostics[0]?.code === "invalid-prop",
     );
 
     // 2. Author ID conflict
@@ -762,7 +762,7 @@ process.stdout.write("ok");
       () => resolve(duplicateIdDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "duplicate-author-id",
+        error.diagnostics[0]?.code === "duplicate-id",
     );
 
     // 3. Morph continuity object kind mismatch (sp vs graphicFrame)
@@ -804,7 +804,7 @@ process.stdout.write("ok");
       () => resolve(morphMismatchDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "morph-object-kind-mismatch",
+        error.diagnostics[0]?.code === "invalid-continuity",
     );
 
     // 4. Layout error
@@ -828,7 +828,7 @@ process.stdout.write("ok");
       () => resolve(invalidLayoutDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-layout-style",
+        error.diagnostics[0]?.code === "invalid-style",
     );
   });
 
@@ -849,13 +849,13 @@ process.stdout.write("ok");
       ),
     );
 
-    // Passing embedFonts to resolve() must fail immediately with unknown-parameter.
+    // Passing embedFonts to resolve() must fail immediately with unknown-prop.
     for (const mode of ["full", "subset"] as const) {
       assert.throws(
         () => resolve(restrictedDoc, { embedFonts: mode } as never),
         (error: unknown) =>
           error instanceof BuildError &&
-          error.diagnostics[0]?.code === "unknown-parameter",
+          error.diagnostics[0]?.code === "unknown-prop",
       );
     }
 
@@ -886,9 +886,14 @@ process.stdout.write("ok");
     for (const mode of ["full", "subset"] as const) {
       assert.throws(
         () => emit(resolution, { embedFonts: mode }),
-        (error: unknown) =>
-          error instanceof BuildError &&
-          error.diagnostics[0]?.code === "font-embedding-restricted",
+        (error: unknown) => {
+          if (!(error instanceof BuildError)) return false;
+          const diag = error.diagnostics[0];
+          return (
+            diag?.code === "font-unavailable" &&
+            diag.reason === "license-restricted"
+          );
+        },
       );
     }
 
@@ -915,9 +920,14 @@ process.stdout.write("ok");
     assert.deepEqual((await validatePptx(fullEmitted.pptx)).errors, []);
     assert.throws(
       () => emit(noSubsetResolution, { embedFonts: "subset" }),
-      (error: unknown) =>
-        error instanceof BuildError &&
-        error.diagnostics[0]?.code === "font-subsetting-forbidden",
+      (error: unknown) => {
+        if (!(error instanceof BuildError)) return false;
+        const diag = error.diagnostics[0];
+        return (
+          diag?.code === "font-unavailable" &&
+          diag.reason === "subsetting-forbidden"
+        );
+      },
     );
   });
 

@@ -85,17 +85,172 @@ export type EmitOptions = z.infer<typeof emitOptionsSchema>;
 export const diagnosticSeveritySchema = z.enum(["error", "warning"]);
 export type DiagnosticSeverity = z.infer<typeof diagnosticSeveritySchema>;
 
-export const diagnosticSchema = z
-  .object({
-    severity: diagnosticSeveritySchema,
-    path: z.string(),
-    code: z.string(),
-    message: z.string(),
-  })
-  .readonly();
-export type Diagnostic = z.infer<typeof diagnosticSchema>;
+const diagnosticFontStyleSchema = z.enum(["normal", "italic"]);
 
-const previewFontStyleSchema = z.enum(["normal", "italic"]);
+export const buildDiagnosticFontUnavailableReasonSchema = z.enum([
+  "missing-resource",
+  "missing-face",
+  "family-mismatch",
+  "style-mismatch",
+  "substitute-required",
+  "unsupported-format",
+  "invalid-metrics",
+  "not-embeddable",
+  "license-restricted",
+  "subsetting-forbidden",
+  "subsetting-failed",
+]);
+export type BuildDiagnosticFontUnavailableReason = z.infer<
+  typeof buildDiagnosticFontUnavailableReasonSchema
+>;
+
+/** Typed resolve/emit/expand failure diagnostic discriminated by `code`. */
+export const buildDiagnosticSchema = z.discriminatedUnion("code", [
+  z.strictObject({
+    code: z.literal("invalid-options"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    expected: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("unknown-prop"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    prop: z.string(),
+    scope: z.enum(["props", "style", "options"]).optional(),
+  }),
+  z.strictObject({
+    code: z.literal("invalid-prop"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    expected: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("invalid-style"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    expected: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("invalid-structure"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    expected: z.string().optional(),
+    conflictPath: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("duplicate-id"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    identifier: z.string().optional(),
+    conflictPath: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("broken-reference"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    reference: z.string().optional(),
+    targetKind: z
+      .enum([
+        "slide",
+        "layout",
+        "placeholder",
+        "object",
+        "cue",
+        "scope",
+        "part",
+        "resource",
+        "axis",
+      ])
+      .optional(),
+  }),
+  z.strictObject({
+    code: z.literal("invalid-continuity"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    reason: z
+      .enum([
+        "inside-group",
+        "on-master",
+        "needs-object",
+        "unsupported-object",
+        "kind-mismatch",
+        "name-conflict",
+      ])
+      .optional(),
+    conflictPath: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("missing-capability"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    capability: z.string(),
+  }),
+  z.strictObject({
+    code: z.literal("font-unavailable"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    font: z.strictObject({
+      family: z.string(),
+      weight: z.number().optional(),
+      style: diagnosticFontStyleSchema.optional(),
+    }),
+    reason: buildDiagnosticFontUnavailableReasonSchema,
+  }),
+  z.strictObject({
+    code: z.literal("font-missing-glyph"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    font: z.strictObject({
+      family: z.string(),
+      weight: z.number(),
+      style: diagnosticFontStyleSchema,
+    }),
+    characters: z.array(z.string()).readonly(),
+  }),
+  z.strictObject({
+    code: z.literal("invalid-resource"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    resourceKind: z.enum(["image", "part", "capability"]),
+  }),
+  z.strictObject({
+    code: z.literal("target-violation"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    target: z.string(),
+    extension: z.string().optional(),
+    mechanism: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("render-failed"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    phase: z.enum(["expand", "append"]),
+  }),
+]);
+export type BuildDiagnostic = z.infer<typeof buildDiagnosticSchema>;
+
+/** Transitional alias retained until Ticket 11 removes legacy Diagnostic references. */
+export const diagnosticSchema = buildDiagnosticSchema;
+/** Transitional alias retained until Ticket 11 removes legacy Diagnostic references. */
+export type Diagnostic = BuildDiagnostic;
+
+const previewFontStyleSchema = diagnosticFontStyleSchema;
 
 /** Typed per-page static preview failure discriminated by `code`. */
 export const previewErrorSchema = z.discriminatedUnion("code", [

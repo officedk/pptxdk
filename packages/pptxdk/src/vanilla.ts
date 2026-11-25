@@ -1,6 +1,7 @@
 export {
   AuthorQuery,
   AuthorQueryError,
+  buildDiagnosticSchema,
   CommonContainer,
   CommonNode,
   DeckContainer,
@@ -26,6 +27,7 @@ export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
 export type {
   AuthorId,
   AuthorNodeGuard,
+  BuildDiagnostic,
   ColorMap,
   ColorMapOverride,
   ColorValue,

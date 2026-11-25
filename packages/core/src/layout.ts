@@ -7,7 +7,12 @@ import {
   validateBlockFlexContainerProperties,
   validateBlockFlexLayoutContextBounds,
 } from "#/block-flex-layout.ts";
-import { BuildError, CapabilityError } from "#/diagnostics.ts";
+import {
+  BuildError,
+  CapabilityError,
+  capabilityErrorToDiagnostic,
+  toBuildDiagnostic,
+} from "#/diagnostics.ts";
 import { gridLayoutMode } from "#/grid-layout.ts";
 import {
   expandedSpacing,
@@ -82,12 +87,22 @@ export const layoutStyleKeys = layoutProperties.filter(
   (key) => !(paddingStyleKeys as readonly string[]).includes(key),
 );
 
-function diagnostic(path: string, code: string, message: string): Diagnostic {
-  return { severity: "error", path, code, message };
+function diagnostic(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): Diagnostic {
+  return toBuildDiagnostic(path, code, message, details);
 }
 
-function fail(path: string, code: string, message: string): never {
-  throw new BuildError([diagnostic(path, code, message)]);
+function fail(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): never {
+  throw new BuildError([diagnostic(path, code, message, details)]);
 }
 
 function element(child: CapabilityChild): child is CapabilityElement {
@@ -112,7 +127,7 @@ function readStyle(
 ): LayoutStyle {
   if (value === undefined) return {};
   if (!isStyleRecord(value)) {
-    fail(path, "invalid-layout-style", "style must be an object");
+    fail(path, "invalid-style", "style must be an object", { field: "style" });
   }
   const unknown = Object.keys(value).find(
     (key) => !layoutPropertySet.has(key) && !allowedPresentation.has(key),
@@ -120,8 +135,9 @@ function readStyle(
   if (unknown !== undefined) {
     fail(
       path,
-      "unsupported-layout-style",
+      "unknown-style",
       `style contains unsupported property ${unknown}`,
+      { prop: unknown, field: `style.${unknown}`, scope: "style" },
     );
   }
   const resolvedDisplay = validateBlockFlexContainerContext(
@@ -173,6 +189,7 @@ export function parseCapabilityLayoutContract(options: {
         "invalid-style",
         "style must be an object",
         options.path,
+        { field: "style" },
       );
     }
     if (!allowPadding) {
@@ -184,6 +201,7 @@ export function parseCapabilityLayoutContract(options: {
           "invalid-layout-context",
           "padding is only applicable to layout containers",
           options.path,
+          { field: `style.${paddingKey}` },
         );
       }
     }
@@ -195,6 +213,7 @@ export function parseCapabilityLayoutContract(options: {
         "unknown-style",
         `style contains unsupported property ${unknown}`,
         options.path,
+        { prop: unknown, field: `style.${unknown}`, scope: "style" },
       );
     }
   }
@@ -494,18 +513,16 @@ export class LayoutPass {
         this.#boundObjects.set(child, bound);
       } catch (error) {
         if (error instanceof BuildError) throw error;
-        const code =
-          error instanceof CapabilityError
-            ? error.code
-            : "invalid-capability-input";
-        const message = error instanceof Error ? error.message : String(error);
-        const targetPath =
-          error instanceof CapabilityError && error.path !== undefined
-            ? error.path.startsWith(childPath)
-              ? error.path
-              : `${childPath}/${error.path}`
-            : childPath;
-        return fail(targetPath, code, message);
+        if (error instanceof CapabilityError) {
+          throw new BuildError([
+            capabilityErrorToDiagnostic(error, childPath, true),
+          ]);
+        }
+        return fail(
+          childPath,
+          "capability-failure",
+          error instanceof Error ? error.message : String(error),
+        );
       }
     }
     return bound;
@@ -708,18 +725,14 @@ export class LayoutPass {
       });
     } catch (error) {
       if (error instanceof BuildError) throw error;
-      const code =
-        error instanceof CapabilityError
-          ? error.code
-          : "layout-measurement-failed";
-      const message = error instanceof Error ? error.message : String(error);
-      const targetPath =
-        error instanceof CapabilityError && error.path !== undefined
-          ? error.path.startsWith(path)
-            ? error.path
-            : `${path}/${error.path}`
-          : path;
-      return fail(targetPath, code, message);
+      if (error instanceof CapabilityError) {
+        throw new BuildError([capabilityErrorToDiagnostic(error, path, true)]);
+      }
+      return fail(
+        path,
+        "capability-failure",
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 }

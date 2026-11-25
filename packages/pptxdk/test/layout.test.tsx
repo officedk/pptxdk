@@ -704,7 +704,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "unsupported-grid-positioning",
+        error.diagnostics[0]?.code === "invalid-style",
     );
     await assert.rejects(
       build(
@@ -716,7 +716,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "unsupported-grid-alignment",
+        error.diagnostics[0]?.code === "invalid-style",
     );
   });
 
@@ -1546,7 +1546,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-grid-tracks" &&
+        error.diagnostics[0]?.code === "invalid-style" &&
         error.diagnostics[0]?.message.includes("fit-content"),
     );
     await assert.rejects(
@@ -1559,7 +1559,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-grid-tracks",
+        error.diagnostics[0]?.code === "invalid-style",
     );
     await assert.rejects(
       build(
@@ -1571,7 +1571,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-layout-context",
+        error.diagnostics[0]?.code === "invalid-structure",
     );
   });
 
@@ -1782,7 +1782,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-layout-context",
+        error.diagnostics[0]?.code === "invalid-structure",
     );
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
@@ -1838,7 +1838,7 @@ describe("public layout entry", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-layout-context" &&
+            code === "invalid-structure" &&
             path === "deck/slide[invalid-block-flex-style]/box[block]",
         ),
     );
@@ -2381,7 +2381,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-layout-context"),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
 
     const result = await build(
@@ -2608,7 +2608,7 @@ describe("public layout entry", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "baseline-measurement-unavailable" &&
+            code === "invalid-structure" &&
             path ===
               "deck/slide[unmeasured-baseline]/box[1]/text[unmeasured-text]",
         ),
@@ -2649,9 +2649,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          ({ code }) => code === "unsupported-baseline-context",
-        ),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
   });
 
@@ -2691,9 +2689,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          ({ code }) => code === "unsupported-baseline-context",
-        ),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
 
     const column = await build(
@@ -3043,9 +3039,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          ({ code }) => code === "unsupported-baseline-context",
-        ),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
   });
 
@@ -3876,7 +3870,7 @@ describe("public layout entry", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "baseline-measurement-unavailable" &&
+            code === "invalid-structure" &&
             path.endsWith("shape[middle-shape]"),
         ),
     );

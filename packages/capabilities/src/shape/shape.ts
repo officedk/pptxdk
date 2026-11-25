@@ -366,6 +366,8 @@ export const shapeCapability = {
       throw new CapabilityError(
         "unknown-parameter",
         `Shape contains unsupported parameter ${unknown}`,
+        undefined,
+        { prop: unknown, scope: "props" },
       );
     }
 

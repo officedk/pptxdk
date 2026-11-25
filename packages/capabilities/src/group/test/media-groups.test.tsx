@@ -454,7 +454,7 @@ describe("images and native groups", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-coordinate");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /image\[tiny-contain\]/u,
@@ -517,7 +517,7 @@ describe("images and native groups", () => {
         ),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-crop");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.match(error.diagnostics[0]?.path ?? "", /image\[bad-crop-/u);
           return true;
         },
@@ -532,18 +532,18 @@ describe("images and native groups", () => {
     for (const [props, code] of [
       [
         { id: "bad-fit", src: png, width: 120, height: 72, fit: "stretch" },
-        "unsupported-fit",
+        "invalid-prop",
       ],
       [
         {
           id: "missing",
           src: new URL("file:///tmp/pptxdk-no-image.png"),
         },
-        "image-read-failed",
+        "invalid-resource",
       ],
       [
         { id: "unknown-format", src: new Uint8Array([1, 2, 3, 4]) },
-        "unsupported-image-format",
+        "invalid-resource",
       ],
     ] as const) {
       await assert.rejects(
@@ -595,7 +595,7 @@ describe("images and native groups", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-image-format");
+        assert.equal(error.diagnostics[0]?.code, "invalid-resource");
         assert.match(error.diagnostics[0]?.path ?? "", /image\[no-idat\]/u);
         return true;
       },
@@ -623,7 +623,7 @@ describe("images and native groups", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-image-format");
+        assert.equal(error.diagnostics[0]?.code, "invalid-resource");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /image\[truncated-jpeg\]/u,
@@ -654,7 +654,7 @@ describe("images and native groups", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-image-format");
+        assert.equal(error.diagnostics[0]?.code, "invalid-resource");
         assert.match(error.diagnostics[0]?.path ?? "", /image\[empty-gif\]/u);
         return true;
       },
@@ -851,7 +851,7 @@ describe("images and native groups", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+        assert.equal(error.diagnostics[0]?.code, "unknown-prop");
         assert.match(error.diagnostics[0]?.path ?? "", /group\[not-a-box\]/u);
         return true;
       },
@@ -871,7 +871,7 @@ describe("images and native groups", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "empty-group");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         assert.match(error.diagnostics[0]?.path ?? "", /group\[empty\]/u);
         return true;
       },

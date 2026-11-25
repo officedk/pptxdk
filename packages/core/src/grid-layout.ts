@@ -1,4 +1,4 @@
-import { BuildError } from "#/diagnostics.ts";
+import { BuildError, toBuildDiagnostic } from "#/diagnostics.ts";
 import {
   expandedSpacing,
   resolvePercent,
@@ -7,7 +7,7 @@ import {
   type LayoutSolverNode,
   type LayoutSolverPort,
 } from "#/layout-protocol.ts";
-import type { Diagnostic, LayoutLength, LayoutStyle } from "#/types.ts";
+import type { LayoutLength, LayoutStyle } from "#/types.ts";
 
 type GridTrack =
   | { readonly kind: "px"; readonly value: number }
@@ -53,9 +53,13 @@ const gridContainerProperties = [
 
 const gridItemProperties = ["gridColumn", "gridRow", "justifySelf"] as const;
 
-function fail(path: string, code: string, message: string): never {
-  const diagnostic: Diagnostic = { severity: "error", path, code, message };
-  throw new BuildError([diagnostic]);
+function fail(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): never {
+  throw new BuildError([toBuildDiagnostic(path, code, message, details)]);
 }
 
 function gridTokens(input: string, path: string): string[] {

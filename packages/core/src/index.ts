@@ -13,7 +13,12 @@ export {
   slidePropsSchema,
   slideStyleSchema,
 } from "#/author-schemas.ts";
-export { BuildError, CapabilityError } from "#/diagnostics.ts";
+export {
+  BuildError,
+  CapabilityError,
+  capabilityErrorToDiagnostic,
+  toBuildDiagnostic,
+} from "#/diagnostics.ts";
 export {
   customGeometrySchema,
   geometryAdjustKeySchema,
@@ -172,6 +177,8 @@ export {
   parseCapabilityLayoutContract,
 } from "#/layout.ts";
 export {
+  buildDiagnosticFontUnavailableReasonSchema,
+  buildDiagnosticSchema,
   buildOptionsSchema,
   diagnosticSchema,
   diagnosticSeveritySchema,
@@ -188,6 +195,8 @@ export {
   targets,
 } from "#/stage-options.ts";
 export type {
+  BuildDiagnostic,
+  BuildDiagnosticFontUnavailableReason,
   BuildOptions,
   Diagnostic,
   DiagnosticSeverity,
@@ -293,6 +302,7 @@ export type {
   LayoutObservation,
   LayoutSpacing,
   LayoutStyle,
+  LegacyReportDiagnostic,
   MasterPlaceholderMap,
   MasterPlaceholderSpec,
   MasterTextStyles,

@@ -16,6 +16,7 @@ import type {
 import {
   formatBaseline,
   targets,
+  type BuildDiagnostic,
   type BuildOptions,
   type Diagnostic,
   type DiagnosticSeverity,
@@ -370,6 +371,14 @@ export type ResolutionDimensionsSummary = {
   readonly height: number;
 };
 
+/** Transitional deprecated report diagnostic entry retained until Ticket 11 removes `.diagnostics` from reports. */
+export type LegacyReportDiagnostic = {
+  readonly severity: DiagnosticSeverity;
+  readonly path: string;
+  readonly code: string;
+  readonly message: string;
+};
+
 export type ResolutionReport = {
   readonly evidence: "generation";
   readonly title?: string;
@@ -378,7 +387,8 @@ export type ResolutionReport = {
   readonly fonts: readonly FontUsage[];
   readonly masters?: readonly ResolvedMaster[];
   readonly slides: readonly ResolvedSlide[];
-  readonly diagnostics: readonly Diagnostic[];
+  /** @deprecated Transitional empty array retained until Ticket 11 removes `.diagnostics` from reports. */
+  readonly diagnostics: readonly LegacyReportDiagnostic[];
 };
 
 export type Resolution = {
@@ -402,7 +412,8 @@ export type BuildReport = {
   readonly fonts: readonly FontUsage[];
   readonly masters?: readonly ResolvedMaster[];
   readonly slides: readonly ResolvedSlide[];
-  readonly diagnostics: readonly Diagnostic[];
+  /** @deprecated Transitional empty array retained until Ticket 11 removes `.diagnostics` from reports. */
+  readonly diagnostics: readonly LegacyReportDiagnostic[];
 };
 
 export type BuildResult = {
@@ -1175,6 +1186,7 @@ export type RegisteredCapabilityModule =
   | TransparentCapabilityModule;
 
 export type {
+  BuildDiagnostic,
   Diagnostic,
   DiagnosticSeverity,
   PreviewError,

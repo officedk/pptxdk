@@ -424,9 +424,7 @@ describe("independent category labels", () => {
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
           assert.ok(
-            error.diagnostics.some(
-              ({ code }) => code === "forbidden-mechanism",
-            ),
+            error.diagnostics.some(({ code }) => code === "target-violation"),
           );
           return true;
         },

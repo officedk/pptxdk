@@ -667,7 +667,34 @@ function resolveVisualFill(
   opacity: number | undefined,
 ): ResolvedFill {
   const normalized = normalizeLegacyFillStyle(style, explicitFill);
-  return resolveBackgroundValue(theme, normalized["background"], opacity);
+  try {
+    return resolveBackgroundValue(theme, normalized["background"], opacity);
+  } catch (error) {
+    if (
+      error instanceof CapabilityError &&
+      error.details?.["field"] === undefined
+    ) {
+      const field =
+        Object.hasOwn(style, "background") && style["background"] !== undefined
+          ? "style.background"
+          : explicitFill !== undefined
+            ? "fill"
+            : Object.hasOwn(style, "backgroundImage") &&
+                style["backgroundImage"] !== undefined
+              ? "style.backgroundImage"
+              : Object.hasOwn(style, "backgroundColor") &&
+                  style["backgroundColor"] !== undefined
+                ? "style.backgroundColor"
+                : undefined;
+      if (field !== undefined) {
+        throw new CapabilityError(error.code, error.message, error.path, {
+          ...error.details,
+          field,
+        });
+      }
+    }
+    throw error;
+  }
 }
 
 function resolveVisualBorder(

@@ -32,7 +32,7 @@ describe("Slice 1: core author primitives & layout schemas", () => {
         () => readAuthorId(invalid, "deck/slide[1]/text[1]"),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-author-id");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.equal(error.diagnostics[0]?.path, "deck/slide[1]/text[1]");
           return true;
         },

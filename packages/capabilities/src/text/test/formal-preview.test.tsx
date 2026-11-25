@@ -446,6 +446,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
   it("closes paint() CapabilityError.code strictly to preview-unsupported-font and preview-missing-glyph across Text, Shape, Table, and Chart", () => {
     const resolveDoc = createResolver(documentCapabilities);
     const allowedCodes = new Set([
+      "preview-missing-font",
       "preview-unsupported-font",
       "preview-missing-glyph",
       "preview-corrupt-image",
@@ -499,7 +500,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 2. Fixed-area Text list prefix without font files
@@ -518,7 +519,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 3. Fixed-size Shape inline text without font files
@@ -539,7 +540,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 4. Fixed-row-height Table cell without font files
@@ -557,7 +558,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 5. Chart without font files
@@ -584,7 +585,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 6. Missing glyph in supplied font

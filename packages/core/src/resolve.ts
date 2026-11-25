@@ -14,7 +14,12 @@ import {
   type DeclarationContainer,
   type DeclarationNode,
 } from "#/declaration.ts";
-import { BuildError, CapabilityError } from "#/diagnostics.ts";
+import {
+  BuildError,
+  CapabilityError,
+  capabilityErrorToDiagnostic,
+  toBuildDiagnostic,
+} from "#/diagnostics.ts";
 import {
   LayoutPass,
   validateBoundObjectCapability,
@@ -270,8 +275,13 @@ type ResolvedSlideResult = {
   readonly linkedSlideIndexes: ReadonlySet<number>;
 };
 
-function diagnostic(path: string, code: string, message: string): Diagnostic {
-  return { severity: "error", path, code, message };
+function diagnostic(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): Diagnostic {
+  return toBuildDiagnostic(path, code, message, details);
 }
 
 function deepFreeze<T>(value: T): T {
@@ -475,11 +485,13 @@ function validateResolveOptions(options: ResolveOptions): void {
   const issue = parsed.error.issues[0];
   if (issue === undefined) return;
   if (issue.path.length === 0 && issue.code === "unrecognized_keys") {
+    const key = issue.keys[0] ?? "unknown";
     throw new BuildError([
       diagnostic(
         "resolve",
         "unknown-parameter",
-        `Resolve options contain unknown parameter ${issue.keys[0]}`,
+        `Resolve options contain unknown parameter ${key}`,
+        { prop: key, field: key, scope: "options" },
       ),
     ]);
   }
@@ -489,6 +501,7 @@ function validateResolveOptions(options: ResolveOptions): void {
         "resolve.signal",
         "invalid-options",
         "Resolve options signal must be an AbortSignal",
+        { field: "signal", expected: "AbortSignal" },
       ),
     ]);
   }
@@ -497,6 +510,7 @@ function validateResolveOptions(options: ResolveOptions): void {
       "resolve",
       "invalid-options",
       "Resolve options must be an object",
+      { expected: "object" },
     ),
   ]);
 }
@@ -611,6 +625,7 @@ function resolveSlides(
             masterPath,
             "missing-capability",
             `No capability module registered for SlideMaster.${unknownMasterProp}`,
+            { capability: unknownMasterProp, field: unknownMasterProp },
           ),
         ]);
       }
@@ -619,6 +634,7 @@ function resolveSlides(
           masterPath,
           "unknown-parameter",
           `SlideMaster contains unknown parameter ${unknownMasterProp}`,
+          { prop: unknownMasterProp, field: unknownMasterProp, scope: "props" },
         ),
       ]);
     }
@@ -641,12 +657,19 @@ function resolveSlides(
     }
     const parsedMaster = slideMasterDataPropsSchema.safeParse(masterDataInput);
     if (!parsedMaster.success) {
+      const firstIssue = parsedMaster.error.issues[0];
+      const issueField =
+        firstIssue !== undefined && firstIssue.path.length > 0
+          ? firstIssue.path.map(String).join(".")
+          : undefined;
       throw new BuildError([
         diagnostic(
           masterPath,
-          "invalid-slide-master",
-          parsedMaster.error.issues[0]?.message ??
-            "Invalid SlideMaster declaration",
+          issueField?.startsWith("style")
+            ? "invalid-style"
+            : "invalid-slide-master",
+          firstIssue?.message ?? "Invalid SlideMaster declaration",
+          issueField === undefined ? undefined : { field: issueField },
         ),
       ]);
     }
@@ -662,7 +685,7 @@ function resolveSlides(
       } catch (error) {
         if (error instanceof CapabilityError) {
           throw new BuildError([
-            diagnostic(masterPath, error.code, error.message),
+            capabilityErrorToDiagnostic(error, masterPath),
           ]);
         }
         throw new BuildError([
@@ -670,6 +693,7 @@ function resolveSlides(
             masterPath,
             "invalid-theme",
             error instanceof Error ? error.message : String(error),
+            { field: "theme" },
           ),
         ]);
       }
@@ -681,6 +705,7 @@ function resolveSlides(
             masterPath,
             "invalid-xml-character",
             "SlideMaster.id contains characters not allowed in XML 1.0",
+            { field: "id" },
           ),
         ]);
       }
@@ -690,6 +715,7 @@ function resolveSlides(
             masterPath,
             "duplicate-author-id",
             `Duplicate author id ${JSON.stringify(masterAuthorId)} in the deck`,
+            { field: "id", identifier: masterAuthorId },
           ),
         ]);
       }
@@ -801,6 +827,7 @@ function resolveSlides(
               rawLayoutPath,
               "missing-capability",
               `No capability module registered for SlideLayout.${unknownLayoutProp}`,
+              { capability: unknownLayoutProp, field: unknownLayoutProp },
             ),
           ]);
         }
@@ -809,6 +836,11 @@ function resolveSlides(
             rawLayoutPath,
             "unknown-parameter",
             `SlideLayout contains unknown parameter ${unknownLayoutProp}`,
+            {
+              prop: unknownLayoutProp,
+              field: unknownLayoutProp,
+              scope: "props",
+            },
           ),
         ]);
       }
@@ -837,12 +869,19 @@ function resolveSlides(
       const parsedLayout =
         slideLayoutDataPropsSchema.safeParse(layoutDataInput);
       if (!parsedLayout.success) {
+        const firstIssue = parsedLayout.error.issues[0];
+        const issueField =
+          firstIssue !== undefined && firstIssue.path.length > 0
+            ? firstIssue.path.map(String).join(".")
+            : undefined;
         throw new BuildError([
           diagnostic(
             rawLayoutPath,
-            "invalid-slide-layout",
-            parsedLayout.error.issues[0]?.message ??
-              "Invalid SlideLayout declaration",
+            issueField?.startsWith("style")
+              ? "invalid-style"
+              : "invalid-slide-layout",
+            firstIssue?.message ?? "Invalid SlideLayout declaration",
+            issueField === undefined ? undefined : { field: issueField },
           ),
         ]);
       }
@@ -856,6 +895,7 @@ function resolveSlides(
               layoutPath,
               "duplicate-author-id",
               `Duplicate SlideLayout.id ${JSON.stringify(layoutAuthorId)} in ${masterPath}`,
+              { field: "id", identifier: layoutAuthorId },
             ),
           ]);
         }
@@ -1164,6 +1204,7 @@ function resolveSlides(
           `deck/slide[${authorId}]`,
           "duplicate-author-id",
           `Duplicate Slide.id ${JSON.stringify(authorId)} in the deck`,
+          { field: "id", identifier: authorId },
         ),
       ]);
     }
@@ -1185,6 +1226,11 @@ function resolveSlides(
             `deck/slide[${id}]`,
             "foreign-slide-layout",
             `Slide ${JSON.stringify(id)} references slide layout ${JSON.stringify(targetLabel)}, which is not owned by this deck`,
+            {
+              field: "layout",
+              reference: targetLabel,
+              targetKind: "layout",
+            },
           ),
         ]);
       }
@@ -1194,6 +1240,11 @@ function resolveSlides(
             `deck/slide[${id}]`,
             "ambiguous-slide-layout",
             `Slide ${JSON.stringify(id)} references slide layout ${JSON.stringify(targetLabel)} mounted multiple times in this deck`,
+            {
+              field: "layout",
+              reference: targetLabel,
+              targetKind: "layout",
+            },
           ),
         ]);
       }
@@ -1205,6 +1256,7 @@ function resolveSlides(
             `deck/slide[${id}]`,
             "invalid-slide-layout",
             "Slide.layout must be a SlideLayout or defineSlideLayout specification",
+            { field: "layout" },
           ),
         ]);
       }
@@ -1218,6 +1270,11 @@ function resolveSlides(
             `deck/slide[${id}]`,
             "foreign-slide-layout",
             `Slide ${JSON.stringify(id)} references slide layout ${JSON.stringify(targetLabel)}, which is not owned by this deck`,
+            {
+              field: "layout",
+              reference: targetLabel,
+              targetKind: "layout",
+            },
           ),
         ]);
       }
@@ -1228,6 +1285,7 @@ function resolveSlides(
           `deck/slide[${id}]`,
           "invalid-slide-layout",
           "Slide.layout must be a SlideLayout or defineSlideLayout specification",
+          { field: "layout" },
         ),
       ]);
     }
@@ -1408,41 +1466,20 @@ function summarizeDocumentFonts(
 }
 
 function recordCapabilityWarnings(
-  warnings: readonly CapabilityWarning[] | undefined,
-  document: DocumentResolveState,
-  path: string,
+  _warnings: readonly CapabilityWarning[] | undefined,
+  _document: DocumentResolveState,
+  _path: string,
 ): void {
-  for (const warning of warnings ?? []) {
-    document.warnings.push({
-      severity: "warning",
-      path: warning.path === undefined ? path : `${path}/${warning.path}`,
-      code: warning.code,
-      message: warning.message,
-    });
-  }
+  // Runtime warnings are silenced; observation fields carry all layout and font facts.
 }
 
 function checkCanvasOverflow(
-  box: GeometryBox | undefined,
-  dimensions: ResolutionDimensions,
-  document: DocumentResolveState,
-  path: string,
+  _box: GeometryBox | undefined,
+  _dimensions: ResolutionDimensions,
+  _document: DocumentResolveState,
+  _path: string,
 ): void {
-  if (box === undefined) return;
-  if (
-    box.x < 0 ||
-    box.y < 0 ||
-    box.x + box.width > dimensions.width ||
-    box.y + box.height > dimensions.height
-  ) {
-    document.warnings.push({
-      severity: "warning",
-      path,
-      code: "overflow",
-      message:
-        "Object overflows slide canvas; build retains original declaration",
-    });
-  }
+  // Canvas overflow is observable directly via ResolvedObject.box and bounds without warnings.
 }
 
 function recordObjectMorph(args: {
@@ -1824,6 +1861,7 @@ function resolveChildrenPass(
       );
       const layer: ResolvedObjectLayer = {
         declarationType: child.type,
+        ...(authorId === undefined ? {} : { authorId }),
         sourceOrder: [index],
         zIndex: paintOrder(bound.contract),
         path,
@@ -2091,6 +2129,7 @@ function resolveBoundContainer(args: {
     memberLayers = enclosesChildren ? (memberResolved?.layers ?? []) : [];
     containerLayer = {
       declarationType: child.type,
+      ...(authorId === undefined ? {} : { authorId }),
       sourceOrder: [index],
       zIndex: paintOrder(bound.contract),
       path,
@@ -4075,7 +4114,7 @@ function resolveDocument(
     fonts: summarizeDocumentFonts(document.fontUsages),
     ...(masterObservations.length > 0 ? { masters: masterObservations } : {}),
     slides: slideObservations,
-    diagnostics: document.warnings,
+    diagnostics: [],
   });
   const query = createBuildQuery(
     resolvedSlides.map((slide, index) => ({

@@ -123,7 +123,7 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "empty-slide-master" &&
+            d.code === "invalid-structure" &&
             d.path === "deck/slide-master[empty-m]",
         ),
     );
@@ -143,7 +143,8 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "foreign-slide-layout" &&
+            d.code === "broken-reference" &&
+            d.targetKind === "layout" &&
             d.path === "deck/slide[bad-slide]" &&
             d.message.includes("other-layout"),
         ),
@@ -162,7 +163,8 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "foreign-slide-layout" &&
+            d.code === "broken-reference" &&
+            d.targetKind === "layout" &&
             d.path === "deck/slide[s1]" &&
             d.message.includes("unmounted-def"),
         ),
@@ -180,7 +182,9 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "ambiguous-slide-layout" && d.path === "deck/slide[s1]",
+            d.code === "broken-reference" &&
+            d.targetKind === "layout" &&
+            d.path === "deck/slide[s1]",
         ),
     );
   });

@@ -986,7 +986,7 @@ describe("public build entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "conflicting-text-content" &&
+        error.diagnostics[0]?.code === "invalid-structure" &&
         error.diagnostics[0]?.path ===
           "deck/slide[cover]/shape[conflicting-shape-body]",
     );
@@ -1567,16 +1567,16 @@ describe("public build entry", () => {
       {
         label: "not-embeddable",
         options: { embeddable: false },
-        code: "font-not-embeddable",
+        reason: "not-embeddable",
       },
       {
         label: "substitute",
         options: { substitute: true },
-        code: "font-substitute-not-embeddable",
+        reason: "not-embeddable",
       },
     ] as const;
 
-    for (const { label, options, code } of policies) {
+    for (const { label, options, reason } of policies) {
       const allowed = font("Jost*", [{ weight: 400, data: jostBook }]);
       const restricted = font(
         "Jost*",
@@ -1614,11 +1614,12 @@ describe("public build entry", () => {
           ),
           (error: unknown) => {
             assert.ok(error instanceof BuildError);
-            assert.equal(error.diagnostics[0]?.code, code);
-            assert.equal(
-              error.diagnostics[0]?.path,
-              `deck/slide[cover]/text[${testId}]`,
-            );
+            const diag = error.diagnostics[0];
+            assert.equal(diag?.code, "font-unavailable");
+            if (diag?.code === "font-unavailable") {
+              assert.equal(diag.reason, reason);
+            }
+            assert.equal(diag?.path, `deck/slide[cover]/text[${testId}]`);
             return true;
           },
         );
@@ -1745,9 +1746,13 @@ describe("public build entry", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "font-subsetting-forbidden");
+        const diag = error.diagnostics[0];
+        assert.equal(diag?.code, "font-unavailable");
+        if (diag?.code === "font-unavailable") {
+          assert.equal(diag.reason, "subsetting-forbidden");
+        }
         assert.equal(
-          error.diagnostics[0]?.path,
+          diag?.path,
           "deck/slide[font-no-subsetting-subset]/text[font-no-subsetting-subset]",
         );
         return true;
@@ -1762,63 +1767,63 @@ describe("public build entry", () => {
         fontValue: font("Jost*", [{ weight: 400, data: jostBook }], {
           embeddable: false,
         }),
-        code: "font-not-embeddable",
+        reason: "not-embeddable",
       },
       {
         label: "missing-resource",
         fontValue: font("Jost*"),
-        code: "font-embedding-resource-missing",
+        reason: "missing-resource",
       },
       {
         label: "substitute-resource",
         fontValue: font("Other Family", [{ weight: 400, data: jostBook }], {
           substitute: true,
         }),
-        code: "font-substitute-not-embeddable",
+        reason: "not-embeddable",
       },
       {
         label: "unsupported-woff2",
         fontValue: font("Noto Sans CJK SC", [
           { weight: 400, data: notoSansScRegular },
         ]),
-        code: "unsupported-font-format",
+        reason: "unsupported-format",
       },
       {
         label: "wrong-weight-resource",
         fontValue: font("Jost*", [{ weight: 400, data: jostBold }]),
-        code: "font-style-mismatch",
+        reason: "style-mismatch",
       },
       {
         label: "restricted-license",
         fontValue: font("Jost*", [
           { weight: 400, data: withFontFsType(jostBook, 0x0002) },
         ]),
-        code: "font-embedding-restricted",
+        reason: "license-restricted",
       },
       {
         label: "preview-print-license",
         fontValue: font("Jost*", [
           { weight: 400, data: withFontFsType(jostBook, 0x0004) },
         ]),
-        code: "font-embedding-preview-print",
+        reason: "license-restricted",
       },
       {
         label: "bitmap-only-license",
         fontValue: font("Jost*", [
           { weight: 400, data: withFontFsType(jostBook, 0x0200) },
         ]),
-        code: "font-embedding-bitmap-only",
+        reason: "unsupported-format",
       },
       {
         label: "invalid-license-flags",
         fontValue: font("Jost*", [
           { weight: 400, data: withFontFsType(jostBook, 0x000a) },
         ]),
-        code: "invalid-font-permissions",
+        reason: "license-restricted",
       },
     ] as const;
 
-    for (const { label, fontValue, code } of cases) {
+    for (const { label, fontValue, reason } of cases) {
       await assert.rejects(
         build(
           deck(
@@ -1839,11 +1844,12 @@ describe("public build entry", () => {
         ),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, code);
-          assert.equal(
-            error.diagnostics[0]?.path,
-            `deck/slide[cover]/text[${label}]`,
-          );
+          const diag = error.diagnostics[0];
+          assert.equal(diag?.code, "font-unavailable");
+          if (diag?.code === "font-unavailable") {
+            assert.equal(diag.reason, reason);
+          }
+          assert.equal(diag?.path, `deck/slide[cover]/text[${label}]`);
           return true;
         },
       );
@@ -2116,7 +2122,9 @@ describe("public build entry", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some(
-          ({ code }) => code === "font-substitution-required",
+          (diag) =>
+            diag.code === "font-unavailable" &&
+            diag.reason === "substitute-required",
         ),
     );
   });
@@ -2637,7 +2645,9 @@ describe("public build entry", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some(
-          ({ code }) => code === "font-measurement-unavailable",
+          (diag) =>
+            diag.code === "font-unavailable" &&
+            diag.reason === "missing-resource",
         ),
     );
   });
@@ -3132,7 +3142,7 @@ describe("public build entry", () => {
 
     await assert.rejects(build(element), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "conflicting-resource");
+      assert.equal(error.diagnostics[0]?.code, "duplicate-id");
       assert.match(error.diagnostics[0]?.path ?? "", /text\[font-conflict\]/u);
       return true;
     });
@@ -3160,7 +3170,7 @@ describe("public build entry", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "conflicting-resource");
+        assert.equal(error.diagnostics[0]?.code, "duplicate-id");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /text\[duplicate-face\]/u,
@@ -3706,7 +3716,7 @@ describe("public build entry", () => {
     ] as const) {
       await assert.rejects(build(element), (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-xml-character");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(error.diagnostics[0]?.path ?? "", path);
         return true;
       });
@@ -3733,7 +3743,7 @@ describe("public build entry", () => {
         ),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-coordinate");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.match(
             error.diagnostics[0]?.path ?? "",
             /slide\[cover\].*shape\[too-small\]/u,
@@ -3836,7 +3846,7 @@ describe("public build entry", () => {
         ),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-dimension");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.equal(error.diagnostics[0]?.path, "deck");
           return true;
         },
@@ -4084,7 +4094,7 @@ describe("public build entry", () => {
 
     await assert.rejects(build(unknownParameter), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+      assert.equal(error.diagnostics[0]?.code, "unknown-prop");
       assert.match(
         error.diagnostics[0]?.path ?? "",
         /slide\[cover\].*shape\[unknown-prop\]/u,
@@ -4372,7 +4382,7 @@ describe("public build entry", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.code, "target-violation");
         assert.equal(error.diagnostics[0]?.path, "deck/slide[baseline-only]");
         return true;
       },
@@ -4450,7 +4460,7 @@ describe("public build entry", () => {
       build(declarations, { target: targets.baselineOnly }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.code, "target-violation");
         return true;
       },
     );
@@ -4464,7 +4474,7 @@ describe("public build entry", () => {
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.code, "target-violation");
         assert.ok(error.diagnostics[0]?.message.includes("p14"));
         return true;
       },
@@ -4479,7 +4489,7 @@ describe("public build entry", () => {
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.code, "target-violation");
         assert.ok(error.diagnostics[0]?.message.includes("p159"));
         return true;
       },

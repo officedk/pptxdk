@@ -408,7 +408,8 @@ describe("slide navigation", () => {
       assert.ok(error instanceof BuildError);
       assert.ok(
         error.diagnostics.some(
-          ({ code }) => code === "morph-object-kind-mismatch",
+          (d) =>
+            d.code === "invalid-continuity" && d.reason === "kind-mismatch",
         ),
       );
       return true;
@@ -434,7 +435,7 @@ describe("slide navigation", () => {
     );
     await assert.rejects(build(missingTarget), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "missing-link-target");
+      assert.equal(error.diagnostics[0]?.code, "broken-reference");
       assert.match(error.diagnostics[0]?.path ?? "", /slide\[source\].*text/u);
       return true;
     });

@@ -1107,9 +1107,7 @@ describe("typed text placeholders and style inheritance", () => {
       () => build(jsxTextInPic),
       (err: unknown) =>
         err instanceof BuildError &&
-        err.diagnostics.some(
-          (d) => d.code === "incompatible-placeholder-content",
-        ),
+        err.diagnostics.some((d) => d.code === "invalid-structure"),
     );
 
     const tblInPic = deck().append(
@@ -1128,9 +1126,7 @@ describe("typed text placeholders and style inheritance", () => {
       () => build(tblInPic),
       (err: unknown) =>
         err instanceof BuildError &&
-        err.diagnostics.some(
-          (d) => d.code === "incompatible-placeholder-content",
-        ),
+        err.diagnostics.some((d) => d.code === "invalid-structure"),
     );
 
     const chartInTbl = deck().append(
@@ -1149,9 +1145,7 @@ describe("typed text placeholders and style inheritance", () => {
       () => build(chartInTbl),
       (err: unknown) =>
         err instanceof BuildError &&
-        err.diagnostics.some(
-          (d) => d.code === "incompatible-placeholder-content",
-        ),
+        err.diagnostics.some((d) => d.code === "invalid-structure"),
     );
   });
 

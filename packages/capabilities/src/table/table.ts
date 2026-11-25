@@ -701,6 +701,11 @@ function paintTableModel(
   const fills: string[] = [];
   const texts: string[] = [];
   const borders: string[] = [];
+  const placeholders: {
+    readonly id?: string;
+    readonly path?: string;
+    readonly url: string;
+  }[] = [];
   for (const entry of model.resolvedCells) {
     const { cell, box: cellBox, fill, body, hasText, hasOverflow } = entry;
     const idPrefix = `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`;
@@ -720,6 +725,13 @@ function paintTableModel(
     } else if (fill.kind === "image") {
       const fillDefId = `${idPrefix}-fill`;
       defs.push(paintImageFillSvg(fill, fillDefId, cellBox));
+      if (fill.source.kind === "external") {
+        placeholders.push({
+          ...(cell.authorId === undefined ? {} : { id: cell.authorId }),
+          path: `${paintContext.path}/${cell.path}`,
+          url: fill.source.externalUrl,
+        });
+      }
       fills.push(
         `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="url(#${fillDefId})" stroke="none"/>`,
       );
@@ -752,6 +764,7 @@ function paintTableModel(
             error.code,
             error.message,
             error.path ?? cell.path,
+            error.details,
           );
         }
         throw error;
@@ -805,6 +818,7 @@ function paintTableModel(
   const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
   return {
     svg: `${defsXml}<g>${fills.join("")}${texts.join("")}${borders.join("")}</g>`,
+    ...(placeholders.length === 0 ? {} : { placeholders }),
   };
 }
 
@@ -941,13 +955,6 @@ function tableLayoutModel(
           widths[index] = (value * requestedWidth) / baseWidth;
         });
       }
-    }
-    const actualWidth = widths.reduce((sum, value) => sum + value, 0);
-    if (actualWidth > requestedWidth + 0.01) {
-      warnings.push({
-        code: "table-width-overflow",
-        message: `Sum of column minimum widths ${actualWidth}px exceeds declared width ${requestedWidth}px; build preserves column widths`,
-      });
     }
   }
   const widthsEmu = widths.map((width, index) =>
@@ -1278,17 +1285,7 @@ export const tableCapability = {
               const extra = (targetHeight - naturalHeight) / growable.length;
               for (const row of growable)
                 heights[row] = (heights[row] ?? 0) + extra;
-            } else {
-              warnings.push({
-                code: "table-height-underflow",
-                message: `Sum of fixed row heights ${naturalHeight}px is less than layout height ${targetHeight}px; build preserves row heights`,
-              });
             }
-          } else if (targetHeight < naturalHeight - 0.01) {
-            warnings.push({
-              code: "table-height-overflow",
-              message: `Sum of row heights ${naturalHeight}px exceeds layout height ${targetHeight}px; build preserves row heights`,
-            });
           }
         }
         const x = parseTableCoordinate(
@@ -1420,11 +1417,6 @@ export const tableCapability = {
             };
             resolvedCells.push(entry);
             resolvedAnchors.set(`${rowIndex}:${column}`, entry);
-          }
-        }
-        for (const warning of warnings) {
-          if (warning.code === "overset") {
-            warning.message = `${warning.message} (table cell preserves original content and declared dimensions)`;
           }
         }
         const name =

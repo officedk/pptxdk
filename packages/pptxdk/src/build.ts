@@ -16,6 +16,8 @@ import {
 import {
   BuildError,
   CapabilityError,
+  buildDiagnosticFontUnavailableReasonSchema,
+  buildDiagnosticSchema,
   buildOptionsSchema,
   createResolver,
   diagnosticSchema,
@@ -25,10 +27,13 @@ import {
   fontEmbeddingModeSchema,
   formatBaseline,
   formatBaselineSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   resolveOptionsSchema,
   targetNameSchema,
   targetSchema,
   targets,
+  toBuildDiagnostic,
   type BuildResult,
   type CapabilityModule,
   type Resolution,
@@ -138,21 +143,24 @@ function validateCapabilityNames(
       const index = Number(issue.path[0]);
       const badName = Array.isArray(names) ? names[index] : undefined;
       throw new BuildError([
-        {
-          severity: "error",
-          code: "unknown-capability",
-          path: `build.capabilities[${index}]`,
-          message: `Unknown official capability ${JSON.stringify(badName)}`,
-        },
+        toBuildDiagnostic(
+          `build.capabilities[${index}]`,
+          "unknown-capability",
+          `Unknown official capability ${JSON.stringify(badName)}`,
+          {
+            capability: typeof badName === "string" ? badName : String(badName),
+            field: "capabilities",
+          },
+        ),
       ]);
     }
     throw new BuildError([
-      {
-        severity: "error",
-        code: "invalid-capability-selection",
-        path: "build.capabilities",
-        message: "capabilities must be an array of official capability names",
-      },
+      toBuildDiagnostic(
+        "build.capabilities",
+        "invalid-capability-selection",
+        "capabilities must be an array of official capability names",
+        { field: "capabilities" },
+      ),
     ]);
   }
   return [...new Set(parsed.data)];
@@ -206,31 +214,30 @@ export async function resolve(
     }
     if (issue?.path.length === 0 && issue.code === "unrecognized_keys") {
       throw new BuildError([
-        {
-          severity: "error",
-          code: "unknown-parameter",
-          path: "resolve",
-          message: `Resolve options contain unknown parameter ${issue.keys[0]}`,
-        },
+        toBuildDiagnostic(
+          "resolve",
+          "unknown-parameter",
+          `Resolve options contain unknown parameter ${issue.keys[0]}`,
+          { prop: String(issue.keys[0]), scope: "options" },
+        ),
       ]);
     }
     if (issue?.path[0] === "signal") {
       throw new BuildError([
-        {
-          severity: "error",
-          code: "invalid-options",
-          path: "resolve.signal",
-          message: "Resolve options signal must be an AbortSignal",
-        },
+        toBuildDiagnostic(
+          "resolve.signal",
+          "invalid-options",
+          "Resolve options signal must be an AbortSignal",
+          { field: "signal" },
+        ),
       ]);
     }
     throw new BuildError([
-      {
-        severity: "error",
-        code: "invalid-options",
-        path: "resolve",
-        message: "Build options must be an object",
-      },
+      toBuildDiagnostic(
+        "resolve",
+        "invalid-options",
+        "Build options must be an object",
+      ),
     ]);
   }
   const capabilities = validateCapabilityNames(parsed.data.capabilities);
@@ -252,12 +259,11 @@ export async function build(
       Array.isArray(options)
     ) {
       throw new BuildError([
-        {
-          severity: "error",
-          code: "invalid-options",
-          path: "build",
-          message: "Build options must be an object",
-        },
+        toBuildDiagnostic(
+          "build",
+          "invalid-options",
+          "Build options must be an object",
+        ),
       ]);
     }
     const { capabilities, ...buildOptions } = options as Record<
@@ -267,12 +273,11 @@ export async function build(
     validateOptions(buildOptions);
     validateCapabilityNames(capabilities);
     throw new BuildError([
-      {
-        severity: "error",
-        code: "invalid-options",
-        path: "build",
-        message: "Build options are invalid",
-      },
+      toBuildDiagnostic(
+        "build",
+        "invalid-options",
+        "Build options are invalid",
+      ),
     ]);
   }
   const capabilities = validateCapabilityNames(parsed.data.capabilities);
@@ -290,6 +295,8 @@ export {
   CapabilityError,
   CodegenError,
   ImportError,
+  buildDiagnosticFontUnavailableReasonSchema,
+  buildDiagnosticSchema,
   buildOptionsSchema,
   cascadedOmissionSchema,
   codegenDiagnosticCodeSchema,
@@ -313,6 +320,8 @@ export {
   importLocationSchema,
   importOptionsSchema,
   importReportSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   resolveOptionsSchema,
   targetNameSchema,
   targetSchema,
@@ -338,6 +347,8 @@ export type {
   ImportResult,
 } from "@pptxdk/import";
 export type {
+  BuildDiagnostic,
+  BuildDiagnosticFontUnavailableReason,
   BuildOptions,
   BuildReport,
   BuildResult,
@@ -356,6 +367,7 @@ export type {
   FontUsage,
   GeometryBox,
   LayoutObservation,
+  LegacyReportDiagnostic,
   Locator,
   LocatorObservation,
   LocatorResourceObservation,
@@ -363,12 +375,15 @@ export type {
   NativeTablePartObservation,
   ObjectObservation,
   ObjectTransform,
+  PreviewError,
+  PreviewPlaceholder,
   Rect,
   Resolution,
   ResolutionDimensionsSummary,
   ResolutionReport,
   ResolvedFooter,
   ResolvedFooterSlot,
+  ResolvedImage,
   ResolvedLayout,
   ResolvedMaster,
   ResolvedObject,

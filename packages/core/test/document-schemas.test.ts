@@ -82,21 +82,17 @@ describe("Slice 3: Deck/Slide/Section schemas, resolve validation, and declarati
     const badDeckUnknown = createDeckNode({ unexpected: true } as never).append(
       createSlideNode({ id: "s1" }),
     );
-    expectBuildError(
-      () => resolve(badDeckUnknown),
-      "unknown-parameter",
-      "deck",
-    );
+    expectBuildError(() => resolve(badDeckUnknown), "unknown-prop", "deck");
 
     const badDeckDim = createDeckNode({ width: 10 }).append(
       createSlideNode({ id: "s1" }),
     );
-    expectBuildError(() => resolve(badDeckDim), "invalid-dimension", "deck");
+    expectBuildError(() => resolve(badDeckDim), "invalid-prop", "deck");
 
     const badDeckTitle = createDeckNode({ title: "bad\u0000title" }).append(
       createSlideNode({ id: "s1" }),
     );
-    expectBuildError(() => resolve(badDeckTitle), "invalid-title", "deck");
+    expectBuildError(() => resolve(badDeckTitle), "invalid-prop", "deck");
 
     const badSectionProp = createDeckNode({}).append(
       createSectionNode({ name: "S1", extra: 1 } as never).append(
@@ -105,7 +101,7 @@ describe("Slice 3: Deck/Slide/Section schemas, resolve validation, and declarati
     );
     expectBuildError(
       () => resolve(badSectionProp),
-      "unknown-section-property",
+      "unknown-prop",
       "deck/section[1]",
     );
 
@@ -114,7 +110,7 @@ describe("Slice 3: Deck/Slide/Section schemas, resolve validation, and declarati
     );
     expectBuildError(
       () => resolve(badSectionName),
-      "invalid-section-name",
+      "invalid-prop",
       "deck/section[1]",
     );
 
@@ -123,7 +119,7 @@ describe("Slice 3: Deck/Slide/Section schemas, resolve validation, and declarati
     );
     expectBuildError(
       () => resolve(badSlideHidden),
-      "invalid-hidden-slide",
+      "invalid-prop",
       "deck/slide[s1]",
     );
 
@@ -132,7 +128,7 @@ describe("Slice 3: Deck/Slide/Section schemas, resolve validation, and declarati
     );
     expectBuildError(
       () => resolve(badSlideStyle),
-      "unsupported-layout-style",
+      "invalid-style",
       "deck/slide[s1]",
     );
   });

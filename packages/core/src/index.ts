@@ -13,7 +13,12 @@ export {
   slidePropsSchema,
   slideStyleSchema,
 } from "#/author-schemas.ts";
-export { BuildError, CapabilityError } from "#/diagnostics.ts";
+export {
+  BuildError,
+  CapabilityError,
+  capabilityErrorToDiagnostic,
+  toBuildDiagnostic,
+} from "#/diagnostics.ts";
 export {
   customGeometrySchema,
   geometryAdjustKeySchema,
@@ -172,6 +177,8 @@ export {
   parseCapabilityLayoutContract,
 } from "#/layout.ts";
 export {
+  buildDiagnosticFontUnavailableReasonSchema,
+  buildDiagnosticSchema,
   buildOptionsSchema,
   diagnosticSchema,
   diagnosticSeveritySchema,
@@ -180,18 +187,24 @@ export {
   fontEmbeddingModeSchema,
   formatBaseline,
   formatBaselineSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   resolveOptionsSchema,
   targetNameSchema,
   targetSchema,
   targets,
 } from "#/stage-options.ts";
 export type {
+  BuildDiagnostic,
+  BuildDiagnosticFontUnavailableReason,
   BuildOptions,
   Diagnostic,
   DiagnosticSeverity,
   EmitOptions,
   Extension,
   FontEmbeddingMode,
+  PreviewError,
+  PreviewPlaceholder,
   ResolveOptions,
   Target,
   TargetName,
@@ -289,6 +302,7 @@ export type {
   LayoutObservation,
   LayoutSpacing,
   LayoutStyle,
+  LegacyReportDiagnostic,
   MasterPlaceholderMap,
   MasterPlaceholderSpec,
   MasterTextStyles,
@@ -297,6 +311,7 @@ export type {
   PaddingStyle,
   PaintContext,
   PaintOutput,
+  PaintPlaceholderRecord,
   PlaceholderLevelStyle,
   PlaceholderListStyles,
   PlaceholderMap,
@@ -312,6 +327,7 @@ export type {
   ResolutionReport,
   ResolvedFooter,
   ResolvedFooterSlot,
+  ResolvedImage,
   ResolvedLayout,
   ResolvedLink,
   ResolvedMaster,

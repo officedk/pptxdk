@@ -193,7 +193,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-advance-after");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.equal(error.diagnostics[0]?.path, "deck/slide[bad-timing]");
         return true;
       },

@@ -49,9 +49,9 @@ describe("pptxdk CLI codegen CodegenError handling", () => {
           codegen: () => {
             throw new actual.CodegenError([
               {
-                severity: "error",
                 path: "deck/slide[s1]/shape[unsupported]",
                 code: "unsupported-declaration",
+                declaration: "shape",
                 message: "Cannot serialize custom declaration node",
               },
             ]);
@@ -124,9 +124,9 @@ describe("pptxdk CLI codegen CodegenError handling", () => {
           entry: partialPath,
           diagnostics: [
             {
-              severity: "error",
               path: "deck/slide[s1]/shape[unsupported]",
               code: "unsupported-declaration",
+              declaration: "shape",
               message: "Cannot serialize custom declaration node",
             },
           ],

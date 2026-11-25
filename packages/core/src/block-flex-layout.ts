@@ -14,7 +14,7 @@ import Yoga, {
   type Node as YogaNode,
 } from "yoga-layout";
 
-import { BuildError } from "#/diagnostics.ts";
+import { BuildError, toBuildDiagnostic } from "#/diagnostics.ts";
 import {
   expandedSpacing,
   parseLayoutNumber,
@@ -27,13 +27,7 @@ import {
   type LayoutSolverNode,
   type LayoutSolverPort,
 } from "#/layout-protocol.ts";
-import type {
-  Diagnostic,
-  GeometryBox,
-  LayoutLength,
-  LayoutStyle,
-  Rect,
-} from "#/types.ts";
+import type { GeometryBox, LayoutLength, LayoutStyle, Rect } from "#/types.ts";
 
 export const paddingStyleKeys = [
   "padding",
@@ -95,9 +89,13 @@ export const blockFlexLayoutProperties = [
   "zIndex",
 ] as const;
 
-function fail(path: string, code: string, message: string): never {
-  const diagnostic: Diagnostic = { severity: "error", path, code, message };
-  throw new BuildError([diagnostic]);
+function fail(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): never {
+  throw new BuildError([toBuildDiagnostic(path, code, message, details)]);
 }
 
 export function isStyleRecord(

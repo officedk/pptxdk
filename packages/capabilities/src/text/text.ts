@@ -216,13 +216,14 @@ function paintTextModel(
   paintContext: PaintContext,
 ): PaintOutput {
   const paintBox = paintContext.box ?? model.box;
-  const backgroundSvg = model.visual.hasVisibleStyle
+  const visualPaint = model.visual.hasVisibleStyle
     ? paintVisualModel({
         model: model.visual,
         slideNumber: paintContext.slideNumber,
         objectId: paintContext.objectId,
-      }).svg
-    : "";
+      })
+    : undefined;
+  const backgroundSvg = visualPaint?.svg ?? "";
   const glyphs = renderTextOutlinesSvg({
     paragraphs: model.text.paragraphs,
     box: paintBox,
@@ -238,6 +239,9 @@ function paintTextModel(
   });
   return {
     svg: `${backgroundSvg}<g transform="${visualSvgTransform(model.visual)}">${glyphs}</g>`,
+    ...(visualPaint?.placeholders === undefined
+      ? {}
+      : { placeholders: visualPaint.placeholders }),
   };
 }
 

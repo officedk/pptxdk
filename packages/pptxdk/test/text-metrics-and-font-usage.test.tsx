@@ -744,7 +744,7 @@ describe("Ticket 01 Slice 3: resolve and emit font/glyph hard-error boundaries",
           ),
         ),
       ),
-      ["font-measurement-unavailable"],
+      ["font-unavailable"],
     );
     await assertResolveThrows(
       createElement(
@@ -919,7 +919,7 @@ describe("Ticket 01 Slice 3: resolve and emit font/glyph hard-error boundaries",
           ),
         ),
       ),
-      ["baseline-measurement-unavailable", "font-measurement-unavailable"],
+      ["invalid-structure", "font-unavailable"],
     );
     await assertResolveThrows(
       createElement(
@@ -1115,7 +1115,8 @@ describe("Ticket 01 Slice 3: resolve and emit font/glyph hard-error boundaries",
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some(
-          (d) => d.code === "font-embedding-resource-missing",
+          (d) =>
+            d.code === "font-unavailable" && d.reason === "missing-resource",
         ),
     );
 
@@ -1155,7 +1156,10 @@ describe("Ticket 01 Slice 3: resolve and emit font/glyph hard-error boundaries",
       () => emit(restrictedBytesRes, { embedFonts: "subset" }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "font-embedding-restricted"),
+        error.diagnostics.some(
+          (d) =>
+            d.code === "font-unavailable" && d.reason === "license-restricted",
+        ),
     );
   });
 });

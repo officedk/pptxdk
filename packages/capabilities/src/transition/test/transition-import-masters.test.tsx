@@ -349,7 +349,7 @@ describe("Transition Zod schemas", () => {
       () => emit(jsxResolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "forbidden-mechanism"),
+        error.diagnostics.some((d) => d.code === "target-violation"),
     );
 
     // Effective Morph from SlideLayout triggers Morph continuity kind-matching on the slide.
@@ -374,7 +374,10 @@ describe("Transition Zod schemas", () => {
       () => resolve(layoutMorphMismatch),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "morph-object-kind-mismatch"),
+        error.diagnostics.some(
+          (d) =>
+            d.code === "invalid-continuity" && d.reason === "kind-mismatch",
+        ),
     );
 
     // Effective Morph from SlideMaster triggers Morph continuity kind-matching unless overridden on Slide.
@@ -403,7 +406,10 @@ describe("Transition Zod schemas", () => {
       () => resolve(masterMorphMismatch),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "morph-object-kind-mismatch"),
+        error.diagnostics.some(
+          (d) =>
+            d.code === "invalid-continuity" && d.reason === "kind-mismatch",
+        ),
     );
 
     // Overriding master Morph with fade on the Slide suppresses Morph continuity kind-matching.

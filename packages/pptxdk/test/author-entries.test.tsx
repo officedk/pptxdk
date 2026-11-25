@@ -291,7 +291,6 @@ export const stringWidthDeck = (
     assert.ok(
       structuralError.diagnostics.some(
         (diagnostic) =>
-          diagnostic.severity === "error" &&
           diagnostic.path.includes("slide[outer]") &&
           diagnostic.path.includes("slide[nested]"),
       ),

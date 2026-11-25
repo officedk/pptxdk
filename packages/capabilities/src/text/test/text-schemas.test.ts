@@ -144,7 +144,7 @@ describe("Text & font local Zod schemas", () => {
       () => resolve(badTextDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "unknown-style-property"),
+        error.diagnostics.some((d) => d.code === "unknown-prop"),
     );
 
     const badSlideNumDoc = await expandDocument(
@@ -166,7 +166,7 @@ describe("Text & font local Zod schemas", () => {
       () => resolve(badSlideNumDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "invalid-slide-number"),
+        error.diagnostics.some((d) => d.code === "invalid-prop"),
     );
 
     assert.throws(

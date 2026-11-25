@@ -1,7 +1,6 @@
-import { BuildError } from "#/diagnostics.ts";
+import { BuildError, toBuildDiagnostic } from "#/diagnostics.ts";
 import type {
   CapabilityLayoutMeasurement,
-  Diagnostic,
   GeometryBox,
   LayoutLength,
   LayoutStyle,
@@ -171,9 +170,16 @@ function failLayoutProtocol(
   path: string,
   code: string,
   message: string,
+  field?: string,
 ): never {
-  const diagnostic: Diagnostic = { severity: "error", path, code, message };
-  throw new BuildError([diagnostic]);
+  throw new BuildError([
+    toBuildDiagnostic(
+      path,
+      code,
+      message,
+      field === undefined ? undefined : { field },
+    ),
+  ]);
 }
 
 export function parseLayoutNumber(
@@ -186,6 +192,7 @@ export function parseLayoutNumber(
       path,
       "invalid-layout-style",
       `${name} must be a finite pixel number`,
+      `style.${name}`,
     );
   }
   return value;

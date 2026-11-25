@@ -364,7 +364,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
+        assert.equal(error.diagnostics[0]?.code, "missing-capability");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[s1]/broken-object[bad-obj]",
@@ -389,7 +389,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
+        assert.equal(error.diagnostics[0]?.code, "missing-capability");
         assert.equal(error.diagnostics[0]?.path, "deck/slide[s1]");
         return true;
       },

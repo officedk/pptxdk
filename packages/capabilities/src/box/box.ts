@@ -234,6 +234,9 @@ export const boxCapability: ObjectCapabilityModule = {
             });
             return {
               svg: `${background.svg}${childrenSvg}`,
+              ...(background.placeholders === undefined
+                ? {}
+                : { placeholders: background.placeholders }),
             };
           },
         };

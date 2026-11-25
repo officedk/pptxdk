@@ -202,19 +202,6 @@ const slideLayoutStyleObjectSchema = layoutStyleObjectSchema.omit({
 export const slideLayoutStyleShape = slideLayoutStyleObjectSchema.shape;
 export const slideLayoutStyleSchema = slideLayoutStyleObjectSchema.readonly();
 
-const enumLayoutStyleKeys = new Set<string>([
-  "display",
-  "position",
-  "flexDirection",
-  "flexWrap",
-  "justifyContent",
-  "alignItems",
-  "alignSelf",
-  "alignContent",
-  "justifyItems",
-  "justifySelf",
-]);
-
 const layoutSchemaKeys = new Set<string>(
   Object.keys(layoutStyleObjectSchema.shape),
 );
@@ -239,13 +226,16 @@ export function validateLayoutStyleValues(
 
   const issue = parsed.error.issues[0];
   const key = typeof issue?.path[0] === "string" ? issue.path[0] : undefined;
-  const code =
-    key !== undefined && enumLayoutStyleKeys.has(key)
-      ? "unsupported-layout-value"
-      : "invalid-layout-style";
   const message =
     key === undefined
       ? (issue?.message ?? "Invalid layout style")
       : `${key}: ${issue?.message ?? "invalid value"}`;
-  throw new BuildError([{ severity: "error", path, code, message }]);
+  throw new BuildError([
+    {
+      code: "invalid-style",
+      path,
+      message,
+      ...(key === undefined ? {} : { field: `style.${key}` }),
+    },
+  ]);
 }

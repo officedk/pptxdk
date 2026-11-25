@@ -1,4 +1,13 @@
+import {
+  previewErrorSchema,
+  previewPlaceholderSchema,
+  type PreviewError,
+  type PreviewPlaceholder,
+} from "@pptxdk/core/build";
 import { z } from "zod";
+
+export { previewErrorSchema, previewPlaceholderSchema };
+export type { PreviewError, PreviewPlaceholder };
 
 export const previewPageNumberSchema = z.int().positive();
 

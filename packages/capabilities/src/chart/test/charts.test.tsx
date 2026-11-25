@@ -202,7 +202,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "conflicting-resource");
+        assert.equal(error.diagnostics[0]?.code, "duplicate-id");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /chart\[value-axis-font-conflict\]/u,
@@ -382,7 +382,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-duration");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /chart\[invalid-motion\]/u,
@@ -1062,7 +1062,7 @@ describe("native Cartesian charts", () => {
           ),
           (error: unknown) => {
             assert.ok(error instanceof BuildError);
-            assert.equal(error.diagnostics[0]?.code, "invalid-chart-option");
+            assert.equal(error.diagnostics[0]?.code, "invalid-prop");
             assert.match(
               error.diagnostics[0]?.path ?? "",
               new RegExp(`chart\\[${testId}\\]`, "u"),
@@ -1606,7 +1606,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-data");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /chart\[sparse-values\]/u,
@@ -1650,7 +1650,7 @@ describe("native Cartesian charts", () => {
         ),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-axis");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.match(
             error.diagnostics[0]?.path ?? "",
             /chart\[category-axis-option\]/u,
@@ -1796,7 +1796,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-option");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(error.diagnostics[0]?.path ?? "", /chart\[1\]/u);
         return true;
       },

@@ -1227,7 +1227,7 @@ describe("Ticket 04: orthogonal visual and content props", () => {
           ),
         (error) =>
           error instanceof BuildError &&
-          error.diagnostics.some((d) => d.code === "invalid-motion"),
+          error.diagnostics.some((d) => d.code === "invalid-prop"),
       );
     }
   });

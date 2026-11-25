@@ -311,7 +311,7 @@ describe("tableCapability resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-xml-character" &&
+            code === "invalid-prop" &&
             path === "deck/slide[cover]/table[bad-name]",
         ),
     );

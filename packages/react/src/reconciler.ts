@@ -1,4 +1,8 @@
-import { BuildError, type Diagnostic } from "@pptxdk/core";
+import {
+  BuildError,
+  toBuildDiagnostic,
+  type BuildDiagnostic,
+} from "@pptxdk/core";
 import { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import type { HostTextNode } from "@pptxdk/core/host";
 import { createContext, type ReactNode } from "react";
@@ -176,8 +180,12 @@ function containsSuspendedBoundary(fiber: FiberNode | null): boolean {
   return false;
 }
 
-function diagnostic(path: string, code: string, message: string): Diagnostic {
-  return { severity: "error", path, code, message };
+function diagnostic(
+  path: string,
+  code: string,
+  message: string,
+): BuildDiagnostic {
+  return toBuildDiagnostic(path, code, message);
 }
 
 function isDeckNode(

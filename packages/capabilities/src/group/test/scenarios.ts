@@ -987,7 +987,10 @@ export const groupRejectionScenario: CapabilityScenario = {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(
-          error.diagnostics.some((d) => d.code === "morph-inside-group"),
+          error.diagnostics.some(
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "inside-group",
+          ),
         );
         return true;
       },
@@ -1006,7 +1009,9 @@ export const groupRejectionScenario: CapabilityScenario = {
       ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(error.diagnostics.some((d) => d.code === "empty-group"));
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "invalid-structure"),
+        );
         return true;
       },
     );

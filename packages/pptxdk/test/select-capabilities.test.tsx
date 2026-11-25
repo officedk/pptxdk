@@ -364,7 +364,6 @@ process.stdout.write(JSON.stringify(texts));
       reactError = error;
     }
     assert.ok(reactError instanceof BuildError);
-    assert.equal(reactError.diagnostics[0]?.severity, "error");
     assert.equal(reactError.diagnostics[0]?.code, "missing-capability");
     assert.equal(
       reactError.diagnostics[0]?.path,
@@ -463,7 +462,7 @@ process.stdout.write(JSON.stringify(texts));
         ]),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "unknown-capability" &&
+        error.diagnostics[0]?.code === "missing-capability" &&
         error.diagnostics[0]?.path === "build.capabilities[0]",
     );
 
@@ -474,7 +473,7 @@ process.stdout.write(JSON.stringify(texts));
         }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-capability-selection",
+        error.diagnostics[0]?.code === "invalid-options",
     );
 
     const controller = new AbortController();

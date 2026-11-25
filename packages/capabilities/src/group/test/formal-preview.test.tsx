@@ -264,9 +264,7 @@ describe("Group static preview, screenGeometry, and member failure propagation",
         ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(
-          error.diagnostics.some((d) => d.code === "invalid-visual-style"),
-        );
+        assert.ok(error.diagnostics.some((d) => d.code === "invalid-style"));
         return true;
       },
     );

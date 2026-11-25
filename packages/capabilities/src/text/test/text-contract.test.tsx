@@ -243,7 +243,7 @@ describe("textCapability resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-xml-character" &&
+            code === "invalid-prop" &&
             path === "deck/slide[cover]/text[bad-name]",
         ),
     );
@@ -265,7 +265,7 @@ describe("textCapability resolved contract", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+        error.diagnostics.some(({ code }) => code === "invalid-prop"),
     );
 
     assert.throws(
@@ -286,7 +286,7 @@ describe("textCapability resolved contract", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+        error.diagnostics.some(({ code }) => code === "invalid-prop"),
     );
 
     assert.throws(
@@ -391,7 +391,7 @@ describe("textCapability resolved contract", () => {
       () => resolve(shapeInTextDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "unsupported-text-child"),
+        error.diagnostics.some((d) => d.code === "invalid-structure"),
     );
 
     const shapeInParagraphDoc = await expandDocument(
@@ -417,7 +417,7 @@ describe("textCapability resolved contract", () => {
       () => resolve(shapeInParagraphDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "unsupported-text-child"),
+        error.diagnostics.some((d) => d.code === "invalid-structure"),
     );
 
     const malformedChild = new CommonNode("bogus", "", {});
@@ -436,7 +436,7 @@ describe("textCapability resolved contract", () => {
       () => resolve(malformedDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "invalid-text-child"),
+        error.diagnostics.some((d) => d.code === "invalid-structure"),
     );
   });
 });

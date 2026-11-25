@@ -21,8 +21,8 @@ function deck(text: ReturnType<typeof createElement>) {
 describe("DrawingML text field ranges", () => {
   it("rejects invalid values according to font size serialization ranges and accepts boundaries", async () => {
     for (const [fontSize, code] of [
-      [0.1, "invalid-font-size"],
-      ["6000pt", "invalid-font-size"],
+      [0.1, "invalid-style"],
+      ["6000pt", "invalid-style"],
     ] as const) {
       await assert.rejects(
         build(
@@ -92,9 +92,7 @@ describe("DrawingML text field ranges", () => {
         (error: unknown) =>
           error instanceof BuildError &&
           error.diagnostics.some(
-            (diagnostic) =>
-              diagnostic.code === "invalid-text-length" ||
-              diagnostic.code === "invalid-paragraph-spacing",
+            (diagnostic) => diagnostic.code === "invalid-style",
           ),
       );
     }

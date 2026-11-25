@@ -104,7 +104,7 @@ describe("slide capabilities resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            diag.code === "invalid-slide-background" &&
+            diag.code === "invalid-prop" &&
             diag.path === "deck/slide[bad-bg]/background",
         ),
     );

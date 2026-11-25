@@ -99,7 +99,23 @@ describe("@pptxdk/codegen core contract", () => {
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "invalid-document" &&
-        error.diagnostics[0]?.path === "deck",
+        error.diagnostics[0]?.path === "deck" &&
+        !("severity" in error.diagnostics[0]),
+    );
+
+    const invalidDeckProp = createDeckNode({
+      width: 960,
+      height: 540,
+      unknownDeckProp: true,
+    } as Record<string, unknown>).append(createSlideNode({ id: "s1" }));
+    assert.throws(
+      () => generate(invalidDeckProp, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "invalid-document" &&
+        error.diagnostics[0]?.path === "deck@unknownDeckProp" &&
+        error.diagnostics[0]?.field === "unknownDeckProp" &&
+        !("severity" in error.diagnostics[0]),
     );
 
     const validEmptyDeck = createDeckNode({ width: 960, height: 540 }).append(
@@ -113,7 +129,9 @@ describe("@pptxdk/codegen core contract", () => {
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "invalid-options" &&
-        error.diagnostics[0]?.path === "deck",
+        error.diagnostics[0]?.path === "deck" &&
+        error.diagnostics[0]?.field === "target" &&
+        !("severity" in error.diagnostics[0]),
     );
 
     const mixedDeck = createDeckNode({ width: 960, height: 540 }).append(
@@ -125,7 +143,8 @@ describe("@pptxdk/codegen core contract", () => {
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "invalid-document" &&
-        error.diagnostics[0]?.path.startsWith("deck/"),
+        error.diagnostics[0]?.path.startsWith("deck/") &&
+        !("severity" in error.diagnostics[0]),
     );
 
     const unsupportedNodeDeck = createDeckNode({
@@ -135,10 +154,13 @@ describe("@pptxdk/codegen core contract", () => {
       createSlideNode({ id: "s1" }).append(
         new CommonNode("text", "text", {
           id: "t1",
-          x: 10,
-          y: 10,
-          width: 100,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 100,
+            height: 40,
+          },
         }),
       ),
     );
@@ -147,7 +169,9 @@ describe("@pptxdk/codegen core contract", () => {
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "unsupported-declaration" &&
-        error.diagnostics[0]?.path === "deck/slide[s1]/text[t1]",
+        error.diagnostics[0]?.declaration === "text" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]/text[t1]" &&
+        !("severity" in error.diagnostics[0]),
     );
 
     const unsupportedSlidePropDeck = createDeckNode({
@@ -164,7 +188,9 @@ describe("@pptxdk/codegen core contract", () => {
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "unsupported-slide-property" &&
-        error.diagnostics[0]?.path === "deck/slide[s1]@transition",
+        error.diagnostics[0]?.field === "transition" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]@transition" &&
+        !("severity" in error.diagnostics[0]),
     );
 
     const unexpressibleValueDeck = createDeckNode({
@@ -176,8 +202,36 @@ describe("@pptxdk/codegen core contract", () => {
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "unexpressible-value" &&
+        error.diagnostics[0]?.field === "width" &&
         error.diagnostics[0]?.path === "deck@width" &&
+        !("severity" in error.diagnostics[0]) &&
         codegenDiagnosticSchema.safeParse(error.diagnostics[0]).success,
+    );
+
+    assert.equal(
+      codegenDiagnosticSchema.safeParse({
+        code: "unsupported-declaration",
+        path: "deck/slide[s1]/widget[w1]",
+        message: "Unsupported",
+      }).success,
+      false,
+    );
+    assert.equal(
+      codegenDiagnosticSchema.safeParse({
+        code: "unsupported-slide-property",
+        path: "deck/slide[s1]@customProp",
+        message: "Unsupported prop",
+      }).success,
+      false,
+    );
+    assert.equal(
+      codegenDiagnosticSchema.safeParse({
+        severity: "error",
+        code: "invalid-document",
+        path: "deck",
+        message: "Legacy severity field must be rejected",
+      }).success,
+      false,
     );
 
     try {

@@ -41,6 +41,7 @@ import {
   codegenOptionsSchema,
   expr,
   type CodegenContext,
+  type CodegenDiagnostic,
   type CodegenDiagnosticCode,
   type CodegenExpr,
   type CodegenFileContent,
@@ -184,12 +185,73 @@ function collectContributions(
   };
 }
 
+function extractFieldFromCodegenPath(path: string): string | undefined {
+  let bracketDepth = 0;
+  for (let index = 0; index < path.length; index += 1) {
+    const ch = path[index];
+    if (ch === "[") {
+      bracketDepth += 1;
+    } else if (ch === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (ch === "@" && bracketDepth === 0) {
+      const field = path.slice(index + 1);
+      return field.length > 0 ? field : undefined;
+    }
+  }
+  return undefined;
+}
+
+function extractDeclarationFromCodegenPath(path: string): string | undefined {
+  const withoutField = path.split("@")[0] ?? path;
+  const lastSegment = withoutField.split("/").at(-1);
+  if (lastSegment === undefined || lastSegment === "") return undefined;
+  const bracketIdx = lastSegment.indexOf("[");
+  return bracketIdx === -1 ? lastSegment : lastSegment.slice(0, bracketIdx);
+}
+
 function failAt(
   path: string,
   code: CodegenDiagnosticCode,
   message: string,
+  context?: {
+    readonly field?: string;
+    readonly declaration?: string;
+  },
 ): never {
-  throw new CodegenError([{ severity: "error", path, code, message }]);
+  const resolvedField = context?.field ?? extractFieldFromCodegenPath(path);
+  let diagnostic: CodegenDiagnostic;
+  switch (code) {
+    case "unsupported-declaration":
+      diagnostic = {
+        code,
+        path,
+        message,
+        declaration:
+          context?.declaration ??
+          extractDeclarationFromCodegenPath(path) ??
+          "unknown",
+      };
+      break;
+    case "unsupported-slide-property":
+      diagnostic = {
+        code,
+        path,
+        message,
+        field: resolvedField ?? "unknown",
+      };
+      break;
+    case "invalid-document":
+    case "invalid-options":
+    case "unexpressible-value":
+      diagnostic = {
+        code,
+        path,
+        message,
+        ...(resolvedField === undefined ? {} : { field: resolvedField }),
+      };
+      break;
+  }
+  throw new CodegenError([diagnostic]);
 }
 
 function childPathLabel(node: CommonNode, index: number): string {
@@ -346,10 +408,19 @@ export function createCodegen(
     }
     const parsedOptions = codegenOptionsSchema.safeParse(options);
     if (!parsedOptions.success) {
+      const issueField = parsedOptions.error.issues[0]?.path
+        .map(String)
+        .join(".");
       failAt(
         "deck",
         "invalid-options",
         'Codegen options.target must be "vanilla" or "react"',
+        {
+          field:
+            issueField !== undefined && issueField.length > 0
+              ? issueField
+              : "target",
+        },
       );
     }
     const target = parsedOptions.data.target as T;
@@ -662,6 +733,7 @@ export function createCodegen(
           nodePath,
           "unsupported-declaration",
           `Declaration type ${JSON.stringify(node.type)} is not supported by registered codegen capabilities`,
+          { declaration: node.type },
         );
       }
       const ctx = makeContext(nodePath);
@@ -709,6 +781,7 @@ export function createCodegen(
           `${ownerPath}@${propName}`,
           "unsupported-slide-property",
           `Property ${JSON.stringify(propName)} on ${ownerPath} is not supported by registered codegen capabilities`,
+          { field: propName },
         );
       }
       const ctx = makeContext(`${ownerPath}@${propName}`);

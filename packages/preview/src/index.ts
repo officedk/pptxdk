@@ -25,16 +25,20 @@ import {
   PreviewPageRangeError,
   paintOptionsSchema,
   previewDiagnosticSchema,
+  previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
+  previewPlaceholderSchema,
   previewSeveritySchema,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
   type PaintOptions,
   type PreviewDiagnostic,
+  type PreviewError,
   type PreviewOptions,
+  type PreviewPlaceholder,
   type PreviewSeverity,
   type ScreenGeometry,
   type ScreenPoint,
@@ -45,9 +49,11 @@ export {
   PreviewPageRangeError,
   paintOptionsSchema,
   previewDiagnosticSchema,
+  previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
+  previewPlaceholderSchema,
   previewSeveritySchema,
   screenGeometrySchema,
   screenPointSchema,
@@ -56,7 +62,9 @@ export {
 export type {
   PaintOptions,
   PreviewDiagnostic,
+  PreviewError,
   PreviewOptions,
+  PreviewPlaceholder,
   PreviewSeverity,
   ScreenGeometry,
   ScreenPoint,
@@ -80,6 +88,9 @@ export type PreviewPageResult = {
   readonly png?: Uint8Array;
   readonly nodes: readonly PreviewNode[];
   readonly layouts: readonly ResolvedLayout[];
+  readonly errors: readonly PreviewError[];
+  readonly placeholders: readonly PreviewPlaceholder[];
+  /** Transitional property retained until Ticket 11. */
   readonly diagnostics: readonly PreviewDiagnostic[];
 };
 
@@ -181,10 +192,138 @@ function maxPaintObjectId(layers: readonly ResolvedObjectLayer[]): number {
   return maxId;
 }
 
+function toPreviewError(
+  error: unknown,
+  path: string,
+  fallbackCapability: string,
+): PreviewError {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof CapabilityError) {
+    const details = error.details ?? {};
+    const rawFont = details["font"];
+    const fontRecord =
+      typeof rawFont === "object" && rawFont !== null
+        ? (rawFont as Readonly<Record<string, unknown>>)
+        : undefined;
+    const family =
+      typeof fontRecord?.["family"] === "string"
+        ? fontRecord["family"]
+        : "unknown";
+    const weight =
+      typeof fontRecord?.["weight"] === "number" ? fontRecord["weight"] : 400;
+    const style: "normal" | "italic" =
+      fontRecord?.["style"] === "italic" ? "italic" : "normal";
+
+    switch (error.code) {
+      case "preview-missing-font":
+        return Object.freeze({
+          code: "preview-missing-font",
+          path,
+          message,
+          font: Object.freeze({ family, weight, style }),
+        });
+      case "preview-unsupported-font": {
+        const optionalWeight =
+          typeof fontRecord?.["weight"] === "number"
+            ? fontRecord["weight"]
+            : undefined;
+        const optionalStyle: "normal" | "italic" | undefined =
+          fontRecord?.["style"] === "italic" ||
+          fontRecord?.["style"] === "normal"
+            ? fontRecord["style"]
+            : undefined;
+        const reason =
+          typeof details["reason"] === "string" ? details["reason"] : undefined;
+        return Object.freeze({
+          code: "preview-unsupported-font",
+          path,
+          message,
+          font: Object.freeze({
+            family,
+            ...(optionalWeight === undefined ? {} : { weight: optionalWeight }),
+            ...(optionalStyle === undefined ? {} : { style: optionalStyle }),
+          }),
+          ...(reason === undefined ? {} : { reason }),
+        });
+      }
+      case "preview-missing-glyph": {
+        const rawChars = details["characters"];
+        const characters = Array.isArray(rawChars)
+          ? rawChars.filter((item): item is string => typeof item === "string")
+          : [];
+        return Object.freeze({
+          code: "preview-missing-glyph",
+          path,
+          message,
+          font: Object.freeze({ family, weight, style }),
+          characters: Object.freeze(characters),
+        });
+      }
+      case "preview-corrupt-image": {
+        const rawFormat = details["format"];
+        const format =
+          rawFormat === "png" || rawFormat === "jpeg" || rawFormat === "gif"
+            ? rawFormat
+            : undefined;
+        return Object.freeze({
+          code: "preview-corrupt-image",
+          path,
+          message,
+          ...(format === undefined ? {} : { format }),
+        });
+      }
+      case "preview-unsupported-capability": {
+        const capability =
+          typeof details["capability"] === "string"
+            ? details["capability"]
+            : fallbackCapability;
+        return Object.freeze({
+          code: "preview-unsupported-capability",
+          path,
+          message,
+          capability,
+        });
+      }
+    }
+  }
+  return Object.freeze({
+    code: "preview-unsupported-capability",
+    path,
+    message,
+    capability: fallbackCapability,
+  });
+}
+
+function recordPaintPlaceholders(
+  placeholders: PreviewPlaceholder[],
+  records:
+    | readonly {
+        readonly id?: string;
+        readonly path?: string;
+        readonly url: string;
+      }[]
+    | undefined,
+  defaultPath: string,
+  defaultId?: string,
+): void {
+  if (records === undefined) return;
+  for (const item of records) {
+    const id = item.id ?? defaultId;
+    placeholders.push(
+      Object.freeze({
+        ...(id === undefined ? {} : { id }),
+        path: item.path ?? defaultPath,
+        url: item.url,
+      }),
+    );
+  }
+}
+
 function paintLayer(
   layer: ResolvedObjectLayer,
   pageNumber: number,
-  diagnostics: PreviewDiagnostic[],
+  errors: PreviewError[],
+  placeholders: PreviewPlaceholder[],
   nodePaths: Map<number, string>,
   transforms: Map<number, PreviewTransform>,
   paintIdOffset = 0,
@@ -197,7 +336,8 @@ function paintLayer(
             paintLayer(
               child,
               pageNumber,
-              diagnostics,
+              errors,
+              placeholders,
               nodePaths,
               transforms,
               paintIdOffset,
@@ -211,7 +351,8 @@ function paintLayer(
               paintLayer(
                 child,
                 pageNumber,
-                diagnostics,
+                errors,
+                placeholders,
                 nodePaths,
                 transforms,
                 paintIdOffset,
@@ -248,44 +389,31 @@ function paintLayer(
         ...(childrenSvg === undefined ? {} : { childrenSvg }),
       });
       recordNodeIdentity();
-      for (const warning of output.warnings ?? []) {
-        diagnostics.push(
-          Object.freeze({
-            severity: "warning",
-            page: pageNumber,
-            path:
-              warning.path === undefined
-                ? layer.path
-                : `${layer.path}/${warning.path}`,
-            message: warning.message,
-          }),
-        );
-      }
+      recordPaintPlaceholders(
+        placeholders,
+        output.placeholders,
+        layer.path,
+        layer.authorId,
+      );
       return output.svg;
     } catch (error) {
       recordNodeIdentity();
-      diagnostics.push(
-        Object.freeze({
-          severity: "error",
-          page: pageNumber,
-          path:
-            error instanceof CapabilityError && error.path !== undefined
-              ? `${layer.path}/${error.path}`
-              : layer.path,
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      const errorPath =
+        error instanceof CapabilityError && error.path !== undefined
+          ? `${layer.path}/${error.path}`
+          : layer.path;
+      errors.push(toPreviewError(error, errorPath, layer.declarationType));
       return "";
     }
   }
 
   recordNodeIdentity();
-  diagnostics.push(
+  errors.push(
     Object.freeze({
-      severity: "error",
-      page: pageNumber,
+      code: "preview-unsupported-capability",
       path: layer.path,
       message: `Preview does not support ${layer.declarationType}`,
+      capability: layer.declarationType,
     }),
   );
   return "";
@@ -316,7 +444,8 @@ export function paint(
       throw new Error("Missing resolved slide observation for paint");
     }
 
-    const diagnostics: PreviewDiagnostic[] = [];
+    const errors: PreviewError[] = [];
+    const placeholders: PreviewPlaceholder[] = [];
     const nodePaths = new Map<number, string>();
     const transforms = new Map<number, PreviewTransform>();
 
@@ -330,7 +459,8 @@ export function paint(
         paintLayer(
           layer,
           pageNumber,
-          diagnostics,
+          errors,
+          placeholders,
           nodePaths,
           transforms,
           masterOffset,
@@ -349,7 +479,8 @@ export function paint(
         paintLayer(
           layer,
           pageNumber,
-          diagnostics,
+          errors,
+          placeholders,
           nodePaths,
           transforms,
           layoutOffset,
@@ -364,7 +495,14 @@ export function paint(
 
     const layers = slide.layers
       .map((layer) =>
-        paintLayer(layer, pageNumber, diagnostics, nodePaths, transforms),
+        paintLayer(
+          layer,
+          pageNumber,
+          errors,
+          placeholders,
+          nodePaths,
+          transforms,
+        ),
       )
       .join("");
 
@@ -392,39 +530,26 @@ export function paint(
           ) {
             shapeTreeCapSvg += previewOutput.svg;
           }
-          for (const warning of previewOutput.warnings ?? []) {
-            diagnostics.push(
-              Object.freeze({
-                severity: "warning",
-                page: pageNumber,
-                path:
-                  warning.path === undefined
-                    ? slideCap.path
-                    : `${slideCap.path}/${warning.path}`,
-                message: warning.message,
-              }),
-            );
-          }
-        } catch (error) {
-          diagnostics.push(
-            Object.freeze({
-              severity: "error",
-              page: pageNumber,
-              path:
-                error instanceof CapabilityError && error.path !== undefined
-                  ? error.path
-                  : slideCap.path,
-              message: error instanceof Error ? error.message : String(error),
-            }),
+          recordPaintPlaceholders(
+            placeholders,
+            previewOutput.placeholders,
+            slideCap.path,
+            slide.authorId,
           );
+        } catch (error) {
+          const errorPath =
+            error instanceof CapabilityError && error.path !== undefined
+              ? error.path
+              : slideCap.path;
+          errors.push(toPreviewError(error, errorPath, slideCap.declaration));
         }
       } else if (slideCap.slot === "background" && slideCap.hasSlideProps) {
-        diagnostics.push(
+        errors.push(
           Object.freeze({
-            severity: "error",
-            page: pageNumber,
+            code: "preview-unsupported-capability",
             path: slideCap.path,
             message: `Preview does not support ${slideCap.declaration}`,
+            capability: slideCap.declaration,
           }),
         );
       }
@@ -443,17 +568,22 @@ export function paint(
         if (inheritedOutput.svg !== "") {
           background = inheritedOutput.svg;
         }
+        recordPaintPlaceholders(
+          placeholders,
+          inheritedOutput.placeholders,
+          slide.inheritedBackground.path,
+        );
       } catch (error) {
-        diagnostics.push(
-          Object.freeze({
-            severity: "error",
-            page: pageNumber,
-            path:
-              error instanceof CapabilityError && error.path !== undefined
-                ? error.path
-                : slide.inheritedBackground.path,
-            message: error instanceof Error ? error.message : String(error),
-          }),
+        const errorPath =
+          error instanceof CapabilityError && error.path !== undefined
+            ? error.path
+            : slide.inheritedBackground.path;
+        errors.push(
+          toPreviewError(
+            error,
+            errorPath,
+            slide.inheritedBackground.declaration,
+          ),
         );
       }
     }
@@ -488,14 +618,27 @@ export function paint(
     };
     collect(slideObservation.objects);
 
-    const pageDiagnostics = Object.freeze([...diagnostics]);
-    if (pageDiagnostics.some((item) => item.severity === "error")) {
+    const pageErrors = Object.freeze([...errors]);
+    const pagePlaceholders = Object.freeze([...placeholders]);
+    const pageDiagnostics: readonly PreviewDiagnostic[] = Object.freeze(
+      pageErrors.map((err) =>
+        Object.freeze({
+          severity: "error" as const,
+          page: pageNumber,
+          path: err.path,
+          message: err.message,
+        }),
+      ),
+    );
+    if (pageErrors.length > 0) {
       pages.push(
         Object.freeze({
           id: slide.id,
           page: pageNumber,
           nodes: Object.freeze(nodes),
           layouts: slideObservation.layouts ?? Object.freeze([]),
+          errors: pageErrors,
+          placeholders: pagePlaceholders,
           diagnostics: pageDiagnostics,
         }),
       );
@@ -528,6 +671,8 @@ export function paint(
         png,
         nodes: Object.freeze(nodes),
         layouts: slideObservation.layouts ?? Object.freeze([]),
+        errors: pageErrors,
+        placeholders: pagePlaceholders,
         diagnostics: pageDiagnostics,
       }),
     );

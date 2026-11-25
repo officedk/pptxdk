@@ -313,6 +313,9 @@ function paintShapeModel(
             : `<g transform="rotate(${roundSvgNumber(rotate)} ${roundSvgNumber(cx)} ${roundSvgNumber(cy)})">${glyphsSvg}</g>`;
       return {
         svg: `${visualPaint.svg}${textLayer}`,
+        ...(visualPaint.placeholders === undefined
+          ? {}
+          : { placeholders: visualPaint.placeholders }),
       };
     }
     default: {
@@ -363,6 +366,8 @@ export const shapeCapability = {
       throw new CapabilityError(
         "unknown-parameter",
         `Shape contains unsupported parameter ${unknown}`,
+        undefined,
+        { prop: unknown, scope: "props" },
       );
     }
 

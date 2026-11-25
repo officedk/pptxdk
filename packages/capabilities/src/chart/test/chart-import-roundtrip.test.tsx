@@ -683,9 +683,7 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          ({ code }) => code === "chart-category-domain-mismatch",
-        ),
+        error.diagnostics.some(({ code }) => code === "invalid-prop"),
     );
   });
 

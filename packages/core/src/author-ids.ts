@@ -31,9 +31,10 @@ export function readAuthorId(
   if (!parsed.success) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path,
-        code: "invalid-author-id",
+        field: "id",
+        expected: "non-empty string",
         message: "id must be a non-empty string",
       },
     ]);
@@ -61,9 +62,10 @@ export function validateAuthorIdScopes(
       if (scope.has(id)) {
         throw new BuildError([
           {
-            severity: "error",
+            code: "duplicate-id",
             path: childPath,
-            code: "duplicate-author-id",
+            field: "id",
+            identifier: id,
             message: `Duplicate author id ${JSON.stringify(id)} in the same scope`,
           },
         ]);

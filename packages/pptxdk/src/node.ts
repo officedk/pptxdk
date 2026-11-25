@@ -4,6 +4,7 @@ import { registerHooks } from "node:module";
 import { extname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { toBuildDiagnostic } from "@pptxdk/core/build";
 import { CommonNode } from "@pptxdk/core/document";
 import { validateOptions } from "@pptxdk/emit";
 import { transformSync, type Loader } from "esbuild";
@@ -14,8 +15,12 @@ import {
   BuildError,
   ImportError,
   build,
+  buildDiagnosticSchema,
   buildOptionsSchema,
   importPptx,
+  previewErrorSchema,
+  previewPlaceholderSchema,
+  type BuildDiagnostic,
   type BuildOptions,
   type BuildResult,
   type FatalImportIssue,
@@ -23,6 +28,8 @@ import {
   type ImportOptions,
   type ImportReport,
   type ImportResult,
+  type PreviewError,
+  type PreviewPlaceholder,
 } from "./index.ts";
 import type { PreviewOptions, PreviewResult } from "./preview.ts";
 
@@ -59,6 +66,7 @@ export type PreviewFromSourceOptions = z.infer<
 >;
 
 export type {
+  BuildDiagnostic,
   BuildOptions,
   BuildResult,
   FatalImportIssue,
@@ -66,10 +74,17 @@ export type {
   ImportOptions,
   ImportReport,
   ImportResult,
+  PreviewError,
   PreviewOptions,
+  PreviewPlaceholder,
   PreviewResult,
 };
-export { ImportError };
+export {
+  ImportError,
+  buildDiagnosticSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
+};
 
 /**
  * Reads a Transitional PPTX file from disk and imports it into an editable CommonNode document
@@ -286,12 +301,12 @@ export async function buildFromSource(
     >;
     validateOptions(buildOptions);
     throw new BuildError([
-      {
-        severity: "error",
-        path: "build.exportName",
-        code: "invalid-options",
-        message: "exportName must be a non-empty string",
-      },
+      toBuildDiagnostic(
+        "build.exportName",
+        "invalid-options",
+        "exportName must be a non-empty string",
+        { field: "exportName" },
+      ),
     ]);
   }
   const { exportName = "default", ...buildOptions } = parsed.data;

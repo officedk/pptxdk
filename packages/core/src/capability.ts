@@ -19,7 +19,12 @@ export {
   footerPlaceholdersSchema,
   headerFooterSchema,
 } from "#/masters.ts";
-export { BuildError, CapabilityError } from "#/diagnostics.ts";
+export {
+  BuildError,
+  CapabilityError,
+  capabilityErrorToDiagnostic,
+  toBuildDiagnostic,
+} from "#/diagnostics.ts";
 export {
   customGeometrySchema,
   geometryAdjustKeySchema,
@@ -46,17 +51,25 @@ export {
   paddingStyleSchema,
 } from "#/layout-schemas.ts";
 export {
+  buildDiagnosticFontUnavailableReasonSchema,
+  buildDiagnosticSchema,
   fontEmbeddingModeSchema,
   formatBaseline,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   targets,
 } from "#/stage-options.ts";
 export type {
+  BuildDiagnostic,
+  BuildDiagnosticFontUnavailableReason,
   BuildOptions,
   Diagnostic,
   DiagnosticSeverity,
   EmitOptions,
   Extension,
   FontEmbeddingMode,
+  PreviewError,
+  PreviewPlaceholder,
   ResolveOptions,
   Target,
   TargetName,
@@ -268,6 +281,7 @@ export type {
   LayoutObservation,
   LayoutSpacing,
   LayoutStyle,
+  LegacyReportDiagnostic,
   LinkTarget,
   Locator,
   MastersEmitDriver,
@@ -283,6 +297,7 @@ export type {
   PaddingStyle,
   PaintContext,
   PaintOutput,
+  PaintPlaceholderRecord,
   PptxRelationship,
   PreviewTransform,
   PreviewWarning,
@@ -293,6 +308,7 @@ export type {
   ResolutionReport,
   ResolvedFooter,
   ResolvedFooterSlot,
+  ResolvedImage,
   ResolvedLayout,
   ResolvedLink,
   ResolvedMaster,

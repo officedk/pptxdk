@@ -464,7 +464,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
       () => resolve(dupDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "duplicate-notes"),
+        error.diagnostics.some((diag) => diag.code === "invalid-structure"),
     );
 
     const badXmlDoc = await expandDocument(
@@ -482,7 +482,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
       () => resolve(badXmlDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "invalid-xml-character"),
+        error.diagnostics.some((diag) => diag.code === "invalid-prop"),
     );
   });
 });

@@ -272,7 +272,7 @@ describe("geometry, object visuals, and text visuals", () => {
           error instanceof BuildError &&
           error.diagnostics.some(
             (item) =>
-              item.code === "invalid-visual-style" &&
+              item.code === "invalid-style" &&
               item.path.includes("badrotate") &&
               item.message.includes("rotate"),
           ),
@@ -443,8 +443,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-visual-style" &&
-            path.includes("shape[line-too-wide]"),
+            code === "invalid-style" && path.includes("shape[line-too-wide]"),
         ),
     );
   });
@@ -470,7 +469,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path: diagnosticPath }) =>
-            code === "invalid-geometry" &&
+            code === "invalid-prop" &&
             diagnosticPath.includes("shape[tiny-view-box]"),
         ),
     );
@@ -773,7 +772,7 @@ describe("geometry, object visuals, and text visuals", () => {
           error instanceof BuildError &&
           error.diagnostics.some(
             (diag) =>
-              diag.code === "invalid-visual-style" &&
+              diag.code === "invalid-style" &&
               diag.message.includes("startArrow"),
           ),
       );
@@ -800,7 +799,7 @@ describe("geometry, object visuals, and text visuals", () => {
           error instanceof BuildError &&
           error.diagnostics.some(
             (diag) =>
-              diag.code === "invalid-visual-style" &&
+              diag.code === "invalid-style" &&
               diag.message.includes("endArrow"),
           ),
       );
@@ -860,7 +859,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
             diag.message.includes("startArrow"),
         ),
     );
@@ -878,7 +877,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
             diag.message.includes("endArrow"),
         ),
     );
@@ -896,7 +895,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
             diag.message.includes("startArrow"),
         ),
     );
@@ -914,7 +913,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-style") &&
+            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
             diag.message.includes("endArrow"),
         ),
     );

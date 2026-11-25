@@ -1,0 +1,210 @@
+{
+  "name": "@pptxdk/capabilities",
+  "version": "0.0.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/capabilities"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "imports": {
+    "#/*.ts": {
+      "source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./shape": {
+      "source": "./src/shape/shape.ts",
+      "types": "./dist/shape/shape.d.ts",
+      "default": "./dist/shape/shape.js"
+    },
+    "./shape-elements": {
+      "source": "./src/shape/shape-elements.ts",
+      "types": "./dist/shape/shape-elements.d.ts",
+      "default": "./dist/shape/shape-elements.js"
+    },
+    "./box": {
+      "source": "./src/box/box.ts",
+      "types": "./dist/box/box.d.ts",
+      "default": "./dist/box/box.js"
+    },
+    "./box-elements": {
+      "source": "./src/box/box-elements.ts",
+      "types": "./dist/box/box-elements.d.ts",
+      "default": "./dist/box/box-elements.js"
+    },
+    "./document": {
+      "source": "./src/document.ts",
+      "types": "./dist/document.d.ts",
+      "default": "./dist/document.js"
+    },
+    "./all": {
+      "source": "./src/all.ts",
+      "types": "./dist/all.d.ts",
+      "default": "./dist/all.js"
+    },
+    "./font": {
+      "source": "./src/font/font.ts",
+      "types": "./dist/font/font.d.ts",
+      "default": "./dist/font/font.js"
+    },
+    "./chart": {
+      "source": "./src/chart/chart.ts",
+      "types": "./dist/chart/chart.d.ts",
+      "default": "./dist/chart/chart.js"
+    },
+    "./chart-elements": {
+      "source": "./src/chart/chart-elements.ts",
+      "types": "./dist/chart/chart-elements.d.ts",
+      "default": "./dist/chart/chart-elements.js"
+    },
+    "./text": {
+      "source": "./src/text/text.ts",
+      "types": "./dist/text/text.d.ts",
+      "default": "./dist/text/text.js"
+    },
+    "./text-elements": {
+      "source": "./src/text/text-elements.ts",
+      "types": "./dist/text/text-elements.d.ts",
+      "default": "./dist/text/text-elements.js"
+    },
+    "./notes": {
+      "source": "./src/notes/notes.ts",
+      "types": "./dist/notes/notes.d.ts",
+      "default": "./dist/notes/notes.js"
+    },
+    "./notes-elements": {
+      "source": "./src/notes/notes-elements.ts",
+      "types": "./dist/notes/notes-elements.d.ts",
+      "default": "./dist/notes/notes-elements.js"
+    },
+    "./notes-declaration": {
+      "source": "./src/notes/notes-declaration.ts",
+      "types": "./dist/notes/notes-declaration.d.ts",
+      "default": "./dist/notes/notes-declaration.js"
+    },
+    "./table": {
+      "source": "./src/table/table.ts",
+      "types": "./dist/table/table.d.ts",
+      "default": "./dist/table/table.js"
+    },
+    "./table-elements": {
+      "source": "./src/table/table-elements.ts",
+      "types": "./dist/table/table-elements.d.ts",
+      "default": "./dist/table/table-elements.js"
+    },
+    "./transition": {
+      "source": "./src/transition/transition.ts",
+      "types": "./dist/transition/transition.d.ts",
+      "default": "./dist/transition/transition.js"
+    },
+    "./slide-background": {
+      "source": "./src/slide-background/slide-background.ts",
+      "types": "./dist/slide-background/slide-background.d.ts",
+      "default": "./dist/slide-background/slide-background.js"
+    },
+    "./motion": {
+      "source": "./src/motion/motion.ts",
+      "types": "./dist/motion/motion.d.ts",
+      "default": "./dist/motion/motion.js"
+    },
+    "./motion-elements": {
+      "source": "./src/motion/motion-elements.ts",
+      "types": "./dist/motion/motion-elements.d.ts",
+      "default": "./dist/motion/motion-elements.js"
+    },
+    "./image": {
+      "source": "./src/image/image.ts",
+      "types": "./dist/image/image.d.ts",
+      "default": "./dist/image/image.js"
+    },
+    "./image-elements": {
+      "source": "./src/image/image-elements.ts",
+      "types": "./dist/image/image-elements.d.ts",
+      "default": "./dist/image/image-elements.js"
+    },
+    "./group": {
+      "source": "./src/group/group.ts",
+      "types": "./dist/group/group.d.ts",
+      "default": "./dist/group/group.js"
+    },
+    "./group-elements": {
+      "source": "./src/group/group-elements.ts",
+      "types": "./dist/group/group-elements.d.ts",
+      "default": "./dist/group/group-elements.js"
+    },
+    "./masters": {
+      "source": "./src/masters/masters.ts",
+      "types": "./dist/masters/masters.d.ts",
+      "default": "./dist/masters/masters.js"
+    },
+    "./footer-placeholder": {
+      "source": "./src/masters/footer-placeholder.ts",
+      "types": "./dist/masters/footer-placeholder.d.ts",
+      "default": "./dist/masters/footer-placeholder.js"
+    },
+    "./placeholder": {
+      "source": "./src/placeholder/placeholder.ts",
+      "types": "./dist/placeholder/placeholder.d.ts",
+      "default": "./dist/placeholder/placeholder.js"
+    },
+    "./placeholder-elements": {
+      "source": "./src/placeholder/placeholder-elements.ts",
+      "types": "./dist/placeholder/placeholder-elements.d.ts",
+      "default": "./dist/placeholder/placeholder-elements.js"
+    }
+  },
+  "scripts": {
+    "format:check": "oxfmt --list-different .",
+    "format:write": "oxfmt --write .",
+    "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
+    "lint:fix": "oxlint --format=unix . --fix",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pptxdk/codegen": "workspace:*",
+    "@pptxdk/core": "workspace:*",
+    "@pptxdk/emit": "workspace:*",
+    "@pptxdk/import": "workspace:*",
+    "fflate": "catalog:",
+    "fontkit": "catalog:",
+    "harfbuzzjs": "catalog:",
+    "jpeg-js": "catalog:",
+    "linebreak": "catalog:",
+    "pngjs": "catalog:",
+    "react": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@pptxdk/preview": "workspace:*",
+    "@pptxdk/react": "workspace:*",
+    "@pptxdk/tooling-config": "workspace:*",
+    "@pptxdk/validation": "workspace:*",
+    "@types/fontkit": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pngjs": "catalog:",
+    "@types/react": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript-7": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": "^26.13.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "extends": "@pptxdk/tooling-config/react.json",
+  "compilerOptions": {
+    "types": ["emscripten", "node"],
+    "declarationMap": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "*.config.ts",
+    "template/**/*.ts",
+    "template/**/*.tsx"
+  ]
+}

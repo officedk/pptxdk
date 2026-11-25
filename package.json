@@ -1,0 +1,41 @@
+{
+  "name": "@pptxdk/workspace",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git"
+  },
+  "type": "module",
+  "scripts": {
+    "format:check": "oxfmt --list-different --no-error-on-unmatched-pattern *.json pnpm-workspace.yaml pnpm-lock.yaml *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .changeset/config.json .devcontainer resources scripts template test",
+    "format:write": "oxfmt --write --no-error-on-unmatched-pattern *.json pnpm-workspace.yaml pnpm-lock.yaml *.config.ts .gitignore .dockerignore Dockerfile TODO.md rust-toolchain.toml .vscode .github .changeset/config.json .devcontainer resources scripts template test",
+    "lint": "oxlint --quiet --format=unix --no-error-on-unmatched-pattern *.config.ts scripts template test",
+    "lint:fix": "oxlint --format=unix --no-error-on-unmatched-pattern *.config.ts scripts template test --fix",
+    "typecheck": "tsc --build --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "node --conditions=source scripts/task-gates.ts check",
+    "check:heavy": "node --conditions=source scripts/task-gates.ts check:heavy",
+    "check:full": "node --conditions=source scripts/task-gates.ts check:full",
+    "fix": "node --conditions=source scripts/task-gates.ts fix",
+    "boundaries": "turbo boundaries",
+    "publication:pack": "turbo run build && changeset pack --out-dir .changeset/packed",
+    "publication:publish": "changeset publish --from-pack-dir .changeset/packed"
+  },
+  "devDependencies": {
+    "@changesets/cli": "catalog:",
+    "@pptxdk/tooling-config": "workspace:./packages/tooling-config",
+    "@types/node": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "turbo": "catalog:",
+    "typescript-7": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": "26.13.0"
+  },
+  "packageManager": "pnpm@12.9.1"
+}

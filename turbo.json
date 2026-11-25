@@ -1,0 +1,170 @@
+{
+  "tasks": {
+    "//#boundaries": {
+      "tags": ["quality:light"]
+    },
+    "//#check": {
+      "tags": ["quality:entry"]
+    },
+    "//#check:full": {
+      "tags": ["quality:entry"]
+    },
+    "//#check:heavy": {
+      "tags": ["quality:entry"]
+    },
+    "//#fix": {
+      "tags": ["work:repair"]
+    },
+    "//#format:check": {
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#format:write": {
+      "cache": false,
+      "dependsOn": ["//#lint:fix"],
+      "tags": ["work:repair"]
+    },
+    "//#lint": {
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#lint:fix": {
+      "cache": false,
+      "tags": ["work:repair"]
+    },
+    "//#typecheck": {
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#test": {
+      "inputs": [
+        "scripts/**",
+        "test/**",
+        "package.json",
+        "turbo.json",
+        "vitest.config.ts",
+        "tsconfig.scripts.json"
+      ],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#publication:pack": {
+      "tags": ["work:release"],
+      "cache": false
+    },
+    "//#publication:publish": {
+      "tags": ["work:release"],
+      "cache": false
+    }
+  },
+  "boundaries": {
+    "tags": {
+      "layer:tooling": {
+        "dependencies": {
+          "allow": []
+        }
+      },
+      "layer:validation": {
+        "dependencies": {
+          "allow": ["layer:tooling"]
+        }
+      },
+      "layer:core": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation"]
+        }
+      },
+      "layer:emit": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
+      "layer:preview": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
+      "layer:import": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
+      "layer:codegen": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
+      "layer:react": {
+        "dependencies": {
+          "allow": ["layer:tooling", "layer:validation", "layer:core"]
+        }
+      },
+      "layer:capabilities": {
+        "dependencies": {
+          "allow": [
+            "layer:tooling",
+            "layer:validation",
+            "layer:core",
+            "layer:emit",
+            "layer:import",
+            "layer:codegen",
+            "layer:preview",
+            "layer:react"
+          ]
+        }
+      },
+      "layer:entry": {
+        "dependencies": {
+          "allow": [
+            "layer:tooling",
+            "layer:validation",
+            "layer:core",
+            "layer:emit",
+            "layer:import",
+            "layer:codegen",
+            "layer:preview",
+            "layer:capabilities",
+            "layer:react"
+          ]
+        }
+      },
+      "layer:example": {
+        "dependencies": {
+          "allow": [
+            "layer:tooling",
+            "layer:validation",
+            "layer:core",
+            "layer:emit",
+            "layer:import",
+            "layer:codegen",
+            "layer:preview",
+            "layer:capabilities",
+            "layer:react",
+            "layer:entry",
+            "layer:application"
+          ]
+        }
+      },
+      "layer:application": {
+        "dependencies": {
+          "allow": [
+            "layer:tooling",
+            "layer:validation",
+            "layer:core",
+            "layer:emit",
+            "layer:import",
+            "layer:codegen",
+            "layer:preview",
+            "layer:capabilities",
+            "layer:react",
+            "layer:entry"
+          ]
+        }
+      }
+    }
+  },
+  "globalDependencies": [
+    "packages/tooling-config/oxfmt.config.ts",
+    "packages/tooling-config/oxlint.config.ts"
+  ]
+}

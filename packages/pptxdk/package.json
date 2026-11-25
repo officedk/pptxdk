@@ -1,0 +1,102 @@
+{
+  "name": "pptxdk",
+  "version": "0.0.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pptxdk/pptxdk.git",
+    "directory": "packages/pptxdk"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "imports": {
+    "#/*.ts": {
+      "source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "#/*.tsx": {
+      "source": "./src/*.tsx",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./build": {
+      "source": "./src/build.ts",
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
+    },
+    "./react": {
+      "source": "./src/react.ts",
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./vanilla": {
+      "source": "./src/vanilla.ts",
+      "types": "./dist/vanilla.d.ts",
+      "default": "./dist/vanilla.js"
+    },
+    "./node": {
+      "source": "./src/node.ts",
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./preview": {
+      "source": "./src/preview.ts",
+      "types": "./dist/preview.d.ts",
+      "default": "./dist/preview.js"
+    }
+  },
+  "scripts": {
+    "format:check": "oxfmt --list-different .",
+    "format:write": "oxfmt --write .",
+    "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
+    "lint:fix": "oxlint --format=unix . --fix",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pptxdk/capabilities": "workspace:*",
+    "@pptxdk/codegen": "workspace:*",
+    "@pptxdk/core": "workspace:*",
+    "@pptxdk/emit": "workspace:*",
+    "@pptxdk/import": "workspace:*",
+    "@pptxdk/preview": "workspace:*",
+    "@pptxdk/react": "workspace:*",
+    "esbuild": "catalog:",
+    "react": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@pptxdk/tooling-config": "workspace:*",
+    "@pptxdk/validation": "workspace:*",
+    "@types/emscripten": "catalog:",
+    "@types/fontkit": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pngjs": "catalog:",
+    "@types/react": "catalog:",
+    "fflate": "catalog:",
+    "fontkit": "catalog:",
+    "harfbuzzjs": "catalog:",
+    "jpeg-js": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "pngjs": "catalog:",
+    "typescript-7": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": "^26.13.0"
+  }
+}

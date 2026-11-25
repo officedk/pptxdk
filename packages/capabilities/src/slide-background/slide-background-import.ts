@@ -96,6 +96,7 @@ function readBackgroundElement(
         }
         switch (fillChild.localName) {
           case "noFill":
+            result = "none";
             break;
           case "solidFill":
             result = readDrawingColor(fillChild, location, diagnostics);

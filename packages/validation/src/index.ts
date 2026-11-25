@@ -526,6 +526,7 @@ export type FileAnimationDependency = {
 };
 
 export type FileSlideBackground =
+  | { readonly type: "none" }
   | { readonly type: "solid"; readonly color?: string }
   | {
       readonly type: "gradient";
@@ -8024,6 +8025,10 @@ function readSlideBackground(
   if (solid !== undefined) {
     const color = readRunColor(solid, theme);
     return { type: "solid", ...(color === undefined ? {} : { color }) };
+  }
+  const noFill = first(properties, drawingNamespace, "noFill");
+  if (noFill !== undefined) {
+    return { type: "none" };
   }
   issue(
     errors,

@@ -18,27 +18,24 @@ import {
 } from "@pptxdk/core/capability";
 import { defineCanvasMechanism } from "@pptxdk/import";
 
-import {
-  decodeImageToPngBytes,
-  readImage,
-  type LoadedImage,
-} from "../image/image-decode.ts";
+import { readImage } from "../image/image-decode.ts";
 import {
   gradientDefSvg,
+  paintImageFillSvg,
   resolveGradientSpec,
+  resolveImageBackgroundSpec,
   type ResolvedGradientStop,
+  type ResolvedImageFill,
 } from "../shared/visual.ts";
 import { slideBackgroundCodegen } from "./slide-background-codegen.ts";
 import { readSlideBackgroundSlot } from "./slide-background-import.ts";
 import {
   slideBackgroundGradientXml,
   slideBackgroundImageXml,
+  slideBackgroundNoneXml,
   slideBackgroundRefXml,
   slideBackgroundSolidXml,
 } from "./slide-background-xml.ts";
-
-const imageRelationship =
-  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 
 type ResolvedBgRefFill =
   | { readonly kind: "none" }
@@ -56,6 +53,7 @@ type ResolvedBgRefFill =
 /** Closed resolved representation of Slide.background consumed exhaustively by emit and paint. */
 export type ResolvedSlideBackground =
   | { readonly kind: "default" }
+  | { readonly kind: "none" }
   | { readonly kind: "solid"; readonly color: ResolvedColor }
   | {
       readonly kind: "linear-gradient";
@@ -66,7 +64,7 @@ export type ResolvedSlideBackground =
       readonly kind: "radial-gradient";
       readonly stops: readonly ResolvedGradientStop[];
     }
-  | { readonly kind: "image"; readonly image: LoadedImage }
+  | ResolvedImageFill
   | {
       readonly kind: "ref";
       readonly idx: 1001 | 1002 | 1003;
@@ -122,6 +120,9 @@ function resolveSlideBackground(
   if (background === undefined) {
     return { kind: "default" };
   }
+  if (background === "none") {
+    return { kind: "none" };
+  }
 
   const parsed = slideBackgroundSchema.safeParse(background);
   if (!parsed.success) {
@@ -142,7 +143,7 @@ function resolveSlideBackground(
         Object.keys(candidate).length === 1 &&
         Object.hasOwn(candidate, "image")
       ) {
-        return { kind: "image", image: readImage(candidate["image"]) };
+        readImage(candidate["image"]);
       }
       if ("color" in candidate && !("ref" in candidate)) {
         return {
@@ -159,12 +160,12 @@ function resolveSlideBackground(
   }
 
   const value: SlideBackground = parsed.data;
+  if (value === "none") {
+    return { kind: "none" };
+  }
   if (typeof value === "object" && value !== null) {
     if ("image" in value) {
-      return {
-        kind: "image",
-        image: readImage(value.image),
-      };
+      return resolveImageBackgroundSpec(value, undefined);
     }
     if ("ref" in value) {
       const refColor = theme.resolveColor(value.color ?? "bg1");
@@ -193,22 +194,26 @@ function emitSlideBackground(
   switch (resolved.kind) {
     case "default":
       return { xml: "" };
+    case "none":
+      return { xml: slideBackgroundNoneXml() };
     case "solid":
       return { xml: slideBackgroundSolidXml(resolved.color) };
     case "linear-gradient":
     case "radial-gradient":
       return { xml: slideBackgroundGradientXml(resolved) };
-    case "image": {
-      const relationshipId = emitContext.registerResource({
-        bytes: resolved.image.bytes,
-        extension: resolved.image.extension,
-        contentType: resolved.image.contentType,
-        relationshipType: imageRelationship,
-      });
+    case "image":
       return {
-        xml: slideBackgroundImageXml(relationshipId),
+        xml: slideBackgroundImageXml(
+          resolved,
+          (resource) => emitContext.registerResource(resource),
+          {
+            x: 0,
+            y: 0,
+            width: emitContext.dimensions.width,
+            height: emitContext.dimensions.height,
+          },
+        ),
       };
-    }
     case "ref":
       return { xml: slideBackgroundRefXml(resolved.idx, resolved.refColor) };
     default: {
@@ -225,6 +230,7 @@ function paintSlideBackground(
   const { width, height } = paintContext.dimensions;
   switch (resolved.kind) {
     case "default":
+    case "none":
       return { svg: "" };
     case "solid":
       return {
@@ -239,9 +245,15 @@ function paintSlideBackground(
       };
     }
     case "image": {
-      let pngBytes: Uint8Array;
+      const patId = `bg-s${paintContext.slideNumber}-img`;
+      let def: string;
       try {
-        pngBytes = decodeImageToPngBytes(resolved.image);
+        def = paintImageFillSvg(resolved, patId, {
+          x: 0,
+          y: 0,
+          width,
+          height,
+        });
       } catch (error) {
         const message =
           error instanceof Error
@@ -253,9 +265,8 @@ function paintSlideBackground(
           `${paintContext.path}/background`,
         );
       }
-      const base64 = Buffer.from(pngBytes).toString("base64");
       return {
-        svg: `<image x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" href="data:image/png;base64,${base64}"/>`,
+        svg: `<defs>${def}</defs><rect x="0" y="0" width="${width}" height="${height}" fill="url(#${patId})"/>`,
       };
     }
     case "ref": {
@@ -381,7 +392,14 @@ export const slideBackgroundCapability = {
     slideBackgroundRefMechanism,
   ] as const,
   bindSlide(input: CapabilityInput, context) {
-    const background = input.props["background"];
+    const rawStyle = input.props["style"];
+    const styleBackground =
+      typeof rawStyle === "object" &&
+      rawStyle !== null &&
+      !Array.isArray(rawStyle)
+        ? (rawStyle as Readonly<Record<string, unknown>>)["background"]
+        : undefined;
+    const background = styleBackground ?? input.props["background"];
     try {
       // Validate background declaration eagerly at bind time so invalid tokens/resources surface early.
       resolveSlideBackground(context.theme, background);

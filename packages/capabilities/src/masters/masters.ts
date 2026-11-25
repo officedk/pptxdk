@@ -112,17 +112,21 @@ function resolvePlaceholderVisualEntries(
       | Readonly<Record<string, unknown>>
       | undefined;
     const hasRotate = hasLocalDeclaration(styleRecord, "rotate");
-    const hasFlipH = spec.flipH === true;
-    const hasFlipV = spec.flipV === true;
+    const hasFlipH =
+      hasLocalDeclaration(styleRecord, "flipH") || spec.flipH === true;
+    const hasFlipV =
+      hasLocalDeclaration(styleRecord, "flipV") || spec.flipV === true;
     const hasGeometryOrRadius =
       spec.geometry !== undefined ||
       hasLocalDeclaration(styleRecord, "borderRadius");
     const hasFill =
+      hasLocalDeclaration(styleRecord, "background") ||
       hasLocalDeclaration(styleRecord, "backgroundColor") ||
       hasLocalDeclaration(styleRecord, "backgroundImage");
     const hasBorder =
-      hasLocalDeclaration(styleRecord, "borderColor") &&
-      spec.style?.borderWidth !== 0;
+      hasLocalDeclaration(styleRecord, "border") ||
+      (hasLocalDeclaration(styleRecord, "borderColor") &&
+        spec.style?.borderWidth !== 0);
     const hasEffects =
       hasLocalDeclaration(styleRecord, "boxShadow") ||
       hasLocalDeclaration(styleRecord, "softEdge");
@@ -153,8 +157,8 @@ function resolvePlaceholderVisualEntries(
       style: styleRecord ?? {},
       box,
       ...(spec.geometry === undefined ? {} : { geometry: spec.geometry }),
-      ...(hasFlipH ? { flipH: true } : {}),
-      ...(hasFlipV ? { flipV: true } : {}),
+      ...(spec.flipH === undefined ? {} : { flipH: spec.flipH }),
+      ...(spec.flipV === undefined ? {} : { flipV: spec.flipV }),
       layoutOnlyWhenInvisible: !hasBox,
     });
     entries.push({

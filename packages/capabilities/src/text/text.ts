@@ -610,24 +610,18 @@ export const textCapability = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: true,
-          filled:
-            visualStyle["backgroundColor"] !== undefined ||
-            visualStyle["backgroundImage"] !== undefined,
+          filled: visual.fill.kind !== "none",
           box,
           rotationDegrees: visual.rotate,
           hasBackground:
-            visualStyle["backgroundColor"] !== undefined ||
-            visualStyle["backgroundImage"] !== undefined ||
-            visualStyle["borderColor"] !== undefined ||
-            (typeof visualStyle["borderWidth"] === "number" &&
-              visualStyle["borderWidth"] > 0),
+            visual.fill.kind !== "none" || visual.border !== undefined,
           paragraphCount: resolvedText.paragraphCount,
         });
         const transform: PreviewTransform = {
           box,
           angle: visual.rotate,
-          flipH: false,
-          flipV: false,
+          flipH: visual.flipH,
+          flipV: visual.flipV,
         };
         const warnings = [...resolvedText.warnings, ...visual.warnings];
         const model: ResolvedTextModel = {
@@ -644,16 +638,18 @@ export const textCapability = {
                   spPrFlags: {
                     hasBox: placeholderGeometry?.hasLocalBoxOverride === true,
                     hasRotate: hasLocalDeclaration(rawSlideStyle, "rotate"),
-                    hasFlipH: false,
-                    hasFlipV: false,
+                    hasFlipH: hasLocalDeclaration(rawSlideStyle, "flipH"),
+                    hasFlipV: hasLocalDeclaration(rawSlideStyle, "flipV"),
                     hasGeometryOrRadius: hasLocalDeclaration(
                       rawSlideStyle,
                       "borderRadius",
                     ),
                     hasFill:
+                      hasLocalDeclaration(rawSlideStyle, "background") ||
                       hasLocalDeclaration(rawSlideStyle, "backgroundColor") ||
                       hasLocalDeclaration(rawSlideStyle, "backgroundImage"),
                     hasBorder:
+                      hasLocalDeclaration(rawSlideStyle, "border") ||
                       hasLocalDeclaration(rawSlideStyle, "borderColor") ||
                       hasLocalDeclaration(rawSlideStyle, "borderWidth") ||
                       hasLocalDeclaration(rawSlideStyle, "borderStyle"),

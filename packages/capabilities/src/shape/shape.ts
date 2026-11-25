@@ -396,29 +396,37 @@ export const shapeCapability = {
       );
     }
 
-    const hasText =
+    const layoutStyleRecord = record(input.props["style"]);
+    const hasDeclaredTextOrPaddingStyle =
+      input.props["textStyle"] !== undefined ||
+      Object.keys(layoutStyleRecord).some(
+        (key) =>
+          textStyleKeys.has(key) ||
+          (paddingStyleKeys as readonly string[]).includes(key),
+      );
+    const hasNonEmptyText =
       (typeof textProp === "string" && textProp !== "") ||
-      (textProp === undefined && input.children.length > 0);
+      (textProp === undefined &&
+        input.children.some(
+          (child) =>
+            !("text" in child && typeof child.text === "string") ||
+            child.text !== "",
+        ));
+    const hasExplicitEmptyText =
+      textProp === "" || (input.children.length > 0 && !hasNonEmptyText);
+    const hasTextBody = hasNonEmptyText || hasDeclaredTextOrPaddingStyle;
 
-    const allowedStyleKeys = new Set<string>(
-      hasText
-        ? shapeStyleKeys
-        : shapeStyleKeys.filter(
-            (key) =>
-              !textStyleKeys.has(key) &&
-              !(paddingStyleKeys as readonly string[]).includes(key),
-          ),
-    );
+    const allowedStyleKeys = new Set<string>(shapeStyleKeys);
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "sp",
       props: input.props,
       allowedStyleKeys,
-      allowPadding: hasText,
+      allowPadding: true,
       path: context.path,
     });
 
-    const insets = hasText
+    const insets = hasTextBody
       ? textInsets(input.props["style"])
       : { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -428,7 +436,7 @@ export const shapeCapability = {
       ...rawTextStyle,
       verticalAlign: rawTextStyle["verticalAlign"] ?? "middle",
     };
-    const { paragraphs, style: parsedTextStyle } = hasText
+    const { paragraphs, style: parsedTextStyle } = hasTextBody
       ? parseTextContent(
           textChildren,
           effectiveTextStyle,
@@ -472,6 +480,7 @@ export const shapeCapability = {
       theme: context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
+      allowBorderArrows: true,
       ...(geometry !== undefined ? { geometry } : {}),
       ...(flipH !== undefined ? { flipH } : {}),
       ...(flipV !== undefined ? { flipV } : {}),
@@ -499,7 +508,7 @@ export const shapeCapability = {
       measureLayout(
         request: CapabilityLayoutRequest,
       ): CapabilityLayoutMeasurement | undefined {
-        if (!hasText || paragraphs.length === 0) {
+        if (!hasTextBody || paragraphs.length === 0) {
           return { minContentWidth: 0, minContentHeight: 0 };
         }
 
@@ -560,6 +569,7 @@ export const shapeCapability = {
           theme: resolveContext.theme,
           style: visualStyle,
           box,
+          allowBorderArrows: true,
           ...(geometry === undefined ? {} : { geometry }),
           ...(flipH === undefined ? {} : { flipH }),
           ...(flipV === undefined ? {} : { flipV }),
@@ -569,7 +579,7 @@ export const shapeCapability = {
           visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
 
         let resolvedText: ResolvedTextBody | undefined;
-        if (hasText && paragraphs.length > 0) {
+        if (hasTextBody && paragraphs.length > 0) {
           const { textRect } = evaluateGeometry(visual.geometry, box);
           resolvedText = resolveTextBody(
             paragraphs,
@@ -595,23 +605,12 @@ export const shapeCapability = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: resolvedText !== undefined,
-          filled:
-            fill !== undefined ||
-            visualStyle["backgroundColor"] !== undefined ||
-            visualStyle["backgroundImage"] !== undefined,
-          solidFilled:
-            (fill ?? visualStyle["backgroundColor"]) !== undefined &&
-            (fill ?? visualStyle["backgroundColor"]) !== "none" &&
-            visualStyle["backgroundImage"] === undefined,
+          filled: visual.fill.kind !== "none",
+          solidFilled: visual.fill.kind === "solid",
           box,
           rotationDegrees: visual.rotate,
           hasBackground:
-            fill !== undefined ||
-            visualStyle["backgroundColor"] !== undefined ||
-            visualStyle["backgroundImage"] !== undefined ||
-            visualStyle["borderColor"] !== undefined ||
-            (typeof visualStyle["borderWidth"] === "number" &&
-              visualStyle["borderWidth"] > 0),
+            visual.fill.kind !== "none" || visual.border !== undefined,
           ...(resolvedText === undefined
             ? {}
             : { paragraphCount: resolvedText.paragraphCount }),
@@ -656,9 +655,11 @@ export const shapeCapability = {
             geometry: geometryName,
             box,
             ...(resolvedText === undefined
-              ? explicitText === undefined
-                ? {}
-                : { text: explicitText }
+              ? explicitText !== undefined
+                ? { text: explicitText }
+                : hasExplicitEmptyText
+                  ? { text: "" }
+                  : {}
               : {
                   text: resolvedText.text,
                   textMetrics:

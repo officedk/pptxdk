@@ -485,11 +485,14 @@ function rotationFormula(effect: TimingEffect): {
   readonly degrees: number;
 } {
   const relativeBy = typeof effect.by === "number";
-  const degrees = relativeBy
-    ? effect.by
-    : typeof effect.from === "number"
+  const fromDegrees =
+    typeof effect.from === "number"
       ? effect.from
-      : 360;
+      : typeof effect.to === "number"
+        ? 0
+        : 360;
+  const toDegrees = typeof effect.to === "number" ? effect.to : 0;
+  const degrees = relativeBy ? effect.by : fromDegrees - toDegrees;
   return {
     angle: `(${formulaNumber(degrees)}*pi/180)*${relativeBy ? "$" : "(1-$)"}`,
     degrees,
@@ -651,9 +654,15 @@ function behaviorIds(
         ? { by: Math.round(effect.by * 60000) }
         : {
             from: Math.round(
-              (typeof effect.from === "number" ? effect.from : 360) * 60000,
+              (typeof effect.from === "number"
+                ? effect.from
+                : typeof effect.to === "number"
+                  ? 0
+                  : 360) * 60000,
             ),
-            to: 0,
+            to: Math.round(
+              (typeof effect.to === "number" ? effect.to : 0) * 60000,
+            ),
           },
       element(
         "p:cBhvr",
@@ -2856,6 +2865,7 @@ function buildOwnerMotionSteps(
         delayMs,
         ...(repeatCount === undefined ? {} : { repeatCount }),
         ...(rawEffect.from === undefined ? {} : { from: rawEffect.from }),
+        ...(rawEffect.to === undefined ? {} : { to: rawEffect.to }),
         ...(rawEffect.by === undefined ? {} : { by: rawEffect.by }),
         ...(rawEffect.intervalMs === undefined
           ? {}

@@ -31,9 +31,12 @@ import {
 import {
   hasLocalDeclaration,
   resolvePlaceholderGeometry,
+  resolvePlaceholderVisualStyle,
 } from "../shared/style-inheritance.ts";
 import {
   emitVisualModel,
+  gradientDefSvg,
+  paintImageFillSvg,
   resolveVisualModel,
   visualSvgTransform,
   type ResolvedBorder,
@@ -101,6 +104,7 @@ type ResolvedImageModel = {
   readonly placeholder?: {
     readonly nativeRef: NativePlaceholderRef;
     readonly omitSpPrTransform: boolean;
+    readonly hasLocalFill: boolean;
   };
 };
 
@@ -137,9 +141,14 @@ function emitImageModel(
   model: ResolvedImageModel,
   emitContext: EmitContext,
 ): EmitOutput {
-  const properties = emitVisualModel(model.visual, undefined, {
-    omitFill: true,
-  });
+  const omitFill =
+    model.visual.fill.kind === "none" &&
+    model.placeholder?.hasLocalFill !== true;
+  const properties = emitVisualModel(
+    model.visual,
+    (resource) => emitContext.registerResource(resource),
+    { omitFill },
+  );
   const escapedName = xmlEscape(model.name);
   const escapedAlt = model.alt === undefined ? undefined : xmlEscape(model.alt);
   let relationshipId: string;
@@ -256,6 +265,31 @@ function paintImageModel(
     (pathItem) => pathItem.fillMode !== "none" && pathItem.d !== "",
   );
 
+  let backgroundElements = "";
+  if (visual.fill.kind !== "none" && fillablePaths.length > 0) {
+    let fillAttr = 'fill="none"';
+    if (visual.fill.kind === "solid") {
+      fillAttr = `fill="#${visual.fill.color.hex}" fill-opacity="${roundSvgNumber(visual.fill.color.alpha ?? 1)}"`;
+    } else if (
+      visual.fill.kind === "linear-gradient" ||
+      visual.fill.kind === "radial-gradient"
+    ) {
+      const bgDefId = `${prefix}-bg`;
+      defs.push(gradientDefSvg(bgDefId, visual.fill));
+      fillAttr = `fill="url(#${bgDefId})"`;
+    } else if (visual.fill.kind === "image") {
+      const bgDefId = `${prefix}-bg`;
+      defs.push(paintImageFillSvg(visual.fill, bgDefId, box));
+      fillAttr = `fill="url(#${bgDefId})"`;
+    }
+    backgroundElements = fillablePaths
+      .map(
+        (pathItem) =>
+          `<path d="${pathItem.d}" ${fillAttr} stroke="none" stroke-width="0"/>`,
+      )
+      .join("");
+  }
+
   const opacity = visual.opacity ?? 1;
   let imageElement = "";
   if (widthFactor > 0 && heightFactor > 0 && fillablePaths.length > 0) {
@@ -313,7 +347,7 @@ function paintImageModel(
       .join("");
   }
 
-  let layer = `<g transform="${visualSvgTransform(visual)}">${imageElement}${borderElements}</g>`;
+  let layer = `<g transform="${visualSvgTransform(visual)}">${backgroundElements}${imageElement}${borderElements}</g>`;
 
   if (visual.boxShadow !== undefined) {
     const shadow = visual.boxShadow;
@@ -578,9 +612,16 @@ export const imageCapability = {
       path: context.path,
     });
 
-    const imageStyle = isRecord(input.props["style"])
-      ? { ...input.props["style"] }
-      : {};
+    const rawSlideStyle = isRecord(input.props["style"])
+      ? input.props["style"]
+      : undefined;
+    const imageStyle =
+      placeholder !== undefined
+        ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
+        : rawSlideStyle !== undefined
+          ? { ...rawSlideStyle }
+          : {};
+    const hasLocalFill = hasLocalDeclaration(rawSlideStyle, "background");
 
     const requestedFit = input.props["fit"];
     let fit: ImageFit = "fill";
@@ -621,16 +662,16 @@ export const imageCapability = {
       flipH === true ||
       flipV === true ||
       [...imageVisualStyleKeys].some(
-        (key) => key !== "opacity" && hasLocalDeclaration(imageStyle, key),
+        (key) => key !== "opacity" && hasLocalDeclaration(rawSlideStyle, key),
       );
     const declaredX = placeholderGeometry?.x ?? input.props["x"];
     const declaredY = placeholderGeometry?.y ?? input.props["y"];
     const requestedWidth =
       placeholderGeometry?.width ??
-      requestedDimension(imageStyle, input.props, "width");
+      requestedDimension(rawSlideStyle ?? {}, input.props, "width");
     const requestedHeight =
       placeholderGeometry?.height ??
-      requestedDimension(imageStyle, input.props, "height");
+      requestedDimension(rawSlideStyle ?? {}, input.props, "height");
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -762,13 +803,12 @@ export const imageCapability = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: false,
-          filled: false,
+          filled: resolvedVisual.fill.kind !== "none",
           box,
           rotationDegrees: angle,
           hasBackground:
-            imageStyle["borderColor"] !== undefined ||
-            (typeof imageStyle["borderWidth"] === "number" &&
-              imageStyle["borderWidth"] > 0),
+            resolvedVisual.fill.kind !== "none" ||
+            resolvedVisual.border !== undefined,
         });
         const omitSpPrTransform =
           placeholder !== undefined &&
@@ -787,6 +827,7 @@ export const imageCapability = {
                 placeholder: {
                   nativeRef: placeholder.nativeRef,
                   omitSpPrTransform,
+                  hasLocalFill,
                 },
               }),
         };

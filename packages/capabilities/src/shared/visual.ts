@@ -1,5 +1,8 @@
 import {
   CapabilityError,
+  borderObjectSchema,
+  borderValueSchema,
+  imageBackgroundSchema,
   linearGradientSchema,
   radialGradientSchema,
   shadowSchema,
@@ -7,6 +10,8 @@ import {
   type CapabilityResource,
   type ColorValue,
   type GradientStop,
+  type ImageBackgroundFit,
+  type ImageBackgroundPosition,
   type LinearGradient,
   type PaintOutput,
   type RadialGradient,
@@ -111,6 +116,18 @@ export type ResolvedGradientSpec =
       readonly stops: readonly ResolvedGradientStop[];
     };
 
+export type ResolvedImageFillSource =
+  | ({ readonly kind: "embedded" } & LoadedImage)
+  | { readonly kind: "external"; readonly externalUrl: string };
+
+export type ResolvedImageFill = {
+  readonly kind: "image";
+  readonly source: ResolvedImageFillSource;
+  readonly fit: ImageBackgroundFit;
+  readonly position: { readonly x: number; readonly y: number };
+  readonly opacity?: number;
+};
+
 export type ResolvedFill =
   | { readonly kind: "none" }
   | { readonly kind: "solid"; readonly color: ResolvedColor }
@@ -123,11 +140,7 @@ export type ResolvedFill =
       readonly kind: "radial-gradient";
       readonly stops: readonly ResolvedGradientStop[];
     }
-  | {
-      readonly kind: "image";
-      readonly image: LoadedImage;
-      readonly opacity?: number;
-    };
+  | ResolvedImageFill;
 
 export type ResolvedBorder = {
   readonly color: ResolvedColor;
@@ -164,6 +177,7 @@ export type ResolvedVisualModel = {
   readonly border?: ResolvedBorder;
   readonly opacity?: number;
   readonly boxShadow?: ResolvedShadow;
+  readonly explicitNoShadow?: boolean;
   readonly softEdge?: number;
   readonly rotate: number;
   readonly rotationUnits?: number;
@@ -185,6 +199,21 @@ export const lineEndStyleSchema = z
   .readonly();
 export type LineEndStyle = z.infer<typeof lineEndStyleSchema>;
 
+export const shapeBorderObjectSchema = borderObjectSchema
+  .unwrap()
+  .extend({
+    startArrow: arrowTypeSchema.optional(),
+    endArrow: arrowTypeSchema.optional(),
+  })
+  .strict()
+  .readonly();
+
+export const shapeBorderValueSchema = z.union([
+  z.literal("none"),
+  shapeBorderObjectSchema,
+]);
+export type ShapeBorderValue = z.infer<typeof shapeBorderValueSchema>;
+
 export const lineEndStyleKeys = Object.keys(
   lineEndStyleSchema.unwrap().shape,
 ) as readonly (keyof LineEndStyle)[];
@@ -205,6 +234,8 @@ export type ShapePropertiesOptions = {
   /** Legacy top-level fill property of shape capability. */
   readonly fill?: ColorValue;
   readonly image?: boolean;
+  /** Allows `startArrow` / `endArrow` inside `style.border` (Shape only). */
+  readonly allowBorderArrows?: boolean;
   /** Layout containers without visible styling do not require emitting native transforms. */
   readonly layoutOnlyWhenInvisible?: boolean;
 };
@@ -461,72 +492,248 @@ function rotationUnits(style: VisualStyleRecord): {
   return { degrees, units };
 }
 
-function resolveVisualFill(
-  theme: ThemeContext,
-  style: VisualStyleRecord,
-  explicitFill: ColorValue | undefined,
-  opacity: number | undefined,
-  isImageObject: boolean,
-): ResolvedFill {
-  if (isImageObject) {
-    return { kind: "none" };
+function resolveImageFillSource(source: unknown): ResolvedImageFillSource {
+  if (isRecord(source) && typeof source["externalUrl"] === "string") {
+    return { kind: "external", externalUrl: source["externalUrl"] };
   }
   if (
-    explicitFill !== undefined &&
-    (style["backgroundColor"] !== undefined ||
-      style["backgroundImage"] !== undefined)
+    source instanceof URL &&
+    (source.protocol === "http:" || source.protocol === "https:")
   ) {
+    return { kind: "external", externalUrl: source.toString() };
+  }
+  if (
+    typeof source === "string" &&
+    (source.startsWith("http://") || source.startsWith("https://"))
+  ) {
+    return { kind: "external", externalUrl: source };
+  }
+  return { kind: "embedded", ...readImage(source) };
+}
+
+function resolvePositionCoordinate(
+  value: number | `${number}%` | undefined,
+): number {
+  if (value === undefined) return 0.5;
+  if (typeof value === "number") {
+    return Math.max(0, Math.min(1, value));
+  }
+  const parsed = Number.parseFloat(value.slice(0, -1));
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed / 100)) : 0.5;
+}
+
+export function resolveImageBackgroundPosition(
+  position: ImageBackgroundPosition | undefined,
+): { readonly x: number; readonly y: number } {
+  if (position === undefined) return { x: 0.5, y: 0.5 };
+  if (typeof position === "string") {
+    switch (position) {
+      case "center":
+        return { x: 0.5, y: 0.5 };
+      case "top":
+        return { x: 0.5, y: 0 };
+      case "bottom":
+        return { x: 0.5, y: 1 };
+      case "left":
+        return { x: 0, y: 0.5 };
+      case "right":
+        return { x: 1, y: 0.5 };
+      case "top left":
+        return { x: 0, y: 0 };
+      case "top right":
+        return { x: 1, y: 0 };
+      case "bottom left":
+        return { x: 0, y: 1 };
+      case "bottom right":
+        return { x: 1, y: 1 };
+      default: {
+        const exhaustive: never = position;
+        return exhaustive;
+      }
+    }
+  }
+  return {
+    x: resolvePositionCoordinate(position.x),
+    y: resolvePositionCoordinate(position.y),
+  };
+}
+
+/** Validates and resolves `{ image, fit?, position?, opacity? }` background declarations. */
+export function resolveImageBackgroundSpec(
+  spec: unknown,
+  opacity: number | undefined,
+): ResolvedImageFill {
+  const parsed = imageBackgroundSchema.safeParse(spec);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
+      invalid(
+        "invalid-visual-style",
+        `background image contains unsupported parameter ${issue.keys[0]}`,
+      );
+    }
     invalid(
-      "unsupported-style-combination",
-      "Shape.fill cannot be set together with style.backgroundColor or backgroundImage",
+      "invalid-visual-style",
+      issue?.message ?? "Invalid image background declaration",
     );
   }
-  if (explicitFill !== undefined) {
-    return {
-      kind: "solid",
-      color: withOpacity(theme.resolveColor(explicitFill), opacity),
-    };
+  const source = resolveImageFillSource(parsed.data.image);
+  const combinedOpacity = (parsed.data.opacity ?? 1) * (opacity ?? 1);
+  return {
+    kind: "image",
+    source,
+    fit: parsed.data.fit ?? "fill",
+    position: resolveImageBackgroundPosition(parsed.data.position),
+    ...(combinedOpacity < 1 ? { opacity: combinedOpacity } : {}),
+  };
+}
+
+/** Normalizes legacy fill props (`Shape.fill`, `backgroundColor`, `backgroundImage`) into `style.background`. */
+export function normalizeLegacyFillStyle(
+  style: VisualStyleRecord,
+  explicitFill?: ColorValue,
+): VisualStyleRecord {
+  const hasNewBackground =
+    Object.hasOwn(style, "background") && style["background"] !== undefined;
+  const hasBgColor =
+    Object.hasOwn(style, "backgroundColor") &&
+    style["backgroundColor"] !== undefined;
+  const hasBgImage =
+    Object.hasOwn(style, "backgroundImage") &&
+    style["backgroundImage"] !== undefined;
+  const hasExplicitFill = explicitFill !== undefined;
+
+  if (hasNewBackground) {
+    if (hasExplicitFill || hasBgColor || hasBgImage) {
+      invalid(
+        "unsupported-style-combination",
+        "style.background cannot be set together with fill, backgroundColor, or backgroundImage",
+      );
+    }
+    return style;
   }
-  const background = style["backgroundColor"];
-  const image = style["backgroundImage"];
-  if (background !== undefined && image !== undefined) {
+  if (hasExplicitFill) {
+    if (hasBgColor || hasBgImage) {
+      invalid(
+        "unsupported-style-combination",
+        "Shape.fill cannot be set together with style.backgroundColor or backgroundImage",
+      );
+    }
+    return { ...style, background: explicitFill };
+  }
+  if (hasBgColor && hasBgImage) {
     invalid(
       "unsupported-style-combination",
       "backgroundColor and backgroundImage cannot be set simultaneously",
     );
   }
-  if (image !== undefined) {
-    if (isRecord(image) && Object.hasOwn(image, "image")) {
-      const unknown = Object.keys(image).find((key) => key !== "image");
-      if (unknown !== undefined) {
-        invalid(
-          "invalid-visual-style",
-          `backgroundImage contains unsupported parameter ${unknown}`,
-        );
-      }
-      const loaded = readImage(image["image"]);
-      return {
-        kind: "image",
-        image: loaded,
-        ...(opacity === undefined ? {} : { opacity }),
-      };
-    }
-    return resolveGradientSpec(theme, image, opacity);
+  if (hasBgImage) {
+    return { ...style, background: style["backgroundImage"] };
   }
-  if (background === undefined) {
+  if (hasBgColor) {
+    return { ...style, background: style["backgroundColor"] };
+  }
+  return style;
+}
+
+/** Resolves a unified `BackgroundValue` (`"none"`, color, gradient, or `{ image, fit?, position?, opacity? }`). */
+export function resolveBackgroundValue(
+  theme: ThemeContext,
+  value: unknown,
+  opacity: number | undefined,
+): ResolvedFill {
+  if (value === undefined || value === "none") {
     return { kind: "none" };
+  }
+  if (isRecord(value) && Object.hasOwn(value, "image")) {
+    return resolveImageBackgroundSpec(value, opacity);
+  }
+  if (
+    isRecord(value) &&
+    (value["type"] === "linear-gradient" || value["type"] === "radial-gradient")
+  ) {
+    return resolveGradientSpec(theme, value, opacity);
   }
   return {
     kind: "solid",
-    color: withOpacity(theme.resolveColor(background as ColorValue), opacity),
+    color: withOpacity(theme.resolveColor(value as ColorValue), opacity),
   };
+}
+
+function resolveVisualFill(
+  theme: ThemeContext,
+  style: VisualStyleRecord,
+  explicitFill: ColorValue | undefined,
+  opacity: number | undefined,
+): ResolvedFill {
+  const normalized = normalizeLegacyFillStyle(style, explicitFill);
+  return resolveBackgroundValue(theme, normalized["background"], opacity);
 }
 
 function resolveVisualBorder(
   theme: ThemeContext,
   style: VisualStyleRecord,
   opacity: number | undefined,
+  allowBorderArrows: boolean,
 ): ResolvedBorder | undefined {
+  const hasNewBorder =
+    Object.hasOwn(style, "border") && style["border"] !== undefined;
+  const hasLegacyBorder = (
+    [
+      "borderColor",
+      "borderWidth",
+      "borderStyle",
+      "startArrow",
+      "endArrow",
+    ] as const
+  ).some((key) => Object.hasOwn(style, key) && style[key] !== undefined);
+  if (hasNewBorder && hasLegacyBorder) {
+    invalid(
+      "unsupported-style-combination",
+      "style.border cannot be set together with borderColor, borderWidth, borderStyle, startArrow, or endArrow",
+    );
+  }
+  if (hasNewBorder) {
+    const rawBorder = style["border"];
+    if (rawBorder === "none") {
+      return undefined;
+    }
+    const parsed = (
+      allowBorderArrows ? shapeBorderValueSchema : borderValueSchema
+    ).safeParse(rawBorder);
+    if (!parsed.success || parsed.data === "none") {
+      const issue = parsed.success ? undefined : parsed.error.issues[0];
+      if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
+        invalid(
+          "invalid-visual-style",
+          `border contains unsupported property ${issue.keys[0]}`,
+        );
+      }
+      invalid(
+        "invalid-visual-style",
+        issue?.message ?? "Invalid border declaration",
+      );
+    }
+    const width = parsed.data.width ?? 1;
+    if (width === 0) {
+      return undefined;
+    }
+    lineWidthEmu(width);
+    const startArrow = (
+      parsed.data as { readonly startArrow?: ArrowType | undefined }
+    ).startArrow;
+    const endArrow = (
+      parsed.data as { readonly endArrow?: ArrowType | undefined }
+    ).endArrow;
+    return {
+      color: withOpacity(theme.resolveColor(parsed.data.color), opacity),
+      width,
+      style: parsed.data.style ?? "solid",
+      ...(startArrow === undefined ? {} : { startArrow }),
+      ...(endArrow === undefined ? {} : { endArrow }),
+    };
+  }
+
   const color = style["borderColor"];
   const width =
     style["borderWidth"] === undefined
@@ -589,11 +796,21 @@ export function hasVisibleBoxStyle(
     return false;
   const borderWidth =
     style["borderWidth"] === undefined ? 1 : (style["borderWidth"] as number);
+  const hasNewBorder =
+    style["border"] !== undefined &&
+    style["border"] !== "none" &&
+    !(
+      typeof style["border"] === "object" &&
+      style["border"] !== null &&
+      (style["border"] as Record<string, unknown>)["width"] === 0
+    );
   return (
+    (style["background"] !== undefined && style["background"] !== "none") ||
     style["backgroundColor"] !== undefined ||
     style["backgroundImage"] !== undefined ||
+    hasNewBorder ||
     (style["borderColor"] !== undefined && borderWidth > 0) ||
-    style["boxShadow"] !== undefined
+    (style["boxShadow"] !== undefined && style["boxShadow"] !== "none")
   );
 }
 
@@ -610,11 +827,21 @@ export function resolveVisualModel(
   for (const [name, value] of [
     ["flipH", options.flipH],
     ["flipV", options.flipV],
+    ["flipH", style["flipH"]],
+    ["flipV", style["flipV"]],
   ] as const) {
     if (value !== undefined && typeof value !== "boolean") {
       invalid("invalid-visual-style", `${name} must be a boolean`);
     }
   }
+  const flipH =
+    style["flipH"] !== undefined
+      ? (style["flipH"] as boolean)
+      : Boolean(options.flipH);
+  const flipV =
+    style["flipV"] !== undefined
+      ? (style["flipV"] as boolean)
+      : Boolean(options.flipV);
 
   const opacity =
     style["opacity"] === undefined
@@ -623,15 +850,10 @@ export function resolveVisualModel(
   if (opacity !== undefined && (opacity < 0 || opacity > 1)) {
     invalid("invalid-visual-style", "opacity must be a number between 0 and 1");
   }
-  if (
-    options.image &&
-    (style["backgroundColor"] !== undefined ||
-      style["backgroundImage"] !== undefined ||
-      style["borderRadius"] !== undefined)
-  ) {
+  if (options.image && style["borderRadius"] !== undefined) {
     invalid(
       "unsupported-style-combination",
-      "Image does not support background fill or borderRadius",
+      "Image does not support borderRadius",
     );
   }
   const radius =
@@ -645,16 +867,16 @@ export function resolveVisualModel(
     );
   }
 
-  const fill = resolveVisualFill(
+  const fill = resolveVisualFill(theme, style, options.fill, opacity);
+  const border = resolveVisualBorder(
     theme,
     style,
-    options.fill,
     opacity,
-    Boolean(options.image),
+    Boolean(options.allowBorderArrows),
   );
-  const border = resolveVisualBorder(theme, style, opacity);
+  const explicitNoShadow = style["boxShadow"] === "none";
   const boxShadow =
-    style["boxShadow"] === undefined
+    style["boxShadow"] === undefined || explicitNoShadow
       ? undefined
       : resolveShadow(theme, style["boxShadow"], "boxShadow");
 
@@ -690,20 +912,22 @@ export function resolveVisualModel(
     ...(border === undefined ? {} : { border }),
     ...(opacity === undefined ? {} : { opacity }),
     ...(boxShadow === undefined ? {} : { boxShadow }),
+    ...(explicitNoShadow ? { explicitNoShadow: true } : {}),
     ...(softEdge === undefined ? {} : { softEdge }),
     rotate: rotation.degrees,
     ...(rotation.units === undefined ? {} : { rotationUnits: rotation.units }),
-    flipH: Boolean(options.flipH),
-    flipV: Boolean(options.flipV),
+    flipH,
+    flipV,
     hasVisibleStyle,
     layoutOnlyWhenInvisible,
     warnings,
   };
 }
 
-function emitFillXml(
+export function emitFillXml(
   fill: ResolvedFill,
   registerResource: ((resource: CapabilityResource) => string) | undefined,
+  box?: ShapeBox,
 ): string {
   switch (fill.kind) {
     case "none":
@@ -714,7 +938,7 @@ function emitFillXml(
     case "radial-gradient":
       return gradientFillMechanism.emit(fill, undefined).xml;
     case "image":
-      return imageFillMechanism.emit(fill, registerResource).xml;
+      return emitImageFillXml(fill, registerResource, box);
     default: {
       const exhaustive: never = fill;
       return exhaustive;
@@ -753,7 +977,10 @@ function emitBorderXml(border: ResolvedBorder | undefined): string {
   return `<a:ln w="${lineWidthEmu(border.width)}"><a:solidFill>${resolvedColorXml(border.color)}</a:solidFill>${dash === undefined ? "" : `<a:prstDash val="${dash}"/>`}${headEnd}${tailEnd}</a:ln>`;
 }
 
-function emitEffectsXml(model: ResolvedVisualModel): string {
+function emitEffectsXml(
+  model: ResolvedVisualModel,
+  options?: { readonly explicitEmptyWhenCleared?: boolean },
+): string {
   const items: string[] = [];
   if (model.boxShadow !== undefined) {
     const shadow = model.boxShadow;
@@ -765,9 +992,12 @@ function emitEffectsXml(model: ResolvedVisualModel): string {
   if (model.softEdge !== undefined && model.softEdge > 0) {
     items.push(`<a:softEdge rad="${emu(model.softEdge, "softEdge", false)}"/>`);
   }
-  return items.length === 0
-    ? ""
-    : `<a:effectLst>${items.join("")}</a:effectLst>`;
+  if (items.length > 0) {
+    return `<a:effectLst>${items.join("")}</a:effectLst>`;
+  }
+  return options?.explicitEmptyWhenCleared && model.explicitNoShadow
+    ? "<a:effectLst/>"
+    : "";
 }
 
 /** Serializes a ResolvedVisualModel into PresentationML `<p:spPr>` XML. */
@@ -784,7 +1014,7 @@ export function emitVisualModel(
   const geometryXmlText = resolvedGeometryXml(model.geometry);
   const visualFill = options?.omitFill
     ? ""
-    : emitFillXml(model.fill, registerResource);
+    : emitFillXml(model.fill, registerResource, box);
   const line = emitBorderXml(model.border);
   const effects = emitEffectsXml(model);
   return {
@@ -821,8 +1051,16 @@ export function emitPlaceholderVisualSpPr(
   let xfrmXml = "";
   if (flags.hasBox || flags.hasRotate || flags.hasFlipH || flags.hasFlipV) {
     const rotAttr = flags.hasRotate ? ` rot="${model.rotationUnits ?? 0}"` : "";
-    const flipHAttr = flags.hasFlipH && model.flipH ? ' flipH="1"' : "";
-    const flipVAttr = flags.hasFlipV && model.flipV ? ' flipV="1"' : "";
+    const flipHAttr = flags.hasFlipH
+      ? model.flipH
+        ? ' flipH="1"'
+        : ' flipH="0"'
+      : "";
+    const flipVAttr = flags.hasFlipV
+      ? model.flipV
+        ? ' flipV="1"'
+        : ' flipV="0"'
+      : "";
     if (flags.hasBox) {
       const { box } = model;
       xfrmXml = `<a:xfrm${rotAttr}${flipHAttr}${flipVAttr}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", false)}" cy="${emu(box.height, "height", false)}"/></a:xfrm>`;
@@ -836,10 +1074,12 @@ export function emitPlaceholderVisualSpPr(
       ? resolvedGeometryXml(model.geometry)
       : "";
   const fillXml = flags.hasFill
-    ? emitFillXml(model.fill, registerResource)
+    ? emitFillXml(model.fill, registerResource, model.box)
     : "";
   const borderXml = flags.hasBorder ? emitBorderXml(model.border) : "";
-  const effectsXml = flags.hasEffects ? emitEffectsXml(model) : "";
+  const effectsXml = flags.hasEffects
+    ? emitEffectsXml(model, { explicitEmptyWhenCleared: true })
+    : "";
   const inner = `${xfrmXml}${geomXml}${fillXml}${borderXml}${effectsXml}`;
   return inner === "" ? "<p:spPr/>" : `<p:spPr>${inner}</p:spPr>`;
 }
@@ -1711,6 +1951,167 @@ export const gradientFillMechanism = defineCanvasMechanism({
   },
 });
 
+function formatOoxmlRectAttrs(rect: {
+  readonly l: number;
+  readonly t: number;
+  readonly r: number;
+  readonly b: number;
+}): string {
+  const attrs: string[] = [];
+  if (rect.l !== 0) attrs.push(`l="${rect.l}"`);
+  if (rect.t !== 0) attrs.push(`t="${rect.t}"`);
+  if (rect.r !== 0) attrs.push(`r="${rect.r}"`);
+  if (rect.b !== 0) attrs.push(`b="${rect.b}"`);
+  return attrs.length === 0 ? "" : ` ${attrs.join(" ")}`;
+}
+
+/** Emits DrawingML `<a:blipFill>` XML for embedded or external image background fills. */
+export function emitImageFillXml(
+  fill: ImageFillModel,
+  registerResource: ((resource: CapabilityResource) => string) | undefined,
+  box?: ShapeBox,
+): string {
+  if (registerResource === undefined) {
+    invalid(
+      "image-resource-failure",
+      "Cannot emit image background fill without resource registrar",
+    );
+  }
+  const relationshipId =
+    fill.source.kind === "external"
+      ? registerResource({
+          externalTarget: fill.source.externalUrl,
+          relationshipType: imageRelationship,
+        })
+      : registerResource({
+          bytes: fill.source.bytes,
+          extension: fill.source.extension,
+          contentType: fill.source.contentType,
+          relationshipType: imageRelationship,
+        });
+  const relAttr =
+    fill.source.kind === "external"
+      ? `r:link="${xmlEscape(relationshipId)}"`
+      : `r:embed="${xmlEscape(relationshipId)}"`;
+  const alpha =
+    fill.opacity === undefined
+      ? ""
+      : `<a:alphaModFix amt="${Math.round(fill.opacity * 100000)}"/>`;
+  const blipXml =
+    alpha === ""
+      ? `<a:blip ${relAttr}/>`
+      : `<a:blip ${relAttr}>${alpha}</a:blip>`;
+
+  let srcRectXml = "";
+  let fillRectXml = "<a:fillRect/>";
+  if (
+    fill.source.kind === "embedded" &&
+    fill.source.width > 0 &&
+    fill.source.height > 0 &&
+    box !== undefined &&
+    box.width > 0 &&
+    box.height > 0
+  ) {
+    const imgRatio = fill.source.width / fill.source.height;
+    const boxRatio = box.width / box.height;
+    if (fill.fit === "cover") {
+      let l = 0;
+      let t = 0;
+      let r = 0;
+      let b = 0;
+      if (imgRatio > boxRatio) {
+        const cropX = 1 - boxRatio / imgRatio;
+        l = Math.round(cropX * fill.position.x * 100000);
+        r = Math.round(cropX * (1 - fill.position.x) * 100000);
+      } else if (imgRatio < boxRatio) {
+        const cropY = 1 - imgRatio / boxRatio;
+        t = Math.round(cropY * fill.position.y * 100000);
+        b = Math.round(cropY * (1 - fill.position.y) * 100000);
+      }
+      const attrs = formatOoxmlRectAttrs({ l, t, r, b });
+      if (attrs !== "") {
+        srcRectXml = `<a:srcRect${attrs}/>`;
+      }
+    } else if (fill.fit === "contain") {
+      let l = 0;
+      let t = 0;
+      let r = 0;
+      let b = 0;
+      if (imgRatio > boxRatio) {
+        const insY = 1 - boxRatio / imgRatio;
+        t = Math.round(insY * fill.position.y * 100000);
+        b = Math.round(insY * (1 - fill.position.y) * 100000);
+      } else if (imgRatio < boxRatio) {
+        const insX = 1 - imgRatio / boxRatio;
+        l = Math.round(insX * fill.position.x * 100000);
+        r = Math.round(insX * (1 - fill.position.x) * 100000);
+      }
+      const attrs = formatOoxmlRectAttrs({ l, t, r, b });
+      if (attrs !== "") {
+        fillRectXml = `<a:fillRect${attrs}/>`;
+      }
+    }
+  }
+
+  return `<a:blipFill rotWithShape="1">${blipXml}${srcRectXml}<a:stretch>${fillRectXml}</a:stretch></a:blipFill>`;
+}
+
+/** Renders deterministic SVG `<pattern>` markup for embedded or external image background fills. */
+export function paintImageFillSvg(
+  fill: ImageFillModel,
+  id: string,
+  box: ShapeBox,
+): string {
+  const bx = roundSvgNumber(box.x);
+  const by = roundSvgNumber(box.y);
+  const bw = roundSvgNumber(box.width);
+  const bh = roundSvgNumber(box.height);
+  const imgOpacity = roundSvgNumber(fill.opacity ?? 1);
+
+  if (fill.source.kind === "external") {
+    return `<pattern id="${id}" patternUnits="userSpaceOnUse" x="${bx}" y="${by}" width="${bw}" height="${bh}"><rect x="0" y="0" width="${bw}" height="${bh}" fill="#F1F5F9" fill-opacity="${imgOpacity}"/></pattern>`;
+  }
+
+  const pngBytes = decodeImageToPngBytes(fill.source);
+  const base64 = Buffer.from(pngBytes).toString("base64");
+  let drawX = 0;
+  let drawY = 0;
+  let drawW = box.width;
+  let drawH = box.height;
+
+  if (
+    fill.fit !== "fill" &&
+    fill.source.width > 0 &&
+    fill.source.height > 0 &&
+    box.width > 0 &&
+    box.height > 0
+  ) {
+    const imgRatio = fill.source.width / fill.source.height;
+    const boxRatio = box.width / box.height;
+    if (fill.fit === "cover") {
+      if (imgRatio > boxRatio) {
+        drawH = box.height;
+        drawW = box.height * imgRatio;
+      } else {
+        drawW = box.width;
+        drawH = box.width / imgRatio;
+      }
+    } else if (fill.fit === "contain") {
+      if (imgRatio > boxRatio) {
+        drawW = box.width;
+        drawH = box.width / imgRatio;
+      } else {
+        drawH = box.height;
+        drawW = box.height * imgRatio;
+      }
+    }
+    drawX = (box.width - drawW) * fill.position.x;
+    drawY = (box.height - drawH) * fill.position.y;
+  }
+
+  return `<pattern id="${id}" patternUnits="userSpaceOnUse" x="${bx}" y="${by}" width="${bw}" height="${bh}"><image x="${roundSvgNumber(drawX)}" y="${roundSvgNumber(drawY)}" width="${roundSvgNumber(drawW)}" height="${roundSvgNumber(drawH)}" preserveAspectRatio="none" opacity="${imgOpacity}" href="data:image/png;base64,${base64}"/></pattern>`;
+}
+
 /** Native canvas mechanism for DrawingML `<a:blipFill>` shape image fills. */
 export const imageFillMechanism = defineCanvasMechanism({
   key: "image-fill",
@@ -1719,35 +2120,16 @@ export const imageFillMechanism = defineCanvasMechanism({
     fill: ImageFillModel,
     registerResource: ((resource: CapabilityResource) => string) | undefined,
   ): { readonly xml: string } {
-    if (registerResource === undefined) {
-      invalid(
-        "image-resource-failure",
-        "Cannot emit image background fill without resource registrar",
-      );
-    }
-    const relationshipId = registerResource({
-      bytes: fill.image.bytes,
-      extension: fill.image.extension,
-      contentType: fill.image.contentType,
-      relationshipType: imageRelationship,
-    });
-    const alpha =
-      fill.opacity === undefined
-        ? ""
-        : `<a:alphaModFix amt="${Math.round(fill.opacity * 100000)}"/>`;
     return {
-      xml: `<a:blipFill rotWithShape="1"><a:blip r:embed="${xmlEscape(relationshipId)}">${alpha}</a:blip><a:stretch><a:fillRect/></a:stretch></a:blipFill>`,
+      xml: emitImageFillXml(fill, registerResource),
     };
   },
   paint(
     fill: ImageFillModel,
     context: { readonly id: string; readonly box: ShapeBox },
   ): PaintOutput {
-    const pngBytes = decodeImageToPngBytes(fill.image);
-    const base64 = Buffer.from(pngBytes).toString("base64");
-    const imgOpacity = roundSvgNumber(fill.opacity ?? 1);
     return {
-      svg: `<pattern id="${context.id}" patternUnits="userSpaceOnUse" x="${roundSvgNumber(context.box.x)}" y="${roundSvgNumber(context.box.y)}" width="${roundSvgNumber(context.box.width)}" height="${roundSvgNumber(context.box.height)}"><image x="0" y="0" width="${roundSvgNumber(context.box.width)}" height="${roundSvgNumber(context.box.height)}" preserveAspectRatio="none" opacity="${imgOpacity}" href="data:image/png;base64,${base64}"/></pattern>`,
+      svg: paintImageFillSvg(fill, context.id, context.box),
     };
   },
   import: {

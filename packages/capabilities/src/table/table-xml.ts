@@ -1,4 +1,5 @@
 import type {
+  CapabilityResource,
   NativePlaceholderRef,
   ResolvedColor,
 } from "@pptxdk/core/capability";
@@ -8,6 +9,12 @@ import {
   resolvedColorXml,
   xmlEscape,
 } from "@pptxdk/emit";
+
+import {
+  emitFillXml,
+  type ResolvedFill,
+  type ShapeBox,
+} from "../shared/visual.ts";
 
 const tableUri = "http://schemas.openxmlformats.org/drawingml/2006/table";
 
@@ -26,13 +33,15 @@ export type TableCellBorder = {
   readonly dash: "solid" | "dash" | "dot";
 };
 
-export type TableCellAlignment = "top" | "middle" | "bottom";
+/** Resolved per-side borders for a table cell (`top`, `right`, `bottom`, `left`). */
+export type TableCellBorders = {
+  readonly top?: TableCellBorder;
+  readonly right?: TableCellBorder;
+  readonly bottom?: TableCellBorder;
+  readonly left?: TableCellBorder;
+};
 
-function fillXml(value: ResolvedColor | undefined): string {
-  return value === undefined
-    ? "<a:noFill/>"
-    : `<a:solidFill>${resolvedColorXml(value)}</a:solidFill>`;
-}
+export type TableCellAlignment = "top" | "middle" | "bottom";
 
 function lineXml(
   side: "L" | "R" | "T" | "B",
@@ -49,15 +58,19 @@ function lineXml(
 export function tableCellPropertiesXml(
   padding: TableCellPadding,
   vertical: TableCellAlignment,
-  border: TableCellBorder | undefined,
-  fill: ResolvedColor | undefined,
+  borders: TableCellBorders,
+  fill: ResolvedFill,
+  registerResource?: (resource: CapabilityResource) => string,
+  box?: ShapeBox,
 ): string {
-  const lines = (["L", "R", "T", "B"] as const)
-    .map((side) => lineXml(side, border))
-    .join("");
+  const lines =
+    lineXml("L", borders.left) +
+    lineXml("R", borders.right) +
+    lineXml("T", borders.top) +
+    lineXml("B", borders.bottom);
   const anchor =
     vertical === "middle" ? "ctr" : vertical === "bottom" ? "b" : "t";
-  return `<a:tcPr marL="${pxToEmu(padding.left)}" marR="${pxToEmu(padding.right)}" marT="${pxToEmu(padding.top)}" marB="${pxToEmu(padding.bottom)}" anchor="${anchor}">${lines}${fillXml(fill)}</a:tcPr>`;
+  return `<a:tcPr marL="${pxToEmu(padding.left)}" marR="${pxToEmu(padding.right)}" marT="${pxToEmu(padding.top)}" marB="${pxToEmu(padding.bottom)}" anchor="${anchor}">${lines}${emitFillXml(fill, registerResource, box)}</a:tcPr>`;
 }
 
 /** Writes an empty continuation cell covered by a merged cell. */

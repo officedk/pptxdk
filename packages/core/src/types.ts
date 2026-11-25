@@ -55,7 +55,13 @@ export type {
 } from "#/layout-schemas.ts";
 
 export type {
+  BackgroundValue,
+  BorderObject,
+  BorderStyle,
+  BorderValue,
+  BoxShadowValue,
   ColorValue,
+  ExternalImageFillSource,
   Font,
   FontFace,
   FontFaceStyle,
@@ -63,6 +69,10 @@ export type {
   FontReference,
   FontSize,
   GradientStop,
+  ImageBackground,
+  ImageBackgroundFit,
+  ImageBackgroundPosition,
+  ImageFillSource,
   LinearGradient,
   FontToken,
   NativeColorSlot,

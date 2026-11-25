@@ -9,6 +9,8 @@ import {
   type VisualStyle,
 } from "@pptxdk/core/capability";
 
+import { normalizeLegacyFillStyle } from "./visual.ts";
+
 export type SharedStyleProperties = TextStyle & PaddingStyle & VisualStyle;
 
 export type StylePropertyRule<T> = {
@@ -102,8 +104,10 @@ export const sharedStyleRules: ExhaustiveStyleRuleMap = Object.freeze({
   paddingLeft: bodyRule<PaddingStyle["paddingLeft"]>("localOnly"),
 
   // Shape visual properties (spPr, never inherited by free children)
+  background: spPrRule<VisualStyle["background"]>(),
   backgroundColor: spPrRule<VisualStyle["backgroundColor"]>(),
   backgroundImage: spPrRule<VisualStyle["backgroundImage"]>(),
+  border: spPrRule<VisualStyle["border"]>(),
   borderColor: spPrRule<VisualStyle["borderColor"]>(),
   borderWidth: spPrRule<VisualStyle["borderWidth"]>(),
   borderStyle: spPrRule<VisualStyle["borderStyle"]>(),
@@ -112,6 +116,8 @@ export const sharedStyleRules: ExhaustiveStyleRuleMap = Object.freeze({
   boxShadow: spPrRule<VisualStyle["boxShadow"]>(),
   softEdge: spPrRule<VisualStyle["softEdge"]>(),
   rotate: spPrRule<VisualStyle["rotate"]>(),
+  flipH: spPrRule<VisualStyle["flipH"]>(),
+  flipV: spPrRule<VisualStyle["flipV"]>(),
 });
 
 /** True iff `key` is an own defined declaration on `record`, honoring explicit `undefined` removal. */
@@ -163,13 +169,43 @@ function applyLayer(
   layerFilter: "all" | StylePropertyRule<unknown>["placeholderLayer"],
 ): void {
   if (source === undefined) return;
+  let effectiveSource = source;
+  if (layerFilter === "all" || layerFilter === "spPr") {
+    const normalized = normalizeLegacyFillStyle(source);
+    if (
+      normalized !== source ||
+      hasLocalDeclaration(normalized, "background")
+    ) {
+      const cleaned = { ...normalized };
+      delete cleaned["backgroundColor"];
+      delete cleaned["backgroundImage"];
+      effectiveSource = cleaned;
+      delete accumulator["backgroundColor"];
+      delete accumulator["backgroundImage"];
+    }
+    if (hasLocalDeclaration(effectiveSource, "border")) {
+      if (
+        hasLocalDeclaration(effectiveSource, "borderColor") ||
+        hasLocalDeclaration(effectiveSource, "borderWidth") ||
+        hasLocalDeclaration(effectiveSource, "borderStyle")
+      ) {
+        // Defer mixed-declaration error to resolveVisualModel on the unmerged layer.
+      } else {
+        delete accumulator["borderColor"];
+        delete accumulator["borderWidth"];
+        delete accumulator["borderStyle"];
+      }
+    } else if (hasLocalDeclaration(effectiveSource, "borderColor")) {
+      delete accumulator["border"];
+    }
+  }
   for (const [key, rawRule] of Object.entries(sharedStyleRules)) {
     const rule = rawRule as StylePropertyRule<unknown>;
     if (layerFilter !== "all" && rule.placeholderLayer !== layerFilter) {
       continue;
     }
-    if (!hasLocalDeclaration(source, key)) continue;
-    const next = rule.apply(accumulator[key], source[key], true);
+    if (!hasLocalDeclaration(effectiveSource, key)) continue;
+    const next = rule.apply(accumulator[key], effectiveSource[key], true);
     if (next === undefined) delete accumulator[key];
     else accumulator[key] = next;
   }

@@ -179,9 +179,7 @@ export const boxCapability: ObjectCapabilityModule = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: false,
-          filled:
-            style["backgroundColor"] !== undefined ||
-            style["backgroundImage"] !== undefined,
+          filled: visual.fill.kind !== "none",
         } as const;
         const annotations = motionContainerAnnotations(
           motionProps,

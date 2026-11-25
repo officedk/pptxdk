@@ -14,7 +14,10 @@ import { motionPropsSchema } from "../motion/motion-schemas.ts";
 import { geometrySchema } from "../shared/geometry.ts";
 import { optionalNameSchema } from "../shared/identity.ts";
 import { morphKeySchema } from "../shared/morph-api.ts";
-import { lineEndStyleSchema } from "../shared/visual.ts";
+import {
+  lineEndStyleSchema,
+  shapeBorderValueSchema,
+} from "../shared/visual.ts";
 
 export const shapeCoordinateSchema = z
   .number()
@@ -36,6 +39,7 @@ const shapeStyleObjectSchema = z.strictObject({
   ...visualStyleSchema.unwrap().shape,
   ...lineEndStyleSchema.unwrap().shape,
   ...textStyleSchema.unwrap().shape,
+  border: shapeBorderValueSchema.optional(),
 });
 
 export const shapeStyleSchema = shapeStyleObjectSchema.readonly();

@@ -71,6 +71,8 @@ export const imageExtentValueSchema = z.number().finite().positive();
 const coreVisualShape = visualStyleSchema.unwrap().shape;
 
 const imageVisualStyleObjectSchema = z.strictObject({
+  background: coreVisualShape.background,
+  border: coreVisualShape.border,
   borderColor: coreVisualShape.borderColor,
   borderWidth: coreVisualShape.borderWidth,
   borderStyle: coreVisualShape.borderStyle,
@@ -78,6 +80,8 @@ const imageVisualStyleObjectSchema = z.strictObject({
   boxShadow: coreVisualShape.boxShadow,
   softEdge: coreVisualShape.softEdge,
   rotate: coreVisualShape.rotate,
+  flipH: coreVisualShape.flipH,
+  flipV: coreVisualShape.flipV,
 });
 
 /** Visual styling supported on Image objects. */

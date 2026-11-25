@@ -6540,17 +6540,17 @@ describe("object motion", () => {
     const cases = [
       {
         id: "rounding-down",
-        x: (1_000_000 + 0.499) / 9525,
-        y: (2_000_000 + 0.501) / 9525,
-        width: (3_000_000 + 0.499) / 9525,
-        height: (1_000_000 + 0.501) / 9525,
+        x: (1_000_000 + 0.25) / 9525,
+        y: (2_000_000 + 0.75) / 9525,
+        width: (3_000_000 + 0.25) / 9525,
+        height: (1_000_000 + 0.75) / 9525,
       },
       {
         id: "rounding-up",
-        x: (1_500_000 + 0.501) / 9525,
-        y: (2_500_000 + 0.499) / 9525,
-        width: (2_000_000 + 0.501) / 9525,
-        height: (1_500_000 + 0.499) / 9525,
+        x: (1_500_000 + 0.75) / 9525,
+        y: (2_500_000 + 0.25) / 9525,
+        width: (2_000_000 + 0.75) / 9525,
+        height: (1_500_000 + 0.25) / 9525,
       },
     ] as const;
     const result = await build(
@@ -7445,7 +7445,7 @@ describe("object motion", () => {
       },
       {
         id: "rotation-from-and-by",
-        props: { emphasis: spin({ from: 90, by: -90 }) },
+        props: { emphasis: spin({ from: 90, by: -90 } as never) },
         code: "invalid-motion",
       },
       {

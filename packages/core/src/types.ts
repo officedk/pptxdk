@@ -3,7 +3,7 @@ import type { LayoutStyle } from "#/layout-schemas.ts";
 import type {
   FooterPlaceholders,
   HeaderFooter,
-  SlideMasterObservation,
+  ResolvedMaster,
 } from "#/masters.ts";
 import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
@@ -85,6 +85,9 @@ export type {
   FooterPlaceholderSpec,
   FooterPlaceholders,
   HeaderFooter,
+  ResolvedMaster,
+  ResolvedPlaceholder,
+  ResolvedSlideLayout,
   SlideLayoutDataProps,
   SlideLayoutDefinition,
   SlideLayoutObservation,
@@ -200,49 +203,107 @@ export type NativeLink = {
   readonly action?: string;
 };
 
-export type ObjectObservation = {
+export type ScreenPoint = {
+  readonly x: number;
+  readonly y: number;
+};
+
+export type ObjectTransform = {
+  readonly angle: number;
+  readonly flipH: boolean;
+  readonly flipV: boolean;
+};
+
+export type ResolvedObject = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
   /** Author id declared on the source node; numeric `id` remains the build observation identity. */
   readonly authorId?: string;
+  readonly path: string;
   readonly placeholder?: string;
   readonly geometry?: string;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
+  readonly bounds?: Rect;
+  readonly corners?: readonly [
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+  ];
+  readonly transform?: ObjectTransform;
+  readonly gridArea?: Rect;
   readonly text?: string;
   readonly textMetrics?: TextMetrics;
   readonly link?: string;
-  readonly table?: NativeTableObservation;
-  readonly members?: readonly ObjectObservation[];
+  readonly table?: ResolvedTable;
+  readonly members?: readonly ResolvedObject[];
 };
+
+/** Transitional alias retained until Ticket 11. */
+export type ObjectObservation = ResolvedObject;
 
 export type LayoutChildReference = {
   readonly kind: "layout" | "object";
   readonly id: number;
 };
 
-export type LayoutObservation = {
+export type ResolvedLayout = {
   readonly id: number;
   readonly authorId?: string;
-  readonly box: GeometryBox;
+  readonly path: string;
+  readonly box: Rect;
+  readonly gridArea?: Rect;
+  readonly columnWidths?: readonly number[];
+  readonly rowHeights?: readonly number[];
   readonly children: readonly LayoutChildReference[];
 };
 
+/** Transitional alias retained until Ticket 11. */
+export type LayoutObservation = ResolvedLayout;
+
+export type ResolvedTableRow = {
+  readonly index: number;
+  readonly id?: string;
+  readonly path: string;
+  readonly y: number;
+  readonly height: number;
+  readonly box: Rect;
+};
+
+export type ResolvedTableCell = {
+  readonly row: number;
+  readonly column: number;
+  readonly rowSpan: number;
+  readonly colSpan: number;
+  readonly id?: string;
+  readonly path: string;
+  readonly box: Rect;
+  readonly text: string;
+  readonly textMetrics: TextMetrics;
+};
+
 /** Table report retains zero-based row and column indexes, corresponding one-to-one with native merge extents. */
-export type NativeTableObservation = {
-  readonly columnWidths: readonly number[];
-  readonly rowHeights: readonly number[];
-  /** Cells covered by a merge remain empty, while merge anchors retain cell body text. */
-  readonly cells: readonly (readonly string[])[];
+export type ResolvedTable = {
+  readonly columns: readonly number[];
+  readonly rows: readonly ResolvedTableRow[];
+  /** Unconditional anchor cell observations in row-major order. */
+  readonly cells: readonly ResolvedTableCell[];
   readonly merges: readonly {
     readonly row: number;
     readonly column: number;
     readonly rowSpan: number;
     readonly colSpan: number;
   }[];
+  /** Transitional aliases retained until Ticket 11. */
+  readonly columnWidths: readonly number[];
+  readonly rowHeights: readonly number[];
   /** Identities and final geometries of rows and cells are submitted by the table module in shared layout results. */
   readonly parts?: readonly NativeTablePartObservation[];
 };
+
+/** Transitional alias retained until Ticket 11. */
+export type NativeTableObservation = ResolvedTable;
 
 export type NativeTablePartObservation = {
   readonly kind: "row" | "cell";
@@ -251,45 +312,59 @@ export type NativeTablePartObservation = {
   readonly column?: number;
   readonly rowSpan?: number;
   readonly colSpan?: number;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly text: string;
   readonly textMetrics?: TextMetrics;
 };
 
-export type SlideObservation = {
+export type ResolvedSlide = {
   /** Page author id; also the stable identifier written to the slide part. */
   readonly id: string;
   /** Author id declared on the Slide, retained as the explicit author observation for pages. */
   readonly authorId?: string;
   readonly index: number;
+  readonly path: string;
   readonly layout?: string;
   readonly section?: string;
   readonly hidden?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
-  readonly objects: readonly ObjectObservation[];
-  readonly layouts?: readonly LayoutObservation[];
+  readonly objects: readonly ResolvedObject[];
+  readonly layouts?: readonly ResolvedLayout[];
   readonly footer?: ResolvedFooter;
   readonly capabilities?: Readonly<Record<string, unknown>>;
+};
+
+/** Transitional alias retained until Ticket 11. */
+export type SlideObservation = ResolvedSlide;
+
+export type ResolutionDimensionsSummary = {
+  readonly width: number;
+  readonly height: number;
 };
 
 export type ResolutionReport = {
   readonly evidence: "generation";
   readonly title?: string;
+  readonly dimensions: ResolutionDimensionsSummary;
   readonly extensions: readonly Extension[];
   readonly fonts: readonly FontUsage[];
-  readonly masters?: readonly SlideMasterObservation[];
-  readonly slides: readonly SlideObservation[];
+  readonly masters?: readonly ResolvedMaster[];
+  readonly slides: readonly ResolvedSlide[];
   readonly diagnostics: readonly Diagnostic[];
 };
 
 export type Resolution = {
   readonly report: ResolutionReport;
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
+  /** Transitional property retained until Ticket 11. */
   readonly query: BuildQuery;
 };
 
 export type BuildReport = {
   readonly evidence: "generation";
   readonly title?: string;
+  readonly dimensions: ResolutionDimensionsSummary;
   readonly target: {
     readonly name: string;
     readonly format: typeof formatBaseline;
@@ -297,14 +372,17 @@ export type BuildReport = {
   };
   readonly extensions: readonly Extension[];
   readonly fonts: readonly FontUsage[];
-  readonly masters?: readonly SlideMasterObservation[];
-  readonly slides: readonly SlideObservation[];
+  readonly masters?: readonly ResolvedMaster[];
+  readonly slides: readonly ResolvedSlide[];
   readonly diagnostics: readonly Diagnostic[];
 };
 
 export type BuildResult = {
   readonly pptx: Uint8Array;
   readonly report: BuildReport;
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
+  /** Transitional property retained until Ticket 11. */
   readonly query: BuildQuery;
 };
 
@@ -316,10 +394,10 @@ export type EmitResult = {
 export type LocatorObservation = {
   readonly evidence: "generation";
   readonly authorId?: string;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly text?: string;
   readonly textMetrics?: TextMetrics;
-  readonly objects: readonly ObjectObservation[];
+  readonly objects: readonly ResolvedObject[];
   readonly resources?: readonly LocatorResourceObservation[];
 };
 
@@ -335,6 +413,25 @@ export type LocatorResourceObservation = ResourceObservation & {
 
 /** Read-only locator and field observation for formal content in a successful build. */
 export type Locator = {
+  readonly id?: string;
+  /** Transitional alias for `id`, retained until Ticket 11. */
+  readonly authorId?: string;
+  readonly kind: string;
+  readonly path: string;
+  readonly box?: Rect;
+  readonly bounds?: Rect;
+  readonly corners?: readonly [
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+  ];
+  readonly transform?: ObjectTransform;
+  readonly text?: string;
+  readonly textMetrics?: TextMetrics;
+  readonly gridArea?: Rect;
+  readonly objects: readonly ResolvedObject[];
+  readonly resources?: readonly LocatorResourceObservation[];
   /** Finds one author id in this locator scope without crossing the next named scope. */
   get(id: string): Locator;
   /** Lists matches for an author id in this locator scope; duplicates are already rejected by the build. */
@@ -342,21 +439,28 @@ export type Locator = {
   /** Direct structural child locators, including anonymous and named nodes. */
   children(): readonly Locator[];
   descendants(): readonly Locator[];
+  /** Transitional method retained until Ticket 11. */
   observe(): LocatorObservation;
 };
 
-export type SlideQuery = Locator & {
+export type SlideLocator = Locator & {
   readonly id: string;
   readonly authorId?: string;
   readonly index: number;
-  readonly observation: SlideObservation;
+  readonly dimensions: ResolutionDimensionsSummary;
+  readonly footer?: ResolvedFooter;
+  /** Transitional property retained until Ticket 11. */
+  readonly observation: ResolvedSlide;
 };
+
+/** Transitional alias retained until Ticket 11. */
+export type SlideQuery = SlideLocator;
 
 export type BuildQuery = {
   readonly evidence: "generation";
-  readonly slides: readonly SlideQuery[];
+  readonly slides: readonly SlideLocator[];
   /** Page lookup by author id in this build. */
-  getSlide(id: string): SlideQuery;
+  getSlide(id: string): SlideLocator;
 };
 
 /** Generic node in the React host tree, without exposing React or renderer internal objects. */
@@ -594,8 +698,10 @@ export type CapabilityLayoutMeasurement = {
  * for read-only locator traversal and observation without core knowing capability-specific part kinds.
  */
 export type CapabilitySubPartObservation = {
+  readonly kind?: "row" | "cell";
   readonly authorId?: string;
-  readonly box?: GeometryBox;
+  readonly path?: string;
+  readonly box?: Rect;
   readonly text?: string;
   readonly textMetrics?: TextMetrics;
   readonly parts?: readonly CapabilitySubPartObservation[];
@@ -692,7 +798,7 @@ export type ResolvedLink = {
 };
 
 export type ResolvedObjectChildren = {
-  readonly objects: readonly ObjectObservation[];
+  readonly objects: readonly ResolvedObject[];
 };
 
 export type ObjectResolveContext = {
@@ -702,7 +808,7 @@ export type ObjectResolveContext = {
   readonly theme: ThemeContext;
   readonly options: ResolveOptions;
   readonly slideNumber: number;
-  readonly layoutBox?: GeometryBox;
+  readonly layoutBox?: Rect;
   readonly placeholder?: PlaceholderResolutionContext;
   /** Convert an explicit continuity handle into an OOXML object name; objects without declared continuity omit this value. */
   readonly morphName?: string;
@@ -734,7 +840,7 @@ export type PaintContext = {
   readonly path: string;
   readonly slideNumber: number;
   readonly objectId: number;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly theme: ThemeContext;
   readonly childrenSvg?: string;
 };
@@ -744,8 +850,11 @@ export type PaintOutput = {
   readonly warnings?: readonly PreviewWarning[];
 };
 
-export type ResolvedObject = {
-  readonly observation: ObjectObservation;
+/** Internal capability protocol result returned by `BoundObjectCapability.resolve()`. */
+export type ObjectResolution = {
+  readonly observation: Omit<ResolvedObject, "path"> & {
+    readonly path?: string;
+  };
   readonly transform?: PreviewTransform;
   readonly parts?: readonly CapabilitySubPartObservation[];
   readonly extensions: readonly Extension[];
@@ -767,7 +876,7 @@ export type BoundObjectCapability = {
   measureLayout?(
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined;
-  resolve(context: ObjectResolveContext): ResolvedObject;
+  resolve(context: ObjectResolveContext): ObjectResolution;
 };
 
 /**
@@ -890,7 +999,8 @@ export type SlidePaintOutput = {
   readonly warnings?: readonly PreviewWarning[];
 };
 
-export type ResolvedSlide = {
+/** Internal capability protocol result returned by `BoundSlideCapability.resolveSlide()`. */
+export type SlideResolution = {
   readonly observation?: unknown;
   readonly footer?: ResolvedFooter;
   readonly extensions: readonly Extension[];
@@ -903,7 +1013,7 @@ export type ResolvedSlide = {
 
 export type BoundSlideCapability = {
   readonly continuity?: BoundSlideContinuityCollaboration;
-  resolveSlide(context: SlideResolveContext): ResolvedSlide;
+  resolveSlide(context: SlideResolveContext): SlideResolution;
 };
 
 export type PptxRelationship = {

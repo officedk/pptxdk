@@ -620,11 +620,22 @@ describe("native tables", () => {
       { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
       { row: 1, column: 0, rowSpan: 2, colSpan: 1 },
     ]);
-    assert.deepEqual(result.report.slides[0]?.objects[0]?.table?.cells, [
-      ["Header", "", "Top"],
-      ["Side", "Middle", "Right"],
-      ["", "Bottom", "End"],
-    ]);
+    assert.deepEqual(
+      result.report.slides[0]?.objects[0]?.table?.cells.map((c) => ({
+        row: c.row,
+        column: c.column,
+        text: c.text,
+      })),
+      [
+        { row: 0, column: 0, text: "Header" },
+        { row: 0, column: 2, text: "Top" },
+        { row: 1, column: 0, text: "Side" },
+        { row: 1, column: 1, text: "Middle" },
+        { row: 1, column: 2, text: "Right" },
+        { row: 2, column: 1, text: "Bottom" },
+        { row: 2, column: 2, text: "End" },
+      ],
+    );
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.deepEqual(file.slides[0]?.objects[0]?.table?.merges, [
@@ -815,10 +826,19 @@ describe("native tables", () => {
     assert.deepEqual(tableObj?.box, { x: 12, y: 8, width: 160, height: 56 });
     assert.deepEqual(tableObj?.table?.columnWidths, [80, 80]);
     assert.deepEqual(tableObj?.table?.rowHeights, [28, 28]);
-    assert.deepEqual(tableObj?.table?.cells, [
-      ["方案", "说明"],
-      ["团队", "可编辑"],
-    ]);
+    assert.deepEqual(
+      tableObj?.table?.cells.map((c) => ({
+        row: c.row,
+        column: c.column,
+        text: c.text,
+      })),
+      [
+        { row: 0, column: 0, text: "方案" },
+        { row: 0, column: 1, text: "说明" },
+        { row: 1, column: 0, text: "团队" },
+        { row: 1, column: 1, text: "可编辑" },
+      ],
+    );
     assert.deepEqual(tableObj?.table?.merges, []);
     const cellParts = tableObj?.table?.parts?.filter(
       (part) => part.kind === "cell",

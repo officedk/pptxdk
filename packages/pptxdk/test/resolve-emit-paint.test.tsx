@@ -174,6 +174,8 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
       "pages",
       "query",
       "report",
+      "slide",
+      "slides",
     ]);
     assert.equal(previewResult.report.slides.length, 2);
     assert.equal(previewResult.query.slides.length, 2);

@@ -17,7 +17,7 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedObject,
+  type ObjectResolution,
   type SlideEmitOutput,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -511,7 +511,7 @@ export const textCapability = {
           throw error;
         }
       },
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const dimensions = {
           x: coordinate(
             resolveContext.layoutBox?.x ?? contract.x ?? declaredX,

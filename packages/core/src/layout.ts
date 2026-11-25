@@ -12,6 +12,7 @@ import { gridLayoutMode } from "#/grid-layout.ts";
 import {
   expandedSpacing,
   type CustomContainerMode,
+  type LayoutGridTracks,
   type LayoutSolver,
   type LayoutSolverNode,
 } from "#/layout-protocol.ts";
@@ -30,6 +31,7 @@ import type {
   LayoutStyle,
   NativeElementKind,
   PlaceholderResolutionContext,
+  Rect,
   RegisteredCapabilityModule,
   ResolveOptions,
   ThemeContext,
@@ -39,8 +41,24 @@ export { paddingStyleKeys };
 
 type Dimensions = { readonly width: number; readonly height: number };
 
+function roundLayoutMetric(value: number): number {
+  const rounded = Math.round(value * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function roundRect(box: Rect): Rect {
+  return {
+    x: roundLayoutMetric(box.x),
+    y: roundLayoutMetric(box.y),
+    width: roundLayoutMetric(box.width),
+    height: roundLayoutMetric(box.height),
+  };
+}
+
 export type LayoutPassResult = {
   readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
+  readonly gridTracks: WeakMap<CapabilityElement, LayoutGridTracks>;
+  readonly gridAreas: WeakMap<CapabilityElement, Rect>;
   readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly hidden: WeakSet<CapabilityElement>;
   readonly warnings: readonly Diagnostic[];
@@ -294,6 +312,8 @@ export class LayoutPass {
   readonly #slideNumber: number;
   readonly #options: ResolveOptions;
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #gridTracks = new WeakMap<CapabilityElement, LayoutGridTracks>();
+  readonly #gridAreas = new WeakMap<CapabilityElement, Rect>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #hidden = new WeakSet<CapabilityElement>();
   readonly #boundObjects = new WeakMap<
@@ -356,12 +376,21 @@ export class LayoutPass {
       slideStyle !== undefined,
       theme,
     );
-    this.#solver.solve((node, box) => {
-      const meta = this.#nodeMeta.get(node);
-      if (meta === undefined) return;
-      this.#boxes.set(meta.element, box);
+    this.#solver.solve((node, box, meta) => {
+      const elementMeta = this.#nodeMeta.get(node);
+      if (elementMeta === undefined) return;
+      this.#boxes.set(elementMeta.element, box);
+      if (meta?.gridTracks !== undefined) {
+        this.#gridTracks.set(elementMeta.element, {
+          columnWidths: meta.gridTracks.columnWidths.map(roundLayoutMetric),
+          rowHeights: meta.gridTracks.rowHeights.map(roundLayoutMetric),
+        });
+      }
+      if (meta?.gridArea !== undefined) {
+        this.#gridAreas.set(elementMeta.element, roundRect(meta.gridArea));
+      }
       if (
-        meta.checksCanvasOverflow &&
+        elementMeta.checksCanvasOverflow &&
         (box.x < 0 ||
           box.y < 0 ||
           box.x + box.width > this.#dimensions.width ||
@@ -378,6 +407,8 @@ export class LayoutPass {
     });
     return {
       boxes: this.#boxes,
+      gridTracks: this.#gridTracks,
+      gridAreas: this.#gridAreas,
       themes: this.#themes,
       hidden: this.#hidden,
       warnings: this.#warnings,

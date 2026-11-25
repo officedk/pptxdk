@@ -28,12 +28,14 @@ import {
   type FooterPlaceholderSpec,
   type FooterPlaceholders,
   type HeaderFooter,
+  type ResolvedPlaceholder,
   type SlideLayoutDefinition,
   type SlideLayoutObservation,
   type SlideMasterObservation,
 } from "#/masters.ts";
 import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import {
+  masterTextStyleCategoryForRole,
   matchMasterPlaceholderSpec,
   nativePlaceholderRefSchema,
   type MasterPlaceholderMap,
@@ -57,6 +59,7 @@ import {
   createThemeContext,
   defaultColorMap,
   defineTheme,
+  isFont,
   isTheme,
   textStyleFrom,
   type ColorMap,
@@ -67,6 +70,7 @@ import {
   type ThemeOverride,
   type ThemeScope,
 } from "#/theme.ts";
+import { computeTransformedGeometry } from "#/transform-geometry.ts";
 import type {
   BoundContainerCollaboration,
   BoundObjectCapability,
@@ -92,17 +96,20 @@ import type {
   ObjectObservation,
   ObjectResolveContext,
   PlaceholderResolutionContext,
+  PreviewTransform,
   RegisteredCapabilityModule,
   Resolution,
   ResolutionReport,
   ResolveOptions,
   ResolvedFooter,
   ResolvedLink,
+  ResolvedObject,
   ResolvedObjectChildren,
-  ResolvedSlide as ResolvedSlideCapabilityOutput,
+  ResolvedSlide,
   SlideCapabilityModule,
   SlideMasterInheritanceContext,
   SlideObservation,
+  SlideResolution,
   TransparentCapabilityModule,
 } from "#/types.ts";
 
@@ -213,6 +220,7 @@ type SlideResolveState = {
   matchContinuityKinds: boolean;
   readonly linkedSlideIndexes: Set<number>;
   readonly layoutDerivedObjectIds: Set<number>;
+  readonly transformsById: Map<number, PreviewTransform>;
 };
 
 type BoundCapabilityRegistry = {
@@ -265,7 +273,13 @@ function diagnostic(path: string, code: string, message: string): Diagnostic {
 }
 
 function deepFreeze<T>(value: T): T {
-  if (typeof value !== "object" || value === null) return value;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    ArrayBuffer.isView(value)
+  ) {
+    return value;
+  }
   // Capability observations might be shallow-frozen; still recursively freeze any unfrozen child values.
   if (!Object.isFrozen(value)) Object.freeze(value);
   for (const child of Object.values(value)) deepFreeze(child);
@@ -283,32 +297,69 @@ function reportBox(box: GeometryBox): GeometryBox {
 }
 
 function projectObservation(
-  observation: ObjectObservation,
+  observation: ResolvedObject,
   layoutDerivedObjectIds: ReadonlySet<number>,
-): ObjectObservation {
+  transformsById: ReadonlyMap<number, PreviewTransform>,
+  ancestorTransforms: readonly PreviewTransform[] = [],
+): ResolvedObject {
   const box =
     observation.box !== undefined && layoutDerivedObjectIds.has(observation.id)
       ? reportBox(observation.box)
       : observation.box;
+  const rawOwn = transformsById.get(observation.id);
+  const ownTransform =
+    rawOwn === undefined
+      ? undefined
+      : {
+          box: box ?? rawOwn.box,
+          angle: rawOwn.angle,
+          flipH: rawOwn.flipH,
+          flipV: rawOwn.flipV,
+        };
+  const chain =
+    ownTransform === undefined
+      ? ancestorTransforms
+      : [ownTransform, ...ancestorTransforms];
+  const transformed =
+    box === undefined
+      ? undefined
+      : computeTransformedGeometry(box, chain, ownTransform);
   const members =
     observation.members === undefined
       ? undefined
       : observation.members.map((member) =>
-          projectObservation(member, layoutDerivedObjectIds),
+          projectObservation(
+            member,
+            layoutDerivedObjectIds,
+            transformsById,
+            chain,
+          ),
         );
   return {
     ...observation,
     ...(box === undefined || box === observation.box ? {} : { box }),
+    ...(transformed === undefined
+      ? {}
+      : {
+          bounds: transformed.bounds,
+          ...(transformed.corners === undefined
+            ? {}
+            : { corners: transformed.corners }),
+          ...(transformed.transform === undefined
+            ? {}
+            : { transform: transformed.transform }),
+        }),
     ...(members === undefined ? {} : { members }),
   };
 }
 
 function projectObservations(
-  observations: readonly ObjectObservation[],
+  observations: readonly ResolvedObject[],
   layoutDerivedObjectIds: ReadonlySet<number>,
-): readonly ObjectObservation[] {
+  transformsById: ReadonlyMap<number, PreviewTransform>,
+): readonly ResolvedObject[] {
   return observations.map((observation) =>
-    projectObservation(observation, layoutDerivedObjectIds),
+    projectObservation(observation, layoutDerivedObjectIds, transformsById),
   );
 }
 
@@ -1725,10 +1776,13 @@ function resolveChildrenPass(
           declaration: child,
         });
       }
-      const observation: ObjectObservation = {
+      const gridArea = context.layout.gridAreas.get(child);
+      const observation: ResolvedObject = {
         ...resolvedObj.observation,
         id,
+        path,
         ...(authorId === undefined ? {} : { authorId }),
+        ...(gridArea === undefined ? {} : { gridArea }),
         ...(placeholder?.key === undefined
           ? {}
           : resolvedObj.observation.placeholder === undefined
@@ -1737,8 +1791,12 @@ function resolveChildrenPass(
         ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
       };
       if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
+      if (resolvedObj.transform !== undefined) {
+        context.slide.transformsById.set(id, resolvedObj.transform);
+      }
       content.push({
         ...(authorId === undefined ? {} : { authorId }),
+        path,
         reference: { kind: "object", id: observation.id },
         children: subPartContentNodes(resolvedObj.parts),
       });
@@ -1951,14 +2009,20 @@ function resolveBoundContainer(args: {
         },
       }),
     );
+    const gridArea = context.layout.gridAreas.get(child);
     if (emitsObject) {
       containerObservation = {
         ...resolvedObj.observation,
         id: objectId,
+        path,
         ...(authorId === undefined ? {} : { authorId }),
+        ...(gridArea === undefined ? {} : { gridArea }),
         ...(containerLink === undefined ? {} : { link: containerLink.summary }),
       };
       if (box !== undefined) context.slide.layoutDerivedObjectIds.add(objectId);
+      if (resolvedObj.transform !== undefined) {
+        context.slide.transformsById.set(objectId, resolvedObj.transform);
+      }
       if (container.checksCanvasOverflow === false) {
         checkCanvasOverflow(
           resolvedObj.observation.box,
@@ -2098,10 +2162,20 @@ function resolveBoundContainer(args: {
   ];
 
   if (layoutId !== undefined && box !== undefined) {
+    const gridTracks = context.layout.gridTracks.get(child);
+    const layoutGridArea = context.layout.gridAreas.get(child);
     context.slide.layouts.push({
       id: layoutId,
       ...(authorId === undefined ? {} : { authorId }),
+      path,
       box: reportBox(box),
+      ...(layoutGridArea === undefined ? {} : { gridArea: layoutGridArea }),
+      ...(gridTracks === undefined
+        ? {}
+        : {
+            columnWidths: gridTracks.columnWidths,
+            rowHeights: gridTracks.rowHeights,
+          }),
       children: [
         ...(containerObservation === undefined
           ? []
@@ -2111,6 +2185,7 @@ function resolveBoundContainer(args: {
     });
     content.push({
       ...(authorId === undefined ? {} : { authorId }),
+      path,
       reference: {
         kind: "layout",
         id: layoutId,
@@ -2129,6 +2204,7 @@ function resolveBoundContainer(args: {
   if (containerObservation !== undefined) {
     content.push({
       ...(authorId === undefined ? {} : { authorId }),
+      path,
       reference: { kind: "object", id: containerObservation.id },
       children: resolvedChildren.content,
     });
@@ -2167,8 +2243,11 @@ function subPartContentNodes(
   if (parts === undefined || parts.length === 0) return [];
   return parts.map((part) => ({
     ...(part.authorId === undefined ? {} : { authorId: part.authorId }),
+    ...(part.path === undefined ? {} : { path: part.path }),
     reference: {
       kind: "part",
+      ...(part.kind === undefined ? {} : { partKind: part.kind }),
+      ...(part.path === undefined ? {} : { path: part.path }),
       ...(part.box === undefined ? {} : { box: part.box }),
       ...(part.text === undefined ? {} : { text: part.text }),
       ...(part.textMetrics === undefined
@@ -2561,16 +2640,15 @@ function resolveOwnerSlideCapabilities(args: {
         module.declaration,
         boundSlide.continuity?.matchSourceKinds,
       );
-      const resolvedSlideCap: ResolvedSlideCapabilityOutput =
-        boundSlide.resolveSlide({
-          path,
-          dimensions,
-          contributions: [],
-          children: [],
-          theme,
-          options,
-          slideNumber: 0,
-        });
+      const resolvedSlideCap: SlideResolution = boundSlide.resolveSlide({
+        path,
+        dimensions,
+        contributions: [],
+        children: [],
+        theme,
+        options,
+        slideNumber: 0,
+      });
       if (resolvedSlideCap.observation !== undefined) {
         capabilities[module.declaration] = resolvedSlideCap.observation;
       }
@@ -2660,6 +2738,7 @@ function resolveSlideDeclaration(
     matchContinuityKinds: false,
     linkedSlideIndexes: new Set(),
     layoutDerivedObjectIds: new Set(),
+    transformsById: new Map(),
   };
   const path = `deck/slide[${id}]`;
   if (nonWhitespaceText(node.children)) {
@@ -2789,17 +2868,16 @@ function resolveSlideDeclaration(
       if (effectiveContinuity === true) {
         slide.matchContinuityKinds = true;
       }
-      const resolvedSlideCap: ResolvedSlideCapabilityOutput =
-        boundSlide.resolveSlide({
-          path,
-          dimensions,
-          contributions,
-          children,
-          theme,
-          options,
-          slideNumber: index,
-          ...(inheritance === undefined ? {} : { inheritance }),
-        });
+      const resolvedSlideCap: SlideResolution = boundSlide.resolveSlide({
+        path,
+        dimensions,
+        contributions,
+        children,
+        theme,
+        options,
+        slideNumber: index,
+        ...(inheritance === undefined ? {} : { inheritance }),
+      });
       if (resolvedSlideCap.observation !== undefined) {
         capabilities[module.declaration] = resolvedSlideCap.observation;
       }
@@ -2868,16 +2946,18 @@ function resolveSlideDeclaration(
   const projectedObjects = projectObservations(
     resolvedChildren.objects,
     slide.layoutDerivedObjectIds,
+    slide.transformsById,
   );
   const sortedLayouts = [...slide.layouts].sort(
     (left, right) => left.id - right.id,
   );
   const layoutId =
     layoutKey === undefined ? undefined : layoutIdByKey.get(layoutKey);
-  const observation: SlideObservation = {
+  const observation: ResolvedSlide = {
     id,
     ...(authorId === undefined ? {} : { authorId }),
     index,
+    path,
     ...(layoutId === undefined ? {} : { layout: layoutId }),
     ...(section === undefined ? {} : { section }),
     ...(hidden ? { hidden: true } : {}),
@@ -2954,7 +3034,10 @@ function resolveSharedCanvasLayers(args: {
   readonly theme: ThemeContext;
   readonly document: DocumentResolveState;
   readonly initialNextId?: number;
-}): readonly ResolvedObjectLayer[] {
+}): {
+  readonly layers: readonly ResolvedObjectLayer[];
+  readonly objects: readonly ResolvedObject[];
+} {
   const {
     children,
     path,
@@ -2966,7 +3049,7 @@ function resolveSharedCanvasLayers(args: {
     document,
     initialNextId = 2,
   } = args;
-  if (children.length === 0) return [];
+  if (children.length === 0) return { layers: [], objects: [] };
   const state: SlideResolveState = {
     index: 1,
     nextId: initialNextId,
@@ -2978,6 +3061,7 @@ function resolveSharedCanvasLayers(args: {
     matchContinuityKinds: false,
     linkedSlideIndexes: new Set(),
     layoutDerivedObjectIds: new Set(),
+    transformsById: new Map(),
   };
   const layout = new LayoutPass(
     modules.declarations,
@@ -3023,7 +3107,14 @@ function resolveSharedCanvasLayers(args: {
   if (state.diagnostics.length > 0) {
     throw new BuildError(state.diagnostics);
   }
-  return resolved.layers;
+  return {
+    layers: resolved.layers,
+    objects: projectObservations(
+      resolved.objects,
+      state.layoutDerivedObjectIds,
+      state.transformsById,
+    ),
+  };
 }
 
 function resolveMasterOrLayoutSlideCapability(args: {
@@ -3170,6 +3261,65 @@ function normalizeLayoutPlaceholderIndices(
     updated[key] = Object.freeze({ ...spec, idx: nextIdx });
   }
   return Object.freeze(updated);
+}
+
+function buildResolvedPlaceholders(
+  placeholders: PlaceholderMap | undefined,
+  masterPlaceholders: MasterPlaceholderMap | undefined,
+  masterTextStyles: MasterTextStyles | undefined,
+): readonly ResolvedPlaceholder[] {
+  if (placeholders === undefined) return [];
+  const result: ResolvedPlaceholder[] = [];
+  for (const [key, spec] of Object.entries(placeholders)) {
+    const masterPh =
+      masterPlaceholders === undefined
+        ? undefined
+        : matchMasterPlaceholderSpec(masterPlaceholders, spec.type);
+    const x = spec.x ?? masterPh?.x;
+    const y = spec.y ?? masterPh?.y;
+    const width = spec.width ?? masterPh?.width;
+    const height = spec.height ?? masterPh?.height;
+    const box =
+      x !== undefined &&
+      y !== undefined &&
+      width !== undefined &&
+      height !== undefined
+        ? { x, y, width, height }
+        : undefined;
+    const category = masterTextStyleCategoryForRole(spec.type);
+    const masterTxLevel1 = masterTextStyles?.[category]?.[1];
+    const rawMerged: Record<string, unknown> = {};
+    for (const layer of [
+      masterTxLevel1,
+      masterPh?.style,
+      masterPh?.listStyles?.[1],
+      spec.style,
+      spec.listStyles?.[1],
+    ]) {
+      if (layer !== undefined) {
+        Object.assign(rawMerged, layer);
+      }
+    }
+    const mergedStyle: Record<string, unknown> = {};
+    for (const [styleKey, styleValue] of Object.entries(rawMerged)) {
+      if (styleValue === undefined) continue;
+      mergedStyle[styleKey] =
+        styleKey === "fontFamily" && isFont(styleValue)
+          ? styleValue.family
+          : styleValue;
+    }
+    const idx = spec.idx ?? masterPh?.idx;
+    const size = spec.sz ?? masterPh?.sz;
+    result.push({
+      key,
+      type: spec.type,
+      ...(idx === undefined ? {} : { idx }),
+      ...(size === undefined ? {} : { size }),
+      ...(box === undefined ? {} : { box }),
+      ...(Object.keys(mergedStyle).length === 0 ? {} : { style: mergedStyle }),
+    });
+  }
+  return result;
 }
 
 function deriveFooterPlaceholdersFromMap(
@@ -3436,7 +3586,7 @@ function resolveDocument(
             document,
           })
         : undefined;
-    const masterLayers = resolveSharedCanvasLayers({
+    const masterShared = resolveSharedCanvasLayers({
       children: parsedMaster.canvasChildren.map(capabilityChild),
       path: parsedMaster.path,
       style: parsedMaster.node.props["style"],
@@ -3447,6 +3597,11 @@ function resolveDocument(
       document,
       initialNextId: 2 + Object.keys(parsedMaster.placeholders ?? {}).length,
     });
+    const masterPlaceholders = buildResolvedPlaceholders(
+      parsedMaster.placeholders,
+      undefined,
+      parsedMaster.textStyles,
+    );
 
     const resolvedLayouts: InternalResolvedSlideLayout[] = [];
     const observedLayouts: SlideLayoutObservation[] = [];
@@ -3546,7 +3701,7 @@ function resolveDocument(
               document,
             })
           : undefined;
-      const layoutLayers = resolveSharedCanvasLayers({
+      const layoutShared = resolveSharedCanvasLayers({
         children: parsedLayout.node.children.map(capabilityChild),
         path: parsedLayout.path,
         style: parsedLayout.node.props["style"],
@@ -3557,6 +3712,11 @@ function resolveDocument(
         document,
         initialNextId: 2 + Object.keys(parsedLayout.placeholders ?? {}).length,
       });
+      const layoutPlaceholders = buildResolvedPlaceholders(
+        parsedLayout.placeholders,
+        parsedMaster.placeholders,
+        parsedMaster.textStyles,
+      );
 
       const resolvedLayout: InternalResolvedSlideLayout = {
         key: parsedLayout.key,
@@ -3574,7 +3734,9 @@ function resolveDocument(
         ...(layoutPlaceholderVisuals === undefined
           ? {}
           : { placeholderVisuals: layoutPlaceholderVisuals }),
-        ...(layoutLayers.length === 0 ? {} : { layers: layoutLayers }),
+        ...(layoutShared.layers.length === 0
+          ? {}
+          : { layers: layoutShared.layers }),
         ...(layoutCapResult.slideCapabilities.length > 0
           ? { slideCapabilities: layoutCapResult.slideCapabilities }
           : {}),
@@ -3583,6 +3745,8 @@ function resolveDocument(
       layoutByKey.set(parsedLayout.key, resolvedLayout);
       observedLayouts.push({
         ...parsedLayout.data,
+        objects: layoutShared.objects,
+        placeholders: layoutPlaceholders,
         ...(Object.keys(layoutCapResult.capabilities).length > 0
           ? { capabilities: layoutCapResult.capabilities }
           : {}),
@@ -3611,7 +3775,9 @@ function resolveDocument(
       ...(masterPlaceholderVisuals === undefined
         ? {}
         : { placeholderVisuals: masterPlaceholderVisuals }),
-      ...(masterLayers.length === 0 ? {} : { layers: masterLayers }),
+      ...(masterShared.layers.length === 0
+        ? {}
+        : { layers: masterShared.layers }),
       ...(parsedMaster.placeholders === undefined
         ? {}
         : { placeholders: parsedMaster.placeholders }),
@@ -3640,6 +3806,8 @@ function resolveDocument(
       ...(parsedMaster.headerFooter === undefined
         ? {}
         : { headerFooter: parsedMaster.headerFooter }),
+      objects: masterShared.objects,
+      placeholders: masterPlaceholders,
       ...(Object.keys(masterCapResult.capabilities).length > 0
         ? { capabilities: masterCapResult.capabilities }
         : {}),
@@ -3830,12 +3998,13 @@ function resolveDocument(
   }
   if (morphDiagnostics.length > 0) throw new BuildError(morphDiagnostics);
 
-  const slideObservations: SlideObservation[] = resolvedSlides.map(
+  const slideObservations: ResolvedSlide[] = resolvedSlides.map(
     ({ observation }) => observation,
   );
   const report: ResolutionReport = deepFreeze({
     evidence: "generation",
     ...(typeof title === "string" ? { title } : {}),
+    dimensions: { width: size.width, height: size.height },
     extensions: [...document.usedExtensions],
     fonts: summarizeDocumentFonts(document.fontUsages),
     ...(masterObservations.length > 0 ? { masters: masterObservations } : {}),
@@ -3845,10 +4014,16 @@ function resolveDocument(
   const query = createBuildQuery(
     resolvedSlides.map((slide, index) => ({
       observation: report.slides[index]!,
+      dimensions: report.dimensions,
       content: slide.internal.content,
     })),
   );
-  const resolution: Resolution = Object.freeze({ report, query });
+  const resolution: Resolution = Object.freeze({
+    report,
+    slides: query.slides,
+    slide: (id: string) => query.getSlide(id),
+    query,
+  });
   const internal: InternalResolution = {
     dimensions: size,
     ...(typeof title === "string" ? { title } : {}),

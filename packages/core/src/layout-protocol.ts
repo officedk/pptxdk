@@ -5,7 +5,18 @@ import type {
   GeometryBox,
   LayoutLength,
   LayoutStyle,
+  Rect,
 } from "#/types.ts";
+
+export type LayoutGridTracks = {
+  readonly columnWidths: readonly number[];
+  readonly rowHeights: readonly number[];
+};
+
+export type LayoutCommitMetadata = {
+  readonly gridTracks?: LayoutGridTracks;
+  readonly gridArea?: Rect;
+};
 
 export type LayoutEdges = {
   readonly top: number;
@@ -90,6 +101,8 @@ export type LayoutSolverPort = {
     node: LayoutSolverNode,
     position: { readonly x: number; readonly y: number },
   ): void;
+  setGridTracks?(node: LayoutSolverNode, tracks: LayoutGridTracks): void;
+  setGridCellArea?(node: LayoutSolverNode, area: Rect): void;
 };
 
 /**
@@ -142,7 +155,13 @@ export type LayoutSolver = {
   appendChild(parent: LayoutSolverNode, child: LayoutSolverNode): void;
   requiresLooseLayout(style: LayoutStyle): boolean;
   positionLooseGeometry(node: LayoutSolverNode): void;
-  solve(onCommit: (node: LayoutSolverNode, box: GeometryBox) => void): void;
+  solve(
+    onCommit: (
+      node: LayoutSolverNode,
+      box: GeometryBox,
+      meta?: LayoutCommitMetadata,
+    ) => void,
+  ): void;
 };
 
 function failLayoutProtocol(

@@ -52,8 +52,10 @@ export async function preview(
   const { pages } = paint(resolution, validatedOptions);
   return Object.freeze({
     report: resolution.report,
-    query: resolution.query,
     pages,
+    slides: resolution.slides,
+    slide: (id: string) => resolution.slide(id),
+    query: resolution.query,
   });
 }
 
@@ -80,6 +82,7 @@ export type {
   PaintOptions,
   PaintResult,
   PreviewDiagnostic,
+  PreviewNode,
   PreviewNodeObservation,
   PreviewOptions,
   PreviewPageResult,

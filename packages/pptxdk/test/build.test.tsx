@@ -3465,8 +3465,10 @@ describe("public build entry", () => {
         kind: "shape",
         name: "badge",
         authorId: "badge",
+        path: "deck/slide[cover]/shape[badge]",
         geometry: "ellipse",
         box: { x: 32, y: 48, width: 120, height: 72 },
+        bounds: { x: 32, y: 48, width: 120, height: 72 },
       },
     ]);
     assert.ok(Object.isFrozen(result.report));

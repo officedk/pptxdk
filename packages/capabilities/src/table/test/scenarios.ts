@@ -953,7 +953,7 @@ export const tableRejectionScenario: CapabilityScenario = {
           },
           createElement(
             Row,
-            { id: "r1" },
+            { id: "r1", style: { height: 28 } },
             createElement(Cell, { id: "missing-glyph-cell" }, "汉"),
           ),
         ),
@@ -1031,7 +1031,7 @@ export const tableRejectionScenario: CapabilityScenario = {
           columns: [140],
           style: { fontFamily: jostFont, fontSize: 14 },
         }).append(
-          row({ id: "r1" }).append(
+          row({ id: "r1", style: { height: 28 } }).append(
             cell("汉", {
               id: "missing-glyph-cell",
             }),

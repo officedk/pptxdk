@@ -718,6 +718,10 @@ export function createGridContainerSolver(
           ? { height: model.height + padding.top + padding.bottom }
           : {}),
       });
+      port.setGridTracks?.(node, {
+        columnWidths: [...model.widths],
+        rowHeights: [...model.heights],
+      });
       for (const placement of model.placements) {
         const child = placement.node;
         const childStyle = child.style;
@@ -734,6 +738,12 @@ export function createGridContainerSolver(
           padding.top +
           model.spanHeight(0, placement.row) +
           (placement.row > 0 ? model.rowGap : 0);
+        port.setGridCellArea?.(child, {
+          x: cellX,
+          y: cellY,
+          width: cellWidth,
+          height: cellHeight,
+        });
         const margin = expandedSpacing(childStyle, "margin");
         const availableWidth = Math.max(
           0,

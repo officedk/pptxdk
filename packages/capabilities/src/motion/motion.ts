@@ -3,7 +3,7 @@ import {
   type CapabilityInput,
   type GeometryBox,
   type LayoutPlaceholderSpec,
-  type ResolvedSlide,
+  type SlideResolution,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
   type SlideEmitContext,
@@ -95,7 +95,7 @@ export {
   wipe,
   zoom,
 } from "./motion-api.ts";
-export { observeMotion } from "./motion-query.ts";
+export { motionSchedule, observeMotion } from "./motion-query.ts";
 export type {
   EffectInstanceObservation,
   MotionCueObservation,
@@ -109,6 +109,7 @@ export type {
   MotionMomentObservation,
   MotionMomentRef,
   MotionQuery,
+  MotionSchedule,
   MotionScopeQueryMember,
   MotionScopeQueryObservation,
   MotionScopeRef,
@@ -2951,7 +2952,7 @@ export const motionCapability: SlideCapabilityModule & {
         input.props["placeholders"],
       );
       return {
-        resolveSlide(_context: SlideResolveContext): ResolvedSlide {
+        resolveSlide(_context: SlideResolveContext): SlideResolution {
           const hasEffects = steps.some((step) => step.effects.length > 0);
           if (!hasEffects) {
             return {
@@ -2975,7 +2976,7 @@ export const motionCapability: SlideCapabilityModule & {
     }
 
     return {
-      resolveSlide(context: SlideResolveContext): ResolvedSlide {
+      resolveSlide(context: SlideResolveContext): SlideResolution {
         const plan = compileMotionPlan(context.contributions);
         validateKnownMotionTimes(plan.observation);
         const hasEffects = plan.steps.some((step) => step.effects.length > 0);

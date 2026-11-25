@@ -118,7 +118,7 @@ export { emit };
  */
 export const build = pipeline.build;
 
-/** Default capability list shared across the SDK author entrypoints. */
+export type { PreviewNode, PreviewNodeObservation } from "@pptxdk/preview";
 export { documentCapabilities, slideBackgroundCapability };
 
 export {
@@ -258,6 +258,7 @@ export type {
   NativeTableObservation,
   NativeTablePartObservation,
   ObjectObservation,
+  ObjectTransform,
   PaddingStyle,
   PlaceholderLevelStyle,
   PlaceholderListStyles,
@@ -271,14 +272,25 @@ export type {
   RadialGradient,
   Rect,
   Resolution,
+  ResolutionDimensionsSummary,
   ResolutionReport,
   ResolvedFooter,
   ResolvedFooterSlot,
+  ResolvedLayout,
+  ResolvedMaster,
+  ResolvedObject,
+  ResolvedPlaceholder,
+  ResolvedSlide,
+  ResolvedSlideLayout,
+  ResolvedTable,
+  ResolvedTableCell,
+  ResolvedTableRow,
   ResolveOptions,
   ResourceObservation,
   RichTextItem,
   SchemeColorName,
   SchemeColorSlot,
+  ScreenPoint,
   SectionProps,
   Shadow,
   SlideBackground,
@@ -288,6 +300,7 @@ export type {
   SlideLayoutObservation,
   SlideLayoutProps,
   SlideLayoutType,
+  SlideLocator,
   SlideMasterObservation,
   SlideMasterProps,
   SlideObservation,
@@ -378,6 +391,7 @@ export {
   floatUp,
   fly,
   motionCapability,
+  motionSchedule,
   observeMotion,
   repeat,
   spin,
@@ -418,6 +432,7 @@ export type {
   MotionNativeProjection,
   MotionObservation,
   MotionQuery,
+  MotionSchedule,
   MotionScopeHandle,
   MotionScopeMode,
   MotionScopeObservation,

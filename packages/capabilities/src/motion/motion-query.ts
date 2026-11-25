@@ -1,4 +1,4 @@
-import type { SlideObservation } from "@pptxdk/core/capability";
+import type { ResolvedSlide, SlideLocator } from "@pptxdk/core/capability";
 import { BuildQueryError } from "@pptxdk/core/query";
 
 import type {
@@ -153,10 +153,13 @@ export type MotionStepQuery = {
   ): MotionMembership;
 };
 
-export type MotionQuery = {
+export type MotionSchedule = {
   readonly evidence: "generation";
   readonly steps: readonly MotionStepQuery[];
 };
+
+/** Transitional alias retained until Ticket 11. */
+export type MotionQuery = MotionSchedule;
 
 export type MotionFactReader = {
   exactOffset(from: string, to: string): number | undefined;
@@ -812,11 +815,18 @@ export function registerMotionObservation(
   queryByObservation.set(observation, query);
 }
 
-/** Accepts only slide observations directly emitted by the current build; reread files will not masquerade as build results. */
-export function observeMotion(
-  slide: SlideObservation,
-): MotionQuery | undefined {
-  const capability = slide.capabilities?.["motion"];
+function isSlideLocator(
+  slide: ResolvedSlide | SlideLocator,
+): slide is SlideLocator {
+  return "observation" in slide && typeof slide.get === "function";
+}
+
+/** Accepts only resolved slides or slide locators directly emitted by the current build; reread files will not masquerade as build results. */
+export function motionSchedule(
+  slide: ResolvedSlide | SlideLocator,
+): MotionSchedule | undefined {
+  const resolvedSlide = isSlideLocator(slide) ? slide.observation : slide;
+  const capability = resolvedSlide.capabilities?.["motion"];
   if (capability === undefined) return undefined;
   if (typeof capability !== "object" || capability === null) {
     throw new BuildQueryError(
@@ -833,6 +843,9 @@ export function observeMotion(
   }
   return query;
 }
+
+/** Transitional alias retained until Ticket 11. */
+export const observeMotion = motionSchedule;
 
 function timingParts(timing: MotionTiming): {
   readonly moment: MotionMoment;

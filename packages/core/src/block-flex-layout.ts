@@ -19,6 +19,8 @@ import {
   parseLayoutNumber,
   type CustomContainerMode,
   type CustomContainerSolver,
+  type LayoutCommitMetadata,
+  type LayoutGridTracks,
   type LayoutNodeMeasure,
   type LayoutSolver,
   type LayoutSolverNode,
@@ -29,6 +31,7 @@ import type {
   GeometryBox,
   LayoutLength,
   LayoutStyle,
+  Rect,
 } from "#/types.ts";
 
 export const paddingStyleKeys = [
@@ -442,6 +445,8 @@ type BlockFlexNode = {
   baselineContent?: YogaNode;
   baseline?: number | undefined;
   allocatedHeight?: number | undefined;
+  gridTracks?: LayoutGridTracks | undefined;
+  relativeGridArea?: Rect | undefined;
 };
 
 function applyBlockFlexStyle(
@@ -1063,6 +1068,12 @@ export function createBlockFlexLayoutSolver(options: {
       internal.yoga.setPosition(Edge.Left, position.x);
       internal.yoga.setPosition(Edge.Top, position.y);
     },
+    setGridTracks(node, tracks) {
+      asInternal(node).gridTracks = tracks;
+    },
+    setGridCellArea(node, area) {
+      asInternal(node).relativeGridArea = area;
+    },
   };
 
   const resolveCustomContainers = (node: BlockFlexNode): void => {
@@ -1073,7 +1084,11 @@ export function createBlockFlexLayoutSolver(options: {
   const placeEscaped = (
     node: BlockFlexNode,
     containingBox: GeometryBox,
-    onCommit: (committed: LayoutSolverNode, box: GeometryBox) => void,
+    onCommit: (
+      committed: LayoutSolverNode,
+      box: GeometryBox,
+      meta?: LayoutCommitMetadata,
+    ) => void,
   ): void => {
     const container = Yoga.Node.create(config);
     container.setWidth(containingBox.width);
@@ -1118,7 +1133,11 @@ export function createBlockFlexLayoutSolver(options: {
   const commit = (
     node: BlockFlexNode,
     origin: { readonly x: number; readonly y: number },
-    onCommit: (committed: LayoutSolverNode, box: GeometryBox) => void,
+    onCommit: (
+      committed: LayoutSolverNode,
+      box: GeometryBox,
+      meta?: LayoutCommitMetadata,
+    ) => void,
   ): void => {
     // Keep the solver's precision: capabilities compile and write the same geometry, so display rounding here would shrink native output.
     const box: GeometryBox = {
@@ -1127,7 +1146,25 @@ export function createBlockFlexLayoutSolver(options: {
       width: node.yoga.getComputedWidth(),
       height: node.yoga.getComputedHeight(),
     };
-    onCommit(node.view, box);
+    const gridArea: Rect | undefined =
+      node.relativeGridArea === undefined
+        ? undefined
+        : {
+            x: origin.x + node.relativeGridArea.x,
+            y: origin.y + node.relativeGridArea.y,
+            width: node.relativeGridArea.width,
+            height: node.relativeGridArea.height,
+          };
+    const meta: LayoutCommitMetadata | undefined =
+      node.gridTracks !== undefined || gridArea !== undefined
+        ? {
+            ...(node.gridTracks === undefined
+              ? {}
+              : { gridTracks: node.gridTracks }),
+            ...(gridArea === undefined ? {} : { gridArea }),
+          }
+        : undefined;
+    onCommit(node.view, box, meta);
     for (const child of node.children) {
       commit(child, { x: box.x, y: box.y }, onCommit);
     }

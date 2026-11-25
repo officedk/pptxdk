@@ -1,19 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import {
-  CodegenError,
-  build,
-  codegen,
-  importPptx,
-  type CodegenResult,
-} from "pptxdk";
-import { previewFromSource, type PreviewResult } from "pptxdk/node";
+import { CodegenError, build, codegen, importPptx } from "pptxdk";
 import {
   Deck,
   Notes,
@@ -41,39 +30,10 @@ import { createElement } from "react";
 import { describe, it } from "vitest";
 
 import {
+  previewGeneratedSourceRelocated,
   rebuildGeneratedSourceRelocated,
   verifyGeneratedSourcesTypecheck,
-  writeCodegenFiles,
 } from "./helpers/codegen-acceptance.ts";
-
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-
-async function previewGeneratedSourceRelocated(
-  result: CodegenResult,
-): Promise<PreviewResult> {
-  const tempRoot = await mkdtemp(join(tmpdir(), "pptxdk-codegen-preview-"));
-  try {
-    const consumerRoot = join(tempRoot, "consumer");
-    const nodeModulesDir = join(consumerRoot, "node_modules");
-    await mkdir(nodeModulesDir, { recursive: true });
-    await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
-    await symlink(
-      join(packageRoot, "node_modules/react"),
-      join(nodeModulesDir, "react"),
-      "dir",
-    );
-
-    const originDir = join(tempRoot, "origin");
-    await writeCodegenFiles(originDir, result.files);
-    const relocatedDir = join(consumerRoot, "relocated");
-    const { rename } = await import("node:fs/promises");
-    await rename(originDir, relocatedDir);
-
-    return await previewFromSource(join(relocatedDir, result.entry));
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-}
 
 const jostBookBytes = new Uint8Array(
   readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
@@ -879,5 +839,47 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
         error.diagnostics[0]?.path ===
           "deck/slide[s-bad]/notes[n-bad]/text[inner]",
     );
+  }, 60_000);
+
+  it("preserves adjacent #text children without inserting whitespace across vanilla and react codegen", async () => {
+    const adjDoc = deck({ width: 960, height: 540 }).append(
+      slide({ id: "s-adj" }).append(
+        text([], {
+          id: "adj-text",
+          x: 10,
+          y: 10,
+          width: 200,
+          height: 40,
+        }).append("Hello", "World"),
+        text([], {
+          id: "adj-para",
+          x: 10,
+          y: 70,
+          width: 200,
+          height: 40,
+        }).append(paragraph().append("A", "B", span("C"), "D", "E")),
+      ),
+    );
+
+    const cases = [
+      { label: "adj:vanilla", result: codegen(adjDoc, { target: "vanilla" }) },
+      { label: "adj:react", result: codegen(adjDoc, { target: "react" }) },
+    ];
+    await verifyGeneratedSourcesTypecheck(cases);
+
+    for (const item of cases) {
+      const { file } = await rebuildGeneratedSourceRelocated(item.result);
+      assert.deepEqual(file.errors, [], `${item.label} validation errors`);
+      assert.equal(
+        file.slides[0]?.objects[0]?.text?.text,
+        "HelloWorld",
+        `${item.label} adj-text`,
+      );
+      assert.equal(
+        file.slides[0]?.objects[1]?.text?.text,
+        "ABCDE",
+        `${item.label} adj-para`,
+      );
+    }
   }, 60_000);
 });

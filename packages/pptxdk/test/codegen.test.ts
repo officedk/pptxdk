@@ -17,9 +17,13 @@ import {
 import {
   chart,
   deck,
+  defineSlideLayout,
   paragraph,
   section,
+  shape,
   slide,
+  slideLayout,
+  slideMaster,
   span,
   text,
 } from "pptxdk/vanilla";
@@ -341,4 +345,57 @@ process.stdout.write("ok");
         error.diagnostics[0]?.path === "deck/slide[s-bad]/text[bad-text]@x",
     );
   });
+
+  it("preserves backslashes and HTML entity sequences in JSX string attributes across codegen, typecheck, and relocated rebuild", async () => {
+    const escLayout = defineSlideLayout({ id: "esc-layout", name: "Esc" });
+    const doc = deck({ width: 960, height: 540 }).append(
+      slideMaster({
+        id: "m-esc",
+        headerFooter: { footer: true, dateTime: false, slideNumber: false },
+        footerPlaceholders: { footer: { text: "Default" } },
+      }).append(slideLayout(escLayout)),
+      section({ name: "Sec C:\\Temp &copy; 2026" }).append(
+        slide({
+          id: "s-esc",
+          layout: escLayout,
+          footer: "Path C:\\Temp &copy; 2026",
+        }).append(
+          shape({
+            id: "sh-esc",
+            x: 10,
+            y: 10,
+            width: 160,
+            height: 50,
+            text: "C:\\Users\\Alice &lt;tag&gt; &amp; Co.",
+          }),
+        ),
+      ),
+    );
+
+    const cases = [
+      { label: "esc:vanilla", result: codegen(doc, { target: "vanilla" }) },
+      { label: "esc:react", result: codegen(doc, { target: "react" }) },
+    ];
+    await verifyGeneratedSourcesTypecheck(cases);
+
+    for (const item of cases) {
+      const { file } = await rebuildGeneratedSourceRelocated(item.result);
+      assert.deepEqual(file.errors, []);
+      assert.equal(
+        file.presentation.sections?.[0]?.name,
+        "Sec C:\\Temp &copy; 2026",
+        `${item.label} section name`,
+      );
+      assert.equal(
+        file.slides[0]?.objects[0]?.text?.text,
+        "C:\\Users\\Alice &lt;tag&gt; &amp; Co.",
+        `${item.label} shape text`,
+      );
+      assert.equal(
+        file.slides[0]?.footerPlaceholders?.[0]?.text,
+        "Path C:\\Temp &copy; 2026",
+        `${item.label} slide footer`,
+      );
+    }
+  }, 60_000);
 });

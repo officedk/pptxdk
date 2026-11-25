@@ -1,21 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rename, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
-import {
-  BuildError,
-  CodegenError,
-  build,
-  codegen,
-  importPptx,
-  type CodegenResult,
-} from "pptxdk";
-import { previewFromSource, type PreviewResult } from "pptxdk/node";
+import { BuildError, CodegenError, build, codegen, importPptx } from "pptxdk";
 import {
   Box,
   Chart,
@@ -66,12 +54,10 @@ import { createElement } from "react";
 import { describe, it } from "vitest";
 
 import {
+  previewGeneratedSourceRelocated,
   rebuildGeneratedSourceRelocated,
   verifyGeneratedSourcesTypecheck,
-  writeCodegenFiles,
 } from "./helpers/codegen-acceptance.ts";
-
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 
 const jostBytes = new Uint8Array(
   readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
@@ -90,34 +76,6 @@ function samplePngPixel(
     png.data[idx + 2]!,
     png.data[idx + 3]!,
   ];
-}
-
-async function previewGeneratedSourceRelocated(
-  result: CodegenResult,
-): Promise<PreviewResult> {
-  const tempRoot = await mkdtemp(
-    join(tmpdir(), "pptxdk-codegen-motion-preview-"),
-  );
-  try {
-    const consumerRoot = join(tempRoot, "consumer");
-    const nodeModulesDir = join(consumerRoot, "node_modules");
-    await mkdir(nodeModulesDir, { recursive: true });
-    await symlink(packageRoot, join(nodeModulesDir, "pptxdk"), "dir");
-    await symlink(
-      join(packageRoot, "node_modules/react"),
-      join(nodeModulesDir, "react"),
-      "dir",
-    );
-
-    const originDir = join(tempRoot, "origin");
-    await writeCodegenFiles(originDir, result.files);
-    const relocatedDir = join(consumerRoot, "relocated");
-    await rename(originDir, relocatedDir);
-
-    return await previewFromSource(join(relocatedDir, result.entry));
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
 }
 
 const animatedLayout = defineSlideLayout({

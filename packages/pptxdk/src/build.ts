@@ -1,8 +1,12 @@
 import {
   CodegenError,
+  codegenDiagnosticCodeSchema,
+  codegenDiagnosticSchema,
+  codegenOptionsSchema,
   codegenTargetSchema,
   createCodegen,
   type CodegenDiagnostic,
+  type CodegenDiagnosticCode,
   type CodegenEntryName,
   type CodegenFileContent,
   type CodegenOptions,
@@ -288,6 +292,9 @@ export {
   ImportError,
   buildOptionsSchema,
   cascadedOmissionSchema,
+  codegenDiagnosticCodeSchema,
+  codegenDiagnosticSchema,
+  codegenOptionsSchema,
   codegenTargetSchema,
   createCodegen,
   createImporter,
@@ -313,6 +320,7 @@ export {
 };
 export type {
   CodegenDiagnostic,
+  CodegenDiagnosticCode,
   CodegenEntryName,
   CodegenFileContent,
   CodegenOptions,

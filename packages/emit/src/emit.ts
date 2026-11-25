@@ -2057,9 +2057,7 @@ export function emit(
       ? {}
       : { masters: resolution.report.masters }),
     slides: resolution.report.slides,
-    diagnostics: Object.freeze(
-      docEmit.warnings.map((warning) => Object.freeze({ ...warning })),
-    ),
+    diagnostics: Object.freeze([]),
   });
   const query = createBuildQuery(
     internal.slides.map((slide, index) => ({

@@ -348,13 +348,20 @@ export function decodeImageToPngBytes(image: LoadedImage): Uint8Array {
     }
   } catch (error) {
     if (error instanceof CapabilityError) {
-      throw error;
+      throw new CapabilityError(
+        error.code,
+        error.message,
+        error.path,
+        error.details ?? { format: image.extension },
+      );
     }
     throw new CapabilityError(
       "preview-corrupt-image",
       error instanceof Error
         ? `Failed to decode ${image.extension.toUpperCase()} image for preview: ${error.message}`
         : `Failed to decode ${image.extension.toUpperCase()} image for preview`,
+      undefined,
+      { format: image.extension },
     );
   }
 

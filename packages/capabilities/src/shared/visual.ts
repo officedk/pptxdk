@@ -1670,6 +1670,9 @@ export function paintVisualModel(options: {
   const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
   return {
     svg: `${defsXml}${layer}`,
+    ...(model.fill.kind === "image" && model.fill.source.kind === "external"
+      ? { placeholders: [{ url: model.fill.source.externalUrl }] }
+      : {}),
   };
 }
 

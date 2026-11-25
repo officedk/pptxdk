@@ -657,7 +657,7 @@ function buildGridModel(
  * Creates the Grid container solver collaborating strictly through `LayoutSolverPort`.
  */
 export function createGridContainerSolver(
-  warnOnce: (path: string, code: string, message: string) => void,
+  _warnOnce?: (path: string, code: string, message: string) => void,
 ): CustomContainerSolver {
   return {
     handlesDisplay(display) {
@@ -696,20 +696,6 @@ export function createGridContainerSolver(
         ? Math.max(0, outerHeight - padding.top - padding.bottom)
         : undefined;
       const model = buildGridModel(node, innerWidth, innerHeight, port);
-      if (innerWidth !== undefined && model.width > innerWidth + 0.01) {
-        warnOnce(
-          node.path,
-          "grid-overflow",
-          `Grid columns minimum size total ${model.width}px exceeds available width ${innerWidth}px; build retains track dimensions`,
-        );
-      }
-      if (innerHeight !== undefined && model.height > innerHeight + 0.01) {
-        warnOnce(
-          node.path,
-          "grid-overflow",
-          `Grid rows minimum size total ${model.height}px exceeds available height ${innerHeight}px; build retains track dimensions`,
-        );
-      }
       port.setContainerSize(node, {
         ...(!hasWidth && outerWidth <= 0
           ? { width: model.width + padding.left + padding.right }
@@ -850,16 +836,6 @@ export function createGridContainerSolver(
         }
         if (child.isContainer && !heightSpecified) {
           port.setAllocatedHeight(child, height);
-        }
-        if (
-          usedWidth > availableWidth + 0.01 ||
-          usedHeight > availableHeight + 0.01
-        ) {
-          warnOnce(
-            child.path,
-            "grid-item-overflow",
-            "Grid item overflows its track area; build retains declared dimensions",
-          );
         }
         const xAlign =
           justify === "center"

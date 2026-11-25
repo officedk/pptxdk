@@ -1176,14 +1176,7 @@ const codegenCommand = define.command("codegen")({
           if (error instanceof CodegenError) {
             return outcome.failure.codegenFailed({
               entry,
-              diagnostics: error.diagnostics.map(
-                ({ severity, path, code, message }) => ({
-                  severity,
-                  path,
-                  code,
-                  message,
-                }),
-              ),
+              diagnostics: [...error.diagnostics],
               importDiagnostics,
             });
           }

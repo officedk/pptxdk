@@ -61,6 +61,7 @@ export type ResolvedSectionRecord = {
 
 export type ResolvedObjectLayer = {
   readonly declarationType: string;
+  readonly authorId?: string;
   readonly sourceOrder: readonly number[];
   readonly zIndex: number;
   readonly path: string;

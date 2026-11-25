@@ -148,7 +148,7 @@ export function blockArc(
   return preset("blockArc", {
     adj1: angle(parsed.data.startAngle),
     adj2: angle(parsed.data.endAngle),
-    // Preserves valid declarations even when values exceed the common guide range of the preset; the shape compiler reports a range warning rather than silently truncating.
+    // Clamped to the OOXML [0, 50000] adjust range during serialization without emitting warnings.
     adj3: Math.round(parsed.data.thickness * 100000),
   });
 }
@@ -805,28 +805,7 @@ export function resolveGeometry(options: {
       const raw = Math.round(
         (radius / Math.min(box.width, box.height)) * 100000,
       );
-      adjust["adj"] = raw;
-      if (raw > 50000) {
-        warnings.push({
-          code: "geometry-adjustment-range",
-          message:
-            "borderRadius exceeds half of the shorter side; preserved original radius and wrote native adjust value",
-        });
-      }
-    }
-  }
-
-  for (const [key, amount] of Object.entries(adjust)) {
-    if (
-      name === "blockArc" &&
-      (((key === "adj1" || key === "adj2") &&
-        (amount < 0 || amount > 21_600_000)) ||
-        (key === "adj3" && (amount < 0 || amount > 50_000)))
-    ) {
-      warnings.push({
-        code: "geometry-adjustment-range",
-        message: `blockArc.${key} exceeds common preset range; preserved original adjust value`,
-      });
+      adjust["adj"] = Math.max(0, Math.min(50000, raw));
     }
   }
 
@@ -860,12 +839,34 @@ function pathCommandXml(command: PathCommand): string {
   }
 }
 
+function clampPresetAdjustValue(
+  presetName: string,
+  key: string,
+  amount: number,
+): number {
+  if (presetName === "roundRect" && key === "adj") {
+    return Math.max(0, Math.min(50_000, amount));
+  }
+  if (presetName === "blockArc") {
+    if (key === "adj1" || key === "adj2") {
+      return Math.max(0, Math.min(21_600_000, amount));
+    }
+    if (key === "adj3") {
+      return Math.max(0, Math.min(50_000, amount));
+    }
+  }
+  return amount;
+}
+
 /** Exhaustively serializes a ResolvedGeometry to DrawingML <a:prstGeom> or <a:custGeom>. */
 export function resolvedGeometryXml(geometry: ResolvedGeometry): string {
   switch (geometry.kind) {
     case "preset": {
       const values = Object.entries(geometry.adjust)
-        .map(([key, amount]) => `<a:gd name="${key}" fmla="val ${amount}"/>`)
+        .map(
+          ([key, amount]) =>
+            `<a:gd name="${key}" fmla="val ${clampPresetAdjustValue(geometry.name, key, amount)}"/>`,
+        )
         .join("");
       return `<a:prstGeom prst="${geometry.name}"><a:avLst>${values}</a:avLst></a:prstGeom>`;
     }

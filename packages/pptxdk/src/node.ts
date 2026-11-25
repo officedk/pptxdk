@@ -16,6 +16,8 @@ import {
   build,
   buildOptionsSchema,
   importPptx,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   type BuildOptions,
   type BuildResult,
   type FatalImportIssue,
@@ -23,6 +25,8 @@ import {
   type ImportOptions,
   type ImportReport,
   type ImportResult,
+  type PreviewError,
+  type PreviewPlaceholder,
 } from "./index.ts";
 import type { PreviewOptions, PreviewResult } from "./preview.ts";
 
@@ -66,10 +70,12 @@ export type {
   ImportOptions,
   ImportReport,
   ImportResult,
+  PreviewError,
   PreviewOptions,
+  PreviewPlaceholder,
   PreviewResult,
 };
-export { ImportError };
+export { ImportError, previewErrorSchema, previewPlaceholderSchema };
 
 /**
  * Reads a Transitional PPTX file from disk and imports it into an editable CommonNode document

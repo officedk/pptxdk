@@ -245,6 +245,7 @@ function computeLocatorSnapshot(
   const text = partRef !== undefined ? partRef.text : selectedText;
   const textMetrics =
     partRef !== undefined ? partRef.textMetrics : object?.textMetrics;
+  const image = object?.image;
   const kind =
     partRef !== undefined
       ? (partRef.partKind ?? "part")
@@ -271,6 +272,7 @@ function computeLocatorSnapshot(
     ...(transform === undefined ? {} : { transform }),
     ...(text === undefined ? {} : { text }),
     ...(textMetrics === undefined ? {} : { textMetrics }),
+    ...(image === undefined ? {} : { image }),
     ...(gridArea === undefined ? {} : { gridArea }),
     objects: Object.freeze(objects),
     ...(resources.length === 0 ? {} : { resources: Object.freeze(resources) }),

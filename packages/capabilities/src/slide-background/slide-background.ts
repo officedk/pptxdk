@@ -263,10 +263,21 @@ function paintSlideBackground(
           "preview-corrupt-image",
           message,
           `${paintContext.path}/background`,
+          error instanceof CapabilityError ? error.details : undefined,
         );
       }
       return {
         svg: `<defs>${def}</defs><rect x="0" y="0" width="${width}" height="${height}" fill="url(#${patId})"/>`,
+        ...(resolved.source.kind === "external"
+          ? {
+              placeholders: [
+                {
+                  path: `${paintContext.path}/background`,
+                  url: resolved.source.externalUrl,
+                },
+              ],
+            }
+          : {}),
       };
     }
     case "ref": {

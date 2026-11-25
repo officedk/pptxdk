@@ -48,6 +48,8 @@ export {
 export {
   fontEmbeddingModeSchema,
   formatBaseline,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   targets,
 } from "#/stage-options.ts";
 export type {
@@ -57,6 +59,8 @@ export type {
   EmitOptions,
   Extension,
   FontEmbeddingMode,
+  PreviewError,
+  PreviewPlaceholder,
   ResolveOptions,
   Target,
   TargetName,
@@ -283,6 +287,7 @@ export type {
   PaddingStyle,
   PaintContext,
   PaintOutput,
+  PaintPlaceholderRecord,
   PptxRelationship,
   PreviewTransform,
   PreviewWarning,
@@ -293,6 +298,7 @@ export type {
   ResolutionReport,
   ResolvedFooter,
   ResolvedFooterSlot,
+  ResolvedImage,
   ResolvedLayout,
   ResolvedLink,
   ResolvedMaster,

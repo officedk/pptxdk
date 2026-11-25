@@ -94,3 +94,62 @@ export const diagnosticSchema = z
   })
   .readonly();
 export type Diagnostic = z.infer<typeof diagnosticSchema>;
+
+const previewFontStyleSchema = z.enum(["normal", "italic"]);
+
+/** Typed per-page static preview failure discriminated by `code`. */
+export const previewErrorSchema = z.discriminatedUnion("code", [
+  z.strictObject({
+    code: z.literal("preview-missing-font"),
+    path: z.string(),
+    message: z.string(),
+    font: z.strictObject({
+      family: z.string(),
+      weight: z.number(),
+      style: previewFontStyleSchema,
+    }),
+  }),
+  z.strictObject({
+    code: z.literal("preview-unsupported-font"),
+    path: z.string(),
+    message: z.string(),
+    font: z.strictObject({
+      family: z.string(),
+      weight: z.number().optional(),
+      style: previewFontStyleSchema.optional(),
+    }),
+    reason: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("preview-missing-glyph"),
+    path: z.string(),
+    message: z.string(),
+    font: z.strictObject({
+      family: z.string(),
+      weight: z.number(),
+      style: previewFontStyleSchema,
+    }),
+    characters: z.array(z.string()).readonly(),
+  }),
+  z.strictObject({
+    code: z.literal("preview-corrupt-image"),
+    path: z.string(),
+    message: z.string(),
+    format: z.enum(["png", "jpeg", "gif"]).optional(),
+  }),
+  z.strictObject({
+    code: z.literal("preview-unsupported-capability"),
+    path: z.string(),
+    message: z.string(),
+    capability: z.string(),
+  }),
+]);
+export type PreviewError = z.infer<typeof previewErrorSchema>;
+
+/** Offline external image placeholder rendered deterministically during static preview. */
+export const previewPlaceholderSchema = z.strictObject({
+  id: z.string().optional(),
+  path: z.string(),
+  url: z.string(),
+});
+export type PreviewPlaceholder = z.infer<typeof previewPlaceholderSchema>;

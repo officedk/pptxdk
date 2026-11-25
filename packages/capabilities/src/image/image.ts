@@ -100,6 +100,7 @@ type ResolvedImageModel = {
   readonly placement: ImagePlacement;
   readonly visual: ResolvedVisualModel;
   readonly name: string;
+  readonly authorId?: string;
   readonly alt?: string;
   readonly placeholder?: {
     readonly nativeRef: NativePlaceholderRef;
@@ -241,10 +242,22 @@ function paintImageModel(
         : "";
     return {
       svg: `<g transform="${visualSvgTransform(visual)}">${placeholderShapes}${borderElements}</g>`,
-      warnings: [
+      placeholders: [
         {
-          message: `External linked image (${image.externalUrl}) is unavailable offline; rendered placeholder`,
+          ...(model.authorId === undefined ? {} : { id: model.authorId }),
+          path: paintContext.path,
+          url: image.externalUrl,
         },
+        ...(visual.fill.kind === "image" &&
+        visual.fill.source.kind === "external"
+          ? [
+              {
+                ...(model.authorId === undefined ? {} : { id: model.authorId }),
+                path: paintContext.path,
+                url: visual.fill.source.externalUrl,
+              },
+            ]
+          : []),
       ],
     };
   }
@@ -373,6 +386,17 @@ function paintImageModel(
   const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
   return {
     svg: `${defsXml}${layer}`,
+    ...(visual.fill.kind === "image" && visual.fill.source.kind === "external"
+      ? {
+          placeholders: [
+            {
+              ...(model.authorId === undefined ? {} : { id: model.authorId }),
+              path: paintContext.path,
+              url: visual.fill.source.externalUrl,
+            },
+          ],
+        }
+      : {}),
   };
 }
 
@@ -820,6 +844,7 @@ export const imageCapability = {
           placement,
           visual: resolvedVisual,
           name,
+          ...(authorId === undefined ? {} : { authorId }),
           ...(altValue === undefined ? {} : { alt: altValue }),
           ...(placeholder === undefined
             ? {}
@@ -835,6 +860,25 @@ export const imageCapability = {
           placeholder === undefined
             ? imageMechanism
             : picturePlaceholderMechanism;
+        const imageObservation =
+          image.kind === "external"
+            ? Object.freeze({
+                kind: "external" as const,
+                ...(authorId === undefined ? {} : { id: authorId }),
+                path: resolveContext.path,
+                url: image.externalUrl,
+                placeholder: Object.freeze({
+                  ...(authorId === undefined ? {} : { id: authorId }),
+                  path: resolveContext.path,
+                  url: image.externalUrl,
+                }),
+              })
+            : Object.freeze({
+                kind: "embedded" as const,
+                contentType: image.contentType,
+                width: image.width,
+                height: image.height,
+              });
 
         return {
           observation: {
@@ -842,6 +886,7 @@ export const imageCapability = {
             kind: "image",
             name,
             box,
+            image: imageObservation,
           },
           transform: {
             box,

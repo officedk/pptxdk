@@ -313,6 +313,9 @@ function paintShapeModel(
             : `<g transform="rotate(${roundSvgNumber(rotate)} ${roundSvgNumber(cx)} ${roundSvgNumber(cy)})">${glyphsSvg}</g>`;
       return {
         svg: `${visualPaint.svg}${textLayer}`,
+        ...(visualPaint.placeholders === undefined
+          ? {}
+          : { placeholders: visualPaint.placeholders }),
       };
     }
     default: {

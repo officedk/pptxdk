@@ -1408,41 +1408,20 @@ function summarizeDocumentFonts(
 }
 
 function recordCapabilityWarnings(
-  warnings: readonly CapabilityWarning[] | undefined,
-  document: DocumentResolveState,
-  path: string,
+  _warnings: readonly CapabilityWarning[] | undefined,
+  _document: DocumentResolveState,
+  _path: string,
 ): void {
-  for (const warning of warnings ?? []) {
-    document.warnings.push({
-      severity: "warning",
-      path: warning.path === undefined ? path : `${path}/${warning.path}`,
-      code: warning.code,
-      message: warning.message,
-    });
-  }
+  // Runtime warnings are silenced; observation fields carry all layout and font facts.
 }
 
 function checkCanvasOverflow(
-  box: GeometryBox | undefined,
-  dimensions: ResolutionDimensions,
-  document: DocumentResolveState,
-  path: string,
+  _box: GeometryBox | undefined,
+  _dimensions: ResolutionDimensions,
+  _document: DocumentResolveState,
+  _path: string,
 ): void {
-  if (box === undefined) return;
-  if (
-    box.x < 0 ||
-    box.y < 0 ||
-    box.x + box.width > dimensions.width ||
-    box.y + box.height > dimensions.height
-  ) {
-    document.warnings.push({
-      severity: "warning",
-      path,
-      code: "overflow",
-      message:
-        "Object overflows slide canvas; build retains original declaration",
-    });
-  }
+  // Canvas overflow is observable directly via ResolvedObject.box and bounds without warnings.
 }
 
 function recordObjectMorph(args: {
@@ -1824,6 +1803,7 @@ function resolveChildrenPass(
       );
       const layer: ResolvedObjectLayer = {
         declarationType: child.type,
+        ...(authorId === undefined ? {} : { authorId }),
         sourceOrder: [index],
         zIndex: paintOrder(bound.contract),
         path,
@@ -2091,6 +2071,7 @@ function resolveBoundContainer(args: {
     memberLayers = enclosesChildren ? (memberResolved?.layers ?? []) : [];
     containerLayer = {
       declarationType: child.type,
+      ...(authorId === undefined ? {} : { authorId }),
       sourceOrder: [index],
       zIndex: paintOrder(bound.contract),
       path,

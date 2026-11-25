@@ -22,6 +22,8 @@ import {
   type EmitOptions,
   type Extension,
   type FontEmbeddingMode,
+  type PreviewError,
+  type PreviewPlaceholder,
   type ResolveOptions,
   type Target,
   type TargetName,
@@ -224,6 +226,21 @@ export type ObjectTransform = {
   readonly flipV: boolean;
 };
 
+export type ResolvedImage =
+  | {
+      readonly kind: "embedded";
+      readonly contentType: string;
+      readonly width: number;
+      readonly height: number;
+    }
+  | {
+      readonly kind: "external";
+      readonly id?: string;
+      readonly path: string;
+      readonly url: string;
+      readonly placeholder: PreviewPlaceholder;
+    };
+
 export type ResolvedObject = {
   readonly id: number;
   readonly kind: string;
@@ -245,6 +262,7 @@ export type ResolvedObject = {
   readonly gridArea?: Rect;
   readonly text?: string;
   readonly textMetrics?: TextMetrics;
+  readonly image?: ResolvedImage;
   readonly link?: string;
   readonly table?: ResolvedTable;
   readonly members?: readonly ResolvedObject[];
@@ -439,6 +457,7 @@ export type Locator = {
   readonly transform?: ObjectTransform;
   readonly text?: string;
   readonly textMetrics?: TextMetrics;
+  readonly image?: ResolvedImage;
   readonly gridArea?: Rect;
   readonly objects: readonly ResolvedObject[];
   readonly resources?: readonly LocatorResourceObservation[];
@@ -858,8 +877,15 @@ export type PaintContext = {
   readonly childrenSvg?: string;
 };
 
+export type PaintPlaceholderRecord = {
+  readonly id?: string;
+  readonly path?: string;
+  readonly url: string;
+};
+
 export type PaintOutput = {
   readonly svg: string;
+  readonly placeholders?: readonly PaintPlaceholderRecord[];
   readonly warnings?: readonly PreviewWarning[];
 };
 
@@ -1009,6 +1035,7 @@ export type SlidePaintContext = {
 
 export type SlidePaintOutput = {
   readonly svg: string;
+  readonly placeholders?: readonly PaintPlaceholderRecord[];
   readonly warnings?: readonly PreviewWarning[];
 };
 
@@ -1147,6 +1174,11 @@ export type RegisteredCapabilityModule =
   | CapabilityModule
   | TransparentCapabilityModule;
 
-export type { Diagnostic, DiagnosticSeverity };
+export type {
+  Diagnostic,
+  DiagnosticSeverity,
+  PreviewError,
+  PreviewPlaceholder,
+};
 
 // DeckProps, SlideProps, and SectionProps are derived from Zod schemas in author-schemas.ts.

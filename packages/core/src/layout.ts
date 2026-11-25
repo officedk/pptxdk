@@ -390,7 +390,6 @@ type CommittedNodeMeta = {
 /** Coordinates layout tree construction, capability binding, solver collaboration, and box commitment. */
 export class LayoutPass {
   readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
-  readonly #dimensions: Dimensions;
   readonly #slideNumber: number;
   readonly #options: ResolveOptions;
   readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
@@ -404,7 +403,6 @@ export class LayoutPass {
   >();
   readonly #nodeMeta = new WeakMap<LayoutSolverNode, CommittedNodeMeta>();
   readonly #warnings: Diagnostic[] = [];
-  readonly #warningKeys = new Set<string>();
   readonly #solver: LayoutSolver;
   #placeholderFor: (
     element: CapabilityElement,
@@ -417,15 +415,12 @@ export class LayoutPass {
     options: ResolveOptions = {},
   ) {
     this.#modules = modules;
-    this.#dimensions = dimensions;
     this.#slideNumber = slideNumber;
     this.#options = options;
     this.#solver = createBlockFlexLayoutSolver({
       dimensions,
       customContainers: customContainerModes.map((mode) =>
-        mode.createSolver((path, code, message) => {
-          this.#warnOnce(path, code, message);
-        }),
+        mode.createSolver(() => {}),
       ),
     });
   }
@@ -464,21 +459,6 @@ export class LayoutPass {
       }
       if (meta?.gridArea !== undefined) {
         this.#gridAreas.set(elementMeta.element, roundRect(meta.gridArea));
-      }
-      if (
-        elementMeta.checksCanvasOverflow &&
-        (box.x < 0 ||
-          box.y < 0 ||
-          box.x + box.width > this.#dimensions.width ||
-          box.y + box.height > this.#dimensions.height)
-      ) {
-        this.#warnings.push({
-          severity: "warning",
-          path: node.path,
-          code: "overflow",
-          message:
-            "Layout container overflows slide canvas; build retains original declaration",
-        });
       }
     });
     return {
@@ -703,13 +683,6 @@ export class LayoutPass {
     for (const descendant of child.children) {
       if (element(descendant)) this.#markHidden(descendant);
     }
-  }
-
-  #warnOnce(path: string, code: string, message: string): void {
-    const key = `${path}\u0000${code}\u0000${message}`;
-    if (this.#warningKeys.has(key)) return;
-    this.#warningKeys.add(key);
-    this.#warnings.push({ severity: "warning", path, code, message });
   }
 
   #measure(

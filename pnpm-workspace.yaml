@@ -1,0 +1,49 @@
+nodeLinker: isolated
+preferSymlinkedExecutables: true
+shellEmulator: true
+autoInstallPeers: false
+injectWorkspacePackages: false
+dedupeInjectedDeps: false
+syncInjectedDepsAfterScripts:
+  - build
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeExclude:
+  - "@ykdz/cli-contract@0.7.0"
+allowBuilds:
+  esbuild: true
+overrides: {}
+packages:
+  - packages/*
+  - examples/*
+catalog:
+  "@changesets/cli": 3.0.3
+  "@types/node": ^26.0.0
+  "@types/react": 19.3.0
+  "@types/react-reconciler": ^0.34.1
+  "@xmldom/xmldom": ^0.9.12
+  "@ykdz/cli-contract": 0.7.0
+  esbuild: ^0.28.2
+  fflate: ^0.8.3
+  fontkit: ^2.0.4
+  harfbuzzjs: ^1.6.4
+  jpeg-js: 0.4.4
+  linebreak: ^1.1.0
+  yoga-layout: ^3.2.1
+  "@types/fontkit": ^2.0.9
+  "@types/emscripten": ^1.41.6
+  "@types/pngjs": 6.0.5
+  "@resvg/resvg-js": 2.6.2
+  oxfmt: ^0.74.0
+  oxlint: ^1.89.0
+  oxlint-tsgolint: ^7.0.2001
+  pngjs: 7.0.0
+  react: 19.3.1
+  react-reconciler: 0.34.0
+  rolldown: 1.2.16
+  rolldown-plugin-dts: 0.30.2
+  turbo: 2.11.10
+  vite: 8.3.5
+  vitest: 5.0.5
+  typescript-7: npm:typescript@^7.0.2
+  zod: ^4.6.7

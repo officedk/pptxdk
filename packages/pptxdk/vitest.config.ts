@@ -1,0 +1,24 @@
+import shared from "@pptxdk/tooling-config/vitest";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    // CLI subprocesses and deck rebuilds share CPU with the other workspace suites.
+    maxWorkers: 4,
+    // Allow cold font, WASM and PPTX validation startup on hosted runners.
+    testTimeout: 15_000,
+    projects: [
+      { ...shared, test: { ...shared.test, name: "development" } },
+      // React adaptation reads private reconciler state; ADR-0018 requires real integration acceptance against the production build users run.
+      {
+        ...shared,
+        test: {
+          ...shared.test,
+          name: "production",
+          include: ["test/async-build.test.tsx"],
+          env: { NODE_ENV: "production" },
+        },
+      },
+    ],
+  },
+});

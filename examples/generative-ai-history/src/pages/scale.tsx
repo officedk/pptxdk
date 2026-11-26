@@ -17,21 +17,30 @@ export function ScalePage() {
       }}
     >
       <Text
-        x={64}
-        y={158}
-        width={740}
-        height={34}
-        style={{ fontSize: 17, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 158,
+          width: 740,
+          height: 34,
+          fontSize: 17,
+          color: colors.muted,
+        }}
       >
         参数量（十亿，线性刻度）
       </Text>
       <Chart
         id="gpt-parameters"
-        x={64}
-        y={196}
-        width={742}
-        height={394}
-        style={{ fontFamily: "body", fontSize: 14, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 196,
+          width: 742,
+          height: 394,
+          fontFamily: "body",
+          fontSize: 14,
+          color: colors.ink,
+        }}
         legend={false}
         plotArea={{ left: 70, top: 24, width: 620, height: 292 }}
         axes={{
@@ -81,50 +90,75 @@ export function ScalePage() {
         ]}
       />
       <Text
-        x={64}
-        y={604}
-        width={742}
-        height={38}
-        style={{ fontSize: 13, lineHeight: 20, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 604,
+          width: 742,
+          height: 38,
+          fontSize: 13,
+          lineHeight: 20,
+          color: colors.muted,
+        }}
       >
         GPT-1 约 117M（见 GPT-2 论文表 2），GPT-2 约 1.5B，GPT-3 为
         175B。柱高采用线性刻度。
       </Text>
       <Rule x={856} y={184} width={1} color={colors.line} thickness={434} />
       <Text
-        x={900}
-        y={196}
-        width={310}
-        height={82}
-        style={{ fontFamily: "display", fontSize: 60, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 900,
+          top: 196,
+          width: 310,
+          height: 82,
+          fontFamily: "display",
+          fontSize: 60,
+          color: colors.cobalt,
+        }}
       >
         约1500×
       </Text>
       <Text
-        x={902}
-        y={284}
-        width={306}
-        height={72}
-        style={{ fontSize: 18, lineHeight: 29, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 902,
+          top: 284,
+          width: 306,
+          height: 72,
+          fontSize: 18,
+          lineHeight: 29,
+          color: colors.ink,
+        }}
       >
         两年间，GPT 系列参数量从 1.17 亿增至 1750 亿。
       </Text>
       <Rule x={902} y={386} width={66} color={colors.sun} thickness={5} />
       <Text
-        x={902}
-        y={420}
-        width={306}
-        height={36}
-        style={{ fontFamily: "display", fontSize: 26, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 902,
+          top: 420,
+          width: 306,
+          height: 36,
+          fontFamily: "display",
+          fontSize: 26,
+          color: colors.ink,
+        }}
       >
         规模之外的新行为
       </Text>
       <Text
-        x={902}
-        y={474}
-        width={306}
-        height={126}
-        style={{ fontSize: 17, lineHeight: 28, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 902,
+          top: 474,
+          width: 306,
+          height: 126,
+          fontSize: 17,
+          lineHeight: 28,
+          color: colors.muted,
+        }}
       >
         GPT-3 展示了上下文内学习：不更新参数，也能依照提示中的示例完成新任务。
       </Text>

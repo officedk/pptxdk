@@ -99,11 +99,12 @@ export function OpenInfraSynthesisPage() {
     >
       {/* Section 1 header */}
       <Text
-        x={48}
-        y={106}
-        width={1184}
-        height={22}
         style={{
+          position: "absolute",
+          left: 48,
+          top: 106,
+          width: 1184,
+          height: 22,
           fontSize: 13,
           color: colors.computeBright,
           textWrap: "nowrap",
@@ -119,12 +120,15 @@ export function OpenInfraSynthesisPage() {
         return (
           <Shape
             key={item.day}
-            x={cardX}
-            y={134}
-            width={189}
-            height={214}
-            fill={colors.obsidianCard}
-            style={{ borderColor: colors.darkLine, borderWidth: 1 }}
+            style={{
+              position: "absolute",
+              left: cardX,
+              top: 134,
+              width: 189,
+              height: 214,
+              background: colors.obsidianCard,
+              border: { color: colors.darkLine, width: 1 },
+            }}
           />
         );
       })}
@@ -133,11 +137,14 @@ export function OpenInfraSynthesisPage() {
         return (
           <Shape
             key={`bar-${item.day}`}
-            x={cardX}
-            y={134}
-            width={189}
-            height={3}
-            fill={item.accent}
+            style={{
+              position: "absolute",
+              left: cardX,
+              top: 134,
+              width: 189,
+              height: 3,
+              background: item.accent,
+            }}
           />
         );
       })}
@@ -146,13 +153,13 @@ export function OpenInfraSynthesisPage() {
         return (
           <Shape
             key={`badge-${item.day}`}
-            x={cardX + 12}
-            y={146}
-            width={54}
-            height={20}
-            fill={item.accent}
-            text={item.day}
-            textStyle={{
+            style={{
+              position: "absolute",
+              left: cardX + 12,
+              top: 146,
+              width: 54,
+              height: 20,
+              background: item.accent,
               fontFamily: "metric",
               fontSize: 10,
               fontWeight: 700,
@@ -160,7 +167,9 @@ export function OpenInfraSynthesisPage() {
               align: "center",
               verticalAlign: "middle",
             }}
-          />
+          >
+            {item.day}
+          </Shape>
         );
       })}
       {openSourceWeekItems.map((item, idx) => {
@@ -168,11 +177,12 @@ export function OpenInfraSynthesisPage() {
         return (
           <Text
             key={`layer-${item.day}`}
-            x={cardX + 72}
-            y={147}
-            width={108}
-            height={18}
             style={{
+              position: "absolute",
+              left: cardX + 72,
+              top: 147,
+              width: 108,
+              height: 18,
               fontSize: 10,
               color: colors.darkMuted,
               textWrap: "nowrap",
@@ -187,11 +197,12 @@ export function OpenInfraSynthesisPage() {
         return (
           <Text
             key={`repo-${item.day}`}
-            x={cardX + 12}
-            y={174}
-            width={165}
-            height={24}
             style={{
+              position: "absolute",
+              left: cardX + 12,
+              top: 174,
+              width: 165,
+              height: 24,
               fontSize: 14,
               color: colors.surface,
               textWrap: "nowrap",
@@ -206,11 +217,12 @@ export function OpenInfraSynthesisPage() {
         return (
           <Text
             key={`kpi-${item.day}`}
-            x={cardX + 12}
-            y={202}
-            width={165}
-            height={20}
             style={{
+              position: "absolute",
+              left: cardX + 12,
+              top: 202,
+              width: 165,
+              height: 20,
               fontFamily: "metric",
               fontSize: 11.5,
               fontWeight: 700,
@@ -239,11 +251,12 @@ export function OpenInfraSynthesisPage() {
         return (
           <Text
             key={`desc-${item.day}`}
-            x={cardX + 12}
-            y={234}
-            width={165}
-            height={102}
             style={{
+              position: "absolute",
+              left: cardX + 12,
+              top: 234,
+              width: 165,
+              height: 102,
               fontSize: 10.5,
               lineHeight: 15.5,
               color: colors.darkMuted,
@@ -256,11 +269,12 @@ export function OpenInfraSynthesisPage() {
 
       {/* Section 2 header */}
       <Text
-        x={48}
-        y={364}
-        width={1184}
-        height={22}
         style={{
+          position: "absolute",
+          left: 48,
+          top: 364,
+          width: 1184,
+          height: 22,
           fontSize: 13,
           color: colors.copperBright,
           textWrap: "nowrap",
@@ -276,12 +290,15 @@ export function OpenInfraSynthesisPage() {
         return (
           <Shape
             key={rec.idx}
-            x={cardX}
-            y={394}
-            width={384}
-            height={264}
-            fill={colors.obsidianCard}
-            style={{ borderColor: colors.darkLine, borderWidth: 1 }}
+            style={{
+              position: "absolute",
+              left: cardX,
+              top: 394,
+              width: 384,
+              height: 264,
+              background: colors.obsidianCard,
+              border: { color: colors.darkLine, width: 1 },
+            }}
           />
         );
       })}
@@ -290,11 +307,14 @@ export function OpenInfraSynthesisPage() {
         return (
           <Shape
             key={`left-${rec.idx}`}
-            x={cardX}
-            y={394}
-            width={4}
-            height={264}
-            fill={rec.accent}
+            style={{
+              position: "absolute",
+              left: cardX,
+              top: 394,
+              width: 4,
+              height: 264,
+              background: rec.accent,
+            }}
           />
         );
       })}
@@ -303,13 +323,13 @@ export function OpenInfraSynthesisPage() {
         return (
           <Shape
             key={`num-${rec.idx}`}
-            x={cardX + 18}
-            y={410}
-            width={36}
-            height={24}
-            fill={rec.accent}
-            text={rec.idx}
-            textStyle={{
+            style={{
+              position: "absolute",
+              left: cardX + 18,
+              top: 410,
+              width: 36,
+              height: 24,
+              background: rec.accent,
               fontFamily: "metric",
               fontSize: 12,
               fontWeight: 700,
@@ -317,7 +337,9 @@ export function OpenInfraSynthesisPage() {
               align: "center",
               verticalAlign: "middle",
             }}
-          />
+          >
+            {rec.idx}
+          </Shape>
         );
       })}
       {hardwareReflections.map((rec, idx) => {
@@ -325,10 +347,11 @@ export function OpenInfraSynthesisPage() {
         return (
           <Text
             key={`title-${rec.idx}`}
-            x={cardX + 60}
-            y={412}
-            width={312}
             style={{
+              position: "absolute",
+              left: cardX + 60,
+              top: 412,
+              width: 312,
               padding: 0,
               fontSize: 12.5,
               color: rec.bright,
@@ -356,11 +379,12 @@ export function OpenInfraSynthesisPage() {
         return (
           <Text
             key={`body-${rec.idx}`}
-            x={cardX + 18}
-            y={458}
-            width={348}
-            height={186}
             style={{
+              position: "absolute",
+              left: cardX + 18,
+              top: 458,
+              width: 348,
+              height: 186,
               fontSize: 11,
               lineHeight: 17,
               color: colors.darkMuted,

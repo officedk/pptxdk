@@ -14,13 +14,23 @@ import { colors, motion } from "../theme.ts";
 export function ComparisonPage() {
   return (
     <Slide id="comparison" background={colors.paper}>
-      <Shape x={0} y={0} width={610} height={720} fill={colors.accent} />
-      <Text
-        x={72}
-        y={70}
-        width={430}
-        height={30}
+      <Shape
         style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 610,
+          height: 720,
+          background: colors.accent,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 72,
+          top: 70,
+          width: 430,
+          height: 30,
           fontSize: 16,
           fontWeight: 700,
           letterSpacing: 2,
@@ -30,11 +40,12 @@ export function ComparisonPage() {
         05 / COMPARISON
       </Text>
       <Text
-        x={70}
-        y={132}
-        width={480}
-        height={130}
         style={{
+          position: "absolute",
+          left: 70,
+          top: 132,
+          width: 480,
+          height: 130,
           fontSize: 52,
           fontWeight: 700,
           lineHeight: 57,
@@ -53,11 +64,12 @@ export function ComparisonPage() {
         </Step>
       </Box>
       <Text
-        x={700}
-        y={74}
-        width={480}
-        height={104}
         style={{
+          position: "absolute",
+          left: 700,
+          top: 74,
+          width: 480,
+          height: 104,
           fontSize: 88,
           lineHeight: 92,
           fontWeight: 700,
@@ -67,11 +79,12 @@ export function ComparisonPage() {
         A / B
       </Text>
       <Text
-        x={706}
-        y={190}
-        width={400}
-        height={44}
         style={{
+          position: "absolute",
+          left: 706,
+          top: 190,
+          width: 400,
+          height: 44,
           fontSize: 30,
           fontFamily: "medium",
           fontWeight: 500,
@@ -83,54 +96,122 @@ export function ComparisonPage() {
       <Step n={2}>
         <Group enter={wipe({ from: "left", duration: motion.settle })}>
           <Text
-            x={704}
-            y={316}
-            width={48}
-            height={40}
-            style={{ fontSize: 25, fontWeight: 700 }}
+            style={{
+              position: "absolute",
+              left: 704,
+              top: 316,
+              width: 48,
+              height: 40,
+              fontSize: 25,
+              fontWeight: 700,
+            }}
           >
             A
           </Text>
-          <Shape x={770} y={320} width={360} height={24} fill={colors.soft} />
-          <Shape x={770} y={320} width={310} height={24} fill={colors.accent} />
+          <Shape
+            style={{
+              position: "absolute",
+              left: 770,
+              top: 320,
+              width: 360,
+              height: 24,
+              background: colors.soft,
+            }}
+          />
+          <Shape
+            style={{
+              position: "absolute",
+              left: 770,
+              top: 320,
+              width: 310,
+              height: 24,
+              background: colors.accent,
+            }}
+          />
           <Text
-            x={1140}
-            y={310}
-            width={60}
-            height={42}
-            style={{ fontSize: 25, fontFamily: "medium", fontWeight: 500 }}
+            style={{
+              position: "absolute",
+              left: 1140,
+              top: 310,
+              width: 60,
+              height: 42,
+              fontSize: 25,
+              fontFamily: "medium",
+              fontWeight: 500,
+            }}
           >
             84
           </Text>
           <Text
-            x={704}
-            y={434}
-            width={48}
-            height={40}
-            style={{ fontSize: 25, fontWeight: 700 }}
+            style={{
+              position: "absolute",
+              left: 704,
+              top: 434,
+              width: 48,
+              height: 40,
+              fontSize: 25,
+              fontWeight: 700,
+            }}
           >
             B
           </Text>
-          <Shape x={770} y={438} width={360} height={24} fill={colors.soft} />
-          <Shape x={770} y={438} width={205} height={24} fill={colors.ink} />
+          <Shape
+            style={{
+              position: "absolute",
+              left: 770,
+              top: 438,
+              width: 360,
+              height: 24,
+              background: colors.soft,
+            }}
+          />
+          <Shape
+            style={{
+              position: "absolute",
+              left: 770,
+              top: 438,
+              width: 205,
+              height: 24,
+              background: colors.ink,
+            }}
+          />
           <Text
-            x={1140}
-            y={428}
-            width={60}
-            height={42}
-            style={{ fontSize: 25, fontFamily: "medium", fontWeight: 500 }}
+            style={{
+              position: "absolute",
+              left: 1140,
+              top: 428,
+              width: 60,
+              height: 42,
+              fontSize: 25,
+              fontFamily: "medium",
+              fontWeight: 500,
+            }}
           >
             56
           </Text>
-          <Shape x={1072} y={310} width={8} height={44} fill={colors.current} />
+          <Shape
+            style={{
+              position: "absolute",
+              left: 1072,
+              top: 310,
+              width: 8,
+              height: 44,
+              background: colors.current,
+            }}
+          />
         </Group>
       </Step>
       <Text
-        x={706}
-        y={564}
-        width={420}
-        height={68}
-        style={{ fontSize: 18, lineHeight: 26, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 706,
+          top: 564,
+          width: 420,
+          height: 68,
+          fontSize: 18,
+          lineHeight: 26,
+          color: colors.muted,
+        }}
       >
         Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
         tempor.

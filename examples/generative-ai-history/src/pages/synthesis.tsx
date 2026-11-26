@@ -42,11 +42,12 @@ export function SynthesisPage() {
       }}
     >
       <Text
-        x={64}
-        y={154}
-        width={1148}
-        height={42}
         style={{
+          position: "absolute",
+          left: 64,
+          top: 154,
+          width: 1148,
+          height: 42,
           fontFamily: "display",
           fontSize: 29,
           color: colors.paperBright,
@@ -63,11 +64,12 @@ export function SynthesisPage() {
       ].map((item, index) => (
         <Fragment key={index}>
           <Text
-            x={item.x}
-            y={214}
-            width={120}
-            height={44}
             style={{
+              position: "absolute",
+              left: item.x,
+              top: 214,
+              width: 120,
+              height: 44,
               fontSize: 22,
               color: index === 3 ? colors.sun : colors.cyan,
               align: "center",
@@ -86,11 +88,12 @@ export function SynthesisPage() {
         return (
           <Fragment key={index}>
             <Text
-              x={64}
-              y={y}
-              width={190}
-              height={34}
               style={{
+                position: "absolute",
+                left: 64,
+                top: y,
+                width: 190,
+                height: 34,
                 fontFamily: "display",
                 fontSize: 24,
                 color: colors.paperBright,
@@ -99,20 +102,28 @@ export function SynthesisPage() {
               {row.name}
             </Text>
             <Text
-              x={286}
-              y={y + 3}
-              width={340}
-              height={32}
-              style={{ fontSize: 17, color: colors.sun }}
+              style={{
+                position: "absolute",
+                left: 286,
+                top: y + 3,
+                width: 340,
+                height: 32,
+                fontSize: 17,
+                color: colors.sun,
+              }}
             >
               {row.formula}
             </Text>
             <Text
-              x={670}
-              y={y + 4}
-              width={542}
-              height={32}
-              style={{ fontSize: 16, color: colors.mist }}
+              style={{
+                position: "absolute",
+                left: 670,
+                top: y + 4,
+                width: 542,
+                height: 32,
+                fontSize: 16,
+                color: colors.mist,
+              }}
             >
               {row.note}
             </Text>
@@ -128,11 +139,16 @@ export function SynthesisPage() {
         );
       })}
       <Text
-        x={64}
-        y={626}
-        width={1152}
-        height={30}
-        style={{ fontSize: 16, color: colors.cyan, align: "center" }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 626,
+          width: 1152,
+          height: 30,
+          fontSize: 16,
+          color: colors.cyan,
+          align: "center",
+        }}
       >
         媒介一直在变：从符号序列，到像素、声音与行动轨迹。
       </Text>

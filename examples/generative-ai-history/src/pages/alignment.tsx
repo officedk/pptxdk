@@ -24,11 +24,15 @@ export function AlignmentPage() {
       }}
     >
       <Text
-        x={64}
-        y={158}
-        width={1148}
-        height={38}
-        style={{ fontSize: 18, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 158,
+          width: 1148,
+          height: 38,
+          fontSize: 18,
+          color: colors.muted,
+        }}
       >
         人类反馈强化学习（RLHF）把“哪种回答更有用”加入训练流程。
       </Text>
@@ -44,11 +48,12 @@ export function AlignmentPage() {
               color={index === 3 ? colors.sun : colors.cobalt}
             />
             <Text
-              x={x + 18}
-              y={240}
-              width={34}
-              height={36}
               style={{
+                position: "absolute",
+                left: x + 18,
+                top: 240,
+                width: 34,
+                height: 36,
                 fontFamily: "display",
                 fontSize: 28,
                 color: index === 3 ? colors.sun : colors.cobalt,
@@ -57,20 +62,25 @@ export function AlignmentPage() {
               {step.number}
             </Text>
             <Text
-              x={x + 58}
-              y={242}
-              width={160}
-              height={34}
-              style={{ fontSize: 22, color: colors.ink }}
+              style={{
+                position: "absolute",
+                left: x + 58,
+                top: 242,
+                width: 160,
+                height: 34,
+                fontSize: 22,
+                color: colors.ink,
+              }}
             >
               {step.title}
             </Text>
             <Text
-              x={x + 20}
-              y={292}
-              width={200}
-              height={54}
               style={{
+                position: "absolute",
+                left: x + 20,
+                top: 292,
+                width: 200,
+                height: 54,
                 fontSize: 15,
                 lineHeight: 24,
                 color: colors.muted,
@@ -87,48 +97,71 @@ export function AlignmentPage() {
       })}
       <Rule x={64} y={398} width={1152} color={colors.line} />
       <Text
-        x={64}
-        y={430}
-        width={242}
-        height={32}
-        style={{ fontSize: 16, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 430,
+          width: 242,
+          height: 32,
+          fontSize: 16,
+          color: colors.cobalt,
+        }}
       >
         语言模型原有目标
       </Text>
       <Text
-        x={316}
-        y={420}
-        width={896}
-        height={52}
-        style={{ fontFamily: "display", fontSize: 28, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 316,
+          top: 420,
+          width: 896,
+          height: 52,
+          fontFamily: "display",
+          fontSize: 28,
+          color: colors.ink,
+        }}
       >
         给定上下文，续写统计上合适的文本
       </Text>
       <Rule x={64} y={486} width={1152} color={colors.mist} />
       <Text
-        x={64}
-        y={520}
-        width={242}
-        height={32}
-        style={{ fontSize: 16, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 520,
+          width: 242,
+          height: 32,
+          fontSize: 16,
+          color: colors.cobalt,
+        }}
       >
         对齐新增的训练信号
       </Text>
       <Text
-        x={316}
-        y={510}
-        width={896}
-        height={52}
-        style={{ fontFamily: "body", fontSize: 26, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 316,
+          top: 510,
+          width: 896,
+          height: 52,
+          fontFamily: "body",
+          fontSize: 26,
+          color: colors.ink,
+        }}
       >
         依据人类偏好，选择更有帮助、更符合意图的回答
       </Text>
       <Text
-        x={64}
-        y={606}
-        width={1148}
-        height={34}
-        style={{ fontSize: 15, color: colors.muted, align: "center" }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 606,
+          width: 1148,
+          height: 34,
+          fontSize: 15,
+          color: colors.muted,
+          align: "center",
+        }}
       >
         1 月 27 日：OpenAI 发布 InstructGPT　·　11 月 30 日：ChatGPT
         研究预览推出

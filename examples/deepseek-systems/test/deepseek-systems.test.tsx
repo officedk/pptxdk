@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 
-import { emit, resolve } from "@officedk/pptxdk";
+import {
+  emit,
+  motionSchedule,
+  resolve,
+  type ResolvedObject,
+  type TextMetrics,
+} from "@officedk/pptxdk";
 import { paint } from "@officedk/pptxdk/preview";
 import { expandDocument } from "@officedk/pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
@@ -22,7 +28,31 @@ function assertValidPng1280x720(png: Uint8Array, label: string): void {
   assert.equal(view.getUint32(20, false), 720, `${label}: PNG height`);
 }
 
-it("full deck preserves 15 slides, zero-diagnostic static preview, native charts and tables, morph continuity, click animations, and valid slide bounds", async () => {
+function flattenObjects(objects: readonly ResolvedObject[]): ResolvedObject[] {
+  return objects.flatMap((object) => [
+    object,
+    ...(object.members === undefined ? [] : flattenObjects(object.members)),
+  ]);
+}
+
+function assertMeasuredTextFits(
+  metrics: TextMetrics | undefined,
+  label: string,
+): void {
+  assert.ok(metrics !== undefined, `${label}: expected textMetrics`);
+  assert.equal(
+    metrics.status,
+    "measured",
+    `${label}: expected measured textMetrics, got ${metrics.status}`,
+  );
+  assert.equal(
+    metrics.fits,
+    true,
+    `${label}: expected text to fit (available=${JSON.stringify(metrics.available)}, content=${JSON.stringify(metrics.content)})`,
+  );
+}
+
+it("full deck preserves 15 slides, zero-error static preview, native charts and tables, morph continuity, click animations, measured text fit, and valid slide bounds", async () => {
   const projects = new Map([
     ["FlashMLA", 0],
     ["DeepEP", 500],
@@ -46,16 +76,81 @@ it("full deck preserves 15 slides, zero-diagnostic static preview, native charts
     await expandDocument(<DeepSeekSystemsDeck fetchProject={fetchProject} />),
   );
   assert.deepEqual(requests, [...projects.keys()]);
+  assert.deepEqual(resolution.report.dimensions, { width: 1280, height: 720 });
+  assert.ok(resolution.report.fonts.length >= 2);
+  for (const fontUsage of resolution.report.fonts) {
+    assert.equal(
+      fontUsage.hasResource,
+      true,
+      `font ${fontUsage.family} (${fontUsage.weight}) must have embedded resource`,
+    );
+    assert.equal(
+      fontUsage.missingGlyphs,
+      undefined,
+      `font ${fontUsage.family} (${fontUsage.weight}) has missing glyphs: ${fontUsage.missingGlyphs?.join(", ")}`,
+    );
+  }
+
+  for (const slide of resolution.slides) {
+    assert.deepEqual(slide.dimensions, { width: 1280, height: 720 });
+    for (const object of flattenObjects(slide.objects)) {
+      const bounds = object.bounds ?? object.box;
+      if (bounds !== undefined) {
+        assert.ok(
+          bounds.x >= 0,
+          `${slide.id}/${object.path} overflows left boundary (${bounds.x})`,
+        );
+        assert.ok(
+          bounds.y >= 0,
+          `${slide.id}/${object.path} overflows top boundary (${bounds.y})`,
+        );
+        assert.ok(
+          bounds.x + bounds.width <= slide.dimensions.width,
+          `${slide.id}/${object.path} overflows right boundary (${bounds.x + bounds.width})`,
+        );
+        assert.ok(
+          bounds.y + bounds.height <= slide.dimensions.height,
+          `${slide.id}/${object.path} overflows bottom boundary (${bounds.y + bounds.height})`,
+        );
+      }
+      if (
+        (object.kind === "text" || object.kind === "shape") &&
+        object.text !== undefined &&
+        object.text.trim() !== ""
+      ) {
+        assertMeasuredTextFits(
+          object.textMetrics,
+          `${slide.id}/${object.path} (${JSON.stringify(object.text)})`,
+        );
+      }
+      if (object.table !== undefined) {
+        for (const cell of object.table.cells) {
+          if (cell.text.trim() !== "") {
+            assertMeasuredTextFits(
+              cell.textMetrics,
+              `${slide.id}/${cell.path} (${JSON.stringify(cell.text)})`,
+            );
+          }
+        }
+      }
+    }
+  }
+
   const result = emit(resolution, {
     embedFonts: "full",
   });
-  assert.deepEqual(resolution.report.diagnostics, []);
-  assert.deepEqual(result.report.diagnostics, []);
+  assert.equal(resolution.slides.length, 15);
+  assert.equal(result.report.slides.length, 15);
 
   const painted = paint(resolution);
   assert.equal(painted.pages.length, 15);
   for (const page of painted.pages) {
-    assert.deepEqual(page.diagnostics, [], `preview page ${page.page}`);
+    assert.deepEqual(page.errors, [], `preview page ${page.page} errors`);
+    assert.deepEqual(
+      page.placeholders,
+      [],
+      `preview page ${page.page} placeholders`,
+    );
     assert.ok(page.png !== undefined, `preview page ${page.page} png`);
     assertValidPng1280x720(page.png, `preview page ${page.page}`);
   }
@@ -105,18 +200,17 @@ it("full deck preserves 15 slides, zero-diagnostic static preview, native charts
   }
 
   const openingSlide = file.slides.find(({ id }) => id === "opening")!;
+  const openingLocator = resolution.slide("opening");
   const kpiAuthorIds = Array.from(
     { length: 4 },
     (_, index) => `opening-kpi-${index + 1}`,
   );
   const kpiGroups = kpiAuthorIds.map((authorId) => {
-    const groupId = result.report.slides
-      .find(({ id }) => id === "opening")
-      ?.objects.find(
-        (object) =>
-          object.kind === "group" &&
-          object.members?.some(({ authorId: value }) => value === authorId),
-      )?.id;
+    const groupId = openingLocator.objects.find(
+      (object) =>
+        object.kind === "group" &&
+        object.members?.some(({ authorId: value }) => value === authorId),
+    )?.id;
     const groups = openingSlide.objects.filter(
       (object) => object.kind === "group" && object.id === groupId,
     );
@@ -176,6 +270,25 @@ it("full deck preserves 15 slides, zero-diagnostic static preview, native charts
     false,
     "KPI entrances should not add a click step",
   );
+  const openingMotion = motionSchedule(openingLocator);
+  assert.ok(openingMotion !== undefined);
+  assert.equal(openingMotion.steps.length, 1);
+  assert.equal(openingMotion.steps[0]?.trigger, "auto");
+  assert.deepEqual(
+    openingMotion.steps[0]?.effects
+      .map((effect) => [
+        effect.preset,
+        effect.durationMs,
+        effect.start.state === "known" ? effect.start.ms : -1,
+      ])
+      .sort((left, right) => Number(left[2]) - Number(right[2])),
+    [
+      ["floatUp", 420, 0],
+      ["floatUp", 420, 120],
+      ["floatUp", 420, 240],
+      ["floatUp", 420, 360],
+    ],
+  );
 
   for (const slide of file.slides) {
     for (const object of slide.objects) {
@@ -220,8 +333,22 @@ it("full deck preserves 15 slides, zero-diagnostic static preview, native charts
     );
   }
 
-  // Verify native tables exist on the three architectural comparison slides.
-  for (const slideId of ["training-cost", "dualpipe", "pd-disaggregation"]) {
+  // Verify native tables exist on the three architectural comparison slides and all rows/cells are measured.
+  for (const [slideId, tableId, expectedRows, expectedCols] of [
+    ["training-cost", "training-cost-table", 5, 5],
+    ["dualpipe", "dualpipe-table", 5, 5],
+    ["pd-disaggregation", "pd-comparison-table", 6, 4],
+  ] as const) {
+    const resolvedTable = resolution.slide(slideId).get(tableId)
+      .objects[0]?.table;
+    assert.ok(
+      resolvedTable !== undefined,
+      `Slide ${slideId} should expose ResolvedTable for ${tableId}`,
+    );
+    assert.equal(resolvedTable.rows.length, expectedRows);
+    assert.equal(resolvedTable.columns.length, expectedCols);
+    assert.equal(resolvedTable.cells.length, expectedRows * expectedCols);
+
     const slide = file.slides.find(({ id }) => id === slideId)!;
     assert.ok(
       slide.objects.some((object) => object.kind === "table"),
@@ -247,13 +374,23 @@ it("full deck preserves 15 slides, zero-diagnostic static preview, native charts
   assert.equal(pdMorphNames.size, 5);
   assert.deepEqual(decodeMorphNames, pdMorphNames);
 
-  // Verify intentional click animations on the 4 interactive slides.
+  // Verify intentional click animations on the 4 interactive slides via motionSchedule and emitted PPTX.
   for (const slideId of [
     "aux-loss-free-mtp",
     "dualpipe",
     "decode-pipeline",
     "r1-rl-distill",
   ]) {
+    const schedule = motionSchedule(resolution.slide(slideId));
+    assert.ok(
+      (schedule?.steps.length ?? 0) >= 1,
+      `Slide ${slideId} motionSchedule should have click-triggered steps`,
+    );
+    for (const step of schedule?.steps ?? []) {
+      assert.equal(step.trigger, "click");
+      assert.ok(step.effects.length > 0);
+    }
+
     const slide = file.slides.find(({ id }) => id === slideId)!;
     assert.ok(
       (slide.animations?.length ?? 0) >= 1,

@@ -64,11 +64,14 @@ function GalleryPanel({
   ) => (
     <Shape
       key={key}
-      x={contentX + x * scale}
-      y={contentY + y * scale}
-      width={width * scale}
-      height={height * scale}
-      fill={fill}
+      style={{
+        position: "absolute",
+        left: contentX + x * scale,
+        top: contentY + y * scale,
+        width: width * scale,
+        height: height * scale,
+        background: fill,
+      }}
       {...(circle ? { geometry: preset("ellipse") } : {})}
     />
   );
@@ -81,11 +84,12 @@ function GalleryPanel({
   ) => (
     <Text
       key={key}
-      x={contentX + x * scale}
-      y={contentY + y * scale}
-      width={width * scale}
-      height={34 * scale}
       style={{
+        position: "absolute",
+        left: contentX + x * scale,
+        top: contentY + y * scale,
+        width: width * scale,
+        height: 34 * scale,
         fontSize: 22 * scale,
         fontWeight: 700,
         align: "center",
@@ -101,18 +105,22 @@ function GalleryPanel({
       morphKey={scope.handle(`panel-${topic.id}`)}
     >
       <Shape
-        x={left}
-        y={170}
-        width={panelWidth}
-        height={366}
-        fill={active ? colors.surface : colors.darkSurface}
+        style={{
+          position: "absolute",
+          left,
+          top: 170,
+          width: panelWidth,
+          height: 366,
+          background: active ? colors.surface : colors.darkSurface,
+        }}
       />
       <Text
-        x={left + (active ? 28 : 12)}
-        y={active ? 194 : 482}
-        width={active ? 570 : 116}
-        height={active ? 42 : 28}
         style={{
+          position: "absolute",
+          left: left + (active ? 28 : 12),
+          top: active ? 194 : 482,
+          width: active ? 570 : 116,
+          height: active ? 42 : 28,
           fontSize: active ? 30 : 17,
           lineHeight: active ? 34 : 20,
           fontWeight: 700,
@@ -122,21 +130,21 @@ function GalleryPanel({
         {topic.title}
       </Text>
       <Text
-        x={left + 28}
-        y={492}
-        width={active ? 560 : 84}
-        height={26}
-        style={{ fontSize: 15, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: left + 28,
+          top: 492,
+          width: active ? 560 : 84,
+          height: 26,
+          fontSize: 15,
+          color: colors.muted,
+        }}
       >
         {active ? topic.description : ""}
       </Text>
       {index === 0 && (
         <Chart
           id="contrast-chart"
-          x={contentX}
-          y={contentY}
-          width={584 * scale}
-          height={196 * scale}
           legend={false}
           plotArea={{
             left: 8 * scale,
@@ -145,6 +153,11 @@ function GalleryPanel({
             height: 140 * scale,
           }}
           style={{
+            position: "absolute",
+            left: contentX,
+            top: contentY,
+            width: 584 * scale,
+            height: 196 * scale,
             fontSize: 20 * scale,
             fontFamily: "chart",
             color: colors.ink,
@@ -282,11 +295,12 @@ export function GalleryPage({
       })}
     >
       <Text
-        x={80}
-        y={58}
-        width={680}
-        height={58}
         style={{
+          position: "absolute",
+          left: 80,
+          top: 58,
+          width: 680,
+          height: 58,
           fontSize: 44,
           lineHeight: 48,
           fontWeight: 700,
@@ -296,11 +310,16 @@ export function GalleryPage({
         Continuous canvas.
       </Text>
       <Text
-        x={960}
-        y={72}
-        width={240}
-        height={30}
-        style={{ fontSize: 15, align: "right", color: colors.accentSoft }}
+        style={{
+          position: "absolute",
+          left: 960,
+          top: 72,
+          width: 240,
+          height: 30,
+          fontSize: 15,
+          align: "right",
+          color: colors.accentSoft,
+        }}
       >
         {11 + focus} / MORPH
       </Text>
@@ -318,14 +337,14 @@ export function GalleryPage({
           morphKey={scope.handle(`navigation-${topic.id}`)}
           link={{ id: `gallery-${topic.id}` }}
           id={`navigation-${topic.id}`}
-          x={86 + index * 284}
-          y={584}
-          width={260}
-          height={54}
-          fill={index === focus ? colors.darkSurface : colors.ink}
           geometry={preset("roundRect")}
-          text={topic.title}
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 86 + index * 284,
+            top: 584,
+            width: 260,
+            height: 54,
+            background: index === focus ? colors.darkSurface : colors.ink,
             fontSize: 21,
             fontFamily: index === focus ? "major" : "medium",
             fontWeight: index === focus ? 700 : 500,
@@ -333,15 +352,20 @@ export function GalleryPage({
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          {topic.title}
+        </Shape>
       ))}
       <Shape
-        x={86 + focus * 284}
-        y={652}
-        width={260}
-        height={5}
-        fill={colors.current}
         morphKey={scope.handle("navigation-selection")}
+        style={{
+          position: "absolute",
+          left: 86 + focus * 284,
+          top: 652,
+          width: 260,
+          height: 5,
+          background: colors.current,
+        }}
       />
     </Slide>
   );

@@ -75,22 +75,26 @@ export function SlideFrame({
   return (
     <Slide
       id={id}
-      background={dark ? colors.obsidian : colors.paper}
+      style={{ background: dark ? colors.obsidian : colors.paper }}
       transition={transition}
     >
       {/* Top kicker bar */}
       <Shape
-        x={48}
-        y={22}
-        width={4}
-        height={16}
-        fill={dark ? colors.computeBright : colors.compute}
+        style={{
+          position: "absolute",
+          left: 48,
+          top: 22,
+          width: 4,
+          height: 16,
+          background: dark ? colors.computeBright : colors.compute,
+        }}
       />
       <Text
-        x={60}
-        y={20}
-        width={670}
         style={{
+          position: "absolute",
+          left: 60,
+          top: 20,
+          width: 670,
           padding: 0,
           fontSize: 12,
           color: dark ? colors.computeBright : colors.compute,
@@ -104,22 +108,35 @@ export function SlideFrame({
       {takeaway !== undefined && (
         <>
           <Shape
-            x={736}
-            y={17}
-            width={496}
-            height={28}
-            fill={dark ? colors.obsidianCard : badge.bg}
             style={{
-              borderColor: dark ? colors.darkLine : badge.border,
-              borderWidth: 1,
+              position: "absolute",
+              left: 736,
+              top: 17,
+              width: 496,
+              height: 28,
+              background: dark ? colors.obsidianCard : badge.bg,
+              border: {
+                color: dark ? colors.darkLine : badge.border,
+                width: 1,
+              },
             }}
           />
-          <Shape x={736} y={17} width={4} height={28} fill={badge.border} />
-          <Text
-            x={748}
-            y={22}
-            width={476}
+          <Shape
             style={{
+              position: "absolute",
+              left: 736,
+              top: 17,
+              width: 4,
+              height: 28,
+              background: badge.border,
+            }}
+          />
+          <Text
+            style={{
+              position: "absolute",
+              left: 748,
+              top: 22,
+              width: 476,
               padding: 0,
               fontSize: 11.5,
               color: dark ? colors.surface : badge.text,
@@ -133,10 +150,11 @@ export function SlideFrame({
 
       {/* Action title */}
       <Text
-        x={48}
-        y={50}
-        width={1184}
         style={{
+          position: "absolute",
+          left: 48,
+          top: 50,
+          width: 1184,
           padding: 0,
           fontSize: 24,
           lineHeight: 32,
@@ -161,10 +179,11 @@ export function SlideFrame({
       {/* Structural footer divider & metadata */}
       <Rule x={48} y={676} width={1184} height={1} color={lineColor} />
       <Text
-        x={48}
-        y={684}
-        width={1060}
         style={{
+          position: "absolute",
+          left: 48,
+          top: 684,
+          width: 1060,
           padding: 0,
           fontSize: 11,
           color: mutedInk,
@@ -174,10 +193,11 @@ export function SlideFrame({
         {source}
       </Text>
       <Text
-        x={1120}
-        y={684}
-        width={112}
         style={{
+          position: "absolute",
+          left: 1120,
+          top: 684,
+          width: 112,
           padding: 0,
           fontFamily: "metric",
           fontSize: 11,

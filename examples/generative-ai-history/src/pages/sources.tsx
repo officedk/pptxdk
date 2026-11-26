@@ -26,11 +26,12 @@ export function SourcesPage({ page }: { readonly page: 1 | 2 }) {
         return (
           <Fragment key={index}>
             <Text
-              x={64}
-              y={y + 2}
-              width={42}
-              height={32}
               style={{
+                position: "absolute",
+                left: 64,
+                top: y + 2,
+                width: 42,
+                height: 32,
                 fontFamily: "display",
                 fontSize: 23,
                 color: colors.cobalt,
@@ -39,31 +40,42 @@ export function SourcesPage({ page }: { readonly page: 1 | 2 }) {
               {String(source.id).padStart(2, "0")}
             </Text>
             <Text
-              x={116}
-              y={y}
-              width={748}
-              height={34}
               link={{ url: source.url }}
-              style={{ fontSize: 13, lineHeight: 16, color: colors.ink }}
+              style={{
+                position: "absolute",
+                left: 116,
+                top: y,
+                width: 748,
+                height: 34,
+                fontSize: 13,
+                lineHeight: 16,
+                color: colors.ink,
+              }}
             >
               {source.title}
             </Text>
             <Text
-              x={116}
-              y={y + 34}
-              width={748}
-              height={18}
-              style={{ fontSize: 10, color: colors.muted, textWrap: "nowrap" }}
+              style={{
+                position: "absolute",
+                left: 116,
+                top: y + 34,
+                width: 748,
+                height: 18,
+                fontSize: 10,
+                color: colors.muted,
+                textWrap: "nowrap",
+              }}
             >
               {source.detail}
             </Text>
             <Text
-              x={888}
-              y={y + 4}
-              width={328}
-              height={40}
               link={{ url: source.url }}
               style={{
+                position: "absolute",
+                left: 888,
+                top: y + 4,
+                width: 328,
+                height: 40,
                 fontSize: 10,
                 lineHeight: 15,
                 color: colors.cobalt,

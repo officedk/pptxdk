@@ -20,7 +20,16 @@ describe("pptxdk CLI codegen CodegenError handling", () => {
       const { pptx } = await build(
         deck({ width: 200, height: 120 }).append(
           slide({ id: "s1" }).append(
-            text("Hello", { id: "t1", x: 10, y: 10, width: 120, height: 30 }),
+            text("Hello", {
+              id: "t1",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 120,
+                height: 30,
+              },
+            }),
           ),
         ),
       );

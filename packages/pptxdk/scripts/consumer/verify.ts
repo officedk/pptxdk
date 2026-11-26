@@ -26,4 +26,5 @@ const { document: loaded } = await importPptxFile("sdk.pptx");
 assert(loaded);
 const result = await preview(loaded);
 assert.equal(result.pages.length, 1);
+assert.deepEqual(result.pages[0]?.errors, []);
 assert(result.pages[0]?.png?.byteLength);

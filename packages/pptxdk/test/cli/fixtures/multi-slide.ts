@@ -2,10 +2,30 @@ import { deck, shape, slide } from "@officedk/pptxdk/vanilla";
 
 export const SpecialIdDeck = deck({ width: 120, height: 96 }).append(
   slide({ id: "sec 1/intro" }).append(
-    shape({ id: "s1", x: 8, y: 8, width: 40, height: 24, fill: "#2563EB" }),
+    shape({
+      id: "s1",
+      style: {
+        position: "absolute",
+        left: 8,
+        top: 8,
+        width: 40,
+        height: 24,
+        background: "#2563EB",
+      },
+    }),
   ),
   slide({ id: "sec 2/summary" }).append(
-    shape({ id: "s2", x: 8, y: 8, width: 40, height: 24, fill: "#059669" }),
+    shape({
+      id: "s2",
+      style: {
+        position: "absolute",
+        left: 8,
+        top: 8,
+        width: 40,
+        height: 24,
+        background: "#059669",
+      },
+    }),
   ),
 );
 
@@ -14,11 +34,14 @@ export const HundredPageDeck = deck({ width: 120, height: 96 }).append(
     slide({ id: `slide-${index + 1}` }).append(
       shape({
         id: `box-${index + 1}`,
-        x: 4,
-        y: 4,
-        width: 24,
-        height: 16,
-        fill: "#334155",
+        style: {
+          position: "absolute",
+          left: 4,
+          top: 4,
+          width: 24,
+          height: 16,
+          background: "#334155",
+        },
       }),
     ),
   ),
@@ -29,11 +52,14 @@ export const SixPageDeck = deck({ width: 120, height: 96 }).append(
     slide({ id: `six-${index + 1}` }).append(
       shape({
         id: `six-box-${index + 1}`,
-        x: 4 + index * 4,
-        y: 4,
-        width: 24,
-        height: 16,
-        fill: "#2563EB",
+        style: {
+          position: "absolute",
+          left: 4 + index * 4,
+          top: 4,
+          width: 24,
+          height: 16,
+          background: "#2563EB",
+        },
       }),
     ),
   ),
@@ -44,11 +70,14 @@ export const OneTwentyPageDeck = deck({ width: 120, height: 96 }).append(
     slide({ id: `deck-120-slide-${index + 1}` }).append(
       shape({
         id: `deck-120-box-${index + 1}`,
-        x: 4 + (index % 10) * 4,
-        y: 4 + Math.floor(index / 10) * 4,
-        width: 24,
-        height: 16,
-        fill: "#0F766E",
+        style: {
+          position: "absolute",
+          left: 4 + (index % 10) * 4,
+          top: 4 + Math.floor(index / 10) * 4,
+          width: 24,
+          height: 16,
+          background: "#0F766E",
+        },
       }),
     ),
   ),

@@ -15,31 +15,40 @@ export function PartialFailurePreviewDeck() {
       <Slide id="warn-ok">
         <Shape
           id="overflow-shape"
-          x={100}
-          y={8}
-          width={40}
-          height={32}
-          fill="#2563EB"
+          style={{
+            position: "absolute",
+            left: 100,
+            top: 8,
+            width: 40,
+            height: 32,
+            background: "#2563EB",
+          }}
         />
       </Slide>
       <Slide id="bad-image">
         <Image
           id="corrupt-img"
           src={corruptPixelPng}
-          x={8}
-          y={8}
-          width={32}
-          height={32}
+          style={{
+            position: "absolute",
+            left: 8,
+            top: 8,
+            width: 32,
+            height: 32,
+          }}
         />
       </Slide>
       <Slide id="good-sibling">
         <Shape
           id="ok-shape"
-          x={8}
-          y={8}
-          width={40}
-          height={24}
-          fill="#059669"
+          style={{
+            position: "absolute",
+            left: 8,
+            top: 8,
+            width: 40,
+            height: 24,
+            background: "#059669",
+          }}
         />
       </Slide>
     </Deck>

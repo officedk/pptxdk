@@ -63,16 +63,15 @@ describe("geometry, object visuals, and text visuals", () => {
             adj2: 42_000,
             adj3: 16_667,
           }),
-          x: 10,
-          y: 10,
-          width: 160,
-          height: 100,
-          flipH: true,
           style: {
-            backgroundColor: { color: "accent1", alpha: 0.7 },
-            borderColor: "accent2",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 160,
+            height: 100,
+            flipH: true,
+            background: { color: "accent1", alpha: 0.7 },
+            border: { color: "accent2", width: 2, style: "dashed" },
             rotate: -15,
             boxShadow: {
               color: { color: "dk1", alpha: 0.4 },
@@ -91,12 +90,13 @@ describe("geometry, object visuals, and text visuals", () => {
             endAngle: 260,
             thickness: 0.75,
           }),
-          x: 190,
-          y: 10,
-          width: 100,
-          height: 100,
           style: {
-            backgroundImage: linearGradient(45, "accent1", "accent4"),
+            position: "absolute",
+            left: 190,
+            top: 10,
+            width: 100,
+            height: 100,
+            background: linearGradient(45, "accent1", "accent4"),
             opacity: 0.8,
           },
         }),
@@ -110,25 +110,28 @@ describe("geometry, object visuals, and text visuals", () => {
             ],
             { viewBox: [100, 100], fillRule: "evenodd" },
           ),
-          x: 310,
-          y: 10,
-          width: 100,
-          height: 100,
-          style: { backgroundColor: "accent3" },
+          style: {
+            position: "absolute",
+            left: 310,
+            top: 10,
+            width: 100,
+            height: 100,
+            background: "accent3",
+          },
         }),
         createElement(Image, {
           key: "image",
           id: "styled-image",
           src: imageBytes,
-          x: 430,
-          y: 10,
-          width: 120,
-          height: 80,
           geometry: "cloud",
-          flipV: true,
           style: {
-            borderColor: "accent2",
-            borderWidth: 1,
+            position: "absolute",
+            left: 430,
+            top: 10,
+            width: 120,
+            height: 80,
+            flipV: true,
+            border: { color: "accent2", width: 1 },
             opacity: 0.5,
             softEdge: 2,
           },
@@ -136,17 +139,18 @@ describe("geometry, object visuals, and text visuals", () => {
         createElement(Text, {
           key: "text",
           id: "styled-text",
-          x: 570,
-          y: 10,
-          width: 160,
-          height: 60,
           style: {
+            position: "absolute",
+            left: 570,
+            top: 10,
+            width: 160,
+            height: 60,
             fontFamily: "Jost",
             letterSpacing: 1.25,
             textTransform: "uppercase",
             textDecoration: "underline",
             textShadow: { color: "accent5", blur: 2 },
-            backgroundColor: "lt2",
+            background: "lt2",
             borderRadius: 8,
           },
           children: "ßeta",
@@ -157,11 +161,14 @@ describe("geometry, object visuals, and text visuals", () => {
           style: { rotate: 12 },
           children: createElement(Shape, {
             id: "group-member",
-            x: 760,
-            y: 10,
-            width: 80,
-            height: 60,
-            style: { backgroundColor: "accent6" },
+            style: {
+              position: "absolute",
+              left: 760,
+              top: 10,
+              width: 80,
+              height: 60,
+              background: "accent6",
+            },
           }),
         }),
         createElement(Box, {
@@ -170,7 +177,7 @@ describe("geometry, object visuals, and text visuals", () => {
           style: {
             width: 70,
             height: 50,
-            backgroundColor: "accent2",
+            background: "accent2",
             borderRadius: 10,
             rotate: 15,
           },
@@ -190,6 +197,10 @@ describe("geometry, object visuals, and text visuals", () => {
     );
     assert.match(slideXml, /<a:prstGeom prst="wedgeRoundRectCallout">/u);
     assert.match(slideXml, /<a:gd name="adj1" fmla="val 28000"\/>/u);
+    assert.match(
+      slideXml,
+      /<a:prstGeom prst="blockArc"><a:avLst><a:gd name="adj1" fmla="val 1200000"\/><a:gd name="adj2" fmla="val 15600000"\/><a:gd name="adj3" fmla="val 50000"\/><\/a:avLst><\/a:prstGeom>/u,
+    );
     assert.match(slideXml, /<a:custGeom>/u);
     assert.match(slideXml, /<a:cubicBezTo>/u);
     assert.match(slideXml, /<a:quadBezTo>/u);
@@ -205,12 +216,7 @@ describe("geometry, object visuals, and text visuals", () => {
     assert.match(slideXml, /rot="900000"/u);
     assert.match(slideXml, /flipH="1"/u);
     assert.match(slideXml, /flipV="1"/u);
-    assert.ok(
-      result.report.diagnostics.some(
-        (item) => item.code === "geometry-adjustment-range",
-      ),
-    );
-    const observed = result.report.slides[0]!.objects;
+    const observed = result.slide("geometry-visual").objects;
     assert.ok(
       observed.some(
         (item) => item.authorId === "visible-box" && item.kind === "shape",
@@ -287,20 +293,26 @@ describe("geometry, object visuals, and text visuals", () => {
         createElement(Shape, {
           key: "radius-10",
           geometry,
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 100,
-          style: { borderRadius: 10 },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+            borderRadius: 10,
+          },
         }),
         createElement(Shape, {
           key: "radius-20",
           geometry,
-          x: 120,
-          y: 0,
-          width: 100,
-          height: 100,
-          style: { borderRadius: 20 },
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 0,
+            width: 100,
+            height: 100,
+            borderRadius: 20,
+          },
         }),
       ]),
     );
@@ -321,21 +333,27 @@ describe("geometry, object visuals, and text visuals", () => {
         createElement(Text, {
           key: "spacing-decimal",
           id: "spacing-decimal",
-          x: 0,
-          y: 0,
-          width: 300.42,
-          height: "auto",
-          style: { fontFamily: jost, fontSize: 20, letterSpacing: 1.25 },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 300.42,
+            height: "auto",
+            fontFamily: jost,
+            fontSize: 20,
+            letterSpacing: 1.25,
+          },
           children: "AAAAAAAAAAAAAAAAAAAA",
         }),
         createElement(Text, {
           key: "spacing-equivalent",
           id: "spacing-equivalent",
-          x: 0,
-          y: 60,
-          width: 300.42,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 0,
+            top: 60,
+            width: 300.42,
+            height: "auto",
             fontFamily: jost,
             fontSize: 20,
             letterSpacing: 94 / 75,
@@ -345,30 +363,39 @@ describe("geometry, object visuals, and text visuals", () => {
         createElement(Text, {
           key: "uppercase-expansion",
           id: "uppercase-expansion",
-          x: 0,
-          y: 120,
-          width: 16.44,
-          height: "auto",
-          style: { fontFamily: jost, fontSize: 20, textTransform: "uppercase" },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 120,
+            width: 16.44,
+            height: "auto",
+            fontFamily: jost,
+            fontSize: 20,
+            textTransform: "uppercase",
+          },
           children: "ß",
         }),
         createElement(Text, {
           key: "uppercase-literal",
           id: "uppercase-literal",
-          x: 0,
-          y: 240,
-          width: 16.44,
-          height: "auto",
-          style: { fontFamily: jost, fontSize: 20, textTransform: "uppercase" },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 240,
+            width: 16.44,
+            height: "auto",
+            fontFamily: jost,
+            fontSize: 20,
+            textTransform: "uppercase",
+          },
           children: "SS",
         }),
       ]),
     );
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
-    const objects = result.report.slides[0]?.objects ?? [];
-    const height = (testId: string) =>
-      objects.find((object) => object.authorId === testId)?.box?.height;
+    const slideLoc = result.slide("geometry-visual");
+    const height = (testId: string) => slideLoc.get(testId).box?.height;
 
     assert.equal(height("spacing-decimal"), height("spacing-equivalent"));
     assert.equal(height("uppercase-expansion"), height("uppercase-literal"));
@@ -411,11 +438,14 @@ describe("geometry, object visuals, and text visuals", () => {
     const valid = await build(
       deck([
         createElement(Shape, {
-          x: 0,
-          y: 0,
-          width: 30,
-          height: 30,
-          style: { borderColor: "accent1", borderWidth: 2112 },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 30,
+            height: 30,
+            border: { color: "accent1", width: 2112 },
+          },
         }),
       ]),
     );
@@ -431,11 +461,14 @@ describe("geometry, object visuals, and text visuals", () => {
         deck([
           createElement(Shape, {
             id: "line-too-wide",
-            x: 0,
-            y: 0,
-            width: 30,
-            height: 30,
-            style: { borderColor: "accent1", borderWidth: 3000 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 30,
+              height: 30,
+              border: { color: "accent1", width: 3000 },
+            },
           }),
         ]),
       ),
@@ -454,14 +487,17 @@ describe("geometry, object visuals, and text visuals", () => {
         deck([
           createElement(Shape, {
             id: "tiny-view-box",
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
             geometry: path("M0 0 L.0001 .0001", {
               viewBox: [0.0001, 0.0001],
             }),
-            style: { borderColor: "accent1" },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: 100,
+              border: { color: "accent1" },
+            },
           }),
         ]),
       ),
@@ -478,12 +514,15 @@ describe("geometry, object visuals, and text visuals", () => {
       deck([
         createElement(Shape, {
           id: "one-unit-view-box",
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 100,
           geometry: path("M0 0 L.001 .001", { viewBox: [0.001, 0.001] }),
-          style: { borderColor: "accent1" },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+            border: { color: "accent1" },
+          },
         }),
       ]),
     );
@@ -501,21 +540,31 @@ describe("geometry, object visuals, and text visuals", () => {
         createElement(Text, {
           key: "normal-wrap",
           id: "normal-wrap",
-          x: 0,
-          y: 0,
-          width: 30,
-          height: "auto",
-          style: { fontFamily: jost, fontSize: 20, textWrap: "normal" },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 30,
+            height: "auto",
+            fontFamily: jost,
+            fontSize: 20,
+            textWrap: "normal",
+          },
           children: content,
         }),
         createElement(Text, {
           key: "no-wrap",
           id: "no-wrap",
-          x: 80,
-          y: 0,
-          width: 30,
-          height: "auto",
-          style: { fontFamily: jost, fontSize: 20, textWrap: "nowrap" },
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 0,
+            width: 30,
+            height: "auto",
+            fontFamily: jost,
+            fontSize: 20,
+            textWrap: "nowrap",
+          },
           children: content,
         }),
         createElement(Box, {
@@ -538,8 +587,7 @@ describe("geometry, object visuals, and text visuals", () => {
             createElement(Shape, {
               key: "normal-flex-marker",
               id: "normal-flex-marker",
-              width: 20,
-              height: 20,
+              style: { width: 20, height: 20 },
             }),
           ],
         }),
@@ -563,37 +611,43 @@ describe("geometry, object visuals, and text visuals", () => {
             createElement(Shape, {
               key: "nowrap-flex-marker",
               id: "nowrap-flex-marker",
-              width: 20,
-              height: 20,
-              style: { minWidth: 1 },
+              style: { width: 20, height: 20, minWidth: 1 },
             }),
           ],
         }),
-        createElement(Shape, {
-          key: "shape-no-wrap",
-          id: "shape-no-wrap",
-          x: 300,
-          y: 0,
-          width: 100,
-          height: 50,
-          text: content,
-          style: { fontFamily: jost, fontSize: 20, textWrap: "nowrap" },
-        }),
+        createElement(
+          Shape,
+          {
+            key: "shape-no-wrap",
+            id: "shape-no-wrap",
+            style: {
+              position: "absolute",
+              left: 300,
+              top: 0,
+              width: 100,
+              height: 50,
+              fontFamily: jost,
+              fontSize: 20,
+              textWrap: "nowrap",
+            },
+          },
+          content,
+        ),
       ]),
     );
     const file = await validatePptx(result.pptx);
 
     assert.deepEqual(file.errors, []);
-    const objects = result.report.slides[0]?.objects ?? [];
-    const object = (testId: string) =>
-      objects.find((candidate) => candidate.authorId === testId);
+    const slideLoc = result.slide("geometry-visual");
     assert.ok(
-      (object("normal-wrap")?.box?.height ?? 0) >
-        (object("no-wrap")?.box?.height ?? 0),
+      (slideLoc.get("normal-wrap").box?.height ?? 0) >
+        (slideLoc.get("no-wrap").box?.height ?? 0),
     );
     assert.ok(
-      (object("nowrap-flex-text")?.box?.width ?? 0) >
-        (object("normal-flex-text")?.box?.width ?? 0),
+      (slideLoc.get("nowrap-min-content").get("nowrap-flex-text").box?.width ??
+        0) >
+        (slideLoc.get("normal-min-content").get("normal-flex-text").box
+          ?.width ?? 0),
     );
     const slideXml = strFromU8(
       unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
@@ -612,51 +666,61 @@ describe("geometry, object visuals, and text visuals", () => {
       [
         [
           createElement(Shape, {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 10,
+              height: 10,
+            },
             geometry: "unknownPreset" as Geometry,
           }),
-          "unsupported-geometry",
+          "invalid-prop",
         ],
         [
           createElement(Shape, {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
             style: {
-              backgroundImage: linearGradient(
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 10,
+              height: 10,
+              background: linearGradient(
                 0,
                 { color: "accent1", position: 0 },
                 { color: "accent2", position: 1.1 },
               ),
             },
           }),
-          "invalid-gradient",
+          "invalid-prop",
         ],
         [
           createElement(Text, {
-            x: 0,
-            y: 0,
-            width: 80,
-            height: 30,
-            style: { letterSpacing: 6000 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 80,
+              height: 30,
+              letterSpacing: 6000,
+            },
             children: "too wide",
           }),
-          "invalid-letter-spacing",
+          "invalid-style",
         ],
         [
           createElement(Shape, {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
             geometry: path("M0 0 L10 10", { viewBox: [10, 10] }),
-            style: { borderRadius: 2 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 10,
+              height: 10,
+              borderRadius: 2,
+            },
           }),
-          "unsupported-style-combination",
+          "invalid-style",
         ],
       ];
 
@@ -675,54 +739,62 @@ describe("geometry, object visuals, and text visuals", () => {
       deck([
         createElement(Shape, {
           id: "arrow-line",
-          x: 10,
-          y: 20,
-          width: 100,
-          height: 1,
           geometry: preset("line"),
           style: {
-            borderColor: "accent1",
-            borderWidth: 2,
-            startArrow: "oval",
-            endArrow: "triangle",
+            position: "absolute",
+            left: 10,
+            top: 20,
+            width: 100,
+            height: 1,
+            border: {
+              color: "accent1",
+              width: 2,
+              startArrow: "oval",
+              endArrow: "triangle",
+            },
           },
         }),
         createElement(Shape, {
           id: "arrow-path",
-          x: 20,
-          y: 40,
-          width: 150,
-          height: 80,
           geometry: path("M 0 0 L 150 80", {
             viewBox: [150, 80],
             fill: false,
           }),
           style: {
-            borderColor: "accent2",
-            borderWidth: 1.5,
-            borderStyle: "dashed",
-            startArrow: "stealth",
-            endArrow: "diamond",
+            position: "absolute",
+            left: 20,
+            top: 40,
+            width: 150,
+            height: 80,
+            border: {
+              color: "accent2",
+              width: 1.5,
+              style: "dashed",
+              startArrow: "stealth",
+              endArrow: "diamond",
+            },
           },
         }),
         createElement(Shape, {
           id: "arrow-none-arrow",
-          x: 30,
-          y: 60,
-          width: 80,
-          height: 1,
           geometry: preset("line"),
           style: {
-            borderColor: "accent3",
-            borderWidth: 1,
-            startArrow: "none",
-            endArrow: "arrow",
+            position: "absolute",
+            left: 30,
+            top: 60,
+            width: 80,
+            height: 1,
+            border: {
+              color: "accent3",
+              width: 1,
+              startArrow: "none",
+              endArrow: "arrow",
+            },
           },
         }),
       ]),
     );
 
-    assert.deepEqual(result.report.diagnostics, []);
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
 
@@ -755,26 +827,25 @@ describe("geometry, object visuals, and text visuals", () => {
           deck([
             createElement(Shape, {
               id: "bad-start-arrow",
-              x: 10,
-              y: 20,
-              width: 100,
-              height: 1,
               geometry: preset("line"),
               style: {
-                borderColor: "accent1",
-                borderWidth: 2,
-                startArrow: invalidType as any,
+                position: "absolute",
+                left: 10,
+                top: 20,
+                width: 100,
+                height: 1,
+                border: {
+                  color: "accent1",
+                  width: 2,
+                  startArrow: invalidType as any,
+                },
               },
             }),
           ]),
         ),
         (error: unknown) =>
           error instanceof BuildError &&
-          error.diagnostics.some(
-            (diag) =>
-              diag.code === "invalid-style" &&
-              diag.message.includes("startArrow"),
-          ),
+          error.diagnostics.some((diag) => diag.code === "invalid-style"),
       );
 
       await assert.rejects(
@@ -782,26 +853,25 @@ describe("geometry, object visuals, and text visuals", () => {
           deck([
             createElement(Shape, {
               id: "bad-end-arrow",
-              x: 10,
-              y: 20,
-              width: 100,
-              height: 1,
               geometry: preset("line"),
               style: {
-                borderColor: "accent1",
-                borderWidth: 2,
-                endArrow: invalidType as any,
+                position: "absolute",
+                left: 10,
+                top: 20,
+                width: 100,
+                height: 1,
+                border: {
+                  color: "accent1",
+                  width: 2,
+                  endArrow: invalidType as any,
+                },
               },
             }),
           ]),
         ),
         (error: unknown) =>
           error instanceof BuildError &&
-          error.diagnostics.some(
-            (diag) =>
-              diag.code === "invalid-style" &&
-              diag.message.includes("endArrow"),
-          ),
+          error.diagnostics.some((diag) => diag.code === "invalid-style"),
       );
     }
   });
@@ -811,15 +881,18 @@ describe("geometry, object visuals, and text visuals", () => {
       deck([
         createElement(Shape, {
           id: "arrow-sample",
-          x: 10,
-          y: 20,
-          width: 100,
-          height: 1,
           geometry: preset("line"),
           style: {
-            borderColor: "accent1",
-            borderWidth: 2,
-            endArrow: "triangle",
+            position: "absolute",
+            left: 10,
+            top: 20,
+            width: 100,
+            height: 1,
+            border: {
+              color: "accent1",
+              width: 2,
+              endArrow: "triangle",
+            },
           },
         }),
       ]),
@@ -850,8 +923,15 @@ describe("geometry, object visuals, and text visuals", () => {
       build(
         <Deck width={960} height={540}>
           <Slide id="box-start-arrow">
-            {/* @ts-expect-error -- testing unknown style on Box */}
-            <Box style={{ startArrow: "triangle" }} />
+            <Box
+              style={{
+                border: {
+                  color: "accent1",
+                  // @ts-expect-error -- testing unsupported arrow on Box border
+                  startArrow: "triangle",
+                },
+              }}
+            />
           </Slide>
         </Deck>,
       ),
@@ -859,7 +939,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
+            diag.code === "invalid-style" &&
             diag.message.includes("startArrow"),
         ),
     );
@@ -868,8 +948,15 @@ describe("geometry, object visuals, and text visuals", () => {
       build(
         <Deck width={960} height={540}>
           <Slide id="box-end-arrow">
-            {/* @ts-expect-error -- testing unknown style on Box */}
-            <Box style={{ endArrow: "triangle" }} />
+            <Box
+              style={{
+                border: {
+                  color: "accent1",
+                  // @ts-expect-error -- testing unsupported arrow on Box border
+                  endArrow: "triangle",
+                },
+              }}
+            />
           </Slide>
         </Deck>,
       ),
@@ -877,8 +964,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
-            diag.message.includes("endArrow"),
+            diag.code === "invalid-style" && diag.message.includes("endArrow"),
         ),
     );
 
@@ -886,8 +972,17 @@ describe("geometry, object visuals, and text visuals", () => {
       build(
         <Deck width={960} height={540}>
           <Slide id="text-start-arrow">
-            {/* @ts-expect-error -- testing unknown style on Text */}
-            <Text style={{ startArrow: "triangle" }}>Hello</Text>
+            <Text
+              style={{
+                border: {
+                  color: "accent1",
+                  // @ts-expect-error -- testing unsupported arrow on Text border
+                  startArrow: "triangle",
+                },
+              }}
+            >
+              Hello
+            </Text>
           </Slide>
         </Deck>,
       ),
@@ -895,7 +990,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
+            diag.code === "invalid-style" &&
             diag.message.includes("startArrow"),
         ),
     );
@@ -904,8 +999,17 @@ describe("geometry, object visuals, and text visuals", () => {
       build(
         <Deck width={960} height={540}>
           <Slide id="text-end-arrow">
-            {/* @ts-expect-error -- testing unknown style on Text */}
-            <Text style={{ endArrow: "triangle" }}>Hello</Text>
+            <Text
+              style={{
+                border: {
+                  color: "accent1",
+                  // @ts-expect-error -- testing unsupported arrow on Text border
+                  endArrow: "triangle",
+                },
+              }}
+            >
+              Hello
+            </Text>
           </Slide>
         </Deck>,
       ),
@@ -913,8 +1017,7 @@ describe("geometry, object visuals, and text visuals", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            (diag.code === "invalid-style" || diag.code === "unknown-prop") &&
-            diag.message.includes("endArrow"),
+            diag.code === "invalid-style" && diag.message.includes("endArrow"),
         ),
     );
   });

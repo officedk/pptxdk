@@ -34,7 +34,6 @@ function previewDocWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(document);
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -47,7 +46,6 @@ function previewJsxWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(await expandDocument(element));
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -130,11 +128,14 @@ describe("SlideBackground capability acceptance", () => {
         slide({ id: "bg-doc", background: "#0F766E" }).append(
           shape({
             id: "card",
-            x: 40,
-            y: 20,
-            width: 120,
-            height: 80,
-            fill: "#F59E0B",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 20,
+              width: 120,
+              height: 80,
+              background: "#F59E0B",
+            },
           }),
         ),
       ),
@@ -148,18 +149,21 @@ describe("SlideBackground capability acceptance", () => {
           { id: "bg-jsx", background: "#0F766E" },
           createElement(Shape, {
             id: "card",
-            x: 40,
-            y: 20,
-            width: 120,
-            height: 80,
-            fill: "#F59E0B",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 20,
+              width: 120,
+              height: 80,
+              background: "#F59E0B",
+            },
           }),
         ),
       ),
     );
 
     for (const result of [docResult, jsxResult]) {
-      assert.deepEqual(result.pages[0]?.diagnostics, []);
+      assert.deepEqual(result.pages[0]?.errors, []);
       assert.deepEqual((await validatePptx(result.pptx)).errors, []);
       assert.deepEqual(result.report.slides[0]?.capabilities, {
         "custom-backdrop": { backdropColor: "#0F766E" },
@@ -216,12 +220,12 @@ describe("SlideBackground capability acceptance", () => {
       ),
     );
     assert.equal(noPreviewResult.pages[0]?.png, undefined);
-    assert.deepEqual(noPreviewResult.pages[0]?.diagnostics, [
+    assert.deepEqual(noPreviewResult.pages[0]?.errors, [
       {
-        severity: "error",
-        page: 1,
+        code: "preview-unsupported-capability",
         path: "deck/slide[no-bg-prev]",
         message: "Preview does not support custom-backdrop-no-preview",
+        capability: "custom-backdrop-no-preview",
       },
     ]);
   });

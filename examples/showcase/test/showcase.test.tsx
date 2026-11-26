@@ -33,19 +33,74 @@ it("builds and paints a byte-equivalent mixed showcase entry with a factory comp
   const jsxPreview = paint(jsxResolution);
   const factoryPreview = paint(factoryResolution);
 
-  assert.deepEqual(jsxResolution.report.diagnostics, []);
-  assert.deepEqual(factoryResolution.report.diagnostics, []);
-  assert.deepEqual(jsx.report.diagnostics, []);
-  assert.deepEqual(factory.report.diagnostics, []);
   assert.deepEqual(factory.report, jsx.report);
+  assert.equal(jsxResolution.slides.length, 16);
+  assert.equal(factoryResolution.slides.length, 16);
+  assert.deepEqual(jsxResolution.report.dimensions, {
+    width: 1280,
+    height: 720,
+  });
+
+  for (const slide of jsxResolution.slides) {
+    assert.deepEqual(slide.dimensions, { width: 1280, height: 720 });
+    const measuredTexts = slide
+      .descendants()
+      .filter((locator) => locator.textMetrics !== undefined);
+    assert.ok(
+      measuredTexts.length > 0,
+      `slide ${slide.id} should contain measured text nodes`,
+    );
+    for (const locator of slide.descendants()) {
+      if (locator.bounds !== undefined) {
+        assert.ok(
+          locator.bounds.x >= 0,
+          `${slide.id} (${locator.path}) overflows left boundary: ${locator.bounds.x}`,
+        );
+        assert.ok(
+          locator.bounds.y >= 0,
+          `${slide.id} (${locator.path}) overflows top boundary: ${locator.bounds.y}`,
+        );
+        assert.ok(
+          locator.bounds.x + locator.bounds.width <= 1280,
+          `${slide.id} (${locator.path}) overflows right boundary: ${locator.bounds.x + locator.bounds.width}`,
+        );
+        assert.ok(
+          locator.bounds.y + locator.bounds.height <= 720,
+          `${slide.id} (${locator.path}) overflows bottom boundary: ${locator.bounds.y + locator.bounds.height}`,
+        );
+      }
+      if (locator.textMetrics !== undefined) {
+        assert.equal(
+          locator.textMetrics.status,
+          "measured",
+          `${slide.id} (${locator.path}) text should be measured`,
+        );
+        assert.equal(
+          locator.textMetrics.fits,
+          true,
+          `${slide.id} (${locator.path}) text "${locator.text}" overflows box`,
+        );
+      }
+    }
+  }
 
   assert.equal(jsxPreview.pages.length, 16);
   assert.equal(factoryPreview.pages.length, 16);
   for (let i = 0; i < 16; i += 1) {
     const jsxPage = jsxPreview.pages[i]!;
     const factoryPage = factoryPreview.pages[i]!;
-    assert.deepEqual(jsxPage.diagnostics, [], `jsx page ${i + 1}`);
-    assert.deepEqual(factoryPage.diagnostics, [], `factory page ${i + 1}`);
+    assert.deepEqual(jsxPage.errors, [], `jsx page ${i + 1} errors`);
+    assert.deepEqual(
+      jsxPage.placeholders,
+      [],
+      `jsx page ${i + 1} placeholders`,
+    );
+    assert.deepEqual(factoryPage.errors, [], `factory page ${i + 1} errors`);
+    assert.deepEqual(
+      factoryPage.placeholders,
+      [],
+      `factory page ${i + 1} placeholders`,
+    );
     assert.ok(jsxPage.png !== undefined, `jsx page ${i + 1} png`);
     assert.ok(factoryPage.png !== undefined, `factory page ${i + 1} png`);
     assertValidPng1280x720(jsxPage.png, `jsx page ${i + 1}`);
@@ -135,7 +190,6 @@ it("builds and paints a byte-equivalent mixed showcase entry with a factory comp
 
 it("map and calendar synchronize click behaviors, four-page gallery preserves continuity and direct navigation", async () => {
   const result = await build(<ShowcaseDeck />, { embedFonts: "full" });
-  assert.deepEqual(result.report.diagnostics, []);
   const file = await validatePptx(result.pptx, {
     allowedExtensions: ["p14", "p159"],
   });
@@ -164,18 +218,19 @@ it("map and calendar synchronize click behaviors, four-page gallery preserves co
   }
 
   const calendar = file.slides.find(({ id }) => id === "calendar")!;
+  const calendarLocator = result.slide("calendar");
   assert.equal(calendar.animations?.length, 3);
   for (const [index, step] of (calendar.animations ?? []).entries()) {
     const color = step.effects.find(({ preset }) => preset === "fillColor")!;
     const caption = step.effects.find(({ kind }) => kind === "entrance")!;
     const date = calendar.objects.find(({ id }) => id === color.targetId)!;
     const note = calendar.objects.find(({ id }) => id === caption.targetId)!;
-    const noteAuthorId = result.report.slides
-      .find(({ id }) => id === "calendar")
-      ?.objects.find(({ id }) => id === note.id)?.authorId;
+    const expectedEventId = `event-${[4, 12, 23][index]}`;
+    const eventLocator = calendarLocator.get(expectedEventId);
     assert.equal(step.trigger, "click");
     assert.equal(date.text?.text, String([4, 12, 23][index]).padStart(2, "0"));
-    assert.equal(noteAuthorId, `event-${[4, 12, 23][index]}`);
+    assert.equal(eventLocator.id, expectedEventId);
+    assert.equal(eventLocator.objects[0]?.id, note.id);
     assert.equal(color.delayMs, caption.delayMs);
   }
 
@@ -285,7 +340,14 @@ it("cards template preserves layout and independent reveal across content replac
       ))}
     </Deck>,
   );
-  assert.deepEqual(result.report.diagnostics, []);
+  for (const slide of result.slides) {
+    for (const locator of slide.descendants()) {
+      if (locator.textMetrics !== undefined) {
+        assert.equal(locator.textMetrics.status, "measured");
+        assert.equal(locator.textMetrics.fits, true);
+      }
+    }
+  }
   const file = await validatePptx(result.pptx);
   assert.deepEqual(file.errors, []);
   const bodyWidths: number[] = [];
@@ -334,17 +396,24 @@ it("progress module receives position and width from slide while preserving inte
       ))}
     </Deck>,
   );
-  assert.deepEqual(result.report.diagnostics, []);
   const file = await validatePptx(result.pptx);
   assert.deepEqual(file.errors, []);
   for (const [index, page] of file.slides.entries()) {
     const frame = frames[index]!;
-    const progressId = result.report.slides[index]?.objects.find(
-      ({ authorId }) => authorId === "progress-example",
-    )?.id;
+    const progressLocator = result
+      .slide(`progress-${index}`)
+      .get("progress-example");
+    const progressId = progressLocator.objects[0]?.id;
     const progress = page.objects.find(({ id }) => id === progressId)!;
     const bounds = progress.boxEmu;
     assert.equal(page.animations?.length, 2);
+    assert.ok(progressLocator.bounds !== undefined);
+    assert.ok(Math.abs(progressLocator.bounds.x - frame.x) <= 1);
+    assert.ok(Math.abs(progressLocator.bounds.y - frame.y) <= 1);
+    assert.ok(Math.abs(progressLocator.bounds.width - frame.width) <= 1);
+    assert.ok(
+      Math.abs(progressLocator.bounds.height - (frame.width / 1120) * 468) <= 1,
+    );
     assert.ok(Math.abs(bounds.x - frame.x * 9525) <= 9525);
     assert.ok(Math.abs(bounds.y - frame.y * 9525) <= 9525);
     assert.ok(Math.abs(bounds.width - frame.width * 9525) <= 9525);

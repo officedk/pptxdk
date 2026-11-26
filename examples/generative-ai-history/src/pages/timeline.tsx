@@ -92,11 +92,12 @@ export function TimelinePage() {
               strokeWidth={2}
             />
             <Text
-              x={Math.min(x - 26, 1052)}
-              y={yearY}
-              width={166}
-              height={48}
               style={{
+                position: "absolute",
+                left: Math.min(x - 26, 1052),
+                top: yearY,
+                width: 166,
+                height: 48,
                 fontFamily: "display",
                 fontSize: moment.year.length > 4 ? 30 : 36,
                 color: colors.ink,
@@ -106,20 +107,30 @@ export function TimelinePage() {
               {moment.year}
             </Text>
             <Text
-              x={Math.min(x - 26, 1052)}
-              y={titleY}
-              width={164}
-              height={30}
-              style={{ fontSize: 18, color: colors.cobalt, textWrap: "nowrap" }}
+              style={{
+                position: "absolute",
+                left: Math.min(x - 26, 1052),
+                top: titleY,
+                width: 164,
+                height: 30,
+                fontSize: 18,
+                color: colors.cobalt,
+                textWrap: "nowrap",
+              }}
             >
               {moment.title}
             </Text>
             <Text
-              x={Math.min(x - 26, 1052)}
-              y={detailY}
-              width={162}
-              height={54}
-              style={{ fontSize: 14, lineHeight: 21, color: colors.muted }}
+              style={{
+                position: "absolute",
+                left: Math.min(x - 26, 1052),
+                top: detailY,
+                width: 162,
+                height: 54,
+                fontSize: 14,
+                lineHeight: 21,
+                color: colors.muted,
+              }}
             >
               {moment.detail}
             </Text>
@@ -136,20 +147,28 @@ export function TimelinePage() {
             thickness={4}
           />
           <Text
-            x={era.x}
-            y={616}
-            width={era.width}
-            height={24}
-            style={{ fontSize: 16, color: colors.ink }}
+            style={{
+              position: "absolute",
+              left: era.x,
+              top: 616,
+              width: era.width,
+              height: 24,
+              fontSize: 16,
+              color: colors.ink,
+            }}
           >
             {era.label}
           </Text>
           <Text
-            x={era.x}
-            y={642}
-            width={era.width}
-            height={20}
-            style={{ fontSize: 12, color: colors.muted }}
+            style={{
+              position: "absolute",
+              left: era.x,
+              top: 642,
+              width: era.width,
+              height: 20,
+              fontSize: 12,
+              color: colors.muted,
+            }}
           >
             {era.years}
           </Text>

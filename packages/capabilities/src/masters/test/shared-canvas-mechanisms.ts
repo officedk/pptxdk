@@ -19,7 +19,7 @@ import { Group } from "@pptxdk/capabilities/group-elements";
 import { Image } from "@pptxdk/capabilities/image-elements";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
 import { Text } from "@pptxdk/capabilities/text-elements";
-import { CommonNode } from "@pptxdk/core";
+import { CommonNode, DeckContainer } from "@pptxdk/core";
 import { emit } from "@pptxdk/emit";
 import { createImporter } from "@pptxdk/import";
 import { paint } from "@pptxdk/preview";
@@ -108,19 +108,25 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
         { id: "brand-master", name: "Brand Master", preserve: true },
         createElement(Shape, {
           id: "master-bar",
-          x: 0,
-          y: 0,
-          width: 640,
-          height: 48,
-          fill: "#1E293B",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 48,
+            background: "#1E293B",
+          },
         }),
         createElement(Image, {
           id: "logo",
           src: logoPng,
-          x: 24,
-          y: 8,
-          width: 32,
-          height: 32,
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 8,
+            width: 32,
+            height: 32,
+          },
         }),
         createElement(
           Box,
@@ -155,11 +161,14 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
             { id: "layout-group" },
             createElement(Shape, {
               id: "layout-pill",
-              x: 400,
-              y: 80,
-              width: 180,
-              height: 80,
-              fill: "#10B981",
+              style: {
+                position: "absolute",
+                left: 400,
+                top: 80,
+                width: 180,
+                height: 80,
+                background: "#10B981",
+              },
             }),
           ),
         ),
@@ -168,11 +177,14 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
           { layout: suppressMasterLayout },
           createElement(Shape, {
             id: "layout-banner",
-            x: 40,
-            y: 80,
-            width: 200,
-            height: 80,
-            fill: "#EA580C",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 80,
+              width: 200,
+              height: 80,
+              background: "#EA580C",
+            },
           }),
         ),
       ),
@@ -181,11 +193,14 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
         { id: "s1-all", layout: withRibbonLayout },
         createElement(Shape, {
           id: "s1-card",
-          x: 40,
-          y: 180,
-          width: 160,
-          height: 80,
-          fill: "#F59E0B",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 180,
+            width: 160,
+            height: 80,
+            background: "#F59E0B",
+          },
         }),
       ),
       createElement(
@@ -197,11 +212,14 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "s2-card",
-          x: 40,
-          y: 180,
-          width: 160,
-          height: 80,
-          fill: "#0284C7",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 180,
+            width: 160,
+            height: 80,
+            background: "#0284C7",
+          },
         }),
       ),
       createElement(Slide, {
@@ -219,13 +237,26 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "master-bar",
-          x: 0,
-          y: 0,
-          width: 640,
-          height: 48,
-          fill: "#1E293B",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 48,
+            background: "#1E293B",
+          },
         }),
-        image({ id: "logo", src: logoPng, x: 24, y: 8, width: 32, height: 32 }),
+        image({
+          id: "logo",
+          src: logoPng,
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 8,
+            width: 32,
+            height: 32,
+          },
+        }),
         box({
           id: "master-badge",
           style: {
@@ -249,33 +280,42 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
           group({ id: "layout-group" }).append(
             shape({
               id: "layout-pill",
-              x: 400,
-              y: 80,
-              width: 180,
-              height: 80,
-              fill: "#10B981",
+              style: {
+                position: "absolute",
+                left: 400,
+                top: 80,
+                width: 180,
+                height: 80,
+                background: "#10B981",
+              },
             }),
           ),
         ),
         slideLayout(suppressMasterLayout).append(
           shape({
             id: "layout-banner",
-            x: 40,
-            y: 80,
-            width: 200,
-            height: 80,
-            fill: "#EA580C",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 80,
+              width: 200,
+              height: 80,
+              background: "#EA580C",
+            },
           }),
         ),
       ),
       slide({ id: "s1-all", layout: withRibbonLayout }).append(
         shape({
           id: "s1-card",
-          x: 40,
-          y: 180,
-          width: 160,
-          height: 80,
-          fill: "#F59E0B",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 180,
+            width: 160,
+            height: 80,
+            background: "#F59E0B",
+          },
         }),
       ),
       slide({
@@ -285,11 +325,14 @@ export const masterSharedCanvasScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "s2-card",
-          x: 40,
-          y: 180,
-          width: 160,
-          height: 80,
-          fill: "#0284C7",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 180,
+            width: 160,
+            height: 80,
+            background: "#0284C7",
+          },
         }),
       ),
       slide({ id: "s3-layout-only", layout: suppressMasterLayout }),
@@ -342,7 +385,7 @@ export const masterSharedCanvasMechanismVerifications: Pick<
     assertPaint({ initial, roundtrip }) {
       assert.equal(initial.pages.length, 3);
       for (const page of initial.pages) {
-        assert.deepEqual(page.diagnostics, []);
+        assert.deepEqual(page.errors, []);
         assert.ok(page.png instanceof Uint8Array);
       }
       // Page 1: master red Logo (40, 24), master navy bar (300, 20), layout emerald pill (450, 120), slide amber card (100, 220)
@@ -375,28 +418,54 @@ export async function verifyMasterLogoSingleEditPropagates(
   });
   const initialDoc = deck({ width: 640, height: 360 }).append(
     slideMaster({ id: "brand", name: "Brand" }).append(
-      shape({ id: "bar", x: 0, y: 0, width: 640, height: 48, fill: "#1E293B" }),
-      image({ id: "logo", src: logoPng, x: 24, y: 8, width: 32, height: 32 }),
+      shape({
+        id: "bar",
+        style: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 640,
+          height: 48,
+          background: "#1E293B",
+        },
+      }),
+      image({
+        id: "logo",
+        src: logoPng,
+        style: {
+          position: "absolute",
+          left: 24,
+          top: 8,
+          width: 32,
+          height: 32,
+        },
+      }),
       slideLayout(layoutDef),
     ),
     slide({ id: "s1", layout: layoutDef }).append(
       shape({
         id: "s1-card",
-        x: 40,
-        y: 180,
-        width: 160,
-        height: 80,
-        fill: "#F59E0B",
+        style: {
+          position: "absolute",
+          left: 40,
+          top: 180,
+          width: 160,
+          height: 80,
+          background: "#F59E0B",
+        },
       }),
     ),
     slide({ id: "s2", layout: layoutDef }).append(
       shape({
         id: "s2-card",
-        x: 240,
-        y: 180,
-        width: 160,
-        height: 80,
-        fill: "#0284C7",
+        style: {
+          position: "absolute",
+          left: 240,
+          top: 180,
+          width: 160,
+          height: 80,
+          background: "#0284C7",
+        },
       }),
     ),
   );
@@ -404,14 +473,18 @@ export async function verifyMasterLogoSingleEditPropagates(
   const imported = createImporter(capabilities)(initialPptx);
   assert.deepEqual(imported.report.diagnostics, []);
 
-  // Move master Logo once on the imported document (x: 24 -> 540) and confirm BOTH slides update while local slide cards stay untouched.
-  const masterNode = imported.document.query.get("Brand").node;
+  // Move master Logo once on the imported document (left: 24 -> 540) and confirm BOTH slides update while local slide cards stay untouched.
+  assert.ok(imported.document instanceof DeckContainer);
+  const masterNode = imported.document.masters.find(
+    (master) => master.props["name"] === "Brand",
+  );
+  assert.ok(masterNode, "imported document must retain Brand master");
   const logoNode = masterNode.children.find(
     (child): child is CommonNode =>
       child instanceof CommonNode && child.kind === "image",
   );
   assert.ok(logoNode, "imported master must retain Logo Image node");
-  logoNode.set({ x: 540 });
+  logoNode.style({ left: 540 });
   const movedResolution = resolveDoc(
     imported.document as ReturnType<typeof deck>,
   );
@@ -421,7 +494,7 @@ export async function verifyMasterLogoSingleEditPropagates(
   assert.deepEqual(validation.errors, []);
   assert.equal(movedPaint.pages.length, 2);
   for (const page of movedPaint.pages) {
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.equal(readPngPixelHex(page.png, 556, 24), "#EF4444");
     assert.equal(readPngPixelHex(page.png, 40, 24), "#1E293B");
   }

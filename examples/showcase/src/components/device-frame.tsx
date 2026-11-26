@@ -25,47 +25,57 @@ export function DeviceFrame({
   return (
     <Group id={id}>
       <Shape
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={colors.ink}
         geometry={preset("roundRect")}
         style={{
+          position: "absolute",
+          left: x,
+          top: y,
+          width,
+          height,
+          background: colors.ink,
           borderRadius: compact ? 12 : 10,
           boxShadow: { color: colors.ink, blur: 12, distance: 6, angle: 45 },
         }}
       />
       <Shape
-        x={x + inset}
-        y={y + top}
-        width={width - inset * 2}
-        height={height - top - inset}
-        fill={colors.surface}
         geometry={preset("roundRect")}
-        style={{ borderRadius: compact ? 6 : 4 }}
+        style={{
+          position: "absolute",
+          left: x + inset,
+          top: y + top,
+          width: width - inset * 2,
+          height: height - top - inset,
+          background: colors.surface,
+          borderRadius: compact ? 6 : 4,
+        }}
       />
       {compact ? (
         <Shape
-          x={x + width / 2 - 24}
-          y={y + 13}
-          width={48}
-          height={5}
-          fill={colors.muted}
           geometry={preset("roundRect")}
-          style={{ borderRadius: 2.5 }}
+          style={{
+            position: "absolute",
+            left: x + width / 2 - 24,
+            top: y + 13,
+            width: 48,
+            height: 5,
+            background: colors.muted,
+            borderRadius: 2.5,
+          }}
         />
       ) : (
         <>
           {[0, 1, 2].map((index) => (
             <Shape
               key={index}
-              x={x + 24 + index * 14}
-              y={y + 15}
-              width={6}
-              height={6}
               geometry={preset("ellipse")}
-              fill={index === 0 ? colors.current : colors.accentSoft}
+              style={{
+                position: "absolute",
+                left: x + 24 + index * 14,
+                top: y + 15,
+                width: 6,
+                height: 6,
+                background: index === 0 ? colors.current : colors.accentSoft,
+              }}
             />
           ))}
         </>

@@ -24,16 +24,19 @@ it("changes color by click step with fill color emphasis and maintains end state
       <Slide id="color">
         <Step n={1}>
           <Shape
-            x={20}
-            y={20}
-            width={80}
-            height={40}
-            fill="#EEEEEE"
             emphasis={fillColor({
               from: "#eeeeee",
               to: "#16324f",
               duration: 600,
             })}
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 40,
+              background: "#EEEEEE",
+            }}
           />
         </Step>
       </Slide>
@@ -60,47 +63,53 @@ it("rejects invalid colors, duplicates, and targets without solid fill", async (
   for (const [content, code] of [
     [
       <Shape
-        x={0}
-        y={0}
-        width={40}
-        height={40}
-        fill="#FFFFFF"
         emphasis={fillColor({ from: "red", to: "#16324F" })}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 40,
+          height: 40,
+          background: "#FFFFFF",
+        }}
       />,
-      "invalid-fill-color",
+      "invalid-prop",
     ],
     [
       <Shape
-        x={0}
-        y={0}
-        width={40}
-        height={40}
-        fill="#FFFFFF"
         emphasis={repeat(fillColor({ from: "#FFFFFF", to: "#16324F" }), 2)}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 40,
+          height: 40,
+          background: "#FFFFFF",
+        }}
       />,
-      "unsupported-repeat",
+      "invalid-prop",
     ],
     [
       <Shape
-        x={0}
-        y={0}
-        width={40}
-        height={40}
         emphasis={fillColor({ from: "#FFFFFF", to: "#16324F" })}
+        style={{ position: "absolute", left: 0, top: 0, width: 40, height: 40 }}
       />,
-      "invalid-fill-color-target",
+      "invalid-prop",
     ],
     [
       <Text
-        x={0}
-        y={0}
-        width={120}
-        height={40}
         emphasis={fillColor({ from: "#FFFFFF", to: "#16324F" })}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 120,
+          height: 40,
+        }}
       >
         文字
       </Text>,
-      "invalid-fill-color-target",
+      "invalid-prop",
     ],
   ] as const) {
     await assert.rejects(
@@ -128,28 +137,34 @@ it("chains subsequent content from completion cues of multiple color-changing co
           <Shape
             id={name}
             name={name}
-            x={20}
-            y={n * 40}
-            width={50}
-            height={30}
-            fill="#FFFFFF"
             emphasis={fillColor({
               from: "#FFFFFF",
               to: "#138A83",
               duration: 400,
             })}
+            style={{
+              position: "absolute",
+              left: 20,
+              top: n * 40,
+              width: 50,
+              height: 30,
+              background: "#FFFFFF",
+            }}
           />
         </MotionScope>
         <MotionScope scope={caption} startAt={region.end}>
           <Shape
             id={`${name}-caption`}
             name={`${name}-caption`}
-            x={80}
-            y={n * 40}
-            width={100}
-            height={30}
-            fill="#16324F"
             enter={fade({ duration: 200 })}
+            style={{
+              position: "absolute",
+              left: 80,
+              top: n * 40,
+              width: 100,
+              height: 30,
+              background: "#16324F",
+            }}
           />
         </MotionScope>
       </Step>
@@ -198,12 +213,15 @@ it("rejects loss of end state hold, inverted, or duplicated color animations dur
     <Deck width={320} height={180}>
       <Slide id="hold">
         <Shape
-          x={0}
-          y={0}
-          width={40}
-          height={40}
-          fill="#FFFFFF"
           emphasis={fillColor({ from: "#FFFFFF", to: "#138A83" })}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 40,
+            height: 40,
+            background: "#FFFFFF",
+          }}
         />
       </Slide>
     </Deck>,

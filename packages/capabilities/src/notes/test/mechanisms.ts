@@ -50,11 +50,14 @@ export const notesAndSectionsRoundtripScenario: CapabilityScenario = {
           { id: "intro-notes" },
           createElement(Shape, {
             id: "navy-card",
-            x: 48,
-            y: 48,
-            width: 240,
-            height: 110,
-            fill: "#1E3A8A",
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 48,
+              width: 240,
+              height: 110,
+              background: "#1E3A8A",
+            },
           }),
           createElement(
             Notes,
@@ -83,11 +86,14 @@ export const notesAndSectionsRoundtripScenario: CapabilityScenario = {
           { id: "hidden-notes", hidden: true },
           createElement(Shape, {
             id: "hidden-card",
-            x: 64,
-            y: 64,
-            width: 180,
-            height: 90,
-            fill: "#991B1B",
+            style: {
+              position: "absolute",
+              left: 64,
+              top: 64,
+              width: 180,
+              height: 90,
+              background: "#991B1B",
+            },
           }),
           createElement(
             Notes,
@@ -105,11 +111,14 @@ export const notesAndSectionsRoundtripScenario: CapabilityScenario = {
           createElement(Shape, {
             id: "indigo-oval",
             geometry: "ellipse",
-            x: 200,
-            y: 90,
-            width: 240,
-            height: 180,
-            fill: "#4338CA",
+            style: {
+              position: "absolute",
+              left: 200,
+              top: 90,
+              width: 240,
+              height: 180,
+              background: "#4338CA",
+            },
           }),
         ),
       ),
@@ -121,11 +130,14 @@ export const notesAndSectionsRoundtripScenario: CapabilityScenario = {
         slide({ id: "intro-notes" }).append(
           shape({
             id: "navy-card",
-            x: 48,
-            y: 48,
-            width: 240,
-            height: 110,
-            fill: "#1E3A8A",
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 48,
+              width: 240,
+              height: 110,
+              background: "#1E3A8A",
+            },
           }),
           notes(
             [
@@ -146,11 +158,14 @@ export const notesAndSectionsRoundtripScenario: CapabilityScenario = {
         slide({ id: "hidden-notes", hidden: true }).append(
           shape({
             id: "hidden-card",
-            x: 64,
-            y: 64,
-            width: 180,
-            height: 90,
-            fill: "#991B1B",
+            style: {
+              position: "absolute",
+              left: 64,
+              top: 64,
+              width: 180,
+              height: 90,
+              background: "#991B1B",
+            },
           }),
           notes("Hidden slide cue", { id: "hidden-speech" }),
         ),
@@ -160,11 +175,14 @@ export const notesAndSectionsRoundtripScenario: CapabilityScenario = {
           shape({
             id: "indigo-oval",
             geometry: "ellipse",
-            x: 200,
-            y: 90,
-            width: 240,
-            height: 180,
-            fill: "#4338CA",
+            style: {
+              position: "absolute",
+              left: 200,
+              top: 90,
+              width: 240,
+              height: 180,
+              background: "#4338CA",
+            },
           }),
         ),
       ),

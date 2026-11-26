@@ -39,14 +39,17 @@ describe("cross-slide object continuity", () => {
           {
             id: "card-before",
             morphKey: background,
-            style: { width: 160, height: 100, backgroundColor: "accent1" },
+            style: { width: 160, height: 100, background: "accent1" },
           },
           createElement(Shape, {
             id: "card-child-before",
-            x: 12,
-            y: 12,
-            width: 40,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 12,
+              top: 12,
+              width: 40,
+              height: 30,
+            },
           }),
         ),
       ),
@@ -61,14 +64,17 @@ describe("cross-slide object continuity", () => {
           {
             id: "card-after",
             morphKey: background,
-            style: { width: 180, height: 110, backgroundColor: "accent2" },
+            style: { width: 180, height: 110, background: "accent2" },
           },
           createElement(Shape, {
             id: "card-child-after",
-            x: 16,
-            y: 16,
-            width: 44,
-            height: 32,
+            style: {
+              position: "absolute",
+              left: 16,
+              top: 16,
+              width: 44,
+              height: 32,
+            },
           }),
         ),
       ),
@@ -123,11 +129,14 @@ describe("cross-slide object continuity", () => {
         createElement(Shape, {
           id: "hero-before",
           morphKey: hero,
-          x: 24,
-          y: 24,
-          width: 160,
-          height: 100,
-          fill: "#336699",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 160,
+            height: 100,
+            background: "#336699",
+          },
         }),
       ),
       createElement(
@@ -142,11 +151,14 @@ describe("cross-slide object continuity", () => {
         createElement(Shape, {
           id: "hero-after",
           morphKey: hero,
-          x: 280,
-          y: 80,
-          width: 180,
-          height: 120,
-          fill: "#CC6633",
+          style: {
+            position: "absolute",
+            left: 280,
+            top: 80,
+            width: 180,
+            height: 120,
+            background: "#CC6633",
+          },
         }),
       ),
     );
@@ -188,7 +200,7 @@ describe("cross-slide object continuity", () => {
         build(declarations, { target }),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+          assert.equal(error.diagnostics[0]?.code, "target-violation");
           return true;
         },
       );
@@ -204,10 +216,13 @@ describe("cross-slide object continuity", () => {
         { scope },
         createElement(Shape, {
           morphKey: key,
-          x: 240,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
       );
     }
@@ -223,10 +238,13 @@ describe("cross-slide object continuity", () => {
             { style: { width: 100, height: 80 } },
             createElement(Shape, {
               morphKey: key,
-              x: 20,
-              y: 20,
-              width: 60,
-              height: 40,
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 60,
+                height: 40,
+              },
             }),
           ),
         ),
@@ -262,11 +280,14 @@ describe("cross-slide object continuity", () => {
       createElement(Shape, {
         morphKey: props.scope.handle("marker"),
         id: props.id,
-        x: props.x,
-        y: 20,
-        width: 80,
-        height: 40,
-        fill: "#336699",
+        style: {
+          position: "absolute",
+          left: props.x,
+          top: 20,
+          width: 80,
+          height: 40,
+          background: "#336699",
+        },
       });
     const result = await build(
       createElement(
@@ -350,18 +371,24 @@ describe("cross-slide object continuity", () => {
             : [
                 createElement(Shape, {
                   morphKey: leading,
-                  x: 0,
-                  y: 0,
-                  width: 20,
-                  height: 20,
+                  style: {
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 20,
+                    height: 20,
+                  },
                 }),
               ]),
           createElement(Shape, {
             morphKey: shared,
-            x: 40,
-            y: 0,
-            width: 20,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 0,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         createElement(
@@ -372,10 +399,13 @@ describe("cross-slide object continuity", () => {
           },
           createElement(Shape, {
             morphKey: shared,
-            x: 40,
-            y: 40,
-            width: 20,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
       );
@@ -419,21 +449,27 @@ describe("cross-slide object continuity", () => {
       createElement(Shape, {
         morphKey: handles.shape,
         id: `shape-${suffix}`,
-        x: offset,
-        y: 10,
-        width: 60,
-        height: 40,
+        style: {
+          position: "absolute",
+          left: offset,
+          top: 10,
+          width: 60,
+          height: 40,
+        },
       }),
       createElement(
         Text,
         {
           morphKey: handles.text,
           id: `text-${suffix}`,
-          x: offset,
-          y: 60,
-          width: 100,
-          height: 30,
-          style: { fontFamily: "Arial" },
+          style: {
+            position: "absolute",
+            left: offset,
+            top: 60,
+            width: 100,
+            height: 30,
+            fontFamily: "Arial",
+          },
         },
         "Editable text",
       ),
@@ -441,31 +477,30 @@ describe("cross-slide object continuity", () => {
         morphKey: handles.image,
         id: `image-${suffix}`,
         src: image,
-        x: offset,
-        y: 100,
-        width: 60,
-        height: 40,
+        style: {
+          position: "absolute",
+          left: offset,
+          top: 100,
+          width: 60,
+          height: 40,
+        },
       }),
       createElement(
         Group,
-        {
-          morphKey: handles.group,
-          id: `group-${suffix}`,
-        },
+        { morphKey: handles.group, id: `group-${suffix}` },
         createElement(Shape, {
-          x: offset + 80,
-          y: 100,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: offset + 80,
+            top: 100,
+            width: 40,
+            height: 30,
+          },
         }),
       ),
       createElement(
         Table,
-        {
-          morphKey: handles.table,
-          id: `table-${suffix}`,
-          columns: [80],
-        },
+        { morphKey: handles.table, id: `table-${suffix}`, columns: [80] },
         createElement(
           Row,
           { style: { height: 30 } },
@@ -475,10 +510,6 @@ describe("cross-slide object continuity", () => {
       createElement(Chart, {
         morphKey: handles.chart,
         id: `chart-${suffix}`,
-        x: offset,
-        y: 200,
-        width: 160,
-        height: 100,
         groups: [
           {
             kind: "column",
@@ -486,6 +517,13 @@ describe("cross-slide object continuity", () => {
             series: [{ name: "S", values: [1] }],
           },
         ],
+        style: {
+          position: "absolute",
+          left: offset,
+          top: 200,
+          width: 160,
+          height: 100,
+        },
       }),
     ];
     const result = await build(
@@ -543,24 +581,33 @@ describe("cross-slide object continuity", () => {
           { id: "before" },
           createElement(Shape, {
             morphKey: departing,
-            x: 10,
-            y: 10,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 60,
+              height: 40,
+            },
           }),
           createElement(Shape, {
             morphKey: replacedBefore,
-            x: 80,
-            y: 10,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 10,
+              width: 60,
+              height: 40,
+            },
           }),
           createElement(Shape, {
             name: "same ordinary name",
-            x: 150,
-            y: 10,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 150,
+              top: 10,
+              width: 60,
+              height: 40,
+            },
           }),
         ),
         createElement(
@@ -571,24 +618,33 @@ describe("cross-slide object continuity", () => {
           },
           createElement(Shape, {
             morphKey: entering,
-            x: 10,
-            y: 80,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 80,
+              width: 60,
+              height: 40,
+            },
           }),
           createElement(Shape, {
             morphKey: replacedAfter,
-            x: 80,
-            y: 80,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 80,
+              width: 60,
+              height: 40,
+            },
           }),
           createElement(Shape, {
             name: "same ordinary name",
-            x: 150,
-            y: 80,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 150,
+              top: 80,
+              width: 60,
+              height: 40,
+            },
           }),
         ),
       ),
@@ -626,10 +682,13 @@ describe("cross-slide object continuity", () => {
         { scope },
         createElement(Shape, {
           morphKey: key,
-          x: 0,
-          y: 0,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 40,
+            height: 30,
+          },
         }),
       );
     }
@@ -647,7 +706,7 @@ describe("cross-slide object continuity", () => {
     }
     const invalid = [
       {
-        code: "invalid-morph-key",
+        code: "invalid-prop",
         deck: createElement(
           Deck,
           {},
@@ -656,16 +715,19 @@ describe("cross-slide object continuity", () => {
             { id: "invalid-handle" },
             createElement(Shape, {
               morphKey: "ordinary string" as never,
-              x: 0,
-              y: 0,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 40,
+                height: 30,
+              },
             }),
           ),
         ),
       },
       {
-        code: "morph-object-name-conflict",
+        code: "invalid-continuity",
         deck: createElement(
           Deck,
           {},
@@ -675,16 +737,19 @@ describe("cross-slide object continuity", () => {
             createElement(Shape, {
               morphKey: key,
               name: "ordinary object name",
-              x: 0,
-              y: 0,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 40,
+                height: 30,
+              },
             } as never),
           ),
         ),
       },
       {
-        code: "duplicate-morph-key",
+        code: "duplicate-id",
         deck: createElement(
           Deck,
           {},
@@ -693,23 +758,29 @@ describe("cross-slide object continuity", () => {
             { id: "duplicate" },
             createElement(Shape, {
               morphKey: key,
-              x: 0,
-              y: 0,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 40,
+                height: 30,
+              },
             }),
             createElement(Shape, {
               morphKey: key,
-              x: 50,
-              y: 0,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 50,
+                top: 0,
+                width: 40,
+                height: 30,
+              },
             }),
           ),
         ),
       },
       {
-        code: "morph-needs-object",
+        code: "invalid-continuity",
         deck: createElement(
           Deck,
           {},
@@ -720,17 +791,20 @@ describe("cross-slide object continuity", () => {
               Box,
               { morphKey: key } as never,
               createElement(Shape, {
-                x: 0,
-                y: 0,
-                width: 40,
-                height: 30,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 40,
+                  height: 30,
+                },
               }),
             ),
           ),
         ),
       },
       {
-        code: "morph-inside-group",
+        code: "invalid-continuity",
         deck: createElement(
           Deck,
           {},
@@ -742,17 +816,20 @@ describe("cross-slide object continuity", () => {
               null,
               createElement(Shape, {
                 morphKey: key,
-                x: 0,
-                y: 0,
-                width: 40,
-                height: 30,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 40,
+                  height: 30,
+                },
               }),
             ),
           ),
         ),
       },
       {
-        code: "morph-inside-group",
+        code: "invalid-continuity",
         deck: createElement(
           Deck,
           {},
@@ -767,10 +844,13 @@ describe("cross-slide object continuity", () => {
                 { style: { width: 100, height: 80 } },
                 createElement(Shape, {
                   morphKey: key,
-                  x: 0,
-                  y: 0,
-                  width: 40,
-                  height: 30,
+                  style: {
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 40,
+                    height: 30,
+                  },
                 }),
               ),
             ),
@@ -783,16 +863,19 @@ describe("cross-slide object continuity", () => {
             },
             createElement(Shape, {
               morphKey: key,
-              x: 240,
-              y: 20,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 240,
+                top: 20,
+                width: 40,
+                height: 30,
+              },
             }),
           ),
         ),
       },
       {
-        code: "morph-inside-group",
+        code: "invalid-continuity",
         deck: createElement(
           Deck,
           {},
@@ -810,10 +893,13 @@ describe("cross-slide object continuity", () => {
                   { style: { width: 80, height: 60 } },
                   createElement(Shape, {
                     morphKey: key,
-                    x: 0,
-                    y: 0,
-                    width: 40,
-                    height: 30,
+                    style: {
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      width: 40,
+                      height: 30,
+                    },
                   }),
                 ),
               ),
@@ -822,7 +908,7 @@ describe("cross-slide object continuity", () => {
         ),
       },
       {
-        code: "morph-inside-group",
+        code: "invalid-continuity",
         deck: createElement(
           Deck,
           {},
@@ -834,7 +920,7 @@ describe("cross-slide object continuity", () => {
         ),
       },
       {
-        code: "morph-object-kind-mismatch",
+        code: "invalid-continuity",
         deck: createElement(
           Deck,
           {},
@@ -843,10 +929,13 @@ describe("cross-slide object continuity", () => {
             { id: "before" },
             createElement(Shape, {
               morphKey: key,
-              x: 0,
-              y: 0,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 40,
+                height: 30,
+              },
             }),
           ),
           createElement(
@@ -858,10 +947,13 @@ describe("cross-slide object continuity", () => {
             createElement(Image, {
               morphKey: key,
               src: image,
-              x: 0,
-              y: 0,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 40,
+                height: 30,
+              },
             }),
           ),
         ),

@@ -64,22 +64,28 @@ describe("transitionCapability bound slide migration & generic continuity collab
         shape({
           id: "hero-a",
           morphKey: hero,
-          x: 30,
-          y: 40,
-          width: 80,
-          height: 60,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 40,
+            width: 80,
+            height: 60,
+            background: "#2563EB",
+          },
         }),
       ),
       slide({ id: "second", background: "#F8FAFC" }).append(
         shape({
           id: "hero-b",
           morphKey: hero,
-          x: 180,
-          y: 50,
-          width: 100,
-          height: 80,
-          fill: "#1D4ED8",
+          style: {
+            position: "absolute",
+            left: 180,
+            top: 50,
+            width: 100,
+            height: 80,
+            background: "#1D4ED8",
+          },
         }),
       ),
     );
@@ -94,11 +100,14 @@ describe("transitionCapability bound slide migration & generic continuity collab
         shape({
           id: "hero-a",
           morphKey: hero,
-          x: 30,
-          y: 40,
-          width: 80,
-          height: 60,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 40,
+            width: 80,
+            height: 60,
+            background: "#2563EB",
+          },
         }),
       ),
       slide({
@@ -113,11 +122,14 @@ describe("transitionCapability bound slide migration & generic continuity collab
         shape({
           id: "hero-b",
           morphKey: hero,
-          x: 180,
-          y: 50,
-          width: 100,
-          height: 80,
-          fill: "#1D4ED8",
+          style: {
+            position: "absolute",
+            left: 180,
+            top: 50,
+            width: 100,
+            height: 80,
+            background: "#1D4ED8",
+          },
         }),
       ),
     );
@@ -129,8 +141,8 @@ describe("transitionCapability bound slide migration & generic continuity collab
     const transitionEmit = emit(transitionResolution);
 
     // Static edit canvas pixels are identical whether transition/advanceAfter are declared or not.
-    assert.deepEqual(transitionPreview.pages[0]?.diagnostics, []);
-    assert.deepEqual(transitionPreview.pages[1]?.diagnostics, []);
+    assert.deepEqual(transitionPreview.pages[0]?.errors, []);
+    assert.deepEqual(transitionPreview.pages[1]?.errors, []);
     assert.deepEqual(
       Buffer.from(transitionPreview.pages[0].png!),
       Buffer.from(staticPreview.pages[0]!.png!),
@@ -280,10 +292,13 @@ describe("transitionCapability bound slide migration & generic continuity collab
         shape({
           id: "s1",
           morphKey: shared,
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 40,
+            height: 40,
+          },
         }),
       ),
       slide({ id: "dst", background: "#112233" }).append(
@@ -298,7 +313,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       continuityMismatchBuild(mismatchDoc),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "morph-object-kind-mismatch");
+        assert.equal(error.diagnostics[0]?.code, "invalid-continuity");
         return true;
       },
     );
@@ -309,10 +324,13 @@ describe("transitionCapability bound slide migration & generic continuity collab
         shape({
           id: "s1",
           morphKey: shared,
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 40,
+            height: 40,
+          },
         }),
       ),
       slide({ id: "dst", background: "#445566" }).append(
@@ -415,7 +433,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "morph-needs-object");
+        assert.equal(error.diagnostics[0]?.code, "invalid-continuity");
         return true;
       },
     );
@@ -433,7 +451,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "link-needs-object");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         return true;
       },
     );
@@ -446,10 +464,13 @@ describe("transitionCapability bound slide migration & generic continuity collab
               shape({
                 id: "inner",
                 morphKey: key,
-                x: 0,
-                y: 0,
-                width: 40,
-                height: 30,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 40,
+                  height: 30,
+                },
               }),
             ),
           ),
@@ -457,7 +478,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "morph-inside-group");
+        assert.equal(error.diagnostics[0]?.code, "invalid-continuity");
         return true;
       },
     );
@@ -483,19 +504,24 @@ describe("transitionCapability bound slide migration & generic continuity collab
               top: 20,
               width: 140,
               height: 80,
-              backgroundColor: "#2563EB",
+              background: "#2563EB",
             },
           }),
           group({ id: "grp-1", morphKey: grpKey }).append(
-            shape({ id: "g1-a", x: 200, y: 20, width: 60, height: 40 }),
+            shape({
+              id: "g1-a",
+              style: {
+                position: "absolute",
+                left: 200,
+                top: 20,
+                width: 60,
+                height: 40,
+              },
+            }),
           ),
           chart({
             id: "chart-1",
             morphKey: chartKey,
-            x: 320,
-            y: 20,
-            width: 240,
-            height: 160,
             groups: [
               {
                 kind: "column",
@@ -503,6 +529,13 @@ describe("transitionCapability bound slide migration & generic continuity collab
                 series: [{ name: "S", values: [2] }],
               },
             ],
+            style: {
+              position: "absolute",
+              left: 320,
+              top: 20,
+              width: 240,
+              height: 160,
+            },
           }),
         ),
         slide({
@@ -512,22 +545,30 @@ describe("transitionCapability bound slide migration & generic continuity collab
           shape({
             id: "shape-sp",
             morphKey: spKey,
-            x: 60,
-            y: 220,
-            width: 160,
-            height: 90,
-            fill: "#1D4ED8",
+            style: {
+              position: "absolute",
+              left: 60,
+              top: 220,
+              width: 160,
+              height: 90,
+              background: "#1D4ED8",
+            },
           }),
           group({ id: "grp-2", morphKey: grpKey }).append(
-            shape({ id: "g2-a", x: 260, y: 220, width: 70, height: 50 }),
+            shape({
+              id: "g2-a",
+              style: {
+                position: "absolute",
+                left: 260,
+                top: 220,
+                width: 70,
+                height: 50,
+              },
+            }),
           ),
           chart({
             id: "chart-2",
             morphKey: chartKey,
-            x: 400,
-            y: 200,
-            width: 280,
-            height: 180,
             groups: [
               {
                 kind: "column",
@@ -535,6 +576,13 @@ describe("transitionCapability bound slide migration & generic continuity collab
                 series: [{ name: "S", values: [5] }],
               },
             ],
+            style: {
+              position: "absolute",
+              left: 400,
+              top: 200,
+              width: 280,
+              height: 180,
+            },
           }),
         ),
       ),
@@ -567,7 +615,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "morph-needs-object");
+        assert.equal(error.diagnostics[0]?.code, "invalid-continuity");
         return true;
       },
     );
@@ -579,14 +627,10 @@ describe("transitionCapability bound slide migration & generic continuity collab
         label: "visible Box vs Chart",
         srcObj: box({
           morphKey: spKey,
-          style: { width: 100, height: 60, backgroundColor: "#112233" },
+          style: { width: 100, height: 60, background: "#112233" },
         }),
         dstObj: chart({
           morphKey: spKey,
-          x: 20,
-          y: 20,
-          width: 200,
-          height: 120,
           groups: [
             {
               kind: "column",
@@ -594,32 +638,54 @@ describe("transitionCapability bound slide migration & generic continuity collab
               series: [{ name: "S", values: [1] }],
             },
           ],
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 200,
+            height: 120,
+          },
         }),
       },
       {
         label: "Group vs Shape",
         srcObj: group({ morphKey: grpKey }).append(
-          shape({ x: 10, y: 10, width: 40, height: 30 }),
+          shape({
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 40,
+              height: 30,
+            },
+          }),
         ),
         dstObj: shape({
           morphKey: grpKey,
-          x: 40,
-          y: 40,
-          width: 80,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 80,
+            height: 60,
+          },
         }),
       },
       {
         label: "Group vs Chart",
         srcObj: group({ morphKey: grpKey }).append(
-          shape({ x: 10, y: 10, width: 40, height: 30 }),
+          shape({
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 40,
+              height: 30,
+            },
+          }),
         ),
         dstObj: chart({
           morphKey: grpKey,
-          x: 20,
-          y: 20,
-          width: 200,
-          height: 120,
           groups: [
             {
               kind: "column",
@@ -627,6 +693,13 @@ describe("transitionCapability bound slide migration & generic continuity collab
               series: [{ name: "S", values: [1] }],
             },
           ],
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 200,
+            height: 120,
+          },
         }),
       },
     ];
@@ -640,10 +713,13 @@ describe("transitionCapability bound slide migration & generic continuity collab
               shape({
                 id: "jump",
                 link: { id: "dst" },
-                x: 400,
-                y: 20,
-                width: 40,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 400,
+                  top: 20,
+                  width: 40,
+                  height: 20,
+                },
               }),
             ),
             slide({ id: "middle" }),
@@ -657,7 +733,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
           assert.ok(error instanceof BuildError, pair.label);
           assert.equal(
             error.diagnostics[0]?.code,
-            "morph-object-kind-mismatch",
+            "invalid-continuity",
             pair.label,
           );
           return true;
@@ -708,7 +784,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       buildAll(timedFadeDoc, { target: targets.baselineOnly }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.code, "target-violation");
         return true;
       },
     );
@@ -751,7 +827,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
         buildAll(morphWithDurationDoc, { target }),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+          assert.equal(error.diagnostics[0]?.code, "target-violation");
           return true;
         },
       );
@@ -777,7 +853,7 @@ describe("transitionCapability bound slide migration & generic continuity collab
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "forbidden-mechanism");
+        assert.equal(error.diagnostics[0]?.code, "target-violation");
         return true;
       },
     );

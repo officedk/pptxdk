@@ -17,7 +17,7 @@ import { notesCapability } from "@pptxdk/capabilities/notes";
 import { Notes } from "@pptxdk/capabilities/notes-elements";
 import { textCapability } from "@pptxdk/capabilities/text";
 import { P, Span } from "@pptxdk/capabilities/text-elements";
-import type { Diagnostic } from "@pptxdk/core";
+import type { BuildDiagnostic } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
 import { appendJSX, Deck, Slide } from "@pptxdk/react";
@@ -41,16 +41,16 @@ const jost = font("Jost*", [
   },
 ]);
 
-function diagnosticsOf(error: unknown): readonly Diagnostic[] {
+function diagnosticsOf(error: unknown): readonly BuildDiagnostic[] {
   return (
-    (error as { readonly diagnostics?: readonly Diagnostic[] }).diagnostics ??
-    []
+    (error as { readonly diagnostics?: readonly BuildDiagnostic[] })
+      .diagnostics ?? []
   );
 }
 
 async function rejectedDiagnostics(
   operation: Promise<unknown>,
-): Promise<readonly Diagnostic[]> {
+): Promise<readonly BuildDiagnostic[]> {
   try {
     await operation;
   } catch (error) {
@@ -69,11 +69,14 @@ describe("rich-text speaker notes", () => {
       slide({ id: "intro" }).append(
         text("Projected title", {
           id: "title",
-          x: 40,
-          y: 40,
-          width: 400,
-          height: 60,
-          style: { fontSize: 48 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 400,
+            height: 60,
+            fontSize: 48,
+          },
         }),
         notes(
           [
@@ -311,7 +314,7 @@ describe("rich-text speaker notes", () => {
     );
     assert.deepEqual(
       (await rejectedDiagnostics(build(duplicate))).map(({ code }) => code),
-      ["duplicate-notes"],
+      ["invalid-structure"],
     );
 
     const hiddenDuplicate = deck().append(
@@ -324,7 +327,7 @@ describe("rich-text speaker notes", () => {
       (await rejectedDiagnostics(build(hiddenDuplicate))).map(
         ({ code }) => code,
       ),
-      ["duplicate-notes"],
+      ["invalid-structure"],
     );
 
     const illegal = deck().append(
@@ -332,7 +335,7 @@ describe("rich-text speaker notes", () => {
     );
     assert.equal(
       (await rejectedDiagnostics(build(illegal)))[0]?.code,
-      "unsupported-text-child",
+      "invalid-structure",
     );
 
     const Unknown = notes as unknown as (
@@ -346,7 +349,7 @@ describe("rich-text speaker notes", () => {
     );
     assert.equal(
       (await rejectedDiagnostics(build(unknown)))[0]?.code,
-      "unknown-parameter",
+      "unknown-prop",
     );
 
     const trimmed = createResolver(
@@ -364,13 +367,22 @@ describe("rich-text speaker notes", () => {
 
     const duplicateIds = deck().append(
       slide({ id: "ids" }).append(
-        text("canvas", { id: "same", x: 10, y: 10, width: 100, height: 30 }),
+        text("canvas", {
+          id: "same",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 100,
+            height: 30,
+          },
+        }),
         notes("notes", { id: "same" }),
       ),
     );
     assert.equal(
       (await rejectedDiagnostics(build(duplicateIds)))[0]?.code,
-      "duplicate-author-id",
+      "duplicate-id",
     );
   });
 
@@ -420,7 +432,7 @@ describe("rich-text speaker notes", () => {
     );
     const result = emit(trimmedText(document));
     assert.deepEqual(result.report.slides[0]?.objects, []);
-    assert.deepEqual(result.report.diagnostics, []);
+    assert.deepEqual(result.report.fonts, []);
   });
 
   it("builds notes from the shared text service when the Text capability is trimmed", async () => {

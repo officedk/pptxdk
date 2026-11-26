@@ -30,21 +30,23 @@ function FlowLabel({
       geometry={preset(
         kind === "data" ? "flowChartInputOutput" : "flowChartProcess",
       )}
-      x={x}
-      y={y}
-      width={width}
-      height={56}
-      fill={transparent}
-      style={{ borderColor: colors.cobalt, borderWidth: 1 }}
-      text={text}
-      textStyle={{
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width,
+        height: 56,
+        background: transparent,
+        border: { color: colors.cobalt, width: 1 },
         fontFamily: "body",
         fontSize: 17,
         color: colors.ink,
         align: "center",
         verticalAlign: "middle",
       }}
-    />
+    >
+      {text}
+    </Shape>
   );
 }
 
@@ -62,11 +64,14 @@ function FlowArrow({
   return (
     <Shape
       geometry={preset("rightArrow")}
-      x={x}
-      y={y}
-      width={width}
-      height={16}
-      fill={color}
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width,
+        height: 16,
+        background: color,
+      }}
     />
   );
 }
@@ -84,29 +89,43 @@ export function VaeGanPage() {
     >
       <Rule x={640} y={174} width={1} color={colors.line} thickness={454} />
       <Text
-        x={64}
-        y={174}
-        width={180}
-        height={62}
-        style={{ fontFamily: "display", fontSize: 46, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 174,
+          width: 180,
+          height: 62,
+          fontFamily: "display",
+          fontSize: 46,
+          color: colors.cobalt,
+        }}
       >
         VAE
       </Text>
       <Text
-        x={210}
-        y={186}
-        width={360}
-        height={34}
-        style={{ fontSize: 20, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 210,
+          top: 186,
+          width: 360,
+          height: 34,
+          fontSize: 20,
+          color: colors.ink,
+        }}
       >
         变分自编码器 · 2013
       </Text>
       <Text
-        x={64}
-        y={246}
-        width={540}
-        height={62}
-        style={{ fontSize: 18, lineHeight: 29, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 246,
+          width: 540,
+          height: 62,
+          fontSize: 18,
+          lineHeight: 29,
+          color: colors.muted,
+        }}
       >
         <P>把数据编码为潜变量分布，</P>
         <P>再从潜空间采样并解码为新样本。</P>
@@ -118,11 +137,16 @@ export function VaeGanPage() {
       <FlowLabel kind="data" x={406} y={342} text="μ，σ" width={100} />
       <Circle x={238} y={452} diameter={20} fill={colors.sun} />
       <Text
-        x={274}
-        y={440}
-        width={280}
-        height={42}
-        style={{ fontFamily: "display", fontSize: 25, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 274,
+          top: 440,
+          width: 280,
+          height: 42,
+          fontFamily: "display",
+          fontSize: 25,
+          color: colors.ink,
+        }}
       >
         在潜空间采样 z
       </Text>
@@ -133,29 +157,43 @@ export function VaeGanPage() {
       <FlowArrow x={362} y={538} />
       <FlowLabel kind="data" x={418} y={520} text="新样本 x′" width={128} />
       <Text
-        x={692}
-        y={174}
-        width={180}
-        height={62}
-        style={{ fontFamily: "display", fontSize: 46, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 692,
+          top: 174,
+          width: 180,
+          height: 62,
+          fontFamily: "display",
+          fontSize: 46,
+          color: colors.cobalt,
+        }}
       >
         GAN
       </Text>
       <Text
-        x={852}
-        y={186}
-        width={330}
-        height={34}
-        style={{ fontSize: 20, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 852,
+          top: 186,
+          width: 330,
+          height: 34,
+          fontSize: 20,
+          color: colors.ink,
+        }}
       >
         生成对抗网络 · 2014
       </Text>
       <Text
-        x={692}
-        y={246}
-        width={520}
-        height={62}
-        style={{ fontSize: 18, lineHeight: 29, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 692,
+          top: 246,
+          width: 520,
+          height: 62,
+          fontSize: 18,
+          lineHeight: 29,
+          color: colors.muted,
+        }}
       >
         生成器努力制造逼真样本，判别器努力识别真伪；两者在对抗中共同改进。
       </Text>
@@ -169,15 +207,18 @@ export function VaeGanPage() {
           viewBox: [1280, 720],
           fill: false,
         })}
-        x={0}
-        y={0}
-        width={1280}
-        height={720}
-        fill={transparent}
         style={{
-          borderColor: colors.cobalt,
-          borderWidth: 2,
-          endArrow: "triangle",
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 1280,
+          height: 720,
+          background: transparent,
+          border: {
+            color: colors.cobalt,
+            width: 2,
+            endArrow: "triangle",
+          },
         }}
       />
       <FlowLabel kind="data" x={714} y={448} text="真实样本" width={160} />
@@ -188,23 +229,27 @@ export function VaeGanPage() {
           viewBox: [1280, 720],
           fill: false,
         })}
-        x={0}
-        y={0}
-        width={1280}
-        height={720}
-        fill={transparent}
         style={{
-          borderColor: colors.sun,
-          borderWidth: 2,
-          endArrow: "triangle",
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 1280,
+          height: 720,
+          background: transparent,
+          border: {
+            color: colors.sun,
+            width: 2,
+            endArrow: "triangle",
+          },
         }}
       />
       <Text
-        x={714}
-        y={554}
-        width={456}
-        height={56}
         style={{
+          position: "absolute",
+          left: 714,
+          top: 554,
+          width: 456,
+          height: 56,
           fontSize: 16,
           lineHeight: 25,
           color: colors.muted,

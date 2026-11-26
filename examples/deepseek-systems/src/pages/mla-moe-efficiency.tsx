@@ -28,11 +28,6 @@ export function MlaMoeEfficiencyPage() {
         <Chart
           id="mla-kv-cache-chart"
           enter={wipe({ from: "left", duration: 460 })}
-          x={66}
-          y={168}
-          width={544}
-          height={272}
-          style={{ fontFamily: "body", fontSize: 12, color: colors.ink }}
           legend={false}
           plotArea={{ left: 146, top: 18, width: 344, height: 204 }}
           axes={{
@@ -88,23 +83,41 @@ export function MlaMoeEfficiencyPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 66,
+            top: 168,
+            width: 544,
+            height: 272,
+            fontFamily: "body",
+            fontSize: 12,
+            color: colors.ink,
+          }}
         />
 
         {/* MLA Low-Rank Compression Schematic */}
         <Shape
-          x={68}
-          y={452}
-          width={540}
-          height={192}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 452,
+            width: 540,
+            height: 192,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <Text
-          x={84}
-          y={462}
-          width={508}
-          height={20}
-          style={{ fontSize: 13, color: colors.steel, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 462,
+            width: 508,
+            height: 20,
+            fontSize: 13,
+            color: colors.steel,
+            textWrap: "nowrap",
+          }}
         >
           MLA（多头潜在注意力）低秩联合压缩机制拆解：
         </Text>
@@ -117,7 +130,16 @@ export function MlaMoeEfficiencyPage() {
           text="输入隐状态 h_t (7168 维)"
           tone="steel"
         />
-        <Shape x={234} y={512} width={24} height={4} fill={colors.compute} />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 234,
+            top: 512,
+            width: 24,
+            height: 4,
+            background: colors.compute,
+          }}
+        />
         <SemanticTag
           x={266}
           y={494}
@@ -127,7 +149,16 @@ export function MlaMoeEfficiencyPage() {
           tone="compute"
           solid
         />
-        <Shape x={442} y={512} width={24} height={4} fill={colors.comm} />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 442,
+            top: 512,
+            width: 24,
+            height: 4,
+            background: colors.comm,
+          }}
+        />
         <SemanticTag
           x={474}
           y={494}
@@ -138,11 +169,16 @@ export function MlaMoeEfficiencyPage() {
         />
 
         <Text
-          x={84}
-          y={548}
-          width={508}
-          height={86}
-          style={{ fontSize: 12, lineHeight: 19, color: colors.muted }}
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 548,
+            width: 508,
+            height: 86,
+            fontSize: 12,
+            lineHeight: 19,
+            color: colors.muted,
+          }}
         >
           • 传统 GQA 需按键值头数缓存完整 K/V 张量；MLA 将 61 层每层 KV
           缓存收敛为 512 维潜在向量与 64
@@ -165,11 +201,6 @@ export function MlaMoeEfficiencyPage() {
         <Chart
           id="moe-training-flops-chart"
           enter={wipe({ duration: 460 })}
-          x={662}
-          y={168}
-          width={552}
-          height={272}
-          style={{ fontFamily: "body", fontSize: 12, color: colors.ink }}
           legend={false}
           plotArea={{ left: 58, top: 24, width: 474, height: 194 }}
           axes={{
@@ -228,50 +259,77 @@ export function MlaMoeEfficiencyPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 662,
+            top: 168,
+            width: 552,
+            height: 272,
+            fontFamily: "body",
+            fontSize: 12,
+            color: colors.ink,
+          }}
         />
 
         {/* MoE vs Dense Comparison Box */}
         <Shape
-          x={664}
-          y={452}
-          width={548}
-          height={192}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 664,
+            top: 452,
+            width: 548,
+            height: 192,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <Text
-          x={680}
-          y={462}
-          width={516}
-          height={20}
-          style={{ fontSize: 13, color: colors.steel, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 680,
+            top: 462,
+            width: 516,
+            height: 20,
+            fontSize: 13,
+            color: colors.steel,
+            textWrap: "nowrap",
+          }}
         >
           细粒度专家拆分与共享专家隔离（DeepSeekMoE 核心配置）：
         </Text>
 
         <Shape
-          x={680}
-          y={492}
-          width={250}
-          height={64}
-          fill={colors.surface}
-          style={{ borderColor: colors.compute, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 680,
+            top: 492,
+            width: 250,
+            height: 64,
+            background: colors.surface,
+            border: { color: colors.compute, width: 1 },
+          }}
         />
         <Text
-          x={692}
-          y={498}
-          width={226}
-          height={20}
-          style={{ fontSize: 12, color: colors.compute, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 692,
+            top: 498,
+            width: 226,
+            height: 20,
+            fontSize: 12,
+            color: colors.compute,
+            textWrap: "nowrap",
+          }}
         >
           DeepSeek-V3 (MoE 稀疏激活)
         </Text>
         <Text
-          x={692}
-          y={520}
-          width={226}
-          height={30}
           style={{
+            position: "absolute",
+            left: 692,
+            top: 520,
+            width: 226,
+            height: 30,
             fontFamily: "metric",
             fontSize: 18,
             fontWeight: 700,
@@ -283,28 +341,37 @@ export function MlaMoeEfficiencyPage() {
         </Text>
 
         <Shape
-          x={946}
-          y={492}
-          width={250}
-          height={64}
-          fill={colors.surface}
-          style={{ borderColor: colors.baseline, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 946,
+            top: 492,
+            width: 250,
+            height: 64,
+            background: colors.surface,
+            border: { color: colors.baseline, width: 1 },
+          }}
         />
         <Text
-          x={958}
-          y={498}
-          width={226}
-          height={20}
-          style={{ fontSize: 12, color: colors.steel, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 958,
+            top: 498,
+            width: 226,
+            height: 20,
+            fontSize: 12,
+            color: colors.steel,
+            textWrap: "nowrap",
+          }}
         >
           LLaMA-3.1 405B (稠密全激活)
         </Text>
         <Text
-          x={958}
-          y={520}
-          width={226}
-          height={30}
           style={{
+            position: "absolute",
+            left: 958,
+            top: 520,
+            width: 226,
+            height: 30,
             fontFamily: "metric",
             fontSize: 18,
             fontWeight: 700,
@@ -316,11 +383,16 @@ export function MlaMoeEfficiencyPage() {
         </Text>
 
         <Text
-          x={680}
-          y={566}
-          width={516}
-          height={68}
-          style={{ fontSize: 12, lineHeight: 19, color: colors.muted }}
+          style={{
+            position: "absolute",
+            left: 680,
+            top: 566,
+            width: 516,
+            height: 68,
+            fontSize: 12,
+            lineHeight: 19,
+            color: colors.muted,
+          }}
         >
           • 除前 3 层采用稠密 FFN 外，其余 58 层均为 MoE 层：每层配置 1
           个常驻共享专家捕获通用知识，256 个细粒度路由专家按 Token 动态激活 8

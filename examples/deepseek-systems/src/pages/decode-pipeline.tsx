@@ -85,36 +85,42 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
         <Shape
           id="morph-sm-frame"
           morphKey={scope.handle("sm-frame")}
-          x={68}
-          y={170}
-          width={644}
-          height={112}
-          fill={colors.paper}
-          style={{ borderColor: colors.comm, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 170,
+            width: 644,
+            height: 112,
+            background: colors.paper,
+            border: { color: colors.comm, width: 1 },
+          }}
         />
         <Shape
           id="morph-sm-mode-tag"
           morphKey={scope.handle("sm-mode-tag")}
-          x={84}
-          y={182}
-          width={272}
-          height={24}
-          fill={colors.comm}
-          text="Decode 模式 · EP144 (18 节点 144 卡)"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 182,
+            width: 272,
+            height: 24,
+            background: colors.comm,
             fontSize: 11.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          Decode 模式 · EP144 (18 节点 144 卡)
+        </Shape>
         <Text
           morphKey={scope.handle("sm-ratio-caption")}
-          x={372}
-          y={184}
-          width={324}
-          height={20}
           style={{
+            position: "absolute",
+            left: 372,
+            top: 184,
+            width: 324,
+            height: 20,
             fontFamily: "metric",
             fontSize: 12,
             fontWeight: 700,
@@ -130,44 +136,49 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
         <Shape
           id="morph-sm-compute-bar"
           morphKey={scope.handle("sm-compute-bar")}
-          x={84}
-          y={216}
-          width={456}
-          height={48}
-          fill={colors.compute}
-          text="132 计算 SMs (100% 算力投入) · 全速运行 FlashMLA 与 FP8 分组专家 GEMM"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 216,
+            width: 456,
+            height: 48,
+            background: colors.compute,
             fontSize: 11.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          132 计算 SMs (100% 算力投入) · 全速运行 FlashMLA 与 FP8 分组专家 GEMM
+        </Shape>
 
         {/* Morphed 0 Comm SM hardware RDMA offload badge */}
         <Shape
           id="morph-sm-comm-bar"
           morphKey={scope.handle("sm-comm-bar")}
-          x={548}
-          y={216}
-          width={148}
-          height={48}
-          fill={colors.copper}
-          style={{ padding: [2, 4] }}
-          text={"0 通信 SM\n网卡 IBGDA 异步直发"}
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 548,
+            top: 216,
+            width: 148,
+            height: 48,
+            background: colors.copper,
+            padding: [2, 4],
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          {"0 通信 SM\n网卡 IBGDA 异步直发"}
+        </Shape>
 
         <Text
-          x={68}
-          y={294}
-          width={644}
           style={{
+            position: "absolute",
+            left: 68,
+            top: 294,
+            width: 644,
             padding: 0,
             fontSize: 11,
             lineHeight: 15.5,
@@ -212,18 +223,22 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
           tone="compute"
         />
         <Shape
-          x={768}
-          y={256}
-          width={444}
-          height={68}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 768,
+            top: 256,
+            width: 444,
+            height: 68,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <Text
-          x={780}
-          y={262}
-          width={420}
           style={{
+            position: "absolute",
+            left: 780,
+            top: 262,
+            width: 420,
             padding: 0,
             fontSize: 10.5,
             lineHeight: 15,
@@ -288,7 +303,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
                   y={426}
                   width={186}
                   height={28}
-                  fill={colors.slot}
+                  background={colors.slot}
                   enter={fade({ duration: 280 })}
                   text={s.step}
                   textStyle={{
@@ -313,7 +328,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
                   y={466}
                   width={186}
                   height={48}
-                  fill={mbAIsComm ? colors.comm : colors.compute}
+                  background={mbAIsComm ? colors.comm : colors.compute}
                   enter={wipe({ from: "left", duration: 340 })}
                   text={s.mbA}
                   textStyle={{
@@ -336,7 +351,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
                   y={526}
                   width={186}
                   height={48}
-                  fill={mbBIsComm ? colors.comm : colors.copper}
+                  background={mbBIsComm ? colors.comm : colors.copper}
                   enter={wipe({ from: "left", duration: 340 })}
                   text={s.mbB}
                   textStyle={{
@@ -371,11 +386,12 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
           tone="comm"
         />
         <Text
-          x={430}
-          y={602}
-          width={782}
-          height={44}
           style={{
+            position: "absolute",
+            left: 430,
+            top: 602,
+            width: 782,
+            height: 44,
             fontSize: 11,
             lineHeight: 16,
             color: colors.muted,

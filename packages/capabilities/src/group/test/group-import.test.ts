@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { deck, group, shape, slide } from "@pptxdk/capabilities/document";
-import { CommonNode } from "@pptxdk/core";
+import { CommonNode, RichTextContainer } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
 import { createImporter } from "@pptxdk/import";
@@ -48,7 +48,16 @@ describe("Group OOXML import", () => {
   it("maps external nested <p:grpSp> (chOff, chExt) -> (off, ext) affine transforms and ignores blank txBody", async () => {
     const base = deck({ width: 640, height: 360 }).append(
       slide({ id: "external-group" }).append(
-        shape({ x: 10, y: 10, width: 20, height: 20, fill: "#000000" }),
+        shape({
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 20,
+            height: 20,
+            background: "#000000",
+          },
+        }),
       ),
     );
     const basePptx = emit(resolveDocument(base)).pptx;
@@ -127,32 +136,41 @@ describe("Group OOXML import", () => {
           id: "solo",
           name: "Solo Shape",
           geometry: "rect",
-          x: 24,
-          y: 24,
-          width: 120,
-          height: 70,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 120,
+            height: 70,
+            background: "#2563EB",
+          },
         }),
         group({ id: "cluster", name: "Editable Cluster" }).append(
           shape({
             id: "left",
             name: "Left Member",
             geometry: "rect",
-            x: 200,
-            y: 40,
-            width: 80,
-            height: 60,
-            fill: "#10B981",
+            style: {
+              position: "absolute",
+              left: 200,
+              top: 40,
+              width: 80,
+              height: 60,
+              background: "#10B981",
+            },
           }),
           shape({
             id: "right",
             name: "Right Member",
             geometry: "diamond",
-            x: 310,
-            y: 40,
-            width: 80,
-            height: 60,
-            fill: "#F59E0B",
+            style: {
+              position: "absolute",
+              left: 310,
+              top: 40,
+              width: 80,
+              height: 60,
+              background: "#F59E0B",
+            },
           }),
         ),
       ),
@@ -172,17 +190,14 @@ describe("Group OOXML import", () => {
       .set({
         name: "Edited Solo",
         geometry: "hexagon",
-        x: 40,
-        width: 150,
       })
-      .style({ backgroundColor: "#DC2626" });
+      .style({ left: 40, width: 150, background: "#DC2626" });
     rightMemberNode
       .set({
         name: "Edited Member",
         geometry: "ellipse",
-        y: 80,
       })
-      .style({ backgroundColor: "#0EA5E9" });
+      .style({ top: 80, background: "#0EA5E9" });
 
     const editedResolution = resolveDocument(imported.document);
     const editedEmit = emit(editedResolution);
@@ -190,7 +205,7 @@ describe("Group OOXML import", () => {
     const editedValidation = await validatePptx(editedEmit.pptx);
 
     assert.deepEqual(editedValidation.errors, []);
-    assert.deepEqual(editedPaint.pages[0]?.diagnostics, []);
+    assert.deepEqual(editedPaint.pages[0]?.errors, []);
     assert.ok(editedPaint.pages[0]?.png instanceof Uint8Array);
     assert.ok(editedPaint.pages[0]?.svg?.includes('fill="#DC2626"'));
     assert.ok(editedPaint.pages[0]?.svg?.includes('fill="#0EA5E9"'));
@@ -212,7 +227,8 @@ describe("Group OOXML import", () => {
     assert.equal(editedGroup.members?.[1]?.geometry, "ellipse");
     assert.equal(editedGroup.members?.[1]?.boxEmu?.y, 80 * emuPerPx);
 
-    soloNode.set({ text: "Updated Shape Copy" });
+    assert.ok(soloNode instanceof RichTextContainer);
+    soloNode.content("Updated Shape Copy");
     const textEditedValidation = await validatePptx(
       emit(resolveDocument(imported.document)).pptx,
     );

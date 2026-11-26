@@ -91,11 +91,12 @@ export const masterLayoutOwnershipScenario: CapabilityScenario = {
           {
             id: "heading",
             name: "Heading",
-            x: 32,
-            y: 28,
-            width: 320,
-            height: 48,
             style: {
+              position: "absolute",
+              left: 32,
+              top: 28,
+              width: 320,
+              height: 48,
               fontFamily: jostFont,
               fontSize: "24pt",
               color: "#0F172A",
@@ -123,11 +124,12 @@ export const masterLayoutOwnershipScenario: CapabilityScenario = {
         text("Master Owned Slide", {
           id: "heading",
           name: "Heading",
-          x: 32,
-          y: 28,
-          width: 320,
-          height: 48,
           style: {
+            position: "absolute",
+            left: 32,
+            top: 28,
+            width: 320,
+            height: 48,
             fontFamily: jostFont,
             fontSize: "24pt",
             color: "#0F172A",
@@ -198,17 +200,15 @@ export const masterOwnershipVerifications: Pick<
     scenario: masterLayoutOwnershipScenario,
     assertNative: assertMasterLayoutNative,
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
-      // Pure-file roundtrip uses unembedded Jost*; static preview reports explicit monochrome outline font file.
+      // Pure-file roundtrip uses unembedded Jost*; static preview reports preview-missing-font.
       assert.ok(
-        roundtrip.pages[0]?.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
+        roundtrip.pages[0]?.errors.some(
+          (err) => err.code === "preview-missing-font",
         ),
-        "Pure-file roundtrip without embedded font must report explicit monochrome outline font file diagnostic",
+        "Pure-file roundtrip without embedded font must report preview-missing-font",
       );
     },
   },
@@ -216,16 +216,14 @@ export const masterOwnershipVerifications: Pick<
     scenario: masterLayoutOwnershipScenario,
     assertNative: assertMasterLayoutNative,
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
       assert.ok(
-        roundtrip.pages[0]?.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
+        roundtrip.pages[0]?.errors.some(
+          (err) => err.code === "preview-missing-font",
         ),
-        "Pure-file roundtrip without embedded font must report explicit monochrome outline font file diagnostic",
+        "Pure-file roundtrip without embedded font must report preview-missing-font",
       );
     },
   },

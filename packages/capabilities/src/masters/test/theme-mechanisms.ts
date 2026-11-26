@@ -139,21 +139,29 @@ export const nativeThemesRoundtripScenario: CapabilityScenario = {
         { id: "s1-clr-map", layout: alphaDefaultLayout },
         createElement(Shape, {
           id: "box-tx1",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "tx1",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "tx1",
+          },
         }),
         createElement(
           Text,
           {
             id: "text-acc1",
-            x: 40,
-            y: 140,
-            width: 240,
-            height: 40,
-            style: { color: "accent1", fontFamily: "major", fontSize: 18 },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 140,
+              width: 240,
+              height: 40,
+              color: "accent1",
+              fontFamily: "major",
+              fontSize: 18,
+            },
           },
           "Master clrMap Slide",
         ),
@@ -167,21 +175,29 @@ export const nativeThemesRoundtripScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "box-ovr-tx1",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "tx1",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "tx1",
+          },
         }),
         createElement(
           Text,
           {
             id: "text-ovr-acc1",
-            x: 40,
-            y: 140,
-            width: 240,
-            height: 40,
-            style: { color: "accent1", fontFamily: "minor", fontSize: 18 },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 140,
+              width: 240,
+              height: 40,
+              color: "accent1",
+              fontFamily: "minor",
+              fontSize: 18,
+            },
           },
           "ThemeOverride Slide",
         ),
@@ -191,21 +207,29 @@ export const nativeThemesRoundtripScenario: CapabilityScenario = {
         { id: "s3-beta", layout: betaLayout },
         createElement(Shape, {
           id: "box-beta-acc1",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "accent1",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "accent1",
+          },
         }),
         createElement(
           Text,
           {
             id: "text-beta-tx1",
-            x: 40,
-            y: 140,
-            width: 240,
-            height: 40,
-            style: { color: "tx1", fontFamily: "minor", fontSize: 18 },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 140,
+              width: 240,
+              height: 40,
+              color: "tx1",
+              fontFamily: "minor",
+              fontSize: 18,
+            },
           },
           "Independent Theme Slide",
         ),
@@ -231,19 +255,27 @@ export const nativeThemesRoundtripScenario: CapabilityScenario = {
       slide({ id: "s1-clr-map", layout: alphaDefaultLayout }).append(
         shape({
           id: "box-tx1",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "tx1",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "tx1",
+          },
         }),
         text("Master clrMap Slide", {
           id: "text-acc1",
-          x: 40,
-          y: 140,
-          width: 240,
-          height: 40,
-          style: { color: "accent1", fontFamily: "major", fontSize: 18 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 140,
+            width: 240,
+            height: 40,
+            color: "accent1",
+            fontFamily: "major",
+            fontSize: 18,
+          },
         }),
       ),
       slide({
@@ -253,37 +285,53 @@ export const nativeThemesRoundtripScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "box-ovr-tx1",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "tx1",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "tx1",
+          },
         }),
         text("ThemeOverride Slide", {
           id: "text-ovr-acc1",
-          x: 40,
-          y: 140,
-          width: 240,
-          height: 40,
-          style: { color: "accent1", fontFamily: "minor", fontSize: 18 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 140,
+            width: 240,
+            height: 40,
+            color: "accent1",
+            fontFamily: "minor",
+            fontSize: 18,
+          },
         }),
       ),
       slide({ id: "s3-beta", layout: betaLayout }).append(
         shape({
           id: "box-beta-acc1",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "accent1",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "accent1",
+          },
         }),
         text("Independent Theme Slide", {
           id: "text-beta-tx1",
-          x: 40,
-          y: 140,
-          width: 240,
-          height: 40,
-          style: { color: "tx1", fontFamily: "minor", fontSize: 18 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 140,
+            width: 240,
+            height: 40,
+            color: "tx1",
+            fontFamily: "minor",
+            fontSize: 18,
+          },
         }),
       ),
     );
@@ -329,22 +377,20 @@ export const themeMechanismVerifications: Pick<
     },
     assertPaint({ initial, roundtrip }) {
       assert.equal(initial.pages.length, 3);
-      assert.deepEqual(initial.pages[2]?.diagnostics, []);
+      assert.deepEqual(initial.pages[2]?.errors, []);
       assert.ok(initial.pages[2]?.svg?.includes('fill="#2563EB"'));
       const png = initial.pages[2]?.png;
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#2563EB");
       // Pure-file roundtrip without embedded fonts: native theme declarations survive (assertNative),
-      // while static preview reports explicit monochrome outline font file without external font reattachment.
+      // while static preview reports preview-missing-font without external font reattachment.
       assert.equal(roundtrip.pages.length, 3);
       assert.equal(roundtrip.pages[2]?.png, undefined);
       assert.ok(
-        roundtrip.pages[2]?.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
+        roundtrip.pages[2]?.errors.some(
+          (err) => err.code === "preview-missing-font",
         ),
-        "Pure-file roundtrip without embedded font must report explicit monochrome outline font file diagnostic",
+        "Pure-file roundtrip without embedded font must report preview-missing-font",
       );
     },
   },
@@ -368,22 +414,20 @@ export const themeMechanismVerifications: Pick<
     },
     assertPaint({ initial, roundtrip }) {
       assert.equal(initial.pages.length, 3);
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.svg?.includes('fill="#F8FAFC"'));
       const png = initial.pages[0]?.png;
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#F8FAFC");
       // Pure-file roundtrip without embedded fonts: native colorMap declarations survive (assertNative),
-      // while static preview reports explicit monochrome outline font file without external font reattachment.
+      // while static preview reports preview-missing-font without external font reattachment.
       assert.equal(roundtrip.pages.length, 3);
       assert.equal(roundtrip.pages[0]?.png, undefined);
       assert.ok(
-        roundtrip.pages[0]?.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
+        roundtrip.pages[0]?.errors.some(
+          (err) => err.code === "preview-missing-font",
         ),
-        "Pure-file roundtrip without embedded font must report explicit monochrome outline font file diagnostic",
+        "Pure-file roundtrip without embedded font must report preview-missing-font",
       );
     },
   },
@@ -407,22 +451,20 @@ export const themeMechanismVerifications: Pick<
     },
     assertPaint({ initial, roundtrip }) {
       assert.equal(initial.pages.length, 3);
-      assert.deepEqual(initial.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[1]?.errors, []);
       assert.ok(initial.pages[1]?.svg?.includes('fill="#DC2626"'));
       const png = initial.pages[1]?.png;
       assert.ok(png instanceof Uint8Array);
       assert.equal(readPngPixelHex(png, 80, 80), "#DC2626");
       // Pure-file roundtrip without embedded fonts: native themeOverride declarations survive (assertNative),
-      // while static preview reports explicit monochrome outline font file without external font reattachment.
+      // while static preview reports preview-missing-font without external font reattachment.
       assert.equal(roundtrip.pages.length, 3);
       assert.equal(roundtrip.pages[1]?.png, undefined);
       assert.ok(
-        roundtrip.pages[1]?.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
+        roundtrip.pages[1]?.errors.some(
+          (err) => err.code === "preview-missing-font",
         ),
-        "Pure-file roundtrip without embedded font must report explicit monochrome outline font file diagnostic",
+        "Pure-file roundtrip without embedded font must report preview-missing-font",
       );
     },
   },

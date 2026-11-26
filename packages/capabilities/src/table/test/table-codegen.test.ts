@@ -32,15 +32,27 @@ describe("table capability codegen", () => {
       id: "table-layout",
       name: "Table Layout",
       placeholders: {
-        title: { type: "title", x: 32, y: 24, width: 576, height: 40 },
+        title: {
+          type: "title",
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 24,
+            width: 576,
+            height: 40,
+          },
+        },
         data: {
           type: "tbl",
           explicitType: true,
           idx: 1,
-          x: 32,
-          y: 80,
-          width: 576,
-          height: 220,
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 80,
+            width: 576,
+            height: 220,
+          },
         },
       },
     });
@@ -51,18 +63,23 @@ describe("table capability codegen", () => {
         table({
           id: "pricing",
           name: "PricingTable",
-          x: 32,
-          y: 80,
-          width: 576,
           columns: [130, "auto", "1fr"],
           link: { url: "https://example.com/pricing" },
-          style: { fontFamily: "Aptos", fontSize: 14, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 80,
+            width: 576,
+            fontFamily: "Aptos",
+            fontSize: 14,
+            color: "#0F172A",
+          },
         }).append(
           row({
             id: "hdr",
             style: {
               height: 44,
-              backgroundColor: "#1E293B",
+              background: "#1E293B",
               color: "#FFFFFF",
             },
           }).append(
@@ -72,9 +89,7 @@ describe("table capability codegen", () => {
               style: {
                 fontWeight: "bold",
                 padding: [6, 10],
-                borderColor: "#0F172A",
-                borderWidth: 2,
-                borderStyle: "solid",
+                border: { color: "#0F172A", width: 2, style: "solid" },
               },
             }),
             cell(
@@ -84,10 +99,8 @@ describe("table capability codegen", () => {
               {
                 id: "hdr-page",
                 style: {
-                  backgroundColor: "#334155",
-                  borderColor: "#0F172A",
-                  borderWidth: 1,
-                  borderStyle: "dashed",
+                  background: "#334155",
+                  border: { color: "#0F172A", width: 1, style: "dashed" },
                 },
               },
             ),
@@ -98,10 +111,8 @@ describe("table capability codegen", () => {
               rowSpan: 2,
               style: {
                 verticalAlign: "middle",
-                backgroundColor: "#EFF6FF",
-                borderColor: "#2563EB",
-                borderWidth: 2,
-                borderStyle: "dotted",
+                background: "#EFF6FF",
+                border: { color: "#2563EB", width: 2, style: "dotted" },
               },
             }),
             cell("Metric", { id: "metric-1" }),
@@ -121,7 +132,7 @@ describe("table capability codegen", () => {
             cell("Summary", { id: "sum-lbl" }),
             cell([], {
               id: "empty-styled",
-              style: { backgroundColor: "#FEF3C7" },
+              style: { background: "#FEF3C7" },
             }),
           ),
         ),
@@ -150,8 +161,8 @@ describe("table capability codegen", () => {
     assert.doesNotMatch(vanillaSource, /nativePlaceholder/u);
     assert.match(vanillaSource, /colSpan: 2/u);
     assert.match(vanillaSource, /rowSpan: 2/u);
-    assert.match(vanillaSource, /borderStyle: "dashed"/u);
-    assert.match(vanillaSource, /borderStyle: "dotted"/u);
+    assert.match(vanillaSource, /border:\s*\{[\s\S]*?style:\s*"dashed"/u);
+    assert.match(vanillaSource, /border:\s*\{[\s\S]*?style:\s*"dotted"/u);
     assert.match(vanillaSource, /cell\(\s*"Tier\\nA",\s*\{/u);
     assert.match(vanillaSource, /cell\(\[\], \{/u);
     assert.match(vanillaSource, /slideNumber\(\)/u);
@@ -175,7 +186,7 @@ describe("table capability codegen", () => {
     );
     assert.match(
       reactSource,
-      /<Cell id="empty-styled" style=\{\{ backgroundColor: "#FEF3C7" \}\} \/>/u,
+      /<Cell id="empty-styled" style=\{\{ background: "#FEF3C7" \}\} \/>/u,
     );
     assert.match(reactSource, /<SlideNumber \/>/u);
   });

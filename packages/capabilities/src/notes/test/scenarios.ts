@@ -82,19 +82,25 @@ export const notesPositiveScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "navy-card",
-          x: 48,
-          y: 48,
-          width: 240,
-          height: 110,
-          fill: "brandNavy",
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 240,
+            height: 110,
+            background: "brandNavy",
+          },
         }),
         createElement(Shape, {
           id: "amber-badge",
-          x: 336,
-          y: 48,
-          width: 240,
-          height: 110,
-          fill: "highlight",
+          style: {
+            position: "absolute",
+            left: 336,
+            top: 48,
+            width: 240,
+            height: 110,
+            background: "highlight",
+          },
         }),
         createElement(
           Notes,
@@ -131,11 +137,14 @@ export const notesPositiveScenario: CapabilityScenario = {
         createElement(Shape, {
           id: "summary-oval",
           geometry: "ellipse",
-          x: 200,
-          y: 90,
-          width: 240,
-          height: 180,
-          fill: "#4338CA",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 90,
+            width: 240,
+            height: 180,
+            background: "#4338CA",
+          },
         }),
       ),
     );
@@ -159,19 +168,25 @@ export const notesPositiveScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "navy-card",
-          x: 48,
-          y: 48,
-          width: 240,
-          height: 110,
-          fill: "brandNavy",
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 240,
+            height: 110,
+            background: "brandNavy",
+          },
         }),
         shape({
           id: "amber-badge",
-          x: 336,
-          y: 48,
-          width: 240,
-          height: 110,
-          fill: "highlight",
+          style: {
+            position: "absolute",
+            left: 336,
+            top: 48,
+            width: 240,
+            height: 110,
+            background: "highlight",
+          },
         }),
         notes(
           [
@@ -199,11 +214,14 @@ export const notesPositiveScenario: CapabilityScenario = {
         shape({
           id: "summary-oval",
           geometry: "ellipse",
-          x: 200,
-          y: 90,
-          width: 240,
-          height: 180,
-          fill: "#4338CA",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 90,
+            width: 240,
+            height: 180,
+            background: "#4338CA",
+          },
         }),
       ),
     );
@@ -213,8 +231,8 @@ export const notesPositiveScenario: CapabilityScenario = {
       "Speaker cue: introduce the architecture.\nKey takeaway: keep notes off the visible canvas.\nSlide index 1";
 
     assert.equal(preview.pages.length, 2, author);
-    assert.deepEqual(preview.pages[0]?.diagnostics, [], author);
-    assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
+    assert.deepEqual(preview.pages[0]?.errors, [], author);
+    assert.deepEqual(preview.pages[1]?.errors, [], author);
 
     // Report observations: only visible canvas shapes are listed under objects; notes stay page-affiliated.
     const reportSlide1 = resolution.report.slides[0]!;
@@ -321,11 +339,15 @@ export const notesPreviewIsolationScenario: CapabilityScenario = {
           Text,
           {
             id: "missing-glyph-text",
-            x: 40,
-            y: 40,
-            width: 160,
-            height: 80,
-            style: { fontFamily: jostFont, fontSize: 18 },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 160,
+              height: 80,
+              fontFamily: jostFont,
+              fontSize: 18,
+            },
           },
           "汉",
         ),
@@ -340,11 +362,14 @@ export const notesPreviewIsolationScenario: CapabilityScenario = {
         { id: "notes-with-valid-shape" },
         createElement(Shape, {
           id: "emerald-card",
-          x: 120,
-          y: 60,
-          width: 240,
-          height: 150,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 60,
+            width: 240,
+            height: 150,
+            background: "#059669",
+          },
         }),
         createElement(
           Notes,
@@ -359,22 +384,29 @@ export const notesPreviewIsolationScenario: CapabilityScenario = {
       slide({ id: "notes-with-missing-glyph" }).append(
         text("汉", {
           id: "missing-glyph-text",
-          x: 40,
-          y: 40,
-          width: 160,
-          height: 80,
-          style: { fontFamily: jostFont, fontSize: 18 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 160,
+            height: 80,
+            fontFamily: jostFont,
+            fontSize: 18,
+          },
         }),
         notes("Notes survive preview rejection", { id: "preserved-notes" }),
       ),
       slide({ id: "notes-with-valid-shape" }).append(
         shape({
           id: "emerald-card",
-          x: 120,
-          y: 60,
-          width: 240,
-          height: 150,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 60,
+            width: 240,
+            height: 150,
+            background: "#059669",
+          },
         }),
         notes("Valid page notes", { id: "valid-notes" }),
       ),
@@ -395,15 +427,19 @@ export const notesPreviewIsolationScenario: CapabilityScenario = {
     assert.equal(validation.slides[1]?.objects.length, 1, author);
 
     assert.equal(preview.pages[0]?.png, undefined, author);
-    assert.equal(preview.pages[0]?.diagnostics[0]?.severity, "error", author);
+    assert.equal(
+      preview.pages[0]?.errors[0]?.code,
+      "preview-missing-glyph",
+      author,
+    );
     assert.match(
-      preview.pages[0]?.diagnostics[0]?.path ?? "",
+      preview.pages[0]?.errors[0]?.path ?? "",
       /text\[missing-glyph-text\]/u,
       author,
     );
 
     assert.ok(preview.pages[1]?.png !== undefined, author);
-    assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
+    assert.deepEqual(preview.pages[1]?.errors, [], author);
     assert.deepEqual(
       pixelAt(preview.pages[1].png, 240, 135),
       [0x05, 0x96, 0x69, 255],

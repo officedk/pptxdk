@@ -49,7 +49,16 @@ describe("Shape OOXML import", () => {
   it("recovers editable geometry, supported visuals, and text while reporting localized diagnostics for unsupported visual attributes", async () => {
     const base = deck({ width: 640, height: 360 }).append(
       slide({ id: "partial-recovery" }).append(
-        shape({ x: 10, y: 10, width: 20, height: 20, fill: "#000000" }),
+        shape({
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 20,
+            height: 20,
+            background: "#000000",
+          },
+        }),
       ),
     );
     const basePptx = emit(resolveDocument(base)).pptx;
@@ -174,12 +183,15 @@ describe("Shape OOXML import", () => {
           id: "custom-radial",
           name: "Custom Radial",
           geometry: customBezierShape,
-          x: 24,
-          y: 140,
-          width: 140,
-          height: 100,
-          flipV: true,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 140,
+            width: 140,
+            height: 100,
+            flipV: true,
+            background: "#D97706",
+          },
         }),
       ),
     );

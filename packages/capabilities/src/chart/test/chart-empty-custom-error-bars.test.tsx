@@ -57,10 +57,13 @@ describe("zero-observation custom error bars", () => {
           <Slide id="zero-custom">
             <Chart
               id="zero-custom"
-              x={10}
-              y={10}
-              width={760}
-              height={560}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 760,
+                height: 560,
+              }}
               groups={[
                 {
                   kind,
@@ -121,10 +124,13 @@ describe("zero-observation custom error bars", () => {
   it("writes a plus-only zero custom source with its include and style", async () => {
     const node = documentChart({
       id: "zero-custom-plus",
-      x: 10,
-      y: 10,
-      width: 760,
-      height: 560,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 760,
+        height: 560,
+      },
       groups: lineZeroGroups({
         type: "custom",
         include: "plus",
@@ -160,10 +166,13 @@ describe("zero-observation custom error bars", () => {
         <Slide id="zero-custom-minus">
           <Chart
             id="zero-custom-minus"
-            x={10}
-            y={10}
-            width={760}
-            height={560}
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 760,
+              height: 560,
+            }}
             groups={[
               {
                 kind: "column",
@@ -205,10 +214,13 @@ describe("zero-observation custom error bars", () => {
         <Slide id="zero-custom-xy">
           <Chart
             id="zero-custom-xy"
-            x={10}
-            y={10}
-            width={760}
-            height={560}
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 760,
+              height: 560,
+            }}
             groups={[
               {
                 kind: "scatter",
@@ -273,10 +285,13 @@ describe("zero-observation custom error bars", () => {
   it("fills a zero custom node and rebuilds the non-zero custom references", async () => {
     const node = documentChart({
       id: "zero-custom-fill",
-      x: 10,
-      y: 10,
-      width: 760,
-      height: 560,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 760,
+        height: 560,
+      },
       groups: lineZeroGroups(customBoth),
     });
     const document = deck({ width: 800, height: 600 }).append(
@@ -358,10 +373,13 @@ describe("zero-observation custom error bars", () => {
           <Slide id="inverse-custom">
             <Chart
               id="inverse-custom"
-              x={10}
-              y={10}
-              width={760}
-              height={560}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 760,
+                height: 560,
+              }}
               groups={lineZeroGroups(errorBars)}
             />
           </Slide>

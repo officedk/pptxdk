@@ -204,7 +204,7 @@ export const slideBackgroundMechanismVerifications: Pick<
     assertPaint({ initial, roundtrip }) {
       for (const result of [initial, roundtrip]) {
         const page = result.pages[1]!;
-        assert.deepEqual(page.diagnostics, []);
+        assert.deepEqual(page.errors, []);
         assert.ok(page.png instanceof Uint8Array);
         assert.equal(readPngPixelHex(page.png, 100, 100), "#0F766E");
       }
@@ -221,7 +221,7 @@ export const slideBackgroundMechanismVerifications: Pick<
     assertPaint({ initial, roundtrip }) {
       for (const result of [initial, roundtrip]) {
         const page = result.pages[2]!;
-        assert.deepEqual(page.diagnostics, []);
+        assert.deepEqual(page.errors, []);
         assert.ok(page.png instanceof Uint8Array);
         assert.ok(page.svg?.includes("<linearGradient"));
         const left = PNG.sync.read(Buffer.from(page.png)).data[
@@ -251,7 +251,7 @@ export const slideBackgroundMechanismVerifications: Pick<
     assertPaint({ initial, roundtrip }) {
       for (const result of [initial, roundtrip]) {
         const page = result.pages[0]!;
-        assert.deepEqual(page.diagnostics, []);
+        assert.deepEqual(page.errors, []);
         assert.ok(page.png instanceof Uint8Array);
         assert.equal(readPngPixelHex(page.png, 100, 100), "#1E40AF");
       }
@@ -270,10 +270,10 @@ export const slideBackgroundMechanismVerifications: Pick<
     },
     assertPaint({ initial, roundtrip }) {
       for (const result of [initial, roundtrip]) {
-        assert.deepEqual(result.pages[3]?.diagnostics, []);
+        assert.deepEqual(result.pages[3]?.errors, []);
         assert.ok(result.pages[3]?.svg?.includes("<linearGradient"));
         const page5 = result.pages[4]!;
-        assert.deepEqual(page5.diagnostics, []);
+        assert.deepEqual(page5.errors, []);
         assert.ok(page5.png instanceof Uint8Array);
         assert.equal(readPngPixelHex(page5.png, 100, 100), "#034B35");
       }

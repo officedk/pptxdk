@@ -32,7 +32,7 @@ function createSolidPng(r: number, g: number, b: number): Uint8Array {
 }
 
 describe("slide-background capability codegen", () => {
-  it("emits solid, theme shade (lighter/darker), bgRef, linear/radial gradients, and image backgrounds on master/layout/slide plus style.backgroundImage gradients", () => {
+  it("emits solid, theme shade (lighter/darker), bgRef, linear/radial gradients, and image backgrounds on master/layout/slide plus style.background gradients", () => {
     const bgPng = createSolidPng(0x1e, 0x3a, 0x8a);
     const tempDir = mkdtempSync(join(tmpdir(), "pptxdk-bg-codegen-"));
     try {
@@ -71,12 +71,13 @@ describe("slide-background capability codegen", () => {
         }).append(
           text("Gradient card", {
             id: "grad-text",
-            x: 40,
-            y: 40,
-            width: 320,
-            height: 80,
             style: {
-              backgroundImage: linearGradient(45, "#0F172A", "#1D4ED8"),
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 320,
+              height: 80,
+              background: linearGradient(45, "#0F172A", "#1D4ED8"),
             },
           }),
         ),

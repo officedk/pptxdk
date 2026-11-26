@@ -19,7 +19,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
+      resolution,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -56,10 +56,13 @@ describe("Image static preview positive behaviors", () => {
       const mutable = image({
         id: "cropped",
         src: bytes,
-        x: 10,
-        y: 10,
-        width: 40,
-        height: 40,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 40,
+          height: 40,
+        },
         crop: { left: 0.5 },
       });
       const doc = deck({ width: 320, height: 180 }).append(
@@ -68,30 +71,36 @@ describe("Image static preview positive behaviors", () => {
           image({
             id: "contained",
             src: bytes,
-            x: 80,
-            y: 10,
-            width: 80,
-            height: 80,
             fit: "contain",
-            style: { rotate: 90 },
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 10,
+              width: 80,
+              height: 80,
+              rotate: 90,
+            },
           }),
           image({
             id: "covered",
             src: bytes,
-            x: 180,
-            y: 10,
-            width: 40,
-            height: 80,
             fit: "cover",
-            flipH: true,
-            style: { opacity: 0.5 },
+            style: {
+              position: "absolute",
+              left: 180,
+              top: 10,
+              width: 40,
+              height: 80,
+              flipH: true,
+              opacity: 0.5,
+            },
           }),
         ),
       );
 
       const first = await previewDoc(doc);
       const page = first.pages[0]!;
-      assert.deepEqual(page.diagnostics, [], format);
+      assert.deepEqual(page.errors, [], format);
       assert.ok(page.png !== undefined, format);
       assert.ok(page.svg !== undefined, format);
       expect(page.svg).toContain("<clipPath");
@@ -104,16 +113,18 @@ describe("Image static preview positive behaviors", () => {
       assert.ok((rendered.data[cropCenter + 2] ?? 0) > 240, format);
 
       // Contain 20x10 inside 80x80 at (80, 10) -> box { x: 80, y: 30, width: 80, height: 40 }.
-      // Rotated 90deg -> screenBox width ~ 40, height ~ 80.
-      const containedNode = page.nodes.find((n) => n.authorId === "contained")!;
-      assert.deepEqual(containedNode.box, {
+      // Rotated 90deg -> bounds width ~ 40, height ~ 80.
+      const containedLocator = first.resolution
+        .slide(`img-${format}`)
+        .get("contained");
+      assert.deepEqual(containedLocator.box, {
         x: 80,
         y: 30,
         width: 80,
         height: 40,
       });
-      expect(containedNode.screenBox?.width).toBeCloseTo(40, 1);
-      expect(containedNode.screenBox?.height).toBeCloseTo(80, 1);
+      expect(containedLocator.bounds?.width).toBeCloseTo(40, 1);
+      expect(containedLocator.bounds?.height).toBeCloseTo(80, 1);
 
       // Mutate image after preview and verify earlier build & preview remain untouched.
       const prevPng = page.png.slice();
@@ -141,21 +152,26 @@ describe("Image static preview positive behaviors", () => {
           createElement(Image, {
             id: "photo",
             src: pngBytes,
-            x: 20,
-            y: 20,
-            width: 60,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 60,
+              height: 60,
+            },
             fit: "contain",
           }),
         ),
       ),
     );
     const jsxPreview = await previewDoc(jsxDoc);
-    assert.deepEqual(jsxPreview.pages[0]?.diagnostics, []);
-    assert.deepEqual(
-      jsxPreview.pages[0]?.nodes.find((n) => n.authorId === "photo")?.box,
-      { x: 20, y: 35, width: 60, height: 30 },
-    );
+    assert.deepEqual(jsxPreview.pages[0]?.errors, []);
+    assert.deepEqual(jsxPreview.resolution.slide("jsx-img").get("photo").box, {
+      x: 20,
+      y: 35,
+      width: 60,
+      height: 30,
+    });
   });
 
   it("renders GIF87a/89a first frame including GCT, LCT, GCE transparency, and interlacing", async () => {
@@ -374,41 +390,53 @@ describe("Image static preview positive behaviors", () => {
         image({
           id: "gif-white",
           src: gif1x1White,
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 40,
+            height: 40,
+          },
         }),
         image({
           id: "gif-interlaced",
           src: gifInterlaced,
-          x: 60,
-          y: 10,
-          width: 80,
-          height: 80,
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 10,
+            width: 80,
+            height: 80,
+          },
         }),
         image({
           id: "gif-87a",
           src: gif87a,
-          x: 160,
-          y: 10,
-          width: 40,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 10,
+            width: 40,
+            height: 40,
+          },
         }),
         image({
           id: "gif-comment-opaque",
           src: gifWithCommentAndOpaqueGce,
-          x: 160,
-          y: 60,
-          width: 40,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 60,
+            width: 40,
+            height: 40,
+          },
         }),
       ),
     );
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     const rendered = PNG.sync.read(Buffer.from(page.png));
     const px = (x: number, y: number) => [
@@ -480,14 +508,13 @@ describe("Image static preview positive behaviors", () => {
           id: "ellipse-dashed-shadow",
           src: pngBytes,
           geometry: "ellipse",
-          x: 20,
-          y: 20,
-          width: 100,
-          height: 80,
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 3,
-            borderStyle: "dashed",
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 100,
+            height: 80,
+            border: { color: "#1E293B", width: 3, style: "dashed" },
             boxShadow: { color: "#000000", blur: 6, distance: 6, angle: 45 },
           },
         }),
@@ -496,14 +523,13 @@ describe("Image static preview positive behaviors", () => {
           id: "roundrect-dotted",
           src: jpegBytes,
           geometry: preset("roundRect", { adj: 25000 }),
-          x: 150,
-          y: 20,
-          width: 100,
-          height: 80,
           style: {
-            borderColor: "#DC2626",
-            borderWidth: 2,
-            borderStyle: "dotted",
+            position: "absolute",
+            left: 150,
+            top: 20,
+            width: 100,
+            height: 80,
+            border: { color: "#DC2626", width: 2, style: "dotted" },
           },
         }),
         // 3. SoftEdge + opacity on GIF
@@ -511,11 +537,12 @@ describe("Image static preview positive behaviors", () => {
           id: "gif-softedge-opacity",
           src: gifRedBytes,
           geometry: "diamond",
-          x: 280,
-          y: 20,
-          width: 90,
-          height: 80,
           style: {
+            position: "absolute",
+            left: 280,
+            top: 20,
+            width: 90,
+            height: 80,
             softEdge: 8,
             opacity: 0.6,
           },
@@ -530,16 +557,15 @@ describe("Image static preview positive behaviors", () => {
             height: 10,
             paths: multiSubpathMask,
           },
-          x: 20,
-          y: 130,
-          width: 100,
-          height: 80,
-          flipH: true,
           style: {
+            position: "absolute",
+            left: 20,
+            top: 130,
+            width: 100,
+            height: 80,
+            flipH: true,
             rotate: 15,
-            borderColor: "#0F766E",
-            borderWidth: 2,
-            borderStyle: "solid",
+            border: { color: "#0F766E", width: 2, style: "solid" },
           },
         }),
         // 5. SmileyFace preset (contains fill="none" mouth arc) with solid border
@@ -547,13 +573,13 @@ describe("Image static preview positive behaviors", () => {
           id: "smiley-mask",
           src: pngBytes,
           geometry: "smileyFace",
-          x: 160,
-          y: 130,
-          width: 90,
-          height: 80,
           style: {
-            borderColor: "#0F172A",
-            borderWidth: 2,
+            position: "absolute",
+            left: 160,
+            top: 130,
+            width: 90,
+            height: 80,
+            border: { color: "#0F172A", width: 2 },
           },
         }),
       ),
@@ -562,7 +588,7 @@ describe("Image static preview positive behaviors", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     expect(page.svg).toContain("<clipPath");
@@ -668,17 +694,29 @@ describe("Image static preview positive behaviors", () => {
     }[] = [
       {
         label: "corrupt-png",
-        node: image({ id: "bad", src: corruptPng, x: 10, y: 10 }),
+        node: image({
+          id: "bad",
+          src: corruptPng,
+          style: { position: "absolute", left: 10, top: 10 },
+        }),
         expected: /decode PNG/i,
       },
       {
         label: "corrupt-jpeg",
-        node: image({ id: "bad", src: corruptJpeg, x: 10, y: 10 }),
+        node: image({
+          id: "bad",
+          src: corruptJpeg,
+          style: { position: "absolute", left: 10, top: 10 },
+        }),
         expected: /decode JPEG/i,
       },
       {
         label: "corrupt-gif",
-        node: image({ id: "bad", src: corruptGif, x: 10, y: 10 }),
+        node: image({
+          id: "bad",
+          src: corruptGif,
+          style: { position: "absolute", left: 10, top: 10 },
+        }),
         expected: /decode GIF|GIF/i,
       },
     ];
@@ -691,35 +729,81 @@ describe("Image static preview positive behaviors", () => {
             image({
               id: "ok-img",
               src: validPng,
-              x: 20,
-              y: 20,
-              width: 60,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 60,
+                height: 30,
+              },
             }),
           ),
         ),
       );
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, [], item.label);
+      assert.equal(result.pages[0]?.svg, undefined, item.label);
       assert.equal(result.pages[0]?.png, undefined, item.label);
+      assert.equal(result.pages[0]?.page, 1, item.label);
       assert.equal(
-        result.pages[0]?.diagnostics[0]?.severity,
-        "error",
+        result.pages[0]?.errors[0]?.code,
+        "preview-corrupt-image",
         item.label,
       );
-      assert.equal(result.pages[0]?.diagnostics[0]?.page, 1, item.label);
       assert.match(
-        result.pages[0]?.diagnostics[0]?.path ?? "",
+        result.pages[0]?.errors[0]?.path ?? "",
         /image\[bad\]/,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.message ?? "",
+        result.pages[0]?.errors[0]?.message ?? "",
         item.expected,
         item.label,
       );
       assert.ok(result.pages[1]?.png !== undefined, item.label);
-      assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+      assert.deepEqual(result.pages[1]?.errors, [], item.label);
     }
+  });
+
+  it("renders deterministic placeholders for external linked images with zero preview errors", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const result = await previewDoc(
+      deck({ width: 320, height: 180 }).append(
+        slide({ id: "s1", background: "#FFFFFF" }).append(
+          image({
+            id: "ext-hero",
+            src: { externalUrl: "https://cdn.example.com/hero.png" },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 160,
+              height: 90,
+            },
+          }),
+        ),
+      ),
+    );
+    const page = result.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.deepEqual(page.placeholders, [
+      {
+        id: "ext-hero",
+        path: "deck/slide[s1]/image[ext-hero]",
+        url: "https://cdn.example.com/hero.png",
+      },
+    ]);
+    assert.deepEqual(result.resolution.slide("s1").get("ext-hero").image, {
+      kind: "external",
+      id: "ext-hero",
+      path: "deck/slide[s1]/image[ext-hero]",
+      url: "https://cdn.example.com/hero.png",
+      placeholder: {
+        id: "ext-hero",
+        path: "deck/slide[s1]/image[ext-hero]",
+        url: "https://cdn.example.com/hero.png",
+      },
+    });
+    assert.ok(page.png instanceof Uint8Array && page.png.length > 0);
   });
 });

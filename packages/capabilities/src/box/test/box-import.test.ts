@@ -46,15 +46,11 @@ describe("Box expanded layout OOXML import", () => {
         }).append(
           shape({
             name: "Flex A",
-            width: 80,
-            height: 44,
-            fill: "#2563EB",
+            style: { width: 80, height: 44, background: "#2563EB" },
           }),
           shape({
             name: "Flex B",
-            width: 90,
-            height: 44,
-            fill: "#16A34A",
+            style: { width: 90, height: 44, background: "#16A34A" },
           }),
         ),
         box({
@@ -76,24 +72,19 @@ describe("Box expanded layout OOXML import", () => {
               padding: 10,
               display: "flex",
               flexDirection: "column",
-              backgroundColor: "#FEF3C7",
-              borderColor: "#D97706",
-              borderWidth: 2,
+              background: "#FEF3C7",
+              border: { color: "#D97706", width: 2 },
               borderRadius: 8,
             },
           }).append(
             shape({
               name: "Grid Card Leaf",
-              width: 60,
-              height: 30,
-              fill: "#B45309",
+              style: { width: 60, height: 30, background: "#B45309" },
             }),
           ),
           shape({
             name: "Grid Sibling",
-            width: 80,
-            height: 50,
-            fill: "#7C3AED",
+            style: { width: 80, height: 50, background: "#7C3AED" },
           }),
         ),
       ),
@@ -113,7 +104,7 @@ describe("Box expanded layout OOXML import", () => {
     const roundtripValidation = await validatePptx(roundtripPptx);
 
     assert.deepEqual(roundtripValidation.errors, []);
-    assert.deepEqual(roundtripPaint.pages[0]?.diagnostics, []);
+    assert.deepEqual(roundtripPaint.pages[0]?.errors, []);
     assert.ok(roundtripPaint.pages[0]?.png instanceof Uint8Array);
 
     const initialObjects = initialValidation.slides[0]!.objects;

@@ -57,13 +57,17 @@ export const chartPositiveScenario: CapabilityScenario = {
         { id: "clustered-column-overview", background: "#FFFFFF" },
         createElement(Chart, {
           id: "sales",
-          x: 24,
-          y: 20,
-          width: 592,
-          height: 320,
           title: "Quarterly sales",
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 20,
+            width: 592,
+            height: 320,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -85,12 +89,16 @@ export const chartPositiveScenario: CapabilityScenario = {
         { id: "untitled-fractional-columns", background: "#F8FAFC" },
         createElement(Chart, {
           id: "fractions",
-          x: 24,
-          y: 12,
-          width: 592,
-          height: 328,
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 12,
+            width: 592,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -111,13 +119,17 @@ export const chartPositiveScenario: CapabilityScenario = {
       slide({ id: "clustered-column-overview", background: "#FFFFFF" }).append(
         chart({
           id: "sales",
-          x: 24,
-          y: 20,
-          width: 592,
-          height: 320,
           title: "Quarterly sales",
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 20,
+            width: 592,
+            height: 320,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -140,12 +152,16 @@ export const chartPositiveScenario: CapabilityScenario = {
       }).append(
         chart({
           id: "fractions",
-          x: 24,
-          y: 12,
-          width: 592,
-          height: 328,
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 12,
+            width: 592,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -167,7 +183,7 @@ export const chartPositiveScenario: CapabilityScenario = {
 
     const page1 = preview.pages[0]!;
     assert.ok(page1.png !== undefined);
-    assert.deepEqual(page1.diagnostics, []);
+    assert.deepEqual(page1.errors, []);
 
     // Verify rendered PNG actually contains accent1 (#2563EB) and accent2 (#F59E0B) bar pixels.
     const png1 = PNG.sync.read(Buffer.from(page1.png));
@@ -188,7 +204,7 @@ export const chartPositiveScenario: CapabilityScenario = {
 
     const page2 = preview.pages[1]!;
     assert.ok(page2.png !== undefined);
-    assert.deepEqual(page2.diagnostics, []);
+    assert.deepEqual(page2.errors, []);
 
     const files = unzipSync(pptx);
     const chart1Xml = strFromU8(files["ppt/charts/chart1.xml"]!);
@@ -235,12 +251,16 @@ export const chartRejectionScenario: CapabilityScenario = {
         { id: "missing-glyph-chart", background: "#FFFFFF" },
         createElement(Chart, {
           id: "cjk-in-latin",
-          x: 20,
-          y: 20,
-          width: 280,
-          height: 220,
           title: "汉",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 280,
+            height: 220,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -251,11 +271,15 @@ export const chartRejectionScenario: CapabilityScenario = {
         }),
         createElement(Chart, {
           id: "healthy-line",
-          x: 330,
-          y: 20,
-          width: 280,
-          height: 220,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 330,
+            top: 20,
+            width: 280,
+            height: 220,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "line",
@@ -270,13 +294,16 @@ export const chartRejectionScenario: CapabilityScenario = {
         { id: "missing-font-chart", background: "#FFFFFF" },
         createElement(Chart, {
           id: "no-font-file",
-          x: 40,
-          y: 20,
-          width: 560,
-          height: 300,
           title: "Missing Font",
           legend: "bottom",
-          style: { fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 20,
+            width: 560,
+            height: 300,
+            fontSize: 14,
+          },
           groups: [
             {
               kind: "doughnut",
@@ -291,13 +318,17 @@ export const chartRejectionScenario: CapabilityScenario = {
         { id: "unaffected-pie", background: "#FFFFFF" },
         createElement(Chart, {
           id: "healthy",
-          x: 40,
-          y: 20,
-          width: 560,
-          height: 300,
           title: "Healthy Share",
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 20,
+            width: 560,
+            height: 300,
+            fontFamily: jostFont,
+            fontSize: 14,
+          },
           groups: [
             {
               kind: "pie",
@@ -315,12 +346,16 @@ export const chartRejectionScenario: CapabilityScenario = {
       slide({ id: "missing-glyph-chart", background: "#FFFFFF" }).append(
         chart({
           id: "cjk-in-latin",
-          x: 20,
-          y: 20,
-          width: 280,
-          height: 220,
           title: "汉",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 280,
+            height: 220,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -331,11 +366,15 @@ export const chartRejectionScenario: CapabilityScenario = {
         }),
         chart({
           id: "healthy-line",
-          x: 330,
-          y: 20,
-          width: 280,
-          height: 220,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 330,
+            top: 20,
+            width: 280,
+            height: 220,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "line",
@@ -348,13 +387,16 @@ export const chartRejectionScenario: CapabilityScenario = {
       slide({ id: "missing-font-chart", background: "#FFFFFF" }).append(
         chart({
           id: "no-font-file",
-          x: 40,
-          y: 20,
-          width: 560,
-          height: 300,
           title: "Missing Font",
           legend: "bottom",
-          style: { fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 20,
+            width: 560,
+            height: 300,
+            fontSize: 14,
+          },
           groups: [
             {
               kind: "doughnut",
@@ -367,13 +409,17 @@ export const chartRejectionScenario: CapabilityScenario = {
       slide({ id: "unaffected-pie", background: "#FFFFFF" }).append(
         chart({
           id: "healthy",
-          x: 40,
-          y: 20,
-          width: 560,
-          height: 300,
           title: "Healthy Share",
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 20,
+            width: 560,
+            height: 300,
+            fontFamily: jostFont,
+            fontSize: 14,
+          },
           groups: [
             {
               kind: "pie",
@@ -393,9 +439,9 @@ export const chartRejectionScenario: CapabilityScenario = {
     const page1 = preview.pages[0]!;
     assert.equal(page1.png, undefined);
     assert.equal(page1.svg, undefined);
-    expect(page1.diagnostics).toEqual([
+    expect(page1.errors).toEqual([
       expect.objectContaining({
-        severity: "error",
+        code: "preview-missing-glyph",
         path: "deck/slide[missing-glyph-chart]/chart[cjk-in-latin]",
         message: expect.stringMatching(/glyph/i),
       }),
@@ -404,9 +450,9 @@ export const chartRejectionScenario: CapabilityScenario = {
     const page2 = preview.pages[1]!;
     assert.equal(page2.png, undefined);
     assert.equal(page2.svg, undefined);
-    expect(page2.diagnostics).toEqual([
+    expect(page2.errors).toEqual([
       expect.objectContaining({
-        severity: "error",
+        code: "preview-missing-font",
         path: "deck/slide[missing-font-chart]/chart[no-font-file]",
         message: expect.stringMatching(/font file/i),
       }),
@@ -414,7 +460,7 @@ export const chartRejectionScenario: CapabilityScenario = {
 
     const page3 = preview.pages[2]!;
     assert.ok(page3.png !== undefined);
-    assert.deepEqual(page3.diagnostics, []);
+    assert.deepEqual(page3.errors, []);
 
     const files = unzipSync(pptx);
     expect(strFromU8(files["ppt/charts/chart1.xml"]!)).toContain(
@@ -454,16 +500,20 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
         { id: "axes-log-reversed-dual", background: "#FFFFFF" },
         createElement(Chart, {
           id: "dual",
-          x: 20,
-          y: 16,
-          width: 600,
-          height: 328,
           title: {
             text: "Scale & Dual Axes",
             style: { fontSize: 18, fontWeight: "bold", color: "#0F172A" },
           },
           legend: "topRight",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 16,
+            width: 600,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           axes: {
             cat: {
               kind: "category",
@@ -528,12 +578,16 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
         { id: "top-reversed-category-and-zero", background: "#FFFFFF" },
         createElement(Chart, {
           id: "topcat",
-          x: 20,
-          y: 20,
-          width: 340,
-          height: 310,
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 340,
+            height: 310,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           axes: {
             cat: {
               kind: "category",
@@ -567,13 +621,17 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
         }),
         createElement(Chart, {
           id: "zeros",
-          x: 380,
-          y: 20,
-          width: 240,
-          height: 310,
           title: "Zero Scale",
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 380,
+            top: 20,
+            width: 240,
+            height: 310,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -589,13 +647,16 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
         { id: "compact-and-long-labels", background: "#FFFFFF" },
         createElement(Chart, {
           id: "tiny",
-          x: 20,
-          y: 20,
-          width: 80,
-          height: 50,
           title: "Tiny",
           legend: "bottom",
-          style: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 80,
+            height: 50,
+            fontFamily: jostFont,
+          },
           groups: [
             {
               kind: "column",
@@ -609,12 +670,16 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
         }),
         createElement(Chart, {
           id: "longlabels",
-          x: 120,
-          y: 20,
-          width: 500,
-          height: 310,
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 13 },
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 20,
+            width: 500,
+            height: 310,
+            fontFamily: jostFont,
+            fontSize: 13,
+          },
           groups: [
             {
               kind: "column",
@@ -637,16 +702,20 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
       slide({ id: "axes-log-reversed-dual", background: "#FFFFFF" }).append(
         chart({
           id: "dual",
-          x: 20,
-          y: 16,
-          width: 600,
-          height: 328,
           title: {
             text: "Scale & Dual Axes",
             style: { fontSize: 18, fontWeight: "bold", color: "#0F172A" },
           },
           legend: "topRight",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 16,
+            width: 600,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           axes: {
             cat: {
               kind: "category",
@@ -712,12 +781,16 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
       }).append(
         chart({
           id: "topcat",
-          x: 20,
-          y: 20,
-          width: 340,
-          height: 310,
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 340,
+            height: 310,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           axes: {
             cat: {
               kind: "category",
@@ -751,13 +824,17 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
         }),
         chart({
           id: "zeros",
-          x: 380,
-          y: 20,
-          width: 240,
-          height: 310,
           title: "Zero Scale",
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 380,
+            top: 20,
+            width: 240,
+            height: 310,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -771,13 +848,16 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
       slide({ id: "compact-and-long-labels", background: "#FFFFFF" }).append(
         chart({
           id: "tiny",
-          x: 20,
-          y: 20,
-          width: 80,
-          height: 50,
           title: "Tiny",
           legend: "bottom",
-          style: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 80,
+            height: 50,
+            fontFamily: jostFont,
+          },
           groups: [
             {
               kind: "column",
@@ -791,12 +871,16 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
         }),
         chart({
           id: "longlabels",
-          x: 120,
-          y: 20,
-          width: 500,
-          height: 310,
           legend: false,
-          style: { fontFamily: jostFont, fontSize: 13 },
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 20,
+            width: 500,
+            height: 310,
+            fontFamily: jostFont,
+            fontSize: 13,
+          },
           groups: [
             {
               kind: "column",
@@ -818,7 +902,7 @@ export const chartAxesAndCompactScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 3);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
       assert.ok(page.svg !== undefined);
     }
@@ -884,13 +968,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         { id: "column-stacked-and-percent", background: "#FFFFFF" },
         createElement(Chart, {
           id: "col-stacked",
-          x: 16,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Stacked +/-",
           legend: "top",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -917,13 +1005,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         }),
         createElement(Chart, {
           id: "col-percent",
-          x: 328,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Percent",
           legend: "left",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 328,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -942,13 +1034,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         { id: "horizontal-bar-variants", background: "#FFFFFF" },
         createElement(Chart, {
           id: "bar-clustered",
-          x: 16,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Bar Clustered",
           legend: "right",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "bar",
@@ -972,13 +1068,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         }),
         createElement(Chart, {
           id: "bar-stacked",
-          x: 328,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Bar Stacked",
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 328,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "bar",
@@ -1000,14 +1100,18 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         { id: "horizontal-percent-bar-topRight-legend", background: "#FFFFFF" },
         createElement(Chart, {
           id: "bar-percent",
-          x: 24,
-          y: 20,
-          width: 592,
-          height: 320,
           title: "Bar Percent",
           legend: "topRight",
           plotArea: { left: 72, top: 44, width: 410, height: 236 },
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 20,
+            width: 592,
+            height: 320,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "bar",
@@ -1031,13 +1135,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
       slide({ id: "column-stacked-and-percent", background: "#FFFFFF" }).append(
         chart({
           id: "col-stacked",
-          x: 16,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Stacked +/-",
           legend: "top",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -1064,13 +1172,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         }),
         chart({
           id: "col-percent",
-          x: 328,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Percent",
           legend: "left",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 328,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -1087,13 +1199,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
       slide({ id: "horizontal-bar-variants", background: "#FFFFFF" }).append(
         chart({
           id: "bar-clustered",
-          x: 16,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Bar Clustered",
           legend: "right",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "bar",
@@ -1117,13 +1233,17 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
         }),
         chart({
           id: "bar-stacked",
-          x: 328,
-          y: 16,
-          width: 296,
-          height: 328,
           title: "Bar Stacked",
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 328,
+            top: 16,
+            width: 296,
+            height: 328,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "bar",
@@ -1146,14 +1266,18 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
       }).append(
         chart({
           id: "bar-percent",
-          x: 24,
-          y: 20,
-          width: 592,
-          height: 320,
           title: "Bar Percent",
           legend: "topRight",
           plotArea: { left: 72, top: 44, width: 410, height: 236 },
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 20,
+            width: 592,
+            height: 320,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "bar",
@@ -1176,7 +1300,7 @@ export const chartBarColumnVariantsScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 3);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
       assert.ok(page.svg !== undefined);
     }
@@ -1271,14 +1395,18 @@ const lineMarkersPoints = Object.fromEntries(
 const lineAreaPage1Charts = [
   {
     id: "line-all-markers-gap",
-    x: 16,
-    y: 16,
-    width: 390,
-    height: 328,
     title: "Smooth Line & All Markers",
     legend: "bottom" as const,
     displayBlanksAs: "gap" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 390,
+      height: 328,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "line" as const,
@@ -1322,14 +1450,18 @@ const lineAreaPage1Charts = [
   },
   {
     id: "line-span",
-    x: 416,
-    y: 16,
-    width: 208,
-    height: 158,
     title: "Span Blanks",
     legend: "bottom" as const,
     displayBlanksAs: "span" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 416,
+      top: 16,
+      width: 208,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "line" as const,
@@ -1350,14 +1482,18 @@ const lineAreaPage1Charts = [
   },
   {
     id: "line-zero",
-    x: 416,
-    y: 186,
-    width: 208,
-    height: 158,
     title: "Zero Blanks",
     legend: "bottom" as const,
     displayBlanksAs: "zero" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 416,
+      top: 186,
+      width: 208,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "line" as const,
@@ -1381,13 +1517,17 @@ const lineAreaPage1Charts = [
 const lineAreaPage2Charts = [
   {
     id: "line-stacked",
-    x: 16,
-    y: 16,
-    width: 296,
-    height: 158,
     title: "Line Stacked",
     legend: "top" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 296,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "line" as const,
@@ -1410,13 +1550,17 @@ const lineAreaPage2Charts = [
   },
   {
     id: "line-percent",
-    x: 328,
-    y: 16,
-    width: 296,
-    height: 158,
     title: "Line Percent",
     legend: "top" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 328,
+      top: 16,
+      width: 296,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "line" as const,
@@ -1434,14 +1578,18 @@ const lineAreaPage2Charts = [
   },
   {
     id: "area-standard-midcat",
-    x: 16,
-    y: 186,
-    width: 296,
-    height: 158,
     title: "Area Standard",
     legend: "bottom" as const,
     displayBlanksAs: "gap" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 186,
+      width: 296,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "area" as const,
@@ -1463,13 +1611,17 @@ const lineAreaPage2Charts = [
   },
   {
     id: "area-percent",
-    x: 328,
-    y: 186,
-    width: 296,
-    height: 158,
     title: "Area Percent",
     legend: "bottom" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 328,
+      top: 186,
+      width: 296,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "area" as const,
@@ -1531,7 +1683,7 @@ export const chartLineAreaParityScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 2);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
       assert.ok(page.svg !== undefined);
     }
@@ -1596,14 +1748,18 @@ export const chartLineAreaParityScenario: CapabilityScenario = {
 const scatterPage1Charts = [
   {
     id: "scatter-smooth-marker-unequal",
-    x: 16,
-    y: 16,
-    width: 300,
-    height: 158,
     title: "Smooth + Markers (Unequal XY)",
     legend: "bottom" as const,
     displayBlanksAs: "span" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 300,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -1648,14 +1804,18 @@ const scatterPage1Charts = [
   },
   {
     id: "scatter-markers-only",
-    x: 324,
-    y: 16,
-    width: 300,
-    height: 158,
     title: "Markers Only (Zero Blanks)",
     legend: "right" as const,
     displayBlanksAs: "zero" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 324,
+      top: 16,
+      width: 300,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -1676,13 +1836,17 @@ const scatterPage1Charts = [
   },
   {
     id: "scatter-straight-only",
-    x: 16,
-    y: 186,
-    width: 196,
-    height: 158,
     title: "Straight Only",
     legend: false as const,
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 186,
+      width: 196,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -1695,13 +1859,17 @@ const scatterPage1Charts = [
   },
   {
     id: "scatter-straight-markers",
-    x: 222,
-    y: 186,
-    width: 196,
-    height: 158,
     title: "Straight + Markers",
     legend: false as const,
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 222,
+      top: 186,
+      width: 196,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -1722,13 +1890,17 @@ const scatterPage1Charts = [
   },
   {
     id: "scatter-smooth-only",
-    x: 428,
-    y: 186,
-    width: 196,
-    height: 158,
     title: "Smooth Only",
     legend: false as const,
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 428,
+      top: 186,
+      width: 196,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -1746,14 +1918,18 @@ const scatterPage1Charts = [
 const scatterPage2Charts = [
   {
     id: "scatter-quadrants",
-    x: 16,
-    y: 20,
-    width: 296,
-    height: 320,
     title: "4-Quadrant Scatter",
     legend: "bottom" as const,
     displayBlanksAs: "gap" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 20,
+      width: 296,
+      height: 320,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -1773,13 +1949,17 @@ const scatterPage2Charts = [
   },
   {
     id: "scatter-log-axes",
-    x: 328,
-    y: 20,
-    width: 296,
-    height: 320,
     title: "Log10 XY Scatter",
     legend: "bottom" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 328,
+      top: 20,
+      width: 296,
+      height: 320,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     axes: {
       x: {
         kind: "value" as const,
@@ -1860,7 +2040,7 @@ export const chartScatterParityScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 2);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
       assert.ok(page.svg !== undefined);
     }
@@ -1908,13 +2088,17 @@ export const chartScatterParityScenario: CapabilityScenario = {
 
 const comboPage1Chart = {
   id: "combo-col-area-line-dual",
-  x: 20,
-  y: 16,
-  width: 600,
-  height: 328,
   title: "Revenue, Baseline & Margin %",
   legend: "bottom" as const,
-  style: { fontFamily: jostFont, fontSize: 12 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 16,
+    width: 600,
+    height: 328,
+    fontFamily: jostFont,
+    fontSize: 12,
+  },
   axes: {
     catPrimary: {
       kind: "category" as const,
@@ -1983,13 +2167,17 @@ const comboPage1Chart = {
 
 const comboPage2Chart = {
   id: "combo-bar-scatter-shared-x",
-  x: 20,
-  y: 16,
-  width: 600,
-  height: 328,
   title: "Horizontal Bar + Scatter Shared X",
   legend: "right" as const,
-  style: { fontFamily: jostFont, fontSize: 12 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 16,
+    width: 600,
+    height: 328,
+    fontFamily: jostFont,
+    fontSize: 12,
+  },
   axes: {
     barCat: { kind: "category" as const, position: "left" as const },
     sharedVal: {
@@ -2078,7 +2266,7 @@ export const chartComboDualAxesScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 2);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
       assert.ok(page.svg !== undefined);
     }
@@ -2135,12 +2323,16 @@ export const chartComboDualAxesScenario: CapabilityScenario = {
 const pieDoughnutPage1Charts = [
   {
     id: "pie-full-circle-360",
-    x: 16,
-    y: 16,
-    width: 220,
-    height: 158,
     title: "360 Full Pie",
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 220,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "pie" as const,
@@ -2165,13 +2357,17 @@ const pieDoughnutPage1Charts = [
   },
   {
     id: "pie-exploded-leader-and-3level-labels",
-    x: 248,
-    y: 16,
-    width: 376,
-    height: 328,
     title: "Exploded Pie & 3-Level Labels",
     legend: "bottom" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 248,
+      top: 16,
+      width: 376,
+      height: 328,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "pie" as const,
@@ -2224,12 +2420,16 @@ const pieDoughnutPage1Charts = [
   },
   {
     id: "pie-bestfit-labels",
-    x: 16,
-    y: 186,
-    width: 220,
-    height: 158,
     title: "BestFit Pie",
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 186,
+      width: 220,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "pie" as const,
@@ -2256,13 +2456,17 @@ const pieDoughnutPage1Charts = [
 const pieDoughnutPage2Charts = [
   {
     id: "doughnut-shared-ring",
-    x: 16,
-    y: 16,
-    width: 296,
-    height: 328,
     title: "Shared Doughnut (60% Hole)",
     legend: "right" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 296,
+      height: 328,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "doughnut" as const,
@@ -2294,13 +2498,17 @@ const pieDoughnutPage2Charts = [
   },
   {
     id: "doughnut-multi-independent",
-    x: 328,
-    y: 16,
-    width: 296,
-    height: 328,
     title: "Multi-Ring Independent",
     legend: "bottom" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 328,
+      top: 16,
+      width: 296,
+      height: 328,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "doughnut" as const,
@@ -2378,7 +2586,7 @@ export const chartPieDoughnutAndLabelsParityScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 2);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
       assert.ok(page.svg !== undefined);
     }
@@ -2441,13 +2649,17 @@ export const chartPieDoughnutAndLabelsParityScenario: CapabilityScenario = {
 const annotationsPage1Charts = [
   {
     id: "col-poly-moving-avg",
-    x: 16,
-    y: 16,
-    width: 300,
-    height: 328,
     title: "Polynomial & Moving Avg",
     legend: "bottom" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 300,
+      height: 328,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "column" as const,
@@ -2484,13 +2696,17 @@ const annotationsPage1Charts = [
   },
   {
     id: "scatter-exp-log-pow-lin",
-    x: 324,
-    y: 16,
-    width: 300,
-    height: 328,
     title: "Linear, Exp, Log & Power",
     legend: "bottom" as const,
-    style: { fontFamily: jostFont, fontSize: 11 },
+    style: {
+      position: "absolute",
+      left: 324,
+      top: 16,
+      width: 300,
+      height: 328,
+      fontFamily: jostFont,
+      fontSize: 11,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -2533,12 +2749,16 @@ const annotationsPage1Charts = [
 const annotationsPage2Charts = [
   {
     id: "col-fixed-pct-err",
-    x: 16,
-    y: 16,
-    width: 300,
-    height: 158,
     title: "Fixed+ & Percentage- (NoCap)",
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 300,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "column" as const,
@@ -2576,12 +2796,16 @@ const annotationsPage2Charts = [
   },
   {
     id: "line-stddev-stderr",
-    x: 324,
-    y: 16,
-    width: 300,
-    height: 158,
     title: "StdDev (Mean) & StdErr",
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 324,
+      top: 16,
+      width: 300,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "line" as const,
@@ -2614,12 +2838,16 @@ const annotationsPage2Charts = [
   },
   {
     id: "scatter-xy-custom-err",
-    x: 16,
-    y: 186,
-    width: 300,
-    height: 158,
     title: "Scatter XY Custom + Fixed",
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 186,
+      width: 300,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "scatter" as const,
@@ -2652,12 +2880,16 @@ const annotationsPage2Charts = [
   },
   {
     id: "bar-trendline-and-err",
-    x: 324,
-    y: 186,
-    width: 300,
-    height: 158,
     title: "Bar Trendline & Error",
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 324,
+      top: 186,
+      width: 300,
+      height: 158,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     groups: [
       {
         kind: "bar" as const,
@@ -2731,7 +2963,7 @@ export const chartTrendlinesAndErrorBarsParityScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, []);
     assert.equal(preview.pages.length, 2);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
       assert.ok(page.svg !== undefined);
     }
@@ -2798,10 +3030,6 @@ export const chartTrendlinesAndErrorBarsParityScenario: CapabilityScenario = {
 const discreteParityPage1Charts: readonly ChartProps[] = [
   {
     id: "dash-cross-axis",
-    x: 16,
-    y: 16,
-    width: 300,
-    height: 320,
     title: {
       text: "LongDash & CrossesAt",
       style: {
@@ -2813,7 +3041,15 @@ const discreteParityPage1Charts: readonly ChartProps[] = [
     },
     legend: "top",
     plotArea: { left: 50, top: 64, width: 210, height: 190 },
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 300,
+      height: 320,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     axes: {
       x: {
         kind: "category",
@@ -2880,13 +3116,17 @@ const discreteParityPage1Charts: readonly ChartProps[] = [
   },
   {
     id: "horiz-bar-labels",
-    x: 328,
-    y: 16,
-    width: 300,
-    height: 320,
     title: "Horizontal Bar Labels",
     legend: "left",
-    style: { fontFamily: jostFont, fontSize: 10 },
+    style: {
+      position: "absolute",
+      left: 328,
+      top: 16,
+      width: 300,
+      height: 320,
+      fontFamily: jostFont,
+      fontSize: 10,
+    },
     axes: {
       x: { kind: "category", tickLabelPosition: "low" },
       y: { kind: "value", numberFormat: "0.00E+00" },
@@ -2921,12 +3161,16 @@ const discreteParityPage1Charts: readonly ChartProps[] = [
 const discreteParityPage2Charts: readonly ChartProps[] = [
   {
     id: "stacked-neg-line",
-    x: 16,
-    y: 16,
-    width: 196,
-    height: 156,
     legend: "bottom",
-    style: { fontFamily: jostFont, fontSize: 9 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 16,
+      width: 196,
+      height: 156,
+      fontFamily: jostFont,
+      fontSize: 9,
+    },
     axes: {
       x: { kind: "category" },
       y: { kind: "value", numberFormat: "[$€-407]#,##0.00" },
@@ -2946,12 +3190,16 @@ const discreteParityPage2Charts: readonly ChartProps[] = [
   },
   {
     id: "stacked-neg-area",
-    x: 222,
-    y: 16,
-    width: 196,
-    height: 156,
     legend: false,
-    style: { fontFamily: jostFont, fontSize: 9 },
+    style: {
+      position: "absolute",
+      left: 222,
+      top: 16,
+      width: 196,
+      height: 156,
+      fontFamily: jostFont,
+      fontSize: 9,
+    },
     axes: {
       x: { kind: "category" },
       y: { kind: "value" },
@@ -2971,13 +3219,17 @@ const discreteParityPage2Charts: readonly ChartProps[] = [
   },
   {
     id: "isolated-gaps-and-area-trend",
-    x: 428,
-    y: 16,
-    width: 196,
-    height: 156,
     legend: false,
     displayBlanksAs: "gap",
-    style: { fontFamily: jostFont, fontSize: 9 },
+    style: {
+      position: "absolute",
+      left: 428,
+      top: 16,
+      width: 196,
+      height: 156,
+      fontFamily: jostFont,
+      fontSize: 9,
+    },
     axes: {
       x: { kind: "category", reversed: true },
       y: { kind: "value" },
@@ -3019,13 +3271,17 @@ const discreteParityPage2Charts: readonly ChartProps[] = [
   },
   {
     id: "scatter-gaps-and-intercept",
-    x: 16,
-    y: 184,
-    width: 240,
-    height: 160,
     legend: false,
     displayBlanksAs: "zero",
-    style: { fontFamily: jostFont, fontSize: 9 },
+    style: {
+      position: "absolute",
+      left: 16,
+      top: 184,
+      width: 240,
+      height: 160,
+      fontFamily: jostFont,
+      fontSize: 9,
+    },
     groups: [
       {
         kind: "scatter",
@@ -3067,13 +3323,17 @@ const discreteParityPage2Charts: readonly ChartProps[] = [
   },
   {
     id: "scatter-isolated-gap",
-    x: 266,
-    y: 184,
-    width: 144,
-    height: 160,
     legend: false,
     displayBlanksAs: "gap",
-    style: { fontFamily: jostFont, fontSize: 9 },
+    style: {
+      position: "absolute",
+      left: 266,
+      top: 184,
+      width: 144,
+      height: 160,
+      fontFamily: jostFont,
+      fontSize: 9,
+    },
     groups: [
       {
         kind: "scatter",
@@ -3092,12 +3352,16 @@ const discreteParityPage2Charts: readonly ChartProps[] = [
   },
   {
     id: "doughnut-full-360",
-    x: 420,
-    y: 184,
-    width: 204,
-    height: 160,
     legend: false,
-    style: { fontFamily: jostFont, fontSize: 9 },
+    style: {
+      position: "absolute",
+      left: 420,
+      top: 184,
+      width: 204,
+      height: 160,
+      fontFamily: jostFont,
+      fontSize: 9,
+    },
     groups: [
       {
         kind: "doughnut",
@@ -3160,7 +3424,7 @@ export const chartDiscreteParityEdgeCasesScenario: CapabilityScenario = {
     assert.deepEqual(validation.errors, [], author);
     assert.equal(preview.pages.length, 2, author);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, [], author);
+      assert.deepEqual(page.errors, [], author);
       assert.ok(page.png !== undefined, author);
     }
     const p1Svg = preview.pages[0]!.svg ?? "";

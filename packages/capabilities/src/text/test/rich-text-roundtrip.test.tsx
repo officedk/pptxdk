@@ -39,10 +39,13 @@ describe("Rich text, font size units, and theme font roundtrip", () => {
             {
               id: "card",
               name: "RichCard",
-              x: 24,
-              y: 24,
-              width: 420,
-              height: 220,
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 420,
+                height: 220,
+              },
             },
             createElement(
               P,
@@ -220,10 +223,13 @@ describe("Rich text, font size units, and theme font roundtrip", () => {
             Text,
             {
               id: "sizes",
-              x: 24,
-              y: 24,
-              width: 360,
-              height: 180,
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 360,
+                height: 180,
+              },
             },
             createElement(
               P,
@@ -300,7 +306,16 @@ describe("Rich text, font size units, and theme font roundtrip", () => {
               { id: "ext" },
               createElement(
                 Text,
-                { id: "t1", x: 20, y: 20, width: 240, height: 80 },
+                {
+                  id: "t1",
+                  style: {
+                    position: "absolute",
+                    left: 20,
+                    top: 20,
+                    width: 240,
+                    height: 80,
+                  },
+                },
                 "Placeholder",
               ),
             ),

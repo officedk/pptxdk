@@ -120,7 +120,7 @@ describe("Native content placeholders fixtures", () => {
     const preview = paint(resolution, { pages: [1, 2, 3, 8, 9] });
     expect(preview.pages).toHaveLength(5);
     for (const page of preview.pages) {
-      expect(page.diagnostics).toEqual([]);
+      expect(page.errors).toEqual([]);
       expect(page.png).toBeInstanceOf(Uint8Array);
     }
 
@@ -145,7 +145,7 @@ describe("Native content placeholders fixtures", () => {
     });
     expect(fontBackedPreview.pages).toHaveLength(4);
     for (const page of fontBackedPreview.pages) {
-      expect(page.diagnostics).toEqual([]);
+      expect(page.errors).toEqual([]);
       expect(page.png).toBeInstanceOf(Uint8Array);
     }
   });
@@ -199,7 +199,7 @@ describe("Native content placeholders fixtures", () => {
     const preview = paint(resolution, { pages: [4, 5, 6, 7, 8, 9] });
     expect(preview.pages).toHaveLength(6);
     for (const page of preview.pages) {
-      expect(page.diagnostics).toEqual([]);
+      expect(page.errors).toEqual([]);
       expect(page.png).toBeInstanceOf(Uint8Array);
       // Static preview omits interactive empty placeholder prompts; only slide background rect is drawn.
       expect(page.svg).not.toMatch(/<path\b/u);

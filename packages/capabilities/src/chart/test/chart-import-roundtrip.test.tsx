@@ -69,13 +69,17 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
   it("imports, detaches, edits shared duplicate categories & secondary axes, and paints with regenerated workbook", async () => {
     const initialPptx = buildChartDeck({
       id: "combo",
-      x: 20,
-      y: 20,
-      width: 600,
-      height: 320,
       title: "Combo Overview",
       legend: "bottom",
-      style: { fontFamily: jostFont, fontSize: 11 },
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 600,
+        height: 320,
+        fontFamily: jostFont,
+        fontSize: 11,
+      },
       axes: {
         period: { kind: "category", title: "Period" },
         amount: { kind: "value", position: "left", min: 0, max: 50 },
@@ -153,7 +157,7 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
     const resolution = resolveDocument(imported.document);
     const { pptx } = emit(resolution);
     const painted = paint(resolution);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png instanceof Uint8Array);
 
     const validation = await validatePptx(pptx);
@@ -190,12 +194,16 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
   it("imports, edits independent doughnut ring categories (c15:datalabelsRange), and paints cleanly", async () => {
     const initialPptx = buildChartDeck({
       id: "rings",
-      x: 20,
-      y: 20,
-      width: 600,
-      height: 320,
       legend: "right",
-      style: { fontFamily: jostFont, fontSize: 11 },
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 600,
+        height: 320,
+        fontFamily: jostFont,
+        fontSize: 11,
+      },
       groups: [
         {
           kind: "doughnut",
@@ -253,7 +261,7 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
     const resolution = resolveDocument(imported.document);
     const { pptx } = emit(resolution);
     const painted = paint(resolution);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png instanceof Uint8Array);
 
     const validation = await validatePptx(pptx);
@@ -554,11 +562,7 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
       const { pptx } = emit(resolution);
       const painted = paint(resolution, { pages: [1, 5, 7] });
       for (const page of painted.pages) {
-        assert.deepEqual(
-          page.diagnostics,
-          [],
-          `${untouched} page ${page.page}`,
-        );
+        assert.deepEqual(page.errors, [], `${untouched} page ${page.page}`);
         assert.ok(page.png instanceof Uint8Array);
       }
 
@@ -579,10 +583,13 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
   it("isolates missing/corrupt chart relationships and malformed chart XML while keeping sibling content", () => {
     const basePptx = buildChartDeck({
       id: "healthy",
-      x: 10,
-      y: 10,
-      width: 400,
-      height: 240,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 400,
+        height: 240,
+      },
       groups: [
         {
           kind: "column",
@@ -649,10 +656,13 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
             slide({ id: "mismatch" }).append(
               chart({
                 id: "mismatch-chart",
-                x: 10,
-                y: 10,
-                width: 400,
-                height: 240,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 400,
+                  height: 240,
+                },
                 axes: {
                   cat: { kind: "category" },
                   val: { kind: "value" },
@@ -699,17 +709,22 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
       slide({ id: "presentation-cartesian" }).append(
         chart({
           id: "col-line-rich",
-          x: 20,
-          y: 20,
-          width: 600,
-          height: 320,
           title: {
             text: "Rich Presentation",
             style: { fontSize: 16, fontWeight: "bold", color: "#1D4ED8" },
           },
           legend: "topRight",
           displayBlanksAs: "gap",
-          style: { fontFamily: jostFont, fontSize: 11, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 600,
+            height: 320,
+            fontFamily: jostFont,
+            fontSize: 11,
+            color: "#0F172A",
+          },
           axes: {
             cat: {
               kind: "category",
@@ -839,12 +854,16 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
       slide({ id: "presentation-scatter-pie" }).append(
         chart({
           id: "scatter-rich",
-          x: 16,
-          y: 16,
-          width: 300,
-          height: 300,
           plotArea: { left: 48, top: 36, width: 220, height: 220 },
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            width: 300,
+            height: 300,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           axes: {
             x: { kind: "value", min: 0, max: 10, crossesAt: 5 },
             y: { kind: "value", min: -10, max: 10, crosses: "autoZero" },
@@ -884,11 +903,15 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
         }),
         chart({
           id: "pie-rich",
-          x: 324,
-          y: 16,
-          width: 300,
-          height: 300,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 324,
+            top: 16,
+            width: 300,
+            height: 300,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "pie",
@@ -1006,7 +1029,7 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
     const reemitted = emit(resolution, { embedFonts: "subset" });
     const painted = paint(resolution);
     for (const page of painted.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png instanceof Uint8Array);
     }
 
@@ -1042,10 +1065,13 @@ describe("chart import, editing, and native-23-absent roundtrip", () => {
   it("reports unconsumed-xml when plotArea, legend, or series spPr contains unsupported visual fills instead of swallowing them", () => {
     const pptx = buildChartDeck({
       id: "unconsumed-sppr",
-      x: 20,
-      y: 20,
-      width: 600,
-      height: 320,
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 600,
+        height: 320,
+      },
       legend: "bottom",
       groups: [
         {

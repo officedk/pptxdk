@@ -33,7 +33,6 @@ function previewDocWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(document);
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -46,7 +45,6 @@ function previewJsxWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(await expandDocument(element));
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };

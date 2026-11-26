@@ -16,7 +16,18 @@ export function Rule({
   readonly color?: ColorValue;
   readonly thickness?: number;
 }) {
-  return <Shape x={x} y={y} width={width} height={thickness} fill={color} />;
+  return (
+    <Shape
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width,
+        height: thickness,
+        background: color,
+      }}
+    />
+  );
 }
 
 export function Circle({
@@ -37,14 +48,17 @@ export function Circle({
   return (
     <Shape
       geometry={preset("ellipse")}
-      x={x}
-      y={y}
-      width={diameter}
-      height={diameter}
-      fill={fill}
-      {...(stroke === undefined
-        ? {}
-        : { style: { borderColor: stroke, borderWidth: strokeWidth } })}
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width: diameter,
+        height: diameter,
+        background: fill,
+        ...(stroke === undefined
+          ? {}
+          : { border: { color: stroke, width: strokeWidth } }),
+      }}
     />
   );
 }
@@ -63,15 +77,18 @@ export function Arrow({
   return (
     <Shape
       geometry={preset("line")}
-      x={x}
-      y={y + 8}
-      width={width}
-      height={1}
-      fill={transparent}
       style={{
-        borderColor: color,
-        borderWidth: 2,
-        endArrow: "triangle",
+        position: "absolute",
+        left: x,
+        top: y + 8,
+        width,
+        height: 1,
+        background: transparent,
+        border: {
+          color,
+          width: 2,
+          endArrow: "triangle",
+        },
       }}
     />
   );
@@ -92,11 +109,12 @@ export function Tag({
 }) {
   return (
     <Text
-      x={x}
-      y={y}
-      width={width}
-      height={28}
       style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width,
+        height: 28,
         fontFamily: "body",
         fontSize: 15,
         color: dark ? colors.mist : colors.cobalt,
@@ -126,12 +144,16 @@ export function OutlineBox({
 }) {
   return (
     <Shape
-      x={x}
-      y={y}
-      width={width}
-      height={height}
-      fill={transparent}
-      style={{ borderColor: color, borderWidth: 1, borderRadius: radius }}
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width,
+        height,
+        background: transparent,
+        border: { color, width: 1 },
+        borderRadius: radius,
+      }}
     />
   );
 }

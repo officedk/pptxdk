@@ -64,11 +64,6 @@ export function TrainingCostPage() {
         <Chart
           id="training-hours-chart"
           enter={wipe({ duration: 460 })}
-          x={66}
-          y={168}
-          width={520}
-          height={292}
-          style={{ fontFamily: "body", fontSize: 12, color: colors.ink }}
           legend={false}
           plotArea={{ left: 58, top: 24, width: 442, height: 214 }}
           axes={{
@@ -120,25 +115,35 @@ export function TrainingCostPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 66,
+            top: 168,
+            width: 520,
+            height: 292,
+            fontFamily: "body",
+            fontSize: 12,
+            color: colors.ink,
+          }}
         />
 
         <Text
-          x={68}
-          y={472}
-          width={516}
-          height={20}
-          style={{ fontSize: 12.5, color: colors.steel, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 472,
+            width: 516,
+            height: 20,
+            fontSize: 12.5,
+            color: colors.steel,
+            textWrap: "nowrap",
+          }}
         >
           完整训练总算力构成比例（100% 堆叠条形图 · 2,788K 小时 = $5.576M）
         </Text>
 
         <Chart
           id="training-share-chart"
-          x={66}
-          y={496}
-          width={520}
-          height={150}
-          style={{ fontFamily: "body", fontSize: 11, color: colors.ink }}
           legend="bottom"
           plotArea={{ left: 68, top: 12, width: 432, height: 68 }}
           axes={{
@@ -188,6 +193,16 @@ export function TrainingCostPage() {
               gapWidth: 55,
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 66,
+            top: 496,
+            width: 520,
+            height: 150,
+            fontFamily: "body",
+            fontSize: 11,
+            color: colors.ink,
+          }}
         />
       </PanelCard>
 
@@ -204,16 +219,21 @@ export function TrainingCostPage() {
       >
         <Table
           id="training-cost-table"
-          x={638}
-          y={174}
-          width={576}
           columns={[132, 92, 74, 78, 200]}
-          style={{ fontFamily: "body", fontSize: 11.5, color: colors.ink }}
+          style={{
+            position: "absolute",
+            left: 638,
+            top: 174,
+            width: 576,
+            fontFamily: "body",
+            fontSize: 11.5,
+            color: colors.ink,
+          }}
         >
           <Row
             style={{
               height: 38,
-              backgroundColor: colors.steel,
+              background: colors.steel,
               color: colors.surface,
               verticalAlign: "middle",
             }}
@@ -246,7 +266,7 @@ export function TrainingCostPage() {
                 key={row.phase}
                 style={{
                   height: 70,
-                  backgroundColor: bg,
+                  background: bg,
                   color: textColor,
                   verticalAlign: "middle",
                 }}
@@ -254,8 +274,7 @@ export function TrainingCostPage() {
                 <Cell
                   style={{
                     padding: [6, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P>{row.phase}</P>
@@ -263,8 +282,7 @@ export function TrainingCostPage() {
                 <Cell
                   style={{
                     padding: [6, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P style={{ align: "right" }}>{row.gpuHours}</P>
@@ -272,8 +290,7 @@ export function TrainingCostPage() {
                 <Cell
                   style={{
                     padding: [6, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P style={{ align: "right" }}>{row.share}</P>
@@ -281,8 +298,7 @@ export function TrainingCostPage() {
                 <Cell
                   style={{
                     padding: [6, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P style={{ align: "right" }}>{row.cost}</P>
@@ -290,8 +306,7 @@ export function TrainingCostPage() {
                 <Cell
                   style={{
                     padding: [6, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P>{row.detail}</P>

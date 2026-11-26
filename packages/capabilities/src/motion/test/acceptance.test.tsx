@@ -12,7 +12,7 @@ import {
   after,
   fade,
   motionCapability,
-  observeMotion,
+  motionSchedule,
   spin,
 } from "@pptxdk/capabilities/motion";
 import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
@@ -80,18 +80,18 @@ describe("Motion capability acceptance & bound slide contract", () => {
             { scope: intro, mode: "sequence" },
             createElement(
               Group,
-              {
-                id: "spin-group",
-                emphasis: spin({ duration: 500 }),
-              },
+              { id: "spin-group", emphasis: spin({ duration: 500 }) },
               createElement(Shape, {
                 id: "group-member",
-                x: 20,
-                y: 20,
-                width: 60,
-                height: 40,
-                fill: "#2563EB",
                 enter: fade({ duration: 200 }),
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 20,
+                  width: 60,
+                  height: 40,
+                  background: "#2563EB",
+                },
               }),
             ),
           ),
@@ -102,12 +102,16 @@ describe("Motion capability acceptance & bound slide contract", () => {
               Text,
               {
                 id: "caption",
-                x: 20,
-                y: 120,
-                width: 200,
-                height: 60,
-                style: { fontFamily: jostFont, fontSize: 16 },
                 enter: fade({ duration: 300 }),
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 120,
+                  width: 200,
+                  height: 60,
+                  fontFamily: jostFont,
+                  fontSize: 16,
+                },
               },
               createElement(P, null, "Delayed caption"),
             ),
@@ -117,12 +121,15 @@ describe("Motion capability acceptance & bound slide contract", () => {
             null,
             createElement(Shape, {
               id: "click-box",
-              x: 260,
-              y: 40,
-              width: 80,
-              height: 60,
-              fill: "#10B981",
               enter: fade({ duration: 250 }),
+              style: {
+                position: "absolute",
+                left: 260,
+                top: 40,
+                width: 80,
+                height: 60,
+                background: "#10B981",
+              },
             }),
           ),
         ),
@@ -131,9 +138,9 @@ describe("Motion capability acceptance & bound slide contract", () => {
 
     const resolution = resolve(doc);
 
-    // observeMotion works immediately on Resolution before emit().
+    // motionSchedule works immediately on Resolution before emit().
     const resolvedSlide = resolution.report.slides[0]!;
-    const resolvedMotion = observeMotion(resolvedSlide);
+    const resolvedMotion = motionSchedule(resolvedSlide);
     assert.ok(resolvedMotion !== undefined);
     assert.equal(resolvedMotion.steps.length, 2);
     assert.equal(resolvedMotion.steps[0]?.trigger, "auto");
@@ -150,12 +157,12 @@ describe("Motion capability acceptance & bound slide contract", () => {
     // Paint succeeds without diagnostics from the same Resolution.
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 1);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
 
-    // Emit preserves slide observation identity so observeMotion works identically on BuildReport.
+    // Emit preserves slide observation identity so motionSchedule works identically on BuildReport.
     const emitted = emit(resolution);
-    const emittedMotion = observeMotion(emitted.report.slides[0]!);
+    const emittedMotion = motionSchedule(emitted.report.slides[0]!);
     assert.equal(emittedMotion, resolvedMotion);
     assert.equal(
       emitted.report.slides[0]?.capabilities?.["motion"],
@@ -188,11 +195,14 @@ describe("Motion capability acceptance & bound slide contract", () => {
             { scope: badScope, startAt: after(missingCueHandle.end, 100) },
             createElement(Shape, {
               id: "orphan",
-              x: 10,
-              y: 10,
-              width: 50,
-              height: 50,
               enter: fade({ duration: 200 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 50,
+                height: 50,
+              },
             }),
           ),
         ),
@@ -218,7 +228,15 @@ describe("Motion capability acceptance & bound slide contract", () => {
           createElement(
             Step as unknown as ComponentType<Record<string, unknown>>,
             { n: 1, morphKey },
-            createElement(Shape, { x: 0, y: 0, width: 40, height: 20 }),
+            createElement(Shape, {
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 40,
+                height: 20,
+              },
+            }),
           ),
         ),
       ),
@@ -227,8 +245,7 @@ describe("Motion capability acceptance & bound slide contract", () => {
       () => resolve(doc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.map(({ code }) => code).join(",") ===
-          "unknown-parameter",
+        error.diagnostics.map(({ code }) => code).join(",") === "unknown-prop",
     );
   });
 });

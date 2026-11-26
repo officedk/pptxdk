@@ -37,8 +37,26 @@ export function GenerativeAiHistoryDeck() {
         headerFooter={{ slideNumber: true }}
         footerPlaceholders={{ slideNumber: pageNumber }}
       >
-        <Shape x={1190} y={34} width={6} height={6} fill={colors.sun} />
-        <Shape x={1174} y={34} width={6} height={6} fill={colors.cyan} />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 1190,
+            top: 34,
+            width: 6,
+            height: 6,
+            background: colors.sun,
+          }}
+        />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 1174,
+            top: 34,
+            width: 6,
+            height: 6,
+            background: colors.cyan,
+          }}
+        />
         <SlideLayout layout={coverLayout} />
         <SlideLayout layout={contentLayout} />
         <SlideLayout layout={summaryLayout} />

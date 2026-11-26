@@ -21,18 +21,113 @@ function assertValidPng1280x720(png: Uint8Array, label: string): void {
   assert.equal(view.getUint32(20, false), 720, `${label}: PNG height`);
 }
 
-it("full deck preserves 14 slides, zero-diagnostic static preview, editable chart, and valid object boundaries", async () => {
+it("full deck preserves 14 slides, clean static preview, master/layout realization, editable chart, and valid object boundaries", async () => {
   const resolution = resolve(await expandDocument(<GenerativeAiHistoryDeck />));
   const result = emit(resolution, {
     embedFonts: "full",
   });
-  assert.deepEqual(resolution.report.diagnostics, []);
-  assert.deepEqual(result.report.diagnostics, []);
+  assert.deepEqual(resolution.report.dimensions, { width: 1280, height: 720 });
+  assert.equal(resolution.slides.length, 14);
+  assert.deepEqual(
+    resolution.slides.map((slide) => slide.id),
+    [
+      "opening",
+      "timeline",
+      "prediction",
+      "vae-gan",
+      "transformer",
+      "scale",
+      "diffusion",
+      "alignment",
+      "systems",
+      "frontier",
+      "synthesis",
+      "questions",
+      "sources-1",
+      "sources-2",
+    ],
+  );
+
+  // Verify ResolvedMaster & ResolvedSlideLayout realization on resolution.report
+  assert.equal(resolution.report.masters?.length, 1);
+  const resolvedMaster = resolution.report.masters![0]!;
+  assert.equal(resolvedMaster.id, "history");
+  assert.equal(resolvedMaster.name, "生成式人工智能简史");
+  assert.equal(resolvedMaster.objects.length, 2);
+  assert.deepEqual(
+    resolvedMaster.layouts.map((layout) => layout.name),
+    ["封面", "浅色正文", "深色总结"],
+  );
+  assert.equal(resolvedMaster.layouts[0]?.showMasterShapes, false);
+  assert.ok(
+    resolvedMaster.layouts[1]?.placeholders.some(({ type }) => type === "obj"),
+  );
+
+  // Verify slide canvas bounds, footer realization, and text accommodation via direct Locators
+  for (const [index, slide] of resolution.slides.entries()) {
+    assert.deepEqual(slide.dimensions, { width: 1280, height: 720 });
+    if (index === 0) {
+      assert.equal(slide.footer?.slideNumber, undefined);
+    } else {
+      const pageNum = slide.footer?.slideNumber;
+      assert.ok(
+        pageNum !== undefined,
+        `${slide.id} should realize slideNumber`,
+      );
+      assert.equal(pageNum.text, String(index + 1));
+      assert.equal(pageNum.textMetrics.status, "measured");
+      assert.equal(pageNum.textMetrics.fits, true);
+    }
+    const textLocators = slide
+      .descendants()
+      .filter((locator) => locator.textMetrics !== undefined);
+    assert.ok(
+      textLocators.length > 0,
+      `${slide.id} should contain measured text locators`,
+    );
+    for (const locator of slide.descendants()) {
+      if (locator.bounds !== undefined) {
+        assert.ok(
+          locator.bounds.x >= 0,
+          `${slide.id} (${locator.path}) overflows left boundary: ${locator.bounds.x}`,
+        );
+        assert.ok(
+          locator.bounds.y >= 0,
+          `${slide.id} (${locator.path}) overflows top boundary: ${locator.bounds.y}`,
+        );
+        assert.ok(
+          locator.bounds.x + locator.bounds.width <= 1280,
+          `${slide.id} (${locator.path}) overflows right boundary: ${locator.bounds.x + locator.bounds.width}`,
+        );
+        assert.ok(
+          locator.bounds.y + locator.bounds.height <= 720,
+          `${slide.id} (${locator.path}) overflows bottom boundary: ${locator.bounds.y + locator.bounds.height}`,
+        );
+      }
+      if (locator.textMetrics !== undefined) {
+        assert.equal(
+          locator.textMetrics.status,
+          "measured",
+          `${slide.id} (${locator.path}) text should be measured`,
+        );
+        assert.equal(
+          locator.textMetrics.fits,
+          true,
+          `${slide.id} (${locator.path}) text "${locator.text}" overflows box`,
+        );
+      }
+    }
+  }
 
   const painted = paint(resolution);
   assert.equal(painted.pages.length, 14);
   for (const page of painted.pages) {
-    assert.deepEqual(page.diagnostics, [], `preview page ${page.page}`);
+    assert.deepEqual(page.errors, [], `preview page ${page.page} errors`);
+    assert.deepEqual(
+      page.placeholders,
+      [],
+      `preview page ${page.page} placeholders`,
+    );
     assert.ok(page.png !== undefined, `preview page ${page.page} png`);
     assertValidPng1280x720(page.png, `preview page ${page.page}`);
   }

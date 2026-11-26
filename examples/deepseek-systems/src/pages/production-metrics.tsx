@@ -96,15 +96,6 @@ export function ProductionMetricsPage() {
       >
         <Chart
           id="node-occupancy-chart"
-          x={62}
-          y={272}
-          width={392}
-          height={292}
-          style={{
-            fontFamily: "body",
-            fontSize: 10,
-            color: colors.ink,
-          }}
           legend="top"
           axes={{
             category: {
@@ -145,13 +136,24 @@ export function ProductionMetricsPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 62,
+            top: 272,
+            width: 392,
+            height: 292,
+            fontFamily: "body",
+            fontSize: 10,
+            color: colors.ink,
+          }}
         />
         <Rule x={64} y={576} width={388} />
         <Text
-          x={64}
-          y={586}
-          width={388}
           style={{
+            position: "absolute",
+            left: 64,
+            top: 586,
+            width: 388,
             padding: 0,
             fontSize: 10.5,
             lineHeight: 15.5,
@@ -176,15 +178,6 @@ export function ProductionMetricsPage() {
       >
         <Chart
           id="kv-cache-hit-chart"
-          x={500}
-          y={272}
-          width={308}
-          height={286}
-          style={{
-            fontFamily: "body",
-            fontSize: 10.5,
-            color: colors.ink,
-          }}
           legend="bottom"
           groups={[
             {
@@ -215,13 +208,24 @@ export function ProductionMetricsPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 500,
+            top: 272,
+            width: 308,
+            height: 286,
+            fontFamily: "body",
+            fontSize: 10.5,
+            color: colors.ink,
+          }}
         />
         <Rule x={500} y={576} width={308} />
         <Text
-          x={500}
-          y={586}
-          width={308}
           style={{
+            position: "absolute",
+            left: 500,
+            top: 586,
+            width: 308,
             padding: 0,
             fontSize: 10.5,
             lineHeight: 15.5,
@@ -246,15 +250,6 @@ export function ProductionMetricsPage() {
       >
         <Chart
           id="cost-revenue-chart"
-          x={854}
-          y={272}
-          width={364}
-          height={292}
-          style={{
-            fontFamily: "body",
-            fontSize: 10,
-            color: colors.ink,
-          }}
           legend={false}
           axes={{
             category: {
@@ -305,13 +300,24 @@ export function ProductionMetricsPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 854,
+            top: 272,
+            width: 364,
+            height: 292,
+            fontFamily: "body",
+            fontSize: 10,
+            color: colors.ink,
+          }}
         />
         <Rule x={856} y={576} width={360} />
         <Text
-          x={856}
-          y={586}
-          width={360}
           style={{
+            position: "absolute",
+            left: 856,
+            top: 586,
+            width: 360,
             padding: 0,
             fontSize: 10.5,
             lineHeight: 15.5,

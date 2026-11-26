@@ -78,16 +78,16 @@ import {
   shapeStyleSchema,
 } from "../src/shape/shape-declaration.ts";
 import {
-  shapeBorderObjectSchema,
-  shapeBorderValueSchema,
-} from "../src/shared/visual.ts";
-import {
   paragraphAuthorPropsSchema,
   slideNumberAuthorPropsSchema,
   spanAuthorPropsSchema,
   textAuthorPropsSchema,
   textBoxStyleSchema,
 } from "../src/shared/text-schemas.ts";
+import {
+  shapeBorderObjectSchema,
+  shapeBorderValueSchema,
+} from "../src/shared/visual.ts";
 import { tableDeclarationPropsSchema } from "../src/table/table-schemas.ts";
 import {
   transitionKindSchema,

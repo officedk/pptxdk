@@ -68,7 +68,13 @@ const motionMasterLayout = defineSlideLayout({
   placeholders: {
     title: {
       type: "title",
-      style: { position: "absolute", left: 32, top: 20, width: 320, height: 48 },
+      style: {
+        position: "absolute",
+        left: 32,
+        top: 20,
+        width: 320,
+        height: 48,
+      },
     },
   },
   motion: {

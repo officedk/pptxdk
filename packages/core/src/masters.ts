@@ -215,10 +215,6 @@ export const resolvedSlideLayoutSchema = z
   .readonly();
 export type ResolvedSlideLayout = z.infer<typeof resolvedSlideLayoutSchema>;
 
-/** Transitional aliases retained until Ticket 11. */
-export const slideLayoutObservationSchema = resolvedSlideLayoutSchema;
-export type SlideLayoutObservation = ResolvedSlideLayout;
-
 export const resolvedMasterSchema = z
   .object({
     id: z.string().min(1),
@@ -233,10 +229,6 @@ export const resolvedMasterSchema = z
   })
   .readonly();
 export type ResolvedMaster = z.infer<typeof resolvedMasterSchema>;
-
-/** Transitional aliases retained until Ticket 11. */
-export const slideMasterObservationSchema = resolvedMasterSchema;
-export type SlideMasterObservation = ResolvedMaster;
 
 const slideLayoutDefinitionSymbol = Symbol.for(
   "@pptxdk/core/slide-layout-definition",

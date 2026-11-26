@@ -1,5 +1,5 @@
 import type { ResolvedSlide, SlideLocator } from "@pptxdk/core/capability";
-import { BuildQueryError } from "@pptxdk/core/query";
+import { BuildQueryError, resolveSlideFromLocator } from "@pptxdk/core/query";
 
 import type {
   MotionEffectObservation,
@@ -158,9 +158,6 @@ export type MotionSchedule = {
   readonly steps: readonly MotionStepQuery[];
 };
 
-/** Transitional alias retained until Ticket 11. */
-export type MotionQuery = MotionSchedule;
-
 export type MotionFactReader = {
   exactOffset(from: string, to: string): number | undefined;
   lowerBound(from: string, to: string): number | undefined;
@@ -229,7 +226,7 @@ type MotionReferenceOwner = {
 
 // Handle ownership is preserved only in WeakMap; reports and public references do not carry build identity tokens.
 const referenceOwners = new WeakMap<object, MotionReferenceOwner>();
-const queryByObservation = new WeakMap<object, MotionQuery>();
+const queryByObservation = new WeakMap<object, MotionSchedule>();
 
 function frozenRef<T extends object>(value: T, owner: MotionReferenceOwner): T {
   const ref = Object.freeze(value);
@@ -428,7 +425,7 @@ function intervalMembership(
 
 export function createMotionQuery(
   sources: readonly MotionQueryStepSource[],
-): MotionQuery {
+): MotionSchedule {
   const queryIdentity = {};
   const stepIdentities = new Map<string, object>();
   for (const source of sources) stepIdentities.set(source.key, {});
@@ -811,22 +808,22 @@ function assertInterval(
 
 export function registerMotionObservation(
   observation: object,
-  query: MotionQuery,
+  query: MotionSchedule,
 ): void {
   queryByObservation.set(observation, query);
-}
-
-function isSlideLocator(
-  slide: ResolvedSlide | SlideLocator,
-): slide is SlideLocator {
-  return "observation" in slide && typeof slide.get === "function";
 }
 
 /** Accepts only resolved slides or slide locators directly emitted by the current build; reread files will not masquerade as build results. */
 export function motionSchedule(
   slide: ResolvedSlide | SlideLocator,
 ): MotionSchedule | undefined {
-  const resolvedSlide = isSlideLocator(slide) ? slide.observation : slide;
+  const resolvedSlide = resolveSlideFromLocator(slide);
+  if (resolvedSlide === undefined) {
+    throw new BuildQueryError(
+      "unbound-observation",
+      "The motion slide observation does not belong to the current successful build",
+    );
+  }
   const capability = resolvedSlide.capabilities?.["motion"];
   if (capability === undefined) return undefined;
   if (typeof capability !== "object" || capability === null) {
@@ -844,9 +841,6 @@ export function motionSchedule(
   }
   return query;
 }
-
-/** Transitional alias retained until Ticket 11. */
-export const observeMotion = motionSchedule;
 
 function timingParts(timing: MotionTiming): {
   readonly moment: MotionMoment;

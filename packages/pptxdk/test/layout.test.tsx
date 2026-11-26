@@ -3671,8 +3671,8 @@ describe("public layout entry", () => {
         slide?.objects.map(({ authorId: testId, box, table }) => ({
           id: testId,
           box,
-          columns: table?.columnWidths,
-          rows: table?.rowHeights,
+          columns: table?.columns,
+          rows: table?.rows.map((r) => r.height),
         })),
       ),
       [

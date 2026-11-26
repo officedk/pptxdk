@@ -10,7 +10,6 @@ import {
   toBuildDiagnostic,
   type BuildDiagnostic,
   type BuildOptions,
-  type BuildQuery,
   type BuildReport,
   type ResourceObservation,
 } from "@pptxdk/core/build";
@@ -34,7 +33,7 @@ import type {
   SlideEmitContext,
   Target,
 } from "@pptxdk/core/capability";
-import { createBuildQuery } from "@pptxdk/core/query";
+import { createBuildQuery, type SlideLocatorIndex } from "@pptxdk/core/query";
 import {
   getInternalResolution,
   type InternalResolution,
@@ -112,7 +111,6 @@ type PackageContext = {
 
 type DocumentEmitState = DocumentPackageState & {
   readonly usedExtensions: Set<Extension>;
-  readonly warnings: BuildDiagnostic[];
   readonly resourceClaims: ReadonlyMap<
     string,
     {
@@ -1275,7 +1273,6 @@ function createDocumentEmitState(
   );
   return {
     usedExtensions: new Set(),
-    warnings: [...internal.warnings],
     resourceClaims: internal.resourceClaims,
     resources: new Map(),
     resourceTypes: new Map(),
@@ -1428,7 +1425,7 @@ function emitLayer(
   return layer.childComposition === "members" ? ownXml : ownXml + siblingXml;
 }
 
-const emittedQueries = new WeakMap<BuildReport, BuildQuery>();
+const emittedQueries = new WeakMap<BuildReport, SlideLocatorIndex>();
 
 function maxResolvedObjectId(layers: readonly ResolvedObjectLayer[]): number {
   let maxId = 1;
@@ -1443,12 +1440,12 @@ function maxResolvedObjectId(layers: readonly ResolvedObjectLayer[]): number {
 }
 
 /**
- * Returns the BuildQuery enriched with emitted package resources for a BuildReport produced by `emit()`.
+ * Returns the slide locator index enriched with emitted package resources for a BuildReport produced by `emit()`.
  */
 export function emittedBuildQuery(
   report: BuildReport,
-  fallbackQuery: BuildQuery,
-): BuildQuery {
+  fallbackQuery: SlideLocatorIndex,
+): SlideLocatorIndex {
   return emittedQueries.get(report) ?? fallbackQuery;
 }
 
@@ -2062,8 +2059,8 @@ export function emit(
     { level: 6, mtime: new Date("2020-01-01T00:00:00Z") },
   );
 
-  // Preserve slide observation identity from resolution.report.slides so WeakMap-backed
-  // observation queries (such as observeMotion) remain bound across resolve and emit.
+  // Preserve slide identity from resolution.report.slides so WeakMap-backed
+  // slide queries (such as motionSchedule) remain bound across resolve and emit.
   const report: BuildReport = Object.freeze({
     evidence: "generation",
     ...(typeof internal.title === "string" ? { title: internal.title } : {}),
@@ -2079,7 +2076,6 @@ export function emit(
       ? {}
       : { masters: resolution.report.masters }),
     slides: resolution.report.slides,
-    diagnostics: Object.freeze([]),
   });
   const query = createBuildQuery(
     internal.slides.map((slide, index) => ({

@@ -24,18 +24,17 @@ import type {
   ThemeOverride,
 } from "#/theme.ts";
 import type {
-  Diagnostic,
   EmitContext,
   EmitOutput,
   EmittedSlideLayoutSpec,
   EmittedSlideMasterSpec,
   Extension,
-  GeometryBox,
   MastersEmitDriver,
   PaintContext,
   PaintOutput,
   PptxRelationship,
   PreviewTransform,
+  Rect,
   Resolution,
   ResolvedLink,
   SlideCapabilityModule,
@@ -74,7 +73,7 @@ export type ResolvedObjectLayer = {
   readonly objectId: number;
   readonly paintObjectId: number;
   readonly theme: ThemeContext;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly transform?: PreviewTransform;
   readonly emitsObject: boolean;
   readonly hasObservation: boolean;
@@ -185,7 +184,6 @@ export type InternalResolution = {
       readonly characters: string;
     }
   >;
-  readonly warnings: readonly Diagnostic[];
 };
 
 // Keep resolved pipeline internals out of the public Resolution object and unreachable from author code.

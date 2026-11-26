@@ -11,7 +11,6 @@ import {
   fade,
   font,
   motionSchedule,
-  observeMotion,
   resolve,
   type Locator,
   type MotionSchedule,
@@ -168,11 +167,6 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
     assert.equal(badgeLocator.kind, "image");
     assert.ok((badgeLocator.resources?.length ?? 0) >= 1);
     assert.equal(badgeLocator.resources?.[0]?.contentType, "image/png");
-    // Transitional bridges remain intact until Ticket 11.
-    assert.equal(
-      built.query.getSlide("intro").get("badge").observe().authorId,
-      "badge",
-    );
 
     // PreviewResult & previewFromSource expose slides & slide(id).
     const previewed = await preview(jsxDeck);
@@ -351,12 +345,11 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
       { x: 350, y: 110 },
     ]);
 
-    // Also verify PreviewNode carries matching bounds + transitional screenBox.
+    // Also verify PreviewNode carries matching bounds.
     const painted = paint(resolution);
     const previewRotNode: PreviewNode | undefined =
       painted.pages[0]?.nodes.find((node) => node.authorId === "rot90");
     assert.deepEqual(previewRotNode?.bounds, rot90.bounds);
-    assert.deepEqual(previewRotNode?.screenBox, rot90.bounds);
   });
 
   it("unconditionally populates ResolvedTable rows and anchor cells with box, span, text, textMetrics, and row/cell Locators", async () => {
@@ -829,6 +822,5 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
     assert.equal(effectObs.start.ms, 0);
     assert.equal(effectObs.end.state, "known");
     assert.equal(effectObs.end.ms, 400);
-    assert.equal(observeMotion(s1Loc), scheduleFromLocator);
   });
 });

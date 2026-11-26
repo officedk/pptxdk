@@ -334,7 +334,6 @@ export async function runScenarioRoundtrip(
     report: resolution.report,
     slides: resolution.slides,
     slide: (id: string) => resolution.slide(id),
-    query: resolution.query,
     pages,
   });
   if (options.counters !== undefined) options.counters.validate += 1;
@@ -556,7 +555,6 @@ export async function runCapabilityScenario(
       report: resolution.report,
       slides: resolution.slides,
       slide: (id: string) => resolution.slide(id),
-      query: resolution.query,
       pages,
     });
 

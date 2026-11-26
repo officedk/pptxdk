@@ -9,14 +9,14 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
   type ObjectCapabilityModule,
-  type ObjectObservation,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
   type ObjectResolution,
+  type Rect,
+  type ResolvedObject,
   type ThemeScope,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
@@ -65,12 +65,12 @@ type MotionNativeMember = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
-  readonly box?: NonNullable<ObjectObservation["box"]>;
+  readonly box?: NonNullable<ResolvedObject["box"]>;
   readonly members?: readonly MotionNativeMember[];
 };
 
 function motionMembers(
-  objects: readonly ObjectObservation[],
+  objects: readonly ResolvedObject[],
 ): readonly MotionNativeMember[] {
   return objects.map((object) => ({
     id: object.id,
@@ -84,7 +84,7 @@ function motionMembers(
   }));
 }
 
-function bounds(members: readonly ObjectObservation[]): {
+function bounds(members: readonly ResolvedObject[]): {
   readonly pixels: { x: number; y: number; width: number; height: number };
   readonly emu: EmuBox;
 } {
@@ -377,7 +377,7 @@ export const groupCapability = {
           contract.layoutStyle.flexBasis !== undefined;
         const hasLayoutHeight = hasExplicitHeight;
 
-        let outputGeometry: GeometryBox;
+        let outputGeometry: Rect;
         if (
           !isPositioned &&
           explicitBox !== undefined &&

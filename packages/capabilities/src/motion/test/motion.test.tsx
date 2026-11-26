@@ -25,7 +25,6 @@ import {
   repeat,
   transitionCapability,
   transitions,
-  type MotionObservation,
   useMotionScope,
   wipe,
   zoom,
@@ -51,6 +50,7 @@ import { createElement, Fragment, type ReactNode } from "react";
 import { describe, it } from "vitest";
 
 import { build, build as buildDocument } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const png = new Uint8Array(
   Buffer.from(
@@ -387,7 +387,7 @@ describe("object motion", () => {
     const result = await build(createElement(RepeatedSpinDeck));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effect = motion.steps[0]?.effects[0];
     const scope = motion.scopes?.[0];
 
@@ -423,7 +423,7 @@ describe("object motion", () => {
   it("keeps continuous breathe without natural completion and waits only for finite body scopes", async () => {
     const result = await build(createElement(RepeatedAndBreathingDeck));
     const slide = result.report.slides[0];
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const effects = motion.steps.flatMap((step) => step.effects);
     const bodyEffect = effects.find(
       ({ target }) => target.authorId === "finite-body",
@@ -686,7 +686,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effect = motion.steps[0]?.effects[0];
     assert.deepEqual(
       [effect?.startMs, effect?.endMs, effect?.durationMs, effect?.repeatCount],
@@ -733,7 +733,7 @@ describe("object motion", () => {
     );
     const breatheMotion = breatheResult.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const breatheEffect = breatheMotion.steps[0]?.effects[0];
     assert.deepEqual(
       [breatheEffect?.durationMs, breatheEffect?.endMs],
@@ -771,7 +771,7 @@ describe("object motion", () => {
     const result = await build(createElement(TimeProjectionDeck, nestedDelays));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effect = motion.steps[0]?.effects[0];
     assert.deepEqual(
       [effect?.startMs, effect?.endMs],
@@ -801,7 +801,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, endMs, completion }) => [
         target.authorId,
@@ -1114,7 +1114,7 @@ describe("object motion", () => {
       assert.ok(target);
       const motion = result.report.slides[0]?.capabilities?.[
         "motion"
-      ] as MotionObservation;
+      ] as ResolvedMotion;
       assert.deepEqual(
         motion.steps[0]?.effects.map(
           ({ target: effectTarget, preset, durationMs, by }) => [
@@ -1237,7 +1237,7 @@ describe("object motion", () => {
 
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
         target.range,
@@ -1358,7 +1358,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effects = motion.steps[0]?.effects ?? [];
     const source = effects.find(({ target }) => target.authorId === "letters");
     const follower = effects.find(
@@ -1545,7 +1545,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, by, startMs, endMs }) => [
         target.authorId,
@@ -1753,7 +1753,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1885,7 +1885,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects
         .filter(({ target }) => target.authorId === "duplicate-seriesElements")
@@ -2048,7 +2048,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const seriesElements = motion.steps[0]?.effects
       .filter(({ target }) => target.authorId === "multi-group-series-elements")
       .map(({ target }) => target.range);
@@ -2160,7 +2160,7 @@ describe("object motion", () => {
         );
         assert.ok(slide !== undefined, `${kind}/${by}`);
         const motion = slide.capabilities?.["motion"] as
-          | MotionObservation
+          | ResolvedMotion
           | undefined;
         const ranges =
           motion?.steps[0]?.effects.map(({ target }) => target.range) ?? [];
@@ -2480,7 +2480,7 @@ describe("object motion", () => {
     const result = await build(createElement(PointSequenceDeck));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const chartEffects = motion.steps[0]?.effects.filter(
       ({ target }) => target.authorId === "point-sequence-chart",
     );
@@ -2847,7 +2847,7 @@ describe("object motion", () => {
     const target = result.report.slides[0]?.objects[0];
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(motion.steps, [
       {
         trigger: "auto",
@@ -2960,7 +2960,7 @@ describe("object motion", () => {
     );
     const observation = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       observation.steps[0]?.effects.map(({ target, preset }) => [
         target.authorId,
@@ -3131,7 +3131,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps.map((step) => [
         step.trigger,
@@ -3225,7 +3225,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset, from, easing }) => [
         target.authorId,
@@ -3317,7 +3317,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(
         ({ target, preset, durationMs, delayMs }) => [
@@ -3584,7 +3584,7 @@ describe("object motion", () => {
     const textObject = result.report.slides[0]?.objects[0];
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset, by, endMs }) => [
         target.authorId,
@@ -4080,7 +4080,7 @@ describe("object motion", () => {
     assert.ok(shape !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset }) => [
         target.authorId,
@@ -4246,7 +4246,7 @@ describe("object motion", () => {
     assert.ok(shapeId !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset, by, endMs }) => [
         target.authorId,
@@ -4775,7 +4775,7 @@ describe("object motion", () => {
       assert.deepEqual(file.errors, [], item.id);
       const motion = result.report.slides[0]?.capabilities?.[
         "motion"
-      ] as MotionObservation;
+      ] as ResolvedMotion;
       assert.equal(motion.steps[0]?.effects.length, 4, item.id);
     }
 
@@ -5019,7 +5019,7 @@ describe("object motion", () => {
     assert.ok(shape !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target }) => target.range),
       [
@@ -5098,7 +5098,7 @@ describe("object motion", () => {
     assert.ok(shape !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset }) => [
         target.range,
@@ -5746,7 +5746,7 @@ describe("object motion", () => {
     const text = group?.members?.find(
       ({ authorId: testId }) => testId === "animated-text-member",
     );
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const projection = motion.nativeProjections?.find(
       ({ logicalTargetId, preset }) =>
         logicalTargetId === group?.id && preset === "spin",
@@ -6116,7 +6116,7 @@ describe("object motion", () => {
     const green = group?.members?.find(
       ({ authorId: testId }) => testId === "cross-step-green",
     );
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const steps = motion.steps;
     assert.equal(steps[0]?.trigger, "auto");
     assert.equal(steps[1]?.trigger, "click");
@@ -6199,7 +6199,7 @@ describe("object motion", () => {
     const group = slide?.objects.find(
       ({ authorId: testId }) => testId === "spinning-group",
     );
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const logicalSpin = motion.steps[0]?.effects.find(
       ({ preset, target }) => preset === "spin" && target.id === group?.id,
     );
@@ -6310,7 +6310,7 @@ describe("object motion", () => {
     const textObject = result.report.slides[0]?.objects[0];
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ preset }) => preset),
       ["fly", "spinIn", "fade", "fade"],
@@ -6447,7 +6447,7 @@ describe("object motion", () => {
     );
     const logicalMotion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       logicalMotion.steps[0]?.effects.map(({ preset, target, by }) => [
         preset,
@@ -7199,8 +7199,8 @@ describe("object motion", () => {
         ),
       ),
     );
-    const slide = result.query.getSlide("relative-spin");
-    const queryEffects = motionSchedule(slide.observation)?.steps.flatMap(
+    const slide = result.slide("relative-spin");
+    const queryEffects = motionSchedule(slide)?.steps.flatMap(
       ({ effects }) => effects,
     );
     const positiveQueryEffect = queryEffects?.find(
@@ -7305,7 +7305,7 @@ describe("object motion", () => {
     );
     const groupMotion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const groupProjection = groupMotion.nativeProjections?.find(
       ({ logicalTargetId, preset }) =>
         logicalTargetId === negativeGroup?.id && preset === "spin",
@@ -7570,7 +7570,7 @@ describe("object motion", () => {
     const disabledScope = await build(scopeDeck({ motion: false }));
     const disabledScopeMotion = disabledScope.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation | undefined;
+    ] as ResolvedMotion | undefined;
     assert.ok(disabledScopeMotion);
     assert.equal(
       disabledScopeMotion.steps.flatMap(({ effects }) => effects).length,

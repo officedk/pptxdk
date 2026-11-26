@@ -17,7 +17,11 @@ import {
 import { groupCapability } from "@pptxdk/capabilities/group";
 import { Group } from "@pptxdk/capabilities/group-elements";
 import { Image } from "@pptxdk/capabilities/image-elements";
-import { fade, type MotionObservation } from "@pptxdk/capabilities/motion";
+import {
+  fade,
+  motionSchedule,
+  type MotionSchedule,
+} from "@pptxdk/capabilities/motion";
 import { path } from "@pptxdk/capabilities/shape";
 import { shapeCapability } from "@pptxdk/capabilities/shape";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
@@ -701,10 +705,10 @@ export const groupPositiveScenario: CapabilityScenario = {
       4,
     );
 
-    // Motion capability observation retains group target and native animation target id.
-    const slide1Motion = resolution.report.slides[0]?.capabilities?.[
-      "motion"
-    ] as MotionObservation;
+    // Motion schedule retains group target and native animation target id.
+    const slide1Motion: MotionSchedule = motionSchedule(
+      resolution.report.slides[0]!,
+    )!;
     const badgeEffect = slide1Motion.steps
       .flatMap((step) => step.effects)
       .find((e) => e.target.authorId === "badge-group");

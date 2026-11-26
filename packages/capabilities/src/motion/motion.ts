@@ -1,8 +1,8 @@
 import {
   CapabilityError,
   type CapabilityInput,
-  type GeometryBox,
   type LayoutPlaceholderSpec,
+  type Rect,
   type SlideResolution,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
@@ -18,9 +18,9 @@ import type {
   MotionDirection,
   MotionEffectObservation,
   MotionNativeProjection,
-  MotionObservation,
   MotionStartDependency,
   NormalizedEffect,
+  ResolvedMotion,
 } from "./motion-api.ts";
 import {
   ownerMotionSchema,
@@ -95,7 +95,7 @@ export {
   wipe,
   zoom,
 } from "./motion-api.ts";
-export { motionSchedule, observeMotion } from "./motion-query.ts";
+export { motionSchedule } from "./motion-query.ts";
 export type {
   EffectInstanceObservation,
   MotionCueObservation,
@@ -108,7 +108,6 @@ export type {
   MotionMembership,
   MotionMomentObservation,
   MotionMomentRef,
-  MotionQuery,
   MotionSchedule,
   MotionScopeQueryMember,
   MotionScopeQueryObservation,
@@ -136,7 +135,6 @@ export type {
   MotionNativeProjection,
   MotionMoment,
   MotionMomentOffset,
-  MotionObservation,
   MotionScopeHandle,
   MotionScopeMode,
   MotionScopeObservation,
@@ -174,7 +172,7 @@ function timeNodeValue(value: number, field: string): number {
   return value;
 }
 
-function validateKnownMotionTimes(observation: MotionObservation): void {
+function validateKnownMotionTimes(observation: ResolvedMotion): void {
   for (const scope of observation.scopes ?? []) {
     validateKnownTime(scope.delayMs, "orchestration scope delay");
     validateKnownTime(scope.eachMs, "stagger interval");
@@ -244,7 +242,7 @@ export type TimingEffect = MotionEffectObservation & {
   readonly targetKind: string;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
-  readonly targetBox?: GeometryBox;
+  readonly targetBox?: Rect;
   readonly targetRotationDegrees?: number;
   readonly targetHasBackground: boolean;
   readonly targetParagraphCount?: number;
@@ -277,7 +275,7 @@ export type MotionNativeMember = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly members?: readonly MotionNativeMember[];
 };
 
@@ -436,7 +434,7 @@ function formulaOffset(value: string, offset: number): string {
 }
 
 function geometryCenter(
-  box: GeometryBox,
+  box: Rect,
   dimensions: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
   if (dimensions.width <= 0 || dimensions.height <= 0) {
@@ -453,7 +451,7 @@ function geometryCenter(
 
 /** Common rotation center is calculated using integer EMUs from serialized xfrm and sldSz to avoid differing rounding results on readback. */
 function serializedGeometryCenter(
-  box: GeometryBox,
+  box: Rect,
   dimensions: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
   const widthEmu = pxToEmu(dimensions.width);
@@ -470,7 +468,7 @@ function serializedGeometryCenter(
   };
 }
 
-function targetBox(effect: TimingEffect, purpose: string): GeometryBox {
+function targetBox(effect: TimingEffect, purpose: string): Rect {
   if (effect.targetBox === undefined) {
     throw new CapabilityError(
       "motion-target-geometry",
@@ -2810,7 +2808,7 @@ function buildOwnerMotionSteps(
     step.effects.forEach((item, effectIdx) => {
       let spid: number;
       let targetName: string;
-      let box: GeometryBox | undefined;
+      let box: Rect | undefined;
       if ("placeholder" in item.target) {
         const entry = placeholderByKey.get(item.target.placeholder);
         if (entry === undefined) {
@@ -3008,7 +3006,7 @@ export const motionCapability: SlideCapabilityModule & {
           ...(timing.nativeProjections.length === 0
             ? {}
             : { nativeProjections: timing.nativeProjections }),
-        } satisfies MotionObservation;
+        } satisfies ResolvedMotion;
         // Query identity must bind to final public observation object containing native projections.
         registerMotionObservation(observation, plan.query);
         return {

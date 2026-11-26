@@ -422,25 +422,24 @@ describe("Ticket 01 Slice 1: Rect, tri-state TextMetrics & warning-free table ce
     assert.equal(overflowSha, EXPECTED_OVERFLOW_PNG_SHA256);
     assert.equal(controlSha, EXPECTED_CONTROL_PNG_SHA256);
 
-    // Table anchor cells expose TextMetrics on table parts and query locators
+    // Table anchor cells expose TextMetrics on table cells and query locators
     const overflowTable = previewResult.report.slides[0]?.objects.find(
       (o) => o.authorId === "tbl-overflow",
     )?.table;
-    const overflowCellPart = overflowTable?.parts?.find(
-      (part) => part.kind === "cell" && part.row === 0 && part.column === 0,
+    const overflowCell = overflowTable?.cells.find(
+      (cell) => cell.row === 0 && cell.column === 0,
     );
-    assertMeasured(overflowCellPart?.textMetrics);
-    assert.equal(overflowCellPart.textMetrics.fits, false);
-    assert.equal(overflowCellPart.textMetrics.content.lineCount, 4);
+    assertMeasured(overflowCell?.textMetrics);
+    assert.equal(overflowCell.textMetrics.fits, false);
+    assert.equal(overflowCell.textMetrics.content.lineCount, 4);
 
-    const controlCellObs = previewResult.query
-      .getSlide("control-slide")
+    const controlCellTextMetrics = previewResult
+      .slide("control-slide")
       .get("tbl-control")
       .get("r1")
-      .get("c1")
-      .observe();
-    assertMeasured(controlCellObs.textMetrics);
-    assert.equal(controlCellObs.textMetrics.fits, true);
+      .get("c1").textMetrics;
+    assertMeasured(controlCellTextMetrics);
+    assert.equal(controlCellTextMetrics.fits, true);
   });
 });
 

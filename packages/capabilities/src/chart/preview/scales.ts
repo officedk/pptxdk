@@ -1,4 +1,4 @@
-import type { GeometryBox } from "@pptxdk/core/capability";
+import type { Rect } from "@pptxdk/core/capability";
 
 import type {
   ParsedCategoryAxis,
@@ -295,7 +295,7 @@ function buildCategoryAxisScale(
     return reversed ? 1 - rawT : rawT;
   };
 
-  const mapScreen = (t: number, plot: GeometryBox): number =>
+  const mapScreen = (t: number, plot: Rect): number =>
     horizontal ? plot.x + t * plot.width : plot.y + (1 - t) * plot.height;
 
   return {
@@ -381,7 +381,7 @@ function buildValueAxisScale(
       const rawT = Math.log(v / min) / logSpan;
       return reversed ? 1 - rawT : rawT;
     };
-    const mapScreen = (t: number, plot: GeometryBox): number =>
+    const mapScreen = (t: number, plot: Rect): number =>
       horizontal ? plot.x + t * plot.width : plot.y + (1 - t) * plot.height;
 
     return {
@@ -481,7 +481,7 @@ function buildValueAxisScale(
     const rawT = (v - min) / span;
     return reversed ? 1 - rawT : rawT;
   };
-  const mapScreen = (t: number, plot: GeometryBox): number =>
+  const mapScreen = (t: number, plot: Rect): number =>
     horizontal ? plot.x + t * plot.width : plot.y + (1 - t) * plot.height;
   const zeroVal = Math.max(min, Math.min(max, 0));
 
@@ -580,7 +580,7 @@ export function resolveAxisCrossingNormalized(
 export function resolveAxisCrossingScreen(
   axis: ParsedChartAxis,
   crossScale: AxisScale,
-  plot: GeometryBox,
+  plot: Rect,
 ): number {
   const t = resolveAxisCrossingNormalized(axis, crossScale);
   return crossScale.mapScreen(t, plot);

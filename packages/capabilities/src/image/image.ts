@@ -9,7 +9,7 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
@@ -86,7 +86,7 @@ type ImageCrop = {
 };
 
 type ImagePlacement = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly sourceCrop: ImageCrop;
 };
 
@@ -405,7 +405,7 @@ function imagePlacement(
   image: { readonly width?: number; readonly height?: number },
   fit: ImageFit,
   crop: Partial<ImageCrop> | undefined,
-  allocated: GeometryBox,
+  allocated: Rect,
 ): ImagePlacement {
   const { width, height } = allocated;
   const box = { ...allocated };

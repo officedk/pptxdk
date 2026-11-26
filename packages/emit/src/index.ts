@@ -27,8 +27,6 @@ export type {
 export {
   buildDiagnosticSchema,
   buildOptionsSchema,
-  diagnosticSchema,
-  diagnosticSeveritySchema,
   emitOptionsSchema,
   extensionSchema,
   fontEmbeddingModeSchema,
@@ -41,11 +39,8 @@ export {
 export type {
   BuildDiagnostic,
   BuildOptions,
-  BuildQuery,
   BuildReport,
   BuildResult,
-  Diagnostic,
-  DiagnosticSeverity,
   EmitOptions,
   EmitResult,
   Extension,

@@ -7,7 +7,6 @@ import {
   fade,
   motionSchedule,
   transitions,
-  type MotionObservation,
 } from "@pptxdk/capabilities";
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
@@ -32,19 +31,20 @@ import {
   build as buildAny,
   buildDocument as build,
 } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const jsx = { ...capabilities, Deck, Slide, expandDocument, build: buildAny };
 
 function motionOf(
   result: Awaited<ReturnType<typeof build>>,
   index = 0,
-): MotionObservation {
+): ResolvedMotion {
   return result.report.slides[index]?.capabilities?.[
     "motion"
-  ] as MotionObservation;
+  ] as ResolvedMotion;
 }
 
-function effectMap(motion: MotionObservation | undefined) {
+function effectMap(motion: ResolvedMotion | undefined) {
   return new Map(
     motion?.steps
       .flatMap((entry) => entry.effects)
@@ -933,7 +933,7 @@ describe("plain authoring choreography", () => {
         ({ authorId: testId, kind, box }) => [testId, kind, box],
       ),
     );
-    const normalize = (motion: MotionObservation) => ({
+    const normalize = (motion: ResolvedMotion) => ({
       steps: motion.steps.map((entry) => [
         entry.trigger,
         entry.number,
@@ -960,8 +960,6 @@ describe("plain authoring choreography", () => {
       normalize(motionOf(pureResult)),
       normalize(motionOf(jsxResult)),
     );
-    assert.deepEqual(pureResult.report.diagnostics, []);
-    assert.deepEqual(jsxResult.report.diagnostics, []);
     assert.deepEqual((await validatePptx(jsxResult.pptx)).errors, []);
   });
 

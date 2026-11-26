@@ -9,7 +9,6 @@ import {
   Shape,
   useMotionScope,
   type MotionEffectObservation,
-  type MotionObservation,
 } from "@pptxdk/capabilities";
 import {
   chart as documentChart,
@@ -22,6 +21,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 import { build, build as buildDocument } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const orders = [
   "series",
@@ -151,7 +151,7 @@ const mixedDomainCombo = {
 };
 
 function chartEffects(
-  motion: MotionObservation,
+  motion: ResolvedMotion,
   authorId: string,
 ): readonly MotionEffectObservation[] {
   return (
@@ -162,7 +162,7 @@ function chartEffects(
 }
 
 function chartRanges(
-  motion: MotionObservation,
+  motion: ResolvedMotion,
   authorId: string,
 ): readonly unknown[] {
   return chartEffects(motion, authorId).map(({ target }) => target.range);
@@ -195,7 +195,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -310,7 +310,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -435,7 +435,7 @@ describe("chart animation topology integration", () => {
     const result = await build(<RingScopeDeck />);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       chartEffects(motion, "ring-scope-chart").map(({ startMs, endMs }) => [
         startMs,
@@ -495,7 +495,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -579,7 +579,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -687,7 +687,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -904,7 +904,7 @@ describe("chart animation topology integration", () => {
     const result = await build(<ZeroScopeDeck />);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       chartEffects(motion, "zero-scope-chart").map(({ startMs, endMs }) => [
         startMs,
@@ -970,7 +970,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1064,7 +1064,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1180,7 +1180,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1255,7 +1255,7 @@ describe("chart animation topology integration", () => {
     const result = await buildDocument(document);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(chartRanges(motion, "zero-command-chart"), [
       { type: "chart", step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
     ]);

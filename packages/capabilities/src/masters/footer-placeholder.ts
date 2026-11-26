@@ -5,7 +5,7 @@ import {
   type ColorValue,
   type FooterPlaceholderSpec,
   type FooterPlaceholders,
-  type GeometryBox,
+  type Rect,
   type HeaderFooter,
   type PlaceholderSize,
   type ResolvedFooter,
@@ -107,7 +107,7 @@ const slotOrder: readonly FooterPlaceholderSlotKey[] = [
 function defaultSlotBox(
   slot: FooterPlaceholderSlotKey,
   dimensions: { readonly width: number; readonly height: number },
-): GeometryBox {
+): Rect {
   const y = Math.round(dimensions.height * 0.88);
   const height = Math.max(18, Math.round(dimensions.height * 0.06));
   switch (slot) {
@@ -177,7 +177,7 @@ function resolveBoxFromSpecs(
   slot: FooterPlaceholderSlotKey,
   dimensions: { readonly width: number; readonly height: number },
   ...specs: readonly (FooterPlaceholderSpec | undefined)[]
-): GeometryBox {
+): Rect {
   const fallback = defaultSlotBox(slot, dimensions);
   const resolved = resolvePlaceholderBoxFromLayers(
     [fallback, ...specs],
@@ -197,7 +197,7 @@ type ResolvedFooterItem = {
   readonly phType: FooterPlaceholderOoxmlType;
   readonly idx: number;
   readonly size: PlaceholderSize;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly emitGeometry: boolean;
   readonly name: string;
   readonly text: ResolvedTextBody;
@@ -211,7 +211,7 @@ function buildFooterTextBody(args: {
   readonly slot: FooterPlaceholderSlotKey;
   readonly content: string | undefined;
   readonly style: Readonly<Record<string, unknown>> | undefined;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly theme: ThemeContext;
   readonly slideNumber: number;
 }): ResolvedTextBody {
@@ -763,7 +763,7 @@ function readSpPrTransformBox(
   spPr: XmlElementCursor,
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
-): GeometryBox | undefined {
+): Rect | undefined {
   const prstGeom = spPr.child(A_NS, "prstGeom");
   if (prstGeom !== undefined) {
     PrstGeomAttrSchema.safeParse(prstGeom.attrsObject(["prst"]));

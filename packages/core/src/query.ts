@@ -1,7 +1,5 @@
 import type {
-  BuildQuery,
   Locator,
-  LocatorObservation,
   LocatorResourceObservation,
   ObjectTransform,
   Rect,
@@ -186,7 +184,6 @@ function queryNode(node: QueryContentNode): QueryNode {
 
 type LocatorSnapshot = {
   readonly id?: string;
-  readonly authorId?: string;
   readonly kind: string;
   readonly path: string;
   readonly box?: Rect;
@@ -261,9 +258,7 @@ function computeLocatorSnapshot(
   );
 
   return {
-    ...(node.authorId === undefined
-      ? {}
-      : { id: node.authorId, authorId: node.authorId }),
+    ...(node.authorId === undefined ? {} : { id: node.authorId }),
     kind,
     path,
     ...(box === undefined ? {} : { box }),
@@ -339,23 +334,6 @@ function makeLocator(
     if (match === undefined) throw new Error("Query match item missing");
     return match;
   };
-  const observe = (): LocatorObservation =>
-    Object.freeze({
-      evidence: "generation",
-      ...(snapshot.authorId === undefined
-        ? {}
-        : { authorId: snapshot.authorId }),
-      ...(snapshot.box === undefined ? {} : { box: snapshot.box }),
-      ...(snapshot.text === undefined ? {} : { text: snapshot.text }),
-      ...(snapshot.textMetrics === undefined
-        ? {}
-        : { textMetrics: snapshot.textMetrics }),
-      objects: snapshot.objects,
-      ...(snapshot.resources === undefined
-        ? {}
-        : { resources: snapshot.resources }),
-    });
-
   return Object.freeze({
     ...snapshot,
     get(id: string) {
@@ -366,8 +344,20 @@ function makeLocator(
     },
     children: childLocators,
     descendants,
-    observe,
   });
+}
+
+const resolvedSlideByLocator = new WeakMap<SlideLocator, ResolvedSlide>();
+
+/** Resolves a `SlideLocator` back to its backing `ResolvedSlide` without exposing `.observation`. */
+export function resolveSlideFromLocator(
+  slide: SlideLocator | ResolvedSlide,
+): ResolvedSlide | undefined {
+  if (typeof slide !== "object" || slide === null) return undefined;
+  const registered = resolvedSlideByLocator.get(slide as SlideLocator);
+  if (registered !== undefined) return registered;
+  if ("get" in slide && typeof slide.get === "function") return undefined;
+  return slide;
 }
 
 function slideQuery(
@@ -404,25 +394,28 @@ function slideQuery(
     "slide",
     observation.path,
   );
-  return Object.freeze({
+  const slideLocator: SlideLocator = Object.freeze({
     ...locator,
     id: observation.id,
-    ...(observation.authorId === undefined
-      ? {}
-      : { authorId: observation.authorId }),
     kind: "slide",
     path: observation.path,
     index: observation.index,
     dimensions: dimensions ?? Object.freeze({ width: 0, height: 0 }),
     ...(observation.footer === undefined ? {} : { footer: observation.footer }),
-    observation,
   });
+  resolvedSlideByLocator.set(slideLocator, observation);
+  return slideLocator;
 }
+
+export type SlideLocatorIndex = {
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
+};
 
 /** Bind content references retained during the compilation phase to the same report without copying or rebuilding the deck tree. */
 export function createBuildQuery(
   slides: readonly BuildQuerySlideInput[],
-): BuildQuery {
+): SlideLocatorIndex {
   const queries = Object.freeze(
     slides.map(({ observation, dimensions, content, resources = [] }) =>
       slideQuery(observation, dimensions, content, resources),
@@ -430,9 +423,8 @@ export function createBuildQuery(
   );
   const byId = new Map(queries.map((slide) => [slide.id, slide] as const));
   return Object.freeze({
-    evidence: "generation" as const,
     slides: queries,
-    getSlide(id: string) {
+    slide(id: string) {
       assertQueryName(id, "id");
       const slide = byId.get(id);
       if (slide === undefined) {

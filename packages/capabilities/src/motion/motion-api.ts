@@ -3,7 +3,7 @@ import {
   type CapabilityAnnotation,
   type CapabilityChild,
   type CapabilityContribution,
-  type GeometryBox,
+  type Rect,
 } from "@pptxdk/core/capability";
 import { CommonContainer } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
@@ -439,7 +439,7 @@ type MotionTarget = {
   readonly paragraphCount?: number;
   /** Original point count for every chart-wide series, in formal series order. */
   readonly chartSeriesPointCounts?: readonly number[];
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly rotationDegrees?: number;
   readonly hasBackground?: boolean;
   readonly members?: readonly MotionNativeMember[];
@@ -450,7 +450,7 @@ type MotionNativeMember = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly members?: readonly MotionNativeMember[];
 };
 
@@ -557,7 +557,7 @@ export type MotionScopeObservation = {
   )[];
 };
 
-export type MotionObservation = {
+export type ResolvedMotion = {
   readonly steps: readonly MotionStepObservation[];
   readonly scopes?: readonly MotionScopeObservation[];
   readonly nativeProjections?: readonly MotionNativeProjection[];

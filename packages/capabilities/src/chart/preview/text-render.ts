@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import {
   measureTextLayoutFromParagraphs,
@@ -96,7 +96,7 @@ export function measureChartText(options: {
  */
 export function renderChartTextSvg(options: {
   readonly text: string;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly style: TextStyle | undefined;
   readonly theme: ThemeContext;
   readonly slideNumber: number;
@@ -104,7 +104,7 @@ export function renderChartTextSvg(options: {
   readonly align?: "left" | "center" | "right";
   readonly verticalAlign?: "top" | "middle" | "bottom";
   readonly wrap?: boolean;
-  readonly clipBox?: GeometryBox;
+  readonly clipBox?: Rect;
   readonly clipAllocator?: ChartTextClipAllocator;
   readonly rotationDegrees?: -90 | 90;
 }): string {
@@ -130,7 +130,7 @@ export function renderChartTextSvg(options: {
   const rawWidth = Math.max(1, options.box.width);
   const rawHeight = Math.max(1, options.box.height);
 
-  let layoutBox: GeometryBox;
+  let layoutBox: Rect;
   if (options.rotationDegrees !== undefined) {
     const cx = options.box.x + options.box.width / 2;
     const cy = options.box.y + options.box.height / 2;

@@ -27,7 +27,7 @@ import {
   type LayoutSolverNode,
   type LayoutSolverPort,
 } from "#/layout-protocol.ts";
-import type { GeometryBox, LayoutLength, LayoutStyle, Rect } from "#/types.ts";
+import type { LayoutLength, LayoutStyle, Rect } from "#/types.ts";
 
 export const paddingStyleKeys = [
   "padding",
@@ -1163,10 +1163,10 @@ export function createBlockFlexLayoutSolver(options: {
 
   const placeEscaped = (
     node: BlockFlexNode,
-    containingBox: GeometryBox,
+    containingBox: Rect,
     onCommit: (
       committed: LayoutSolverNode,
-      box: GeometryBox,
+      box: Rect,
       meta?: LayoutCommitMetadata,
     ) => void,
   ): void => {
@@ -1228,7 +1228,7 @@ export function createBlockFlexLayoutSolver(options: {
     origin: { readonly x: number; readonly y: number },
     onCommit: (
       committed: LayoutSolverNode,
-      box: GeometryBox,
+      box: Rect,
       meta?: LayoutCommitMetadata,
     ) => void,
   ): void => {
@@ -1242,7 +1242,7 @@ export function createBlockFlexLayoutSolver(options: {
         : computed;
     const rawWidth = node.yoga.getComputedWidth();
     const rawHeight = node.yoga.getComputedHeight();
-    const box: GeometryBox = {
+    const box: Rect = {
       x: origin.x + node.yoga.getComputedLeft(),
       y: origin.y + node.yoga.getComputedTop(),
       width: preserveDouble(rawWidth, node.contractWidth ?? node.style.width),

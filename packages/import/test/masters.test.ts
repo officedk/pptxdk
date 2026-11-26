@@ -5,7 +5,7 @@ import {
   CommonNode,
   DeckContainer,
   SlideMasterContainer,
-  type SlideLayoutObservation,
+  type ResolvedSlideLayout,
 } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { createSlideNode } from "@pptxdk/core/document";
@@ -134,7 +134,7 @@ describe("SlideMaster and SlideLayout import", () => {
 
     const resolve = createResolver([testMastersCap]);
     const resolved = resolve(result.document);
-    const resolvedLayouts: readonly SlideLayoutObservation[] =
+    const resolvedLayouts: readonly ResolvedSlideLayout[] =
       resolved.report.masters?.[0]?.layouts ?? [];
     assert.equal(resolvedLayouts.length, 11);
     assert.equal(resolvedLayouts[9]?.type, "vertTx");

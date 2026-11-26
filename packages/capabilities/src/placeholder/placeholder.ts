@@ -15,7 +15,7 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type MorphKey,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
@@ -125,7 +125,7 @@ export function createPlaceholderNode(
 }
 
 type ResolvedPlaceholderModel = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly name: string;
   readonly nativeRef: NativePlaceholderRef;
   readonly visual: ResolvedVisualModel;
@@ -487,7 +487,7 @@ export const placeholderCapability = {
         : {}),
 
       resolve(resolveContext: ObjectResolveContext): ObjectResolution {
-        const box: GeometryBox = {
+        const box: Rect = {
           x:
             resolveContext.layoutBox?.x ??
             (typeof rawX === "number" ? rawX : 0),

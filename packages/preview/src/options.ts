@@ -25,19 +25,6 @@ export type PaintOptions = z.infer<typeof paintOptionsSchema>;
 export const previewOptionsSchema = paintOptionsSchema;
 export type PreviewOptions = z.infer<typeof previewOptionsSchema>;
 
-export const previewSeveritySchema = z.enum(["error", "warning"]);
-export type PreviewSeverity = z.infer<typeof previewSeveritySchema>;
-
-export const previewDiagnosticSchema = z
-  .object({
-    severity: previewSeveritySchema,
-    page: previewPageNumberSchema,
-    path: z.string(),
-    message: z.string(),
-  })
-  .readonly();
-export type PreviewDiagnostic = z.infer<typeof previewDiagnosticSchema>;
-
 export const screenPointSchema = z
   .object({
     x: z.number(),

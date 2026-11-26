@@ -27,12 +27,11 @@ import type {
   BoundContainerCollaboration,
   BoundObjectCapability,
   BoundObjectCapabilityModule,
+  BuildDiagnostic,
   CapabilityChild,
   CapabilityElement,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
-  Diagnostic,
-  GeometryBox,
   LayoutLength,
   LayoutStyle,
   NativeElementKind,
@@ -62,12 +61,11 @@ function roundRect(box: Rect): Rect {
 }
 
 export type LayoutPassResult = {
-  readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
+  readonly boxes: WeakMap<CapabilityElement, Rect>;
   readonly gridTracks: WeakMap<CapabilityElement, LayoutGridTracks>;
   readonly gridAreas: WeakMap<CapabilityElement, Rect>;
   readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly hidden: WeakSet<CapabilityElement>;
-  readonly warnings: readonly Diagnostic[];
   readonly bound: WeakMap<CapabilityElement, BoundObjectCapability>;
 };
 
@@ -92,7 +90,7 @@ function diagnostic(
   code: string,
   message: string,
   details?: Readonly<Record<string, unknown>>,
-): Diagnostic {
+): BuildDiagnostic {
   return toBuildDiagnostic(path, code, message, details);
 }
 
@@ -411,7 +409,7 @@ export class LayoutPass {
   readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
   readonly #slideNumber: number;
   readonly #options: ResolveOptions;
-  readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #boxes = new WeakMap<CapabilityElement, Rect>();
   readonly #gridTracks = new WeakMap<CapabilityElement, LayoutGridTracks>();
   readonly #gridAreas = new WeakMap<CapabilityElement, Rect>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
@@ -421,7 +419,6 @@ export class LayoutPass {
     BoundObjectCapability
   >();
   readonly #nodeMeta = new WeakMap<LayoutSolverNode, CommittedNodeMeta>();
-  readonly #warnings: Diagnostic[] = [];
   readonly #solver: LayoutSolver;
   #placeholderFor: (
     element: CapabilityElement,
@@ -486,7 +483,6 @@ export class LayoutPass {
       gridAreas: this.#gridAreas,
       themes: this.#themes,
       hidden: this.#hidden,
-      warnings: this.#warnings,
       bound: this.#boundObjects,
     };
   }

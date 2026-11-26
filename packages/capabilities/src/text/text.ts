@@ -10,7 +10,7 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
@@ -144,7 +144,7 @@ type TextInsets = ReturnType<typeof textInsets>;
 /** Closed resolved text model produced in resolve() and exhaustively consumed by emitTextModel and paintTextModel. */
 type ResolvedTextModel = {
   readonly escapedName: string;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly visual: ResolvedVisualModel;
   readonly text: ResolvedTextBody;
   readonly insets: TextInsets;
@@ -265,7 +265,7 @@ export const textPlaceholderMechanism = defineCanvasMechanism({
 
 type ResolvedSlideNumberFieldModel = {
   readonly run: Run;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly idPrefix: string;
 };
 
@@ -563,7 +563,7 @@ export const textCapability = {
                   : { localBodyDeclared }),
               },
         );
-        const box: GeometryBox = {
+        const box: Rect = {
           ...dimensions,
           height: size(
             resolveContext.layoutBox?.height ??

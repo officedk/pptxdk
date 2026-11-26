@@ -13,13 +13,13 @@ import {
   type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolution,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
+  type Rect,
   type ResolvedColor,
   type ResolvedTable,
   type ResolvedTableCell as ResolvedTableCellObservation,
@@ -548,7 +548,7 @@ function prepareRows(
 
 type ResolvedTableCell = {
   readonly cell: ParsedCell;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly fill: ResolvedFill;
   readonly body: ResolvedTextBody;
   readonly hasText: boolean;
@@ -1298,7 +1298,7 @@ export const tableCapability = {
         );
         const width = widths.reduce((sum, value) => sum + value, 0);
         const height = heights.reduce((sum, value) => sum + value, 0);
-        const box: GeometryBox = { x, y, width, height };
+        const box: Rect = { x, y, width, height };
         const columnOffsets: number[] = [];
         let offsetX = x;
         for (const w of widths) {
@@ -1311,7 +1311,7 @@ export const tableCapability = {
           rowOffsets.push(offsetY);
           offsetY += h;
         }
-        const cellBoxes = new Map<ParsedCell, GeometryBox>();
+        const cellBoxes = new Map<ParsedCell, Rect>();
         for (const cell of cells) {
           cellBoxes.set(cell, {
             x: columnOffsets[cell.column] ?? x,
@@ -1477,26 +1477,6 @@ export const tableCapability = {
               textMetrics,
             };
           });
-        const tableParts = [
-          ...resolvedRowObservations.map((rowObs) => ({
-            kind: "row" as const,
-            ...(rowObs.id === undefined ? {} : { authorId: rowObs.id }),
-            row: rowObs.index,
-            box: rowObs.box,
-            text: matrix[rowObs.index]?.join("\t") ?? "",
-          })),
-          ...resolvedCellObservations.map((cellObs) => ({
-            kind: "cell" as const,
-            ...(cellObs.id === undefined ? {} : { authorId: cellObs.id }),
-            row: cellObs.row,
-            column: cellObs.column,
-            rowSpan: cellObs.rowSpan,
-            colSpan: cellObs.colSpan,
-            box: cellObs.box,
-            text: cellObs.text,
-            textMetrics: cellObs.textMetrics,
-          })),
-        ];
         const subParts: CapabilitySubPartObservation[] =
           resolvedRowObservations.map((rowObs) => ({
             kind: "row",
@@ -1527,9 +1507,6 @@ export const tableCapability = {
               rowSpan,
               colSpan,
             })),
-          columnWidths: [...widths],
-          rowHeights: [...heights],
-          parts: tableParts,
         };
         const annotations = motionAnnotations(motionProps, {
           kind: "table",

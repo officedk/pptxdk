@@ -31,7 +31,6 @@ import {
   spin,
   wipe,
   zoom,
-  type MotionObservation,
 } from "@pptxdk/capabilities/motion";
 import {
   MotionScope,
@@ -55,6 +54,7 @@ import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
 
 import type { CapabilityScenario } from "../../../test/acceptance-runner.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const jostFont = font("Jost*", [
   {
@@ -538,8 +538,8 @@ export const motionPositiveScenario: CapabilityScenario = {
     assert.deepEqual(validation.extensions, [], author);
     const p1 = preview.pages[0]!;
     const p2 = preview.pages[1]!;
-    assert.deepEqual(p1.diagnostics, [], author);
-    assert.deepEqual(p2.diagnostics, [], author);
+    assert.deepEqual(p1.errors, [], author);
+    assert.deepEqual(p2.errors, [], author);
     assert.ok(p1.png !== undefined, author);
     assert.ok(p2.png !== undefined, author);
 
@@ -588,8 +588,8 @@ export const motionPositiveScenario: CapabilityScenario = {
 
     const slide1 = resolution.report.slides[0]!;
     const slide2 = resolution.report.slides[1]!;
-    const motion1 = slide1.capabilities?.["motion"] as MotionObservation;
-    const motion2 = slide2.capabilities?.["motion"] as MotionObservation;
+    const motion1 = slide1.capabilities?.["motion"] as ResolvedMotion;
+    const motion2 = slide2.capabilities?.["motion"] as ResolvedMotion;
     assert.ok(motion1 !== undefined && motion2 !== undefined, author);
 
     assert.deepEqual(
@@ -819,7 +819,7 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
     assert.deepEqual(validation.errors, [], author);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.equal(motion.nativeProjections?.length, 1, author);
     assert.equal(
       motion.nativeProjections?.[0]?.nativeEffects.length,

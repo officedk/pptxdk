@@ -1080,7 +1080,10 @@ describe("Ticket 03: single-track layout and containers", () => {
         width: 180,
         height: 80,
       });
-      assert.deepEqual(explicitTbl.objects[0]?.table?.rowHeights, [35, 45]);
+      assert.deepEqual(
+        explicitTbl.objects[0]?.table?.rows.map((row) => row.height),
+        [35, 45],
+      );
       assert.deepEqual(explicitCol.get("after-explicit-tbl").box, {
         x: 236,
         y: 100,

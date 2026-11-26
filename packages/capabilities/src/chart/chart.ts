@@ -11,7 +11,7 @@ import {
   type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type LayoutStyle,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
@@ -894,7 +894,7 @@ function displayBlanksAs(
 
 type ResolvedChartModel = {
   readonly parsed: ParsedChart;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly name: string;
   readonly textStyles: ChartTextStyleXml;
   readonly fontUses: readonly FontEmbeddingUse[];
@@ -1350,7 +1350,7 @@ export const chartCapability = {
           resolveContext.layoutBox?.height ??
           declaredHeight ??
           width * (9 / 16);
-        const box: GeometryBox = { x, y, width, height };
+        const box: Rect = { x, y, width, height };
 
         if (parsed.plotArea !== undefined) {
           if (

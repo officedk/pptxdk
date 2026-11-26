@@ -226,6 +226,7 @@ function emitSlideBackground(
 function paintSlideBackground(
   resolved: ResolvedSlideBackground,
   paintContext: SlidePaintContext,
+  field = "style.background",
 ): SlidePaintOutput {
   const { width, height } = paintContext.dimensions;
   switch (resolved.kind) {
@@ -263,7 +264,10 @@ function paintSlideBackground(
           "preview-corrupt-image",
           message,
           `${paintContext.path}/background`,
-          error instanceof CapabilityError ? error.details : undefined,
+          {
+            ...(error instanceof CapabilityError ? error.details : undefined),
+            field,
+          },
         );
       }
       return {
@@ -393,6 +397,7 @@ export const slideBackgroundRefMechanism = defineCanvasMechanism({
 export const slideBackgroundCapability = {
   declaration: "slide-background",
   slideProp: "background",
+  consumesOwnerBackgroundStyle: true,
   slot: "background",
   always: true,
   codegen: slideBackgroundCodegen,
@@ -410,6 +415,8 @@ export const slideBackgroundCapability = {
       !Array.isArray(rawStyle)
         ? (rawStyle as Readonly<Record<string, unknown>>)["background"]
         : undefined;
+    const backgroundField =
+      styleBackground !== undefined ? "style.background" : "background";
     const background = styleBackground ?? input.props["background"];
     try {
       // Validate background declaration eagerly at bind time so invalid tokens/resources surface early.
@@ -437,7 +444,11 @@ export const slideBackgroundCapability = {
             return emitSlideBackground(resolved, emitContext);
           },
           paint(paintContext: SlidePaintContext): SlidePaintOutput {
-            return paintSlideBackground(resolved, paintContext);
+            return paintSlideBackground(
+              resolved,
+              paintContext,
+              backgroundField,
+            );
           },
         };
       },

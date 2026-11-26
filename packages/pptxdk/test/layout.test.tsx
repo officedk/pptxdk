@@ -2622,7 +2622,7 @@ describe("public layout entry", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-structure" &&
+            code === "font-unavailable" &&
             path ===
               "deck/slide[unmeasured-baseline]/box[1]/text[unmeasured-text]",
         ),

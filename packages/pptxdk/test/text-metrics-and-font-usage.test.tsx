@@ -1018,7 +1018,7 @@ describe("Ticket 01 Slice 3: resolve and emit font/glyph hard-error boundaries",
           ),
         ),
       ),
-      ["invalid-structure", "font-unavailable"],
+      ["font-unavailable"],
     );
     await assertResolveThrows(
       createElement(

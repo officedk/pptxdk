@@ -59,6 +59,7 @@ export const codegenDiagnosticSchema = z.discriminatedUnion("code", [
     code: z.literal("unsupported-declaration"),
     path: z.string(),
     message: z.string(),
+    field: z.string().optional(),
     declaration: z.string(),
   }),
   z.strictObject({

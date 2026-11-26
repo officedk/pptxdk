@@ -982,7 +982,7 @@ const previewCommand = define.command("preview")({
                   "Preview failed:",
                   ...errors.map(
                     (error) =>
-                      `  Page ${error.page} ${error.path} [${error.code}]: ${error.message}`,
+                      `  Page ${error.page} ${error.path}${error.field ? ` (${error.field})` : ""} [${error.code}]: ${error.message}`,
                   ),
                   ...(pages.length > 0
                     ? [
@@ -1297,7 +1297,7 @@ const codegenCommand = define.command("codegen")({
                   "Source generation failed:",
                   ...diagnostics.map(
                     (diagnostic) =>
-                      `  ${diagnostic.path}${"field" in diagnostic && diagnostic.field !== undefined ? ` (${diagnostic.field})` : ""} [${diagnostic.code}]: ${diagnostic.message}`,
+                      `  ${diagnostic.path}${diagnostic.field !== undefined ? ` (${diagnostic.field})` : ""} [${diagnostic.code}]: ${diagnostic.message}`,
                   ),
                 ]),
               ),

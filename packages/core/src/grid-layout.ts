@@ -660,9 +660,7 @@ function buildGridModel(
 /**
  * Creates the Grid container solver collaborating strictly through `LayoutSolverPort`.
  */
-export function createGridContainerSolver(
-  _warnOnce?: (path: string, code: string, message: string) => void,
-): CustomContainerSolver {
+export function createGridContainerSolver(): CustomContainerSolver {
   return {
     handlesDisplay(display) {
       return display === "grid";
@@ -761,8 +759,8 @@ export function createGridContainerSolver(
           );
         }
         const align = gridAlignment(alignValue);
-        const declaredWidth = childStyle.width ?? child.contractWidth;
-        const declaredHeight = childStyle.height ?? child.contractHeight;
+        const declaredWidth = childStyle.width;
+        const declaredHeight = childStyle.height;
         const widthPercent = resolvePercent(declaredWidth, cellWidth);
         const heightPercent = resolvePercent(declaredHeight, cellHeight);
         const widthSpecified =

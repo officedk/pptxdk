@@ -409,10 +409,19 @@ export const shapeCapability = {
       ...(geometry !== undefined ? { geometry } : {}),
     });
 
-    const declaredWidth = contract.width;
-    const declaredHeight = contract.height;
-    const hasFixedSize =
-      typeof declaredWidth === "number" && typeof declaredHeight === "number";
+    const ls = contract.layoutStyle;
+    const declaredWidth = ls.width;
+    const declaredHeight = ls.height;
+    const hasBothVerticalOffsets =
+      ls.position === "absolute" &&
+      ((ls.inset !== undefined && ls.inset !== "auto") ||
+        (ls.top !== undefined &&
+          ls.top !== "auto" &&
+          ls.bottom !== undefined &&
+          ls.bottom !== "auto"));
+    const hasFixedHeight =
+      (declaredHeight !== undefined && declaredHeight !== "auto") ||
+      hasBothVerticalOffsets;
 
     const native: BoundObjectNativeCollaboration = {
       ...(morphKey === undefined ? {} : { morphKey }),
@@ -459,11 +468,11 @@ export const shapeCapability = {
           };
         } catch (error) {
           if (
-            hasFixedSize &&
+            hasFixedHeight &&
+            request.purpose !== "baseline" &&
             error instanceof CapabilityError &&
             (error.code === "font-measurement-unavailable" ||
-              (error.code === "font-missing-glyph" &&
-                request.purpose !== "baseline"))
+              error.code === "font-missing-glyph")
           ) {
             return {
               baseline: "unavailable",
@@ -508,8 +517,7 @@ export const shapeCapability = {
             {
               width: Math.max(0, textRect.width - insets.left - insets.right),
               height: Math.max(0, textRect.height - insets.top - insets.bottom),
-              contentSized:
-                declaredHeight === undefined || declaredHeight === "auto",
+              contentSized: !hasFixedHeight,
               insets,
             },
             "text-box",
@@ -543,10 +551,6 @@ export const shapeCapability = {
             "Shape.name contains characters not allowed in XML 1.0",
           );
         }
-        const warnings = [
-          ...visual.warnings,
-          ...(resolvedText?.warnings ?? []),
-        ];
         const resolvedModel: ResolvedShapeModel = {
           escapedName,
           visual,
@@ -586,7 +590,6 @@ export const shapeCapability = {
           },
           transform,
           extensions: [],
-          ...(warnings.length === 0 ? {} : { warnings }),
           ...(annotations.length === 0 ? {} : { annotations }),
           ...(resolvedText === undefined
             ? {}

@@ -346,21 +346,22 @@ function subsetBytes(
   characters: string,
 ): Uint8Array {
   const requiredCharacters = [...new Set(characters)];
-  for (const character of requiredCharacters) {
+  const missingCharacters = requiredCharacters.filter((character) => {
     const codePoint = character.codePointAt(0);
-    if (
+    return (
       codePoint !== undefined &&
       requiresVisibleFontGlyph(character) &&
       (!checked.font.hasGlyphForCodePoint(codePoint) ||
         checked.font.glyphForCodePoint(codePoint).id === 0)
-    ) {
-      return fail(
-        use,
-        "font-missing-glyph",
-        `${use.family} ${use.weight} ${use.style} font is missing glyph for emitted character ${character}`,
-        [character],
-      );
-    }
+    );
+  });
+  if (missingCharacters.length > 0) {
+    return fail(
+      use,
+      "font-missing-glyph",
+      `${use.family} ${use.weight} ${use.style} font is missing glyph for emitted character ${missingCharacters[0]!}`,
+      missingCharacters,
+    );
   }
 
   let bytes: Uint8Array;

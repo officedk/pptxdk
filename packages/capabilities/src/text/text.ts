@@ -396,6 +396,16 @@ export const textCapability = {
     const insets = textInsets(input.props["style"], placeholder);
     const styleHeight = layoutStyleValue(input, "height");
     const requestedHeight = height(placeholderGeometry?.height ?? styleHeight);
+    const ls = contract.layoutStyle;
+    const hasBothVerticalOffsets =
+      ls.position === "absolute" &&
+      ((ls.inset !== undefined && ls.inset !== "auto") ||
+        (ls.top !== undefined &&
+          ls.top !== "auto" &&
+          ls.bottom !== undefined &&
+          ls.bottom !== "auto"));
+    const isContentSized =
+      requestedHeight.contentSized && !hasBothVerticalOffsets;
 
     const {
       paragraphs,
@@ -464,8 +474,8 @@ export const textCapability = {
       measureLayout(
         request: CapabilityLayoutRequest,
       ): CapabilityLayoutMeasurement | undefined {
-        const isContentSized = requestedHeight.contentSized;
-        const width = request.availableWidth ?? contract.width ?? declaredWidth;
+        const width =
+          request.availableWidth ?? contract.layoutStyle.width ?? declaredWidth;
         const innerWidth =
           request.availableWidth !== undefined
             ? request.availableWidth
@@ -486,10 +496,10 @@ export const textCapability = {
         } catch (error) {
           if (
             !isContentSized &&
+            request.purpose !== "baseline" &&
             error instanceof CapabilityError &&
             (error.code === "font-measurement-unavailable" ||
-              (error.code === "font-missing-glyph" &&
-                request.purpose !== "baseline"))
+              error.code === "font-missing-glyph")
           ) {
             return {
               baseline: "unavailable",
@@ -500,16 +510,12 @@ export const textCapability = {
       },
       resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const dimensions = {
-          x: coordinate(
-            resolveContext.layoutBox?.x ?? declaredX ?? contract.x,
-            "x",
-          ),
-          y: coordinate(
-            resolveContext.layoutBox?.y ?? declaredY ?? contract.y,
-            "y",
-          ),
+          x: coordinate(resolveContext.layoutBox?.x ?? declaredX, "x"),
+          y: coordinate(resolveContext.layoutBox?.y ?? declaredY, "y"),
           width: size(
-            resolveContext.layoutBox?.width ?? declaredWidth ?? contract.width,
+            resolveContext.layoutBox?.width ??
+              declaredWidth ??
+              contract.layoutStyle.width,
             "width",
           ),
         };
@@ -533,7 +539,7 @@ export const textCapability = {
           {
             width: innerWidth,
             ...(innerHeight === undefined ? {} : { height: innerHeight }),
-            contentSized: requestedHeight.contentSized,
+            contentSized: isContentSized,
             insets,
           },
           "text-box",
@@ -550,11 +556,11 @@ export const textCapability = {
           ...dimensions,
           height: size(
             resolveContext.layoutBox?.height ??
-              (requestedHeight.contentSized
+              (isContentSized
                 ? resolvedText.measurement === undefined
                   ? undefined
                   : resolvedText.measurement.height + insets.top + insets.bottom
-                : requestedHeight.value),
+                : measuredHeight),
             "height",
           ),
         };
@@ -604,7 +610,6 @@ export const textCapability = {
           flipH: visual.flipH,
           flipV: visual.flipV,
         };
-        const warnings = [...resolvedText.warnings, ...visual.warnings];
         const model: ResolvedTextModel = {
           escapedName,
           box,
@@ -646,7 +651,6 @@ export const textCapability = {
           },
           transform,
           extensions: [],
-          ...(warnings.length === 0 ? {} : { warnings }),
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: resolvedText.resourceClaims,
           fontUsages: resolvedText.fontUsages,

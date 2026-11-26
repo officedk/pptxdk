@@ -262,7 +262,18 @@ function paintImageModel(
     };
   }
 
-  const pngBytes = decodeImageToPngBytes(image);
+  let pngBytes: Uint8Array;
+  try {
+    pngBytes = decodeImageToPngBytes(image);
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      throw new CapabilityError(error.code, error.message, error.path, {
+        ...error.details,
+        field: "src",
+      });
+    }
+    throw error;
+  }
 
   const leftCrop = roundCropFraction(sourceCrop.l);
   const topCrop = roundCropFraction(sourceCrop.t);
@@ -882,9 +893,6 @@ export const imageCapability = {
             flipV: resolvedVisual.flipV,
           },
           extensions: [],
-          ...(resolvedVisual.warnings.length === 0
-            ? {}
-            : { warnings: resolvedVisual.warnings }),
           ...(annotations.length === 0 ? {} : { annotations }),
 
           emit(emitContext: EmitContext): EmitOutput {

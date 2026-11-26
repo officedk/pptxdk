@@ -49,11 +49,11 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
   id: "layout-block-flex-semantics",
   capability: "layout:block-flex",
   description:
-    "Dual-author Block and Flex layout scenario covering row/column flow, auto sizing, min-content automatic minimums, percentages, flexWrap, text/shape baseline alignment, absolute containing-block escaping, and canvas overflow warnings.",
+    "Dual-author Block and Flex layout scenario covering row/column flow, auto sizing, min-content automatic minimums, percentages, flexWrap, text/shape baseline alignment, absolute containing-block escaping, and out-of-bounds canvas geometry.",
   visualCheckpoints: [
     "Page 1 (block-flex-flow-and-auto-min): light #F8FAFC canvas; top white header row aligns auto-sized 'Block & Flex Layout' text on the left and a 30%-width blue badge ('30% Width') on the right; middle row displays 3 cards—left blue card protects its unbreakable 'MinimumContentGuard' width via automatic minimum, middle emerald card (minWidth: 0) shrinks and wraps text cleanly, right amber card takes 25% width; bottom gray block section stacks full-width column items.",
     "Page 2 (flex-wrap-and-baseline): white canvas; top-left bordered panel wraps four 110x42 colored chips across two rows (2 per row); top-right amber-bordered Flex row aligns baselines across 28px Text ('28px'), a nested Box wrapping 16px Text ('16px Boxed'), and 12px CJK/Latin Text ('12px 基线') alongside a centered teal Shape badge; bottom indigo-bordered relative box anchors an escaped absolute indigo Shape at its bottom-right corner and a dark slate Shape at its top-left.",
-    "Page 3 (canvas-overflow-and-escape): pale rose #FEF2F2 canvas; dark slate Shape escapes an enclosing static Box to position at (32, 32) on the Slide; bottom-right coral Box ('Overflow retained') intentionally extends past the right/bottom canvas edges (clipped at PNG border while retaining full coordinates in PPTX and reporting an overflow warning).",
+    "Page 3 (canvas-overflow-and-escape): pale rose #FEF2F2 canvas; dark slate Shape escapes an enclosing static Box to position at (32, 32) on the Slide; bottom-right coral Box ('Overflow retained') intentionally extends past the right/bottom canvas edges (clipped at PNG border while retaining full coordinates in PPTX).",
   ],
   nativeCheckpoints: [
     "Open exported PPTX in PowerPoint/WPS and verify identical geometry across JSX and /document builds, including clipped-at-slide-edge overflowing Box retained at its declared EMU bounds.",

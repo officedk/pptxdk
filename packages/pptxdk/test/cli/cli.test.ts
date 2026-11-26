@@ -1253,6 +1253,7 @@ describe("pptxdk CLI preview", () => {
               code: "preview-corrupt-image",
               page: 2,
               path: "deck/slide[bad-image]/image[corrupt-img]",
+              field: "src",
               format: "png",
               message: expect.stringContaining("PNG"),
             },
@@ -1288,7 +1289,7 @@ describe("pptxdk CLI preview", () => {
       expect(textResult.stderr).not.toContain("Warning");
       expect(textResult.stderr).toContain("Preview failed:");
       expect(textResult.stderr).toContain(
-        "Page 2 deck/slide[bad-image]/image[corrupt-img] [preview-corrupt-image]:",
+        "Page 2 deck/slide[bad-image]/image[corrupt-img] (src) [preview-corrupt-image]:",
       );
       expect(textResult.stderr).toContain("Written pages:");
       expect(textResult.stderr).toContain(

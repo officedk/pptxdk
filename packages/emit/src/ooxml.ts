@@ -512,6 +512,20 @@ function levelDefRPrXml(
     const resolved = themeContext.resolveColor(style.color);
     fillXml = `<a:solidFill>${resolvedColorXml(resolved)}</a:solidFill>`;
   }
+  let effectXml = "";
+  if (style.textShadow === "none") {
+    effectXml = "<a:effectLst/>";
+  } else if (style.textShadow !== undefined) {
+    const blur = pxToEmu(style.textShadow.blur ?? 4);
+    const dist = pxToEmu(style.textShadow.distance ?? 0);
+    const dir = Math.round(
+      ((((style.textShadow.angle ?? 90) % 360) + 360) % 360) * 60_000,
+    );
+    const shadowColor = themeContext.resolveColor(
+      style.textShadow.color ?? { color: "#000000", alpha: 0.35 },
+    );
+    effectXml = `<a:effectLst><a:outerShdw blurRad="${blur}" dist="${dist}" dir="${dir}" algn="ctr" rotWithShape="0">${resolvedColorXml(shadowColor)}</a:outerShdw></a:effectLst>`;
+  }
   let fontXml = "";
   if (style.fontFamily !== undefined) {
     const resolved = themeContext.resolveFont(style.fontFamily);
@@ -535,9 +549,15 @@ function levelDefRPrXml(
           : resolved.family;
     fontXml = `<a:latin typeface="${xmlEscape(latin)}"/><a:ea typeface="${xmlEscape(ea)}"/><a:cs typeface="${xmlEscape(cs)}"/>`;
   }
-  if (attrs.length === 0 && fillXml === "" && fontXml === "") return "";
+  if (
+    attrs.length === 0 &&
+    fillXml === "" &&
+    effectXml === "" &&
+    fontXml === ""
+  )
+    return "";
   const attrText = attrs.length === 0 ? "" : ` ${attrs.join(" ")}`;
-  const inner = `${fillXml}${fontXml}`;
+  const inner = `${fillXml}${effectXml}${fontXml}`;
   return inner === ""
     ? `<a:defRPr${attrText}/>`
     : `<a:defRPr${attrText}>${inner}</a:defRPr>`;

@@ -32,7 +32,6 @@ import type {
   CapabilityElement,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
-  LayoutLength,
   LayoutStyle,
   NativeElementKind,
   PlaceholderResolutionContext,
@@ -247,108 +246,16 @@ export function parseCapabilityLayoutContract(options: {
     }
   }
 
-  const x =
-    typeof props["x"] === "number" && Number.isFinite(props["x"])
-      ? props["x"]
-      : undefined;
-  const y =
-    typeof props["y"] === "number" && Number.isFinite(props["y"])
-      ? props["y"]
-      : undefined;
-  const styleWidth = rawStyle !== undefined ? rawStyle["width"] : undefined;
-  const styleHeight = rawStyle !== undefined ? rawStyle["height"] : undefined;
-  const width = (styleWidth ?? props["width"]) as
-    | number
-    | `${number}%`
-    | "auto"
-    | undefined;
-  const height = (styleHeight ?? props["height"]) as
-    | number
-    | `${number}%`
-    | "auto"
-    | undefined;
-
-  const isValidBridgeLength = (value: unknown): value is LayoutLength =>
-    (typeof value === "number" && Number.isFinite(value) && value >= 0) ||
-    value === "auto" ||
-    (typeof value === "string" && /^(\d+(?:\.\d*)?|\.\d+)%$/u.test(value));
-
-  // Transitional geometry bridge (Tickets 03-10): map legacy top-level x/y/width/height into
-  // LayoutStyle so unmigrated callers keep working inside unconditional block/flex/grid containers.
-  let effectiveLayoutStyle = layoutStyle;
-  if (
-    x !== undefined ||
-    y !== undefined ||
-    isValidBridgeLength(props["width"]) ||
-    isValidBridgeLength(props["height"])
-  ) {
-    const bridged: Record<string, unknown> = { ...layoutStyle };
-    if (
-      (x !== undefined || y !== undefined) &&
-      layoutStyle.position === undefined
-    ) {
-      bridged["position"] = "absolute";
-      if (
-        layoutStyle.left === undefined &&
-        layoutStyle.inset === undefined &&
-        layoutStyle.right === undefined
-      ) {
-        bridged["left"] = x ?? 0;
-      }
-      if (
-        layoutStyle.top === undefined &&
-        layoutStyle.inset === undefined &&
-        layoutStyle.bottom === undefined
-      ) {
-        bridged["top"] = y ?? 0;
-      }
-    } else if (layoutStyle.position === "absolute") {
-      if (
-        layoutStyle.left === undefined &&
-        layoutStyle.inset === undefined &&
-        layoutStyle.right === undefined &&
-        x !== undefined
-      ) {
-        bridged["left"] = x;
-      }
-      if (
-        layoutStyle.top === undefined &&
-        layoutStyle.inset === undefined &&
-        layoutStyle.bottom === undefined &&
-        y !== undefined
-      ) {
-        bridged["top"] = y;
-      }
-    }
-    if (
-      layoutStyle.width === undefined &&
-      isValidBridgeLength(props["width"])
-    ) {
-      bridged["width"] = props["width"];
-    }
-    if (
-      layoutStyle.height === undefined &&
-      isValidBridgeLength(props["height"])
-    ) {
-      bridged["height"] = props["height"];
-    }
-    effectiveLayoutStyle = bridged as LayoutStyle;
-  }
-
   const isIntrinsicWidthObject =
     nativeKind === "pic" ||
     (nativeKind === "grpSp" &&
-      effectiveLayoutStyle.position !== "relative" &&
-      effectiveLayoutStyle.position !== "absolute" &&
-      effectiveLayoutStyle.width === undefined);
+      layoutStyle.position !== "relative" &&
+      layoutStyle.position !== "absolute" &&
+      layoutStyle.width === undefined);
 
   return {
     nativeKind,
-    ...(x === undefined ? {} : { x }),
-    ...(y === undefined ? {} : { y }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
-    layoutStyle: effectiveLayoutStyle,
+    layoutStyle,
     ...(padding === undefined ? {} : { padding }),
     ...(isIntrinsicWidthObject ? { preservesIntrinsicSize: true } : {}),
   };
@@ -401,7 +308,6 @@ function objectModule(
 
 type CommittedNodeMeta = {
   readonly element: CapabilityElement;
-  readonly checksCanvasOverflow: boolean;
 };
 
 /** Coordinates layout tree construction, capability binding, solver collaboration, and box commitment. */
@@ -435,9 +341,7 @@ export class LayoutPass {
     this.#options = options;
     this.#solver = createBlockFlexLayoutSolver({
       dimensions,
-      customContainers: customContainerModes.map((mode) =>
-        mode.createSolver(() => {}),
-      ),
+      customContainers: customContainerModes.map((mode) => mode.createSolver()),
     });
   }
 
@@ -617,14 +521,6 @@ export class LayoutPass {
         ...(contract.preservesIntrinsicSize
           ? { preservesIntrinsicSize: true }
           : {}),
-        ...(contract.width === undefined
-          ? {}
-          : { contractWidth: contract.width }),
-        ...(contract.height === undefined
-          ? {}
-          : { contractHeight: contract.height }),
-        ...(contract.x === undefined ? {} : { contractX: contract.x }),
-        ...(contract.y === undefined ? {} : { contractY: contract.y }),
         ...(contract.padding === undefined
           ? {}
           : { padding: contract.padding }),
@@ -633,7 +529,6 @@ export class LayoutPass {
     );
     this.#nodeMeta.set(node, {
       element: input,
-      checksCanvasOverflow: container.checksCanvasOverflow !== false,
     });
     this.#appendChildren(container.children, path, node, theme);
     return node;
@@ -659,14 +554,6 @@ export class LayoutPass {
         ...(contract.contentMinimumsEnforced
           ? { contentMinimumsEnforced: true }
           : {}),
-        ...(contract.width === undefined
-          ? {}
-          : { contractWidth: contract.width }),
-        ...(contract.height === undefined
-          ? {}
-          : { contractHeight: contract.height }),
-        ...(contract.x === undefined ? {} : { contractX: contract.x }),
-        ...(contract.y === undefined ? {} : { contractY: contract.y }),
         ...(contract.padding === undefined
           ? {}
           : { padding: contract.padding }),
@@ -686,7 +573,6 @@ export class LayoutPass {
     );
     this.#nodeMeta.set(node, {
       element: input,
-      checksCanvasOverflow: false,
     });
     return node;
   }

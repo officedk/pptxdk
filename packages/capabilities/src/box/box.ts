@@ -136,7 +136,6 @@ export const boxCapability: ObjectCapabilityModule = {
       emitsObject: hasVisibleStyle,
       observesLayout: true,
       propagatesBaseline: true,
-      checksCanvasOverflow: true,
     };
 
     const native: BoundObjectNativeCollaboration = {
@@ -205,9 +204,6 @@ export const boxCapability: ObjectCapabilityModule = {
           ...(transform === undefined ? {} : { transform }),
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
-          ...(visual.warnings.length === 0
-            ? {}
-            : { warnings: visual.warnings }),
           emit(emitContext: EmitContext): EmitOutput {
             return {
               xml: visual.hasVisibleStyle

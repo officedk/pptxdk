@@ -180,6 +180,11 @@ function toPreviewError(
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof CapabilityError) {
     const details = error.details ?? {};
+    const field =
+      typeof details["field"] === "string" && details["field"] !== ""
+        ? details["field"]
+        : undefined;
+    const fieldSpread = field === undefined ? {} : { field };
     const rawFont = details["font"];
     const fontRecord =
       typeof rawFont === "object" && rawFont !== null
@@ -199,6 +204,7 @@ function toPreviewError(
         return Object.freeze({
           code: "preview-missing-font",
           path,
+          ...fieldSpread,
           message,
           font: Object.freeze({ family, weight, style }),
         });
@@ -217,6 +223,7 @@ function toPreviewError(
         return Object.freeze({
           code: "preview-unsupported-font",
           path,
+          ...fieldSpread,
           message,
           font: Object.freeze({
             family,
@@ -234,6 +241,7 @@ function toPreviewError(
         return Object.freeze({
           code: "preview-missing-glyph",
           path,
+          ...fieldSpread,
           message,
           font: Object.freeze({ family, weight, style }),
           characters: Object.freeze(characters),
@@ -248,6 +256,7 @@ function toPreviewError(
         return Object.freeze({
           code: "preview-corrupt-image",
           path,
+          ...fieldSpread,
           message,
           ...(format === undefined ? {} : { format }),
         });
@@ -260,6 +269,7 @@ function toPreviewError(
         return Object.freeze({
           code: "preview-unsupported-capability",
           path,
+          ...fieldSpread,
           message,
           capability,
         });

@@ -6,6 +6,7 @@ import {
   layoutStyleSchema,
   linkTargetSchema,
   matchLayoutPlaceholderKey,
+  matchMasterPlaceholderSpec,
   nativePlaceholderRefSchema,
   parseCapabilityLayoutContract,
   visualStyleSchema,
@@ -31,11 +32,13 @@ import {
 } from "@pptxdk/emit";
 import {
   A_NS,
+  EMU_PER_PX,
   extentEmuFragmentSchema,
   offsetEmuFragmentSchema,
   ooxmlBoolSchema,
   ooxmlNonNegativeIntSchema,
   P_NS,
+  transformAttributesFragmentSchema,
   defineCanvasMechanism,
   emuToPx,
   type ImportDiagnostic,
@@ -67,6 +70,7 @@ import {
 } from "../shared/style-inheritance.ts";
 import {
   emitPlaceholderVisualSpPr,
+  readSpPrAppearance,
   resolveVisualModel,
   visualStyleKeys,
   type PlaceholderSpPrFlags,
@@ -261,9 +265,27 @@ export function readContentPlaceholderSp(
         readonly height: number;
       }
     | undefined;
+  let rotate: number | undefined;
+  let flipH: boolean | undefined;
+  let flipV: boolean | undefined;
+  let fallbackUnits = { w: 0, h: 0 };
   const xfrm = spPr.child(A_NS, "xfrm");
   if (xfrm !== undefined) {
-    xfrm.attrsObject(["rot", "flipH", "flipV"]);
+    const hasExplicitFlipH = xfrm.element.hasAttribute("flipH");
+    const hasExplicitFlipV = xfrm.element.hasAttribute("flipV");
+    const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
+    const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
+    if (parsedXfrm.success) {
+      if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
+        rotate = parsedXfrm.data.rot / 60_000;
+      }
+      if (hasExplicitFlipH && parsedXfrm.data.flipH !== undefined) {
+        flipH = parsedXfrm.data.flipH;
+      }
+      if (hasExplicitFlipV && parsedXfrm.data.flipV !== undefined) {
+        flipV = parsedXfrm.data.flipV;
+      }
+    }
     const off = xfrm.child(A_NS, "off");
     const ext = xfrm.child(A_NS, "ext");
     if (off !== undefined && ext !== undefined) {
@@ -274,6 +296,7 @@ export function readContentPlaceholderSp(
         ext.attrsObject(["cx", "cy"]),
       );
       if (parsedOff.success && parsedExt.success) {
+        fallbackUnits = { w: parsedExt.data.cx, h: parsedExt.data.cy };
         localBox = {
           x: emuToPx(parsedOff.data.x),
           y: emuToPx(parsedOff.data.y),
@@ -283,53 +306,117 @@ export function readContentPlaceholderSp(
       }
     }
   }
-  const prstGeomEl = directElementChild(spPr.element, A_NS, "prstGeom");
-  if (
-    prstGeomEl !== undefined &&
-    prstGeomEl.getAttribute("prst") === "rect" &&
-    prstGeomEl.attributes.length === 1
-  ) {
-    const prstGeom = spPr.child(A_NS, "prstGeom")!;
-    prstGeom.consumeAttr("prst");
-    const avLstEl = directElementChild(prstGeom.element, A_NS, "avLst");
-    if (
-      avLstEl !== undefined &&
-      avLstEl.children.length === 0 &&
-      avLstEl.attributes.length === 0
-    ) {
-      prstGeom.child(A_NS, "avLst");
-    }
-  }
-  const noFillEl = directElementChild(spPr.element, A_NS, "noFill");
-  if (
-    noFillEl !== undefined &&
-    noFillEl.children.length === 0 &&
-    noFillEl.attributes.length === 0
-  ) {
-    spPr.child(A_NS, "noFill");
-  }
 
   const matchedKey = matchLayoutPlaceholderKey(layoutPlaceholders, {
     type: nativeRef.type,
     idx: nativeRef.idx,
   });
+  const layoutPlaceholder =
+    matchedKey === undefined ? undefined : layoutPlaceholders?.[matchedKey];
+  const masterPlaceholder = matchMasterPlaceholderSpec(
+    context.masterPlaceholders,
+    nativeRef.type,
+  );
+  const inheritedWidth =
+    (typeof layoutPlaceholder?.style?.width === "number"
+      ? layoutPlaceholder.style.width
+      : undefined) ??
+    (typeof masterPlaceholder?.style?.width === "number"
+      ? masterPlaceholder.style.width
+      : undefined);
+  const inheritedHeight =
+    (typeof layoutPlaceholder?.style?.height === "number"
+      ? layoutPlaceholder.style.height
+      : undefined) ??
+    (typeof masterPlaceholder?.style?.height === "number"
+      ? masterPlaceholder.style.height
+      : undefined);
+  const inheritedBox =
+    inheritedWidth !== undefined && inheritedHeight !== undefined
+      ? { width: inheritedWidth, height: inheritedHeight }
+      : undefined;
+  const effectiveFallbackUnits =
+    localBox === undefined && inheritedBox !== undefined
+      ? {
+          w: Math.round(inheritedBox.width * EMU_PER_PX),
+          h: Math.round(inheritedBox.height * EMU_PER_PX),
+        }
+      : fallbackUnits;
+
+  const appearance = readSpPrAppearance(
+    spPr,
+    context.package,
+    effectiveFallbackUnits,
+    phLocation,
+    diagnostics,
+    { preservePlaceholderClears: true },
+  );
+
+  const { border: rawBorder, ...restVisualStyle } = appearance.style;
+  const border: NonNullable<PlaceholderDeclarationProps["style"]>["border"] =
+    rawBorder === "none"
+      ? "none"
+      : rawBorder === undefined
+        ? undefined
+        : (() => {
+            const {
+              startArrow: _startArrow,
+              endArrow: _endArrow,
+              ...plainBorder
+            } = rawBorder;
+            return plainBorder;
+          })();
+  const boxSize = localBox ?? inheritedBox;
+  let borderRadius: number | undefined;
+  if (appearance.geometry === "roundRect") {
+    if (boxSize !== undefined) {
+      borderRadius =
+        (16667 / 100_000) * Math.min(boxSize.width, boxSize.height);
+    }
+  } else if (
+    typeof appearance.geometry === "object" &&
+    appearance.geometry.type === "preset" &&
+    appearance.geometry.name === "roundRect" &&
+    boxSize !== undefined
+  ) {
+    const adj = appearance.geometry.adjust?.["adj"] ?? 16667;
+    if (adj > 0) {
+      borderRadius = (adj / 100_000) * Math.min(boxSize.width, boxSize.height);
+    }
+  }
+
+  const combinedStyle: Record<string, unknown> = {
+    ...(localBox === undefined
+      ? {}
+      : {
+          position: "absolute",
+          left: localBox.x,
+          top: localBox.y,
+          width: localBox.width,
+          height: localBox.height,
+        }),
+    ...restVisualStyle,
+    ...(border === undefined ? {} : { border }),
+    ...(borderRadius === undefined ? {} : { borderRadius }),
+    ...(rotate === undefined ? {} : { rotate }),
+    ...(flipH === undefined ? {} : { flipH }),
+    ...(flipV === undefined ? {} : { flipV }),
+  };
+
+  let validatedStyle: PlaceholderDeclarationProps["style"] | undefined;
+  if (Object.keys(combinedStyle).length > 0) {
+    const parsedStyle = placeholderObjectStyleSchema.safeParse(combinedStyle);
+    if (parsedStyle.success) {
+      validatedStyle = parsedStyle.data;
+    }
+  }
 
   const node = createPlaceholderNode({
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
     nativePlaceholder: nativeRef,
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
-    ...(localBox === undefined
-      ? {}
-      : {
-          style: {
-            position: "absolute",
-            left: localBox.x,
-            top: localBox.y,
-            width: localBox.width,
-            height: localBox.height,
-          },
-        }),
+    ...(validatedStyle === undefined ? {} : { style: validatedStyle }),
   });
 
   if (

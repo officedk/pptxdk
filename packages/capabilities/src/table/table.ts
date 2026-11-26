@@ -44,6 +44,7 @@ import {
   parseTextParagraphs,
   renderTextOutlinesSvg,
   resolveTextBody,
+  type MissingGlyphIssue,
   type Paragraph,
   type ResolvedTextBody,
   type ResolvedTextStyle,
@@ -138,8 +139,13 @@ type ParsedRow = {
 };
 const maximumExtentEmu = 2_147_483_647;
 
-function fail(code: string, message: string, path?: string): never {
-  throw new CapabilityError(code, message, path);
+function fail(
+  code: string,
+  message: string,
+  path?: string,
+  details?: Readonly<Record<string, unknown>>,
+): never {
+  throw new CapabilityError(code, message, path, details);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -270,7 +276,7 @@ function resolveCellBody(
     );
   } catch (error) {
     if (error instanceof CapabilityError) {
-      fail(error.code, error.message, cell.path);
+      fail(error.code, error.message, cell.path, error.details);
     }
     throw error;
   }
@@ -467,7 +473,7 @@ function prepareRows(
         parsedTextStyle = textResult.style;
       } catch (error) {
         if (error instanceof CapabilityError) {
-          fail(error.code, error.message, cellPath);
+          fail(error.code, error.message, cellPath, error.details);
         }
         throw error;
       }
@@ -608,7 +614,11 @@ function emitTableModel(
         (embedFonts === "full" || embedFonts === "subset") &&
         body.missingGlyphErrors.length > 0
       ) {
-        fail("font-missing-glyph", body.missingGlyphErrors[0]!, cell.path);
+        const issue: MissingGlyphIssue = body.missingGlyphErrors[0]!;
+        fail("font-missing-glyph", issue.message, cell.path, {
+          font: issue.font,
+          characters: issue.characters,
+        });
       }
       let emittedXml: string;
       try {
@@ -617,7 +627,12 @@ function emitTableModel(
         }).xml;
       } catch (error) {
         if (error instanceof CapabilityError) {
-          fail(error.code, error.message, error.path ?? cell.path);
+          fail(
+            error.code,
+            error.message,
+            error.path ?? cell.path,
+            error.details,
+          );
         }
         throw error;
       }
@@ -810,10 +825,39 @@ type TableLayoutModel = {
   readonly cells: readonly ParsedCell[];
   readonly widths: readonly number[];
   readonly heights: readonly number[];
-  readonly warnings: { code: string; message: string; path?: string }[];
-  readonly warningKeys: Set<string>;
   readonly claims: { kind: string; key: string; identity: string }[];
 };
+
+function failTableMeasurementUnavailable(
+  result: ResolvedTextBody,
+  defaultMessage: string,
+  cellPath: string,
+): never {
+  if (
+    result.measurementError !== undefined &&
+    result.measurementError.code !== "font-measurement-unavailable"
+  ) {
+    fail(
+      result.measurementError.code,
+      result.measurementError.message,
+      cellPath,
+      result.measurementError.details,
+    );
+  }
+  const errorFont =
+    typeof result.measurementError?.details?.["font"] === "object" &&
+    result.measurementError.details["font"] !== null
+      ? (result.measurementError.details["font"] as Record<string, unknown>)
+      : undefined;
+  const fallbackFont =
+    result.unmeasuredIssues.missingResourceFonts[0] ??
+    result.unmeasuredIssues.referencedFonts[0];
+  const font = errorFont ?? fallbackFont;
+  fail("font-measurement-unavailable", defaultMessage, cellPath, {
+    ...(font === undefined ? {} : { font }),
+    reason: "missing-resource",
+  });
+}
 
 /** Shared calculation of table tracks and text dimensions used by layout measurement and table resolution. */
 function tableLayoutModel(
@@ -822,16 +866,8 @@ function tableLayoutModel(
   theme: ThemeContext,
 ): TableLayoutModel {
   const { columns, tableStyle, rows, cells } = parsed;
-  const warnings: { code: string; message: string; path?: string }[] = [];
   const claims: { kind: string; key: string; identity: string }[] = [];
-  const warningKeys = new Set<string>();
-  const addTextResult = (result: ResolvedTextBody, path: string) => {
-    for (const warning of result.warnings) {
-      const key = `${path}\u0000${warning.code}\u0000${warning.message}`;
-      if (warningKeys.has(key)) continue;
-      warningKeys.add(key);
-      warnings.push({ ...warning, path });
-    }
+  const addTextResult = (result: ResolvedTextBody) => {
     claims.push(...result.resourceClaims);
   };
   const naturalWidths = new Map<ParsedCell, number>();
@@ -855,21 +891,35 @@ function tableLayoutModel(
         undefined,
         false,
       );
-      addTextResult(measured, cell.path);
+      addTextResult(measured);
       if (
         measured.textMetrics?.status === "unmeasured" &&
         measured.textMetrics.reason === "missing-glyphs"
       ) {
+        const issue = measured.missingGlyphErrors[0];
+        const glyphFont = measured.unmeasuredIssues.missingGlyphFonts[0];
         fail(
           "font-missing-glyph",
-          measured.missingGlyphErrors[0] ??
+          issue?.message ??
             "auto columns require glyphs for all visible characters",
           cell.path,
+          issue !== undefined
+            ? { font: issue.font, characters: issue.characters }
+            : glyphFont !== undefined
+              ? {
+                  font: {
+                    family: glyphFont.family,
+                    weight: glyphFont.weight,
+                    style: glyphFont.style,
+                  },
+                  characters: glyphFont.missingGlyphs ?? [],
+                }
+              : undefined,
         );
       }
       if (measured.measurement === undefined && measured.text.trim() !== "") {
-        fail(
-          "font-measurement-unavailable",
+        failTableMeasurementUnavailable(
+          measured,
           "auto columns require available font metrics; provide measurement fonts or use explicit column widths",
           cell.path,
         );
@@ -945,21 +995,35 @@ function tableLayoutModel(
       widthOf(cell) - cell.padding.left - cell.padding.right,
     );
     const result = resolveCellBody(cell, theme, innerWidth, undefined, false);
-    addTextResult(result, cell.path);
+    addTextResult(result);
     if (
       result.textMetrics?.status === "unmeasured" &&
       result.textMetrics.reason === "missing-glyphs"
     ) {
+      const issue = result.missingGlyphErrors[0];
+      const glyphFont = result.unmeasuredIssues.missingGlyphFonts[0];
       fail(
         "font-missing-glyph",
-        result.missingGlyphErrors[0] ??
+        issue?.message ??
           "Automatic row height requires glyphs for all visible characters",
         cell.path,
+        issue !== undefined
+          ? { font: issue.font, characters: issue.characters }
+          : glyphFont !== undefined
+            ? {
+                font: {
+                  family: glyphFont.family,
+                  weight: glyphFont.weight,
+                  style: glyphFont.style,
+                },
+                characters: glyphFont.missingGlyphs ?? [],
+              }
+            : undefined,
       );
     }
     if (result.measurement === undefined && result.text.trim() !== "") {
-      fail(
-        "font-measurement-unavailable",
+      failTableMeasurementUnavailable(
+        result,
         "Automatic row height requires available font metrics; provide measurement fonts or specify height on Row",
         cell.path,
       );
@@ -1009,8 +1073,6 @@ function tableLayoutModel(
     cells,
     widths,
     heights,
-    warnings,
-    warningKeys,
     claims,
   };
 }
@@ -1218,17 +1280,9 @@ export const tableCapability = {
         );
         const { widths } = model;
         const heights = [...model.heights];
-        const warnings = [...model.warnings];
         const claims = [...model.claims];
         const fontUses: FontEmbeddingUse[] = [];
-        const warningKeys = new Set(model.warningKeys);
         const addTextResult = (result: ResolvedTextBody, path: string) => {
-          for (const warning of result.warnings) {
-            const key = `${path}\u0000${warning.code}\u0000${warning.message}`;
-            if (warningKeys.has(key)) continue;
-            warningKeys.add(key);
-            warnings.push({ ...warning, path });
-          }
           claims.push(...result.resourceClaims);
           fontUses.push(...result.fontUses.map((use) => ({ ...use, path })));
         };
@@ -1516,7 +1570,6 @@ export const tableCapability = {
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: claims,
           ...(fontUsages.length === 0 ? {} : { fontUsages }),
-          ...(warnings.length === 0 ? {} : { warnings }),
 
           emit(emitContext: EmitContext): EmitOutput {
             return mechanism.emit(resolvedModel, emitContext);

@@ -57,7 +57,10 @@ type ResolvedPlaceholderVisualEntry = {
 
 const readMasterPlaceholderVisuals: PlaceholderVisualReader = (args) =>
   readPlaceholderSpPrVisuals(args, {
-    readAppearance: readSpPrAppearance,
+    readAppearance: (spPr, pkg, fallbackUnits, location, diagnostics) =>
+      readSpPrAppearance(spPr, pkg, fallbackUnits, location, diagnostics, {
+        preservePlaceholderClears: true,
+      }),
     allowedStyleKeys: supportedPlaceholderVisualStyleKeys,
   });
 

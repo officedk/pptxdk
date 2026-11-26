@@ -622,10 +622,6 @@ export type NativeElementKind =
 
 export type CapabilityLayoutContract = {
   readonly nativeKind: NativeElementKind;
-  readonly x?: number;
-  readonly y?: number;
-  readonly width?: number | `${number}%` | "auto";
-  readonly height?: number | `${number}%` | "auto";
   readonly layoutStyle: LayoutStyle;
   readonly padding?: {
     readonly top: number;
@@ -666,7 +662,7 @@ export type CapabilityLayoutMeasurement = {
  * for read-only locator traversal and observation without core knowing capability-specific part kinds.
  */
 export type CapabilitySubPartObservation = {
-  readonly kind?: "row" | "cell";
+  readonly kind?: string;
   readonly authorId?: string;
   readonly path?: string;
   readonly box?: Rect;
@@ -739,8 +735,6 @@ export type BoundContainerCollaboration = {
   readonly observesLayout?: boolean;
   /** True when single-child flex rows propagate text baseline through this container. Defaults to true. */
   readonly propagatesBaseline?: boolean;
-  /** True when overflowing the slide canvas emits a layout container overflow warning. Defaults to true. */
-  readonly checksCanvasOverflow?: boolean;
 };
 
 export type ResolvedLink = {
@@ -1042,6 +1036,8 @@ export type SlideCapabilityModule<
   readonly slideProp?: string;
   /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
   readonly slideProps?: readonly string[];
+  /** True when this slide capability also consumes `style.background` on Slide, SlideMaster, and SlideLayout declarations. */
+  readonly consumesOwnerBackgroundStyle?: boolean;
   /** Written to the slide following PresentationML fixed child element order. */
   readonly slot: SlideCapabilitySlot;
   /** Runs once regardless of whether Slide provides the corresponding property. */

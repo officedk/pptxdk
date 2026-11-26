@@ -39,7 +39,7 @@ export type QueryContentReference =
   | { readonly kind: "object"; readonly id: number }
   | {
       readonly kind: "part";
-      readonly partKind?: "row" | "cell";
+      readonly partKind?: string;
       readonly path?: string;
       readonly box?: Rect;
       readonly bounds?: Rect;

@@ -203,9 +203,42 @@ function createTrackedBadgeCapability() {
       }
       const rawLink = input.props["link"] as LinkTarget | undefined;
 
+      const rawStyle =
+        typeof input.props["style"] === "object" &&
+        input.props["style"] !== null &&
+        !Array.isArray(input.props["style"])
+          ? (input.props["style"] as Record<string, unknown>)
+          : {};
+      const hasPos =
+        typeof input.props["x"] === "number" ||
+        typeof input.props["y"] === "number";
       const contract = parseCapabilityLayoutContract({
         nativeKind: "sp",
-        props: input.props,
+        props: {
+          ...input.props,
+          style: {
+            ...(hasPos && rawStyle["position"] === undefined
+              ? { position: "absolute" }
+              : {}),
+            ...(typeof input.props["x"] === "number" &&
+            rawStyle["left"] === undefined
+              ? { left: input.props["x"] }
+              : {}),
+            ...(typeof input.props["y"] === "number" &&
+            rawStyle["top"] === undefined
+              ? { top: input.props["y"] }
+              : {}),
+            ...(typeof input.props["width"] === "number" &&
+            rawStyle["width"] === undefined
+              ? { width: input.props["width"] }
+              : {}),
+            ...(typeof input.props["height"] === "number" &&
+            rawStyle["height"] === undefined
+              ? { height: input.props["height"] }
+              : {}),
+            ...rawStyle,
+          },
+        },
         allowedStyleKeys: new Set<string>(layoutStyleKeys),
         path: context.path,
       });
@@ -215,9 +248,13 @@ function createTrackedBadgeCapability() {
       const declaredY =
         typeof input.props["y"] === "number" ? input.props["y"] : 0;
       const declaredWidth =
-        typeof contract.width === "number" ? contract.width : label.length * 10;
+        typeof contract.layoutStyle.width === "number"
+          ? contract.layoutStyle.width
+          : label.length * 10;
       const declaredHeight =
-        typeof contract.height === "number" ? contract.height : 36;
+        typeof contract.layoutStyle.height === "number"
+          ? contract.layoutStyle.height
+          : 36;
 
       // Encapsulated private state: never returned on contract or exposed to core.
       const privateLabel = label;
@@ -1100,7 +1137,6 @@ describe("bound object capability contract", () => {
           theme: derivedTheme,
           emitsObject,
           propagatesBaseline: true,
-          checksCanvasOverflow: true,
         };
         const morphKey = input.props["morphKey"] as MorphKey | undefined;
         const link = input.props["link"] as LinkTarget | undefined;
@@ -1414,25 +1450,31 @@ describe("bound object capability contract", () => {
     const tileModule: BoundObjectCapabilityModule = {
       declaration: "metric-tile",
       bind(input, context) {
-        // Deliberately omit props.width/height/x/y; supply them strictly on contract.
+        // Deliberately omit raw style.left/top/width/height on host props; supply them strictly via contract.layoutStyle.
+        const rawStyle =
+          typeof input.props["style"] === "object" &&
+          input.props["style"] !== null &&
+          !Array.isArray(input.props["style"])
+            ? (input.props["style"] as Record<string, unknown>)
+            : {};
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
           props: {
-            ...(input.props["posX"] === undefined
-              ? {}
-              : { x: input.props["posX"] }),
-            ...(input.props["posY"] === undefined
-              ? {}
-              : { y: input.props["posY"] }),
-            ...(input.props["spanW"] === undefined
-              ? {}
-              : { width: input.props["spanW"] }),
-            ...(input.props["spanH"] === undefined
-              ? {}
-              : { height: input.props["spanH"] }),
-            ...(input.props["style"] === undefined
-              ? {}
-              : { style: input.props["style"] }),
+            style: {
+              ...rawStyle,
+              ...(input.props["posX"] === undefined
+                ? {}
+                : { left: input.props["posX"] }),
+              ...(input.props["posY"] === undefined
+                ? {}
+                : { top: input.props["posY"] }),
+              ...(input.props["spanW"] === undefined
+                ? {}
+                : { width: input.props["spanW"] }),
+              ...(input.props["spanH"] === undefined
+                ? {}
+                : { height: input.props["spanH"] }),
+            },
           },
           allowedStyleKeys: new Set<string>(layoutStyleKeys),
           path: context.path,
@@ -1444,9 +1486,13 @@ describe("bound object capability contract", () => {
         const minW =
           typeof input.props["minW"] === "number" ? input.props["minW"] : 40;
         const naturalW =
-          typeof contract.width === "number" ? contract.width : 80;
+          typeof contract.layoutStyle.width === "number"
+            ? contract.layoutStyle.width
+            : 80;
         const naturalH =
-          typeof contract.height === "number" ? contract.height : 30;
+          typeof contract.layoutStyle.height === "number"
+            ? contract.layoutStyle.height
+            : 30;
         return {
           contract,
           measureLayout() {
@@ -1498,7 +1544,7 @@ describe("bound object capability contract", () => {
               gap: 10,
             }}
           >
-            {/* spanW=60 clamps minContentWidth=100 down to 60 via contract.width */}
+            {/* spanW=60 clamps minContentWidth=100 down to 60 via contract.layoutStyle.width */}
             <MetricTile
               id="clamped-tile"
               spanW={60}
@@ -1542,7 +1588,7 @@ describe("bound object capability contract", () => {
     // Baseline 28 vs 14 shifts shifted-tile down by 14px.
     assert.equal(clamped.y, 20);
     assert.equal(shifted.y, 34);
-    // Absolute position comes from contract.x / contract.y (posX / posY).
+    // Absolute position comes from contract.layoutStyle.left / top (posX / posY).
     assert.deepEqual(abs, { x: 220, y: 40, width: 90, height: 50 });
   });
 
@@ -1670,7 +1716,6 @@ describe("bound object capability contract", () => {
           restrictsMemberContinuity: true,
           observesLayout: false,
           propagatesBaseline: false,
-          checksCanvasOverflow: false,
         };
         return {
           contract,
@@ -1858,12 +1903,6 @@ describe("bound object capability contract", () => {
     const newTileModule: BoundObjectCapabilityModule = {
       declaration: "new-tile",
       bind(input, context) {
-        const contract = parseCapabilityLayoutContract({
-          nativeKind: "sp",
-          props: input.props,
-          allowedStyleKeys: new Set<string>(layoutStyleKeys),
-          path: context.path,
-        });
         const label =
           typeof input.props["label"] === "string"
             ? input.props["label"]
@@ -1880,6 +1919,28 @@ describe("bound object capability contract", () => {
               ? input.props["height"]
               : 40,
         };
+        const rawStyle =
+          typeof input.props["style"] === "object" &&
+          input.props["style"] !== null &&
+          !Array.isArray(input.props["style"])
+            ? (input.props["style"] as Record<string, unknown>)
+            : {};
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: {
+            ...input.props,
+            style: {
+              position: "absolute",
+              left: box.x,
+              top: box.y,
+              width: box.width,
+              height: box.height,
+              ...rawStyle,
+            },
+          },
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          path: context.path,
+        });
         const rotate =
           typeof input.props["rotate"] === "number" ? input.props["rotate"] : 0;
         const link = input.props["link"] as LinkTarget | undefined;

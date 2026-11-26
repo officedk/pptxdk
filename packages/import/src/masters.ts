@@ -276,6 +276,35 @@ function readDefRPr(
     solidFill === undefined ? undefined : readStyleColor(solidFill, clrMap);
   rPr.ignoreEmptyChild(A_NS, "noFill");
 
+  let textShadow: PlaceholderLevelStyle["textShadow"];
+  const effectLst = rPr.child(A_NS, "effectLst");
+  if (effectLst !== undefined) {
+    const outerShdw = effectLst.child(A_NS, "outerShdw");
+    if (outerShdw !== undefined) {
+      const shdwAttrs = outerShdw.attrsObject([
+        "blurRad",
+        "dist",
+        "dir",
+        "algn",
+        "rotWithShape",
+      ]);
+      const blurParsed = ooxmlNonNegativeIntSchema.safeParse(
+        shdwAttrs["blurRad"],
+      );
+      const distParsed = ooxmlNonNegativeIntSchema.safeParse(shdwAttrs["dist"]);
+      const dirParsed = ooxmlIntSchema.safeParse(shdwAttrs["dir"]);
+      const shdwColor = readStyleColor(outerShdw, clrMap);
+      textShadow = {
+        ...(shdwColor === undefined ? {} : { color: shdwColor }),
+        blur: blurParsed.success ? emuToPx(blurParsed.data) : 0,
+        distance: distParsed.success ? emuToPx(distParsed.data) : 0,
+        angle: dirParsed.success ? dirParsed.data / 60_000 : 0,
+      };
+    } else if (effectLst.element.children.length === 0) {
+      textShadow = "none";
+    }
+  }
+
   const latin = rPr.child(A_NS, "latin");
   const ea = rPr.child(A_NS, "ea");
   const cs = rPr.child(A_NS, "cs");
@@ -321,6 +350,7 @@ function readDefRPr(
     ...(letterSpacing === undefined ? {} : { letterSpacing }),
     ...(textTransform === undefined ? {} : { textTransform }),
     ...(textDecoration === undefined ? {} : { textDecoration }),
+    ...(textShadow === undefined ? {} : { textShadow }),
     ...(lang === undefined ? {} : { lang }),
   };
 }

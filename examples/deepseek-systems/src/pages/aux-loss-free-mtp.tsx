@@ -38,12 +38,15 @@ export function AuxLossFreeMtpPage() {
       >
         {/* Step 1: Router Affinity */}
         <Shape
-          x={68}
-          y={170}
-          width={540}
-          height={86}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 170,
+            width: 540,
+            height: 86,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <SemanticTag
           x={82}
@@ -55,10 +58,11 @@ export function AuxLossFreeMtpPage() {
           solid
         />
         <Text
-          x={242}
-          y={184}
-          width={356}
           style={{
+            position: "absolute",
+            left: 242,
+            top: 184,
+            width: 356,
             padding: 0,
             fontSize: 11.5,
             color: colors.ink,
@@ -68,10 +72,15 @@ export function AuxLossFreeMtpPage() {
           采用 Sigmoid 计算亲和度：s_i,t = Sigmoid(u_t^T · e_i)
         </Text>
         <Text
-          x={82}
-          y={218}
-          width={512}
-          style={{ padding: 0, fontSize: 11.5, color: colors.muted }}
+          style={{
+            position: "absolute",
+            left: 82,
+            top: 218,
+            width: 512,
+            padding: 0,
+            fontSize: 11.5,
+            color: colors.muted,
+          }}
         >
           归一化门控权重仅由被选中专家的原始亲和度 s_i,t
           决定，不掺入任何人工正则梯度。
@@ -79,12 +88,15 @@ export function AuxLossFreeMtpPage() {
 
         {/* Step 2: Bias Injection */}
         <Shape
-          x={68}
-          y={268}
-          width={540}
-          height={98}
-          fill={colors.computeSoft}
-          style={{ borderColor: colors.compute, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 268,
+            width: 540,
+            height: 98,
+            background: colors.computeSoft,
+            border: { color: colors.compute, width: 1 },
+          }}
         />
         <SemanticTag
           x={82}
@@ -96,10 +108,11 @@ export function AuxLossFreeMtpPage() {
           solid
         />
         <Text
-          x={242}
-          y={282}
-          width={356}
           style={{
+            position: "absolute",
+            left: 242,
+            top: 282,
+            width: 356,
             padding: 0,
             fontSize: 12.5,
             color: colors.compute,
@@ -109,10 +122,11 @@ export function AuxLossFreeMtpPage() {
           选路准则：Top-K( s_i,t + b_i )，合成权重仍用原始 s_i,t
         </Text>
         <Text
-          x={82}
-          y={312}
-          width={512}
           style={{
+            position: "absolute",
+            left: 82,
+            top: 312,
+            width: 512,
             padding: 0,
             fontSize: 11.5,
             lineHeight: 18,
@@ -126,38 +140,48 @@ export function AuxLossFreeMtpPage() {
 
         {/* Step 3: Visual Expert Grid with Click Emphasis */}
         <Shape
-          x={68}
-          y={378}
-          width={540}
-          height={176}
-          fill={colors.surface}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 378,
+            width: 540,
+            height: 176,
+            background: colors.surface,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <Text
-          x={82}
-          y={388}
-          width={510}
-          height={20}
-          style={{ fontSize: 12, color: colors.steel, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 82,
+            top: 388,
+            width: 510,
+            height: 20,
+            fontSize: 12,
+            color: colors.steel,
+            textWrap: "nowrap",
+          }}
         >
           专家层路由示意（1 常驻共享专家 + 256
           路由专家池，点击触发热点偏置调平）：
         </Text>
 
         <Shape
-          x={82}
-          y={418}
-          width={106}
-          height={72}
-          fill={colors.comm}
-          text={"Shared Expert\n常驻全激活"}
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 82,
+            top: 418,
+            width: 106,
+            height: 72,
+            background: colors.comm,
             fontSize: 11.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          {"Shared Expert\n常驻全激活"}
+        </Shape>
 
         <Step n={1}>
           {routedExperts.map((expert, idx) => {
@@ -169,17 +193,6 @@ export function AuxLossFreeMtpPage() {
               <Shape
                 key={expert.id}
                 id={`routed-expert-${expert.id}`}
-                x={exX}
-                y={exY}
-                width={90}
-                height={32}
-                fill={
-                  expert.hot
-                    ? colors.copperSoft
-                    : expert.active
-                      ? colors.computeSoft
-                      : colors.slot
-                }
                 {...(expert.hot
                   ? {
                       emphasis: fillColor({
@@ -190,21 +203,24 @@ export function AuxLossFreeMtpPage() {
                     }
                   : {})}
                 style={{
-                  borderColor: expert.hot
-                    ? colors.copper
+                  position: "absolute",
+                  left: exX,
+                  top: exY,
+                  width: 90,
+                  height: 32,
+                  background: expert.hot
+                    ? colors.copperSoft
                     : expert.active
-                      ? colors.compute
-                      : colors.line,
-                  borderWidth: 1,
-                }}
-                text={
-                  expert.hot
-                    ? `${expert.id} 过载 b↓`
-                    : expert.active
-                      ? `${expert.id} 激活`
-                      : `${expert.id} 空闲`
-                }
-                textStyle={{
+                      ? colors.computeSoft
+                      : colors.slot,
+                  border: {
+                    color: expert.hot
+                      ? colors.copper
+                      : expert.active
+                        ? colors.compute
+                        : colors.line,
+                    width: 1,
+                  },
                   fontSize: 11,
                   color: expert.hot
                     ? colors.copperText
@@ -214,17 +230,28 @@ export function AuxLossFreeMtpPage() {
                   align: "center",
                   verticalAlign: "middle",
                 }}
-              />
+              >
+                {expert.hot
+                  ? `${expert.id} 过载 b↓`
+                  : expert.active
+                    ? `${expert.id} 激活`
+                    : `${expert.id} 空闲`}
+              </Shape>
             );
           })}
         </Step>
 
         <Text
-          x={82}
-          y={502}
-          width={510}
-          height={44}
-          style={{ fontSize: 11.5, lineHeight: 18, color: colors.muted }}
+          style={{
+            position: "absolute",
+            left: 82,
+            top: 502,
+            width: 510,
+            height: 44,
+            fontSize: 11.5,
+            lineHeight: 18,
+            color: colors.muted,
+          }}
         >
           • 节点受限路由（Node-Limited Routing）：256 个专家分为 8 组部署在 8
           个节点上，每个 Token 最多路由至 M=4 个节点，从算法源头限制跨节点 IB
@@ -233,19 +260,27 @@ export function AuxLossFreeMtpPage() {
 
         {/* Bottom Summary Strip */}
         <Shape
-          x={68}
-          y={566}
-          width={540}
-          height={82}
-          fill={colors.commSoft}
-          style={{ borderColor: colors.comm, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 566,
+            width: 540,
+            height: 82,
+            background: colors.commSoft,
+            border: { color: colors.comm, width: 1 },
+          }}
         />
         <Text
-          x={82}
-          y={576}
-          width={512}
-          height={62}
-          style={{ fontSize: 12, lineHeight: 19, color: colors.commText }}
+          style={{
+            position: "absolute",
+            left: 82,
+            top: 576,
+            width: 512,
+            height: 62,
+            fontSize: 12,
+            lineHeight: 19,
+            color: colors.commText,
+          }}
         >
           工程收益对比：相比传统的序列级辅助损失（Sequence-Wise Auxiliary
           Loss），无辅助损失偏置法在保持各 GPU
@@ -266,39 +301,60 @@ export function AuxLossFreeMtpPage() {
       >
         {/* Architecture Flow Diagram for MTP */}
         <Shape
-          x={664}
-          y={170}
-          width={548}
-          height={232}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 664,
+            top: 170,
+            width: 548,
+            height: 232,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <Text
-          x={680}
-          y={180}
-          width={516}
-          height={20}
-          style={{ fontSize: 12.5, color: colors.steel, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 680,
+            top: 180,
+            width: 516,
+            height: 20,
+            fontSize: 12.5,
+            color: colors.steel,
+            textWrap: "nowrap",
+          }}
         >
           MTP 因果链式预测结构（主模型 671B + MTP 模组 14B = 仓库总权重 685B）：
         </Text>
 
         {/* Main Model Column */}
         <Shape
-          x={680}
-          y={212}
-          width={242}
-          height={174}
-          fill={colors.surface}
-          style={{ borderColor: colors.compute, borderWidth: 1 }}
-        />
-        <Shape x={680} y={212} width={242} height={28} fill={colors.compute} />
-        <Text
-          x={688}
-          y={216}
-          width={226}
-          height={20}
           style={{
+            position: "absolute",
+            left: 680,
+            top: 212,
+            width: 242,
+            height: 174,
+            background: colors.surface,
+            border: { color: colors.compute, width: 1 },
+          }}
+        />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 680,
+            top: 212,
+            width: 242,
+            height: 28,
+            background: colors.compute,
+          }}
+        />
+        <Text
+          style={{
+            position: "absolute",
+            left: 688,
+            top: 216,
+            width: 226,
+            height: 20,
             fontSize: 12,
             color: colors.surface,
             align: "center",
@@ -335,29 +391,45 @@ export function AuxLossFreeMtpPage() {
         {/* Connector Arrow */}
         <Shape
           geometry={preset("rightArrow")}
-          x={930}
-          y={288}
-          width={32}
-          height={26}
-          fill={colors.copper}
+          style={{
+            position: "absolute",
+            left: 930,
+            top: 288,
+            width: 32,
+            height: 26,
+            background: colors.copper,
+          }}
         />
 
         {/* MTP Module Column */}
         <Shape
-          x={970}
-          y={212}
-          width={226}
-          height={174}
-          fill={colors.surface}
-          style={{ borderColor: colors.copper, borderWidth: 1 }}
-        />
-        <Shape x={970} y={212} width={226} height={28} fill={colors.copper} />
-        <Text
-          x={978}
-          y={216}
-          width={210}
-          height={20}
           style={{
+            position: "absolute",
+            left: 970,
+            top: 212,
+            width: 226,
+            height: 174,
+            background: colors.surface,
+            border: { color: colors.copper, width: 1 },
+          }}
+        />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 970,
+            top: 212,
+            width: 226,
+            height: 28,
+            background: colors.copper,
+          }}
+        />
+        <Text
+          style={{
+            position: "absolute",
+            left: 978,
+            top: 216,
+            width: 210,
+            height: 20,
             fontSize: 12,
             color: colors.surface,
             align: "center",
@@ -393,29 +465,51 @@ export function AuxLossFreeMtpPage() {
 
         {/* Dual Lifecycle Roles of MTP */}
         <Shape
-          x={664}
-          y={416}
-          width={548}
-          height={110}
-          fill={colors.surface}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 664,
+            top: 416,
+            width: 548,
+            height: 110,
+            background: colors.surface,
+            border: { color: colors.line, width: 1 },
+          }}
         />
-        <Shape x={664} y={416} width={4} height={110} fill={colors.compute} />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 664,
+            top: 416,
+            width: 4,
+            height: 110,
+            background: colors.compute,
+          }}
+        />
         <Text
-          x={682}
-          y={426}
-          width={514}
-          height={22}
-          style={{ fontSize: 14, color: colors.compute, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 682,
+            top: 426,
+            width: 514,
+            height: 22,
+            fontSize: 14,
+            color: colors.compute,
+            textWrap: "nowrap",
+          }}
         >
           阶段一：训练期加密监督信号（可独立丢弃，零推理负担）
         </Text>
         <Text
-          x={682}
-          y={452}
-          width={514}
-          height={64}
-          style={{ fontSize: 12, lineHeight: 19, color: colors.muted }}
+          style={{
+            position: "absolute",
+            left: 682,
+            top: 452,
+            width: 514,
+            height: 64,
+            fontSize: 12,
+            lineHeight: 19,
+            color: colors.muted,
+          }}
         >
           • 相比独立并行输出头的 MTP 方案，DeepSeek-V3
           保持完整的因果链连接，迫使主模型隐状态同时编码当前与后续 Token
@@ -423,19 +517,32 @@ export function AuxLossFreeMtpPage() {
         </Text>
 
         <Shape
-          x={664}
-          y={538}
-          width={548}
-          height={110}
-          fill={colors.copperSoft}
-          style={{ borderColor: colors.copper, borderWidth: 1 }}
-        />
-        <Shape x={664} y={538} width={4} height={110} fill={colors.copper} />
-        <Text
-          x={682}
-          y={548}
-          width={360}
           style={{
+            position: "absolute",
+            left: 664,
+            top: 538,
+            width: 548,
+            height: 110,
+            background: colors.copperSoft,
+            border: { color: colors.copper, width: 1 },
+          }}
+        />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 664,
+            top: 538,
+            width: 4,
+            height: 110,
+            background: colors.copper,
+          }}
+        />
+        <Text
+          style={{
+            position: "absolute",
+            left: 682,
+            top: 548,
+            width: 360,
             padding: 0,
             fontSize: 14,
             color: colors.copperText,
@@ -445,10 +552,11 @@ export function AuxLossFreeMtpPage() {
           阶段二：推理期自投机解码（Speculative Decoding）
         </Text>
         <Text
-          x={1044}
-          y={544}
-          width={152}
           style={{
+            position: "absolute",
+            left: 1044,
+            top: 544,
+            width: 152,
             padding: 0,
             fontFamily: "metric",
             fontSize: 21,
@@ -462,10 +570,11 @@ export function AuxLossFreeMtpPage() {
         </Text>
         <Rule x={682} y={576} width={514} height={1} color={colors.copper} />
         <Text
-          x={682}
-          y={584}
-          width={514}
           style={{
+            position: "absolute",
+            left: 682,
+            top: 584,
+            width: 514,
             padding: 0,
             fontSize: 12,
             lineHeight: 19,

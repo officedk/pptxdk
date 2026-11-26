@@ -24,57 +24,85 @@ export function PredictionPage() {
       }}
     >
       <Text
-        x={64}
-        y={176}
-        width={120}
-        height={66}
-        style={{ fontFamily: "display", fontSize: 54, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 176,
+          width: 120,
+          height: 66,
+          fontFamily: "display",
+          fontSize: 54,
+          color: colors.cobalt,
+        }}
       >
         1950
       </Text>
       <Text
-        x={190}
-        y={184}
-        width={340}
-        height={34}
-        style={{ fontSize: 23, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 190,
+          top: 184,
+          width: 340,
+          height: 34,
+          fontSize: 23,
+          color: colors.ink,
+        }}
       >
         图灵：用行为重述智能
       </Text>
       <Text
-        x={190}
-        y={230}
-        width={340}
-        height={94}
-        style={{ fontSize: 17, lineHeight: 27, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 190,
+          top: 230,
+          width: 340,
+          height: 94,
+          fontSize: 17,
+          lineHeight: 27,
+          color: colors.muted,
+        }}
       >
         《计算机器与智能》提出“模仿游戏”，把“机器能思考吗”转化为对话中能否分辨机器的问题。
       </Text>
       <Rule x={64} y={350} width={454} color={colors.line} />
       <Text
-        x={64}
-        y={388}
-        width={120}
-        height={66}
-        style={{ fontFamily: "display", fontSize: 54, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 388,
+          width: 120,
+          height: 66,
+          fontFamily: "display",
+          fontSize: 54,
+          color: colors.cobalt,
+        }}
       >
         1966
       </Text>
       <Text
-        x={190}
-        y={396}
-        width={340}
-        height={34}
-        style={{ fontSize: 23, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 190,
+          top: 396,
+          width: 340,
+          height: 34,
+          fontSize: 23,
+          color: colors.ink,
+        }}
       >
         ELIZA：规则制造对话
       </Text>
       <Text
-        x={190}
-        y={442}
-        width={340}
-        height={94}
-        style={{ fontSize: 17, lineHeight: 27, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 190,
+          top: 442,
+          width: 340,
+          height: 94,
+          fontSize: 17,
+          lineHeight: 27,
+          color: colors.muted,
+        }}
       >
         模式匹配与预设脚本已能模拟谈话。它提醒后来者：流畅的语言行为，不等于真正理解。
       </Text>
@@ -86,29 +114,42 @@ export function PredictionPage() {
         color={colors.cobalt}
       />
       <Text
-        x={620}
-        y={202}
-        width={540}
-        height={28}
-        style={{ fontSize: 16, color: colors.cobalt }}
+        style={{
+          position: "absolute",
+          left: 620,
+          top: 202,
+          width: 540,
+          height: 28,
+          fontSize: 16,
+          color: colors.cobalt,
+        }}
       >
         统计语言模型面对的问题
       </Text>
       <Text
-        x={620}
-        y={252}
-        width={540}
-        height={62}
-        style={{ fontFamily: "display", fontSize: 37, color: colors.ink }}
+        style={{
+          position: "absolute",
+          left: 620,
+          top: 252,
+          width: 540,
+          height: 62,
+          fontFamily: "display",
+          fontSize: 37,
+          color: colors.ink,
+        }}
       >
         “机器如何学会 ______”
       </Text>
       <Text
-        x={620}
-        y={326}
-        width={540}
-        height={28}
-        style={{ fontSize: 16, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 620,
+          top: 326,
+          width: 540,
+          height: 28,
+          fontSize: 16,
+          color: colors.muted,
+        }}
       >
         p（下一个词｜已经出现的词）
       </Text>
@@ -117,11 +158,15 @@ export function PredictionPage() {
         return (
           <Fragment key={index}>
             <Text
-              x={620}
-              y={y}
-              width={64}
-              height={30}
-              style={{ fontSize: 18, color: colors.ink }}
+              style={{
+                position: "absolute",
+                left: 620,
+                top: y,
+                width: 64,
+                height: 30,
+                fontSize: 18,
+                color: colors.ink,
+              }}
             >
               {candidate.word}
             </Text>
@@ -140,11 +185,16 @@ export function PredictionPage() {
               thickness={10}
             />
             <Text
-              x={1110}
-              y={y}
-              width={68}
-              height={30}
-              style={{ fontSize: 16, color: colors.ink, align: "right" }}
+              style={{
+                position: "absolute",
+                left: 1110,
+                top: y,
+                width: 68,
+                height: 30,
+                fontSize: 16,
+                color: colors.ink,
+                align: "right",
+              }}
             >
               {candidate.value.toFixed(2)}
             </Text>
@@ -152,20 +202,25 @@ export function PredictionPage() {
         );
       })}
       <Text
-        x={620}
-        y={548}
-        width={540}
-        height={22}
-        style={{ fontSize: 12, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 620,
+          top: 548,
+          width: 540,
+          height: 22,
+          fontSize: 12,
+          color: colors.muted,
+        }}
       >
         仅列前三个候选；数值为示意，不对应某个真实模型。
       </Text>
       <Text
-        x={584}
-        y={608}
-        width={632}
-        height={38}
         style={{
+          position: "absolute",
+          left: 584,
+          top: 608,
+          width: 632,
+          height: 38,
           fontFamily: "display",
           fontSize: 25,
           color: colors.cobalt,

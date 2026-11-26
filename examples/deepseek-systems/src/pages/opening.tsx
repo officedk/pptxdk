@@ -41,16 +41,17 @@ export function OpeningPage() {
   return (
     <Slide
       id="opening"
-      background={colors.obsidian}
       transition={transitions.fade({ duration: 500 })}
+      style={{ background: colors.obsidian }}
     >
       {/* Top telemetry bar */}
       <Text
-        x={56}
-        y={28}
-        width={620}
-        height={22}
         style={{
+          position: "absolute",
+          left: 56,
+          top: 28,
+          width: 620,
+          height: 22,
           fontFamily: "metric",
           fontSize: 12,
           fontWeight: 700,
@@ -62,11 +63,12 @@ export function OpeningPage() {
         DEEPSEEK-V3 / R1 ARCHITECTURE &amp; SYSTEMS ENGINEERING
       </Text>
       <Text
-        x={680}
-        y={28}
-        width={544}
-        height={22}
         style={{
+          position: "absolute",
+          left: 680,
+          top: 28,
+          width: 544,
+          height: 22,
           fontFamily: "metric",
           fontSize: 12,
           color: colors.darkMuted,
@@ -80,28 +82,40 @@ export function OpeningPage() {
 
       {/* Left hero column */}
       <Shape
-        x={56}
-        y={84}
-        width={236}
-        height={28}
-        fill={colors.obsidianCard}
-        style={{ borderColor: colors.compute, borderWidth: 1 }}
-        text="AI-HPC 软硬协同系统工程剖析"
-        textStyle={{
+        style={{
+          position: "absolute",
+          left: 56,
+          top: 84,
+          width: 236,
+          height: 28,
+          background: colors.obsidianCard,
+          border: { color: colors.compute, width: 1 },
           fontSize: 12,
           color: colors.computeBright,
           align: "center",
           verticalAlign: "middle",
         }}
+      >
+        AI-HPC 软硬协同系统工程剖析
+      </Shape>
+      <Shape
+        style={{
+          position: "absolute",
+          left: 56,
+          top: 84,
+          width: 4,
+          height: 28,
+          background: colors.compute,
+        }}
       />
-      <Shape x={56} y={84} width={4} height={28} fill={colors.compute} />
 
       <Text
-        x={56}
-        y={126}
-        width={736}
-        height={98}
         style={{
+          position: "absolute",
+          left: 56,
+          top: 126,
+          width: 736,
+          height: 98,
           fontSize: 35,
           lineHeight: 46,
           color: colors.surface,
@@ -111,11 +125,12 @@ export function OpeningPage() {
       </Text>
 
       <Text
-        x={56}
-        y={234}
-        width={728}
-        height={64}
         style={{
+          position: "absolute",
+          left: 56,
+          top: 234,
+          width: 728,
+          height: 64,
           fontSize: 14,
           lineHeight: 22,
           color: colors.darkMuted,
@@ -133,12 +148,15 @@ export function OpeningPage() {
           <Shape
             key={pillar.code}
             id={`opening-pillar-${index + 1}`}
-            x={56}
-            y={y}
-            width={728}
-            height={96}
-            fill={colors.obsidianCard}
-            style={{ borderColor: colors.darkLine, borderWidth: 1 }}
+            style={{
+              position: "absolute",
+              left: 56,
+              top: y,
+              width: 728,
+              height: 96,
+              background: colors.obsidianCard,
+              border: { color: colors.darkLine, width: 1 },
+            }}
           />
         );
       })}
@@ -147,11 +165,14 @@ export function OpeningPage() {
         return (
           <Shape
             key={`${pillar.code}-bar`}
-            x={56}
-            y={y}
-            width={4}
-            height={96}
-            fill={pillar.tone}
+            style={{
+              position: "absolute",
+              left: 56,
+              top: y,
+              width: 4,
+              height: 96,
+              background: pillar.tone,
+            }}
           />
         );
       })}
@@ -160,11 +181,12 @@ export function OpeningPage() {
         return (
           <Text
             key={`${pillar.code}-label`}
-            x={74}
-            y={y + 10}
-            width={220}
-            height={18}
             style={{
+              position: "absolute",
+              left: 74,
+              top: y + 10,
+              width: 220,
+              height: 18,
               fontSize: 11,
               color: colors.computeBright,
               textWrap: "nowrap",
@@ -179,11 +201,12 @@ export function OpeningPage() {
         return (
           <Text
             key={`${pillar.code}-title`}
-            x={260}
-            y={y + 8}
-            width={508}
-            height={22}
             style={{
+              position: "absolute",
+              left: 260,
+              top: y + 8,
+              width: 508,
+              height: 22,
               fontSize: 15,
               color: colors.surface,
               textWrap: "nowrap",
@@ -198,11 +221,12 @@ export function OpeningPage() {
         return (
           <Text
             key={`${pillar.code}-detail`}
-            x={74}
-            y={y + 36}
-            width={694}
-            height={50}
             style={{
+              position: "absolute",
+              left: 74,
+              top: y + 36,
+              width: 694,
+              height: 50,
               fontSize: 12.5,
               lineHeight: 20,
               color: colors.darkMuted,
@@ -215,11 +239,12 @@ export function OpeningPage() {
 
       {/* Right column: Core quantitative telemetry stack */}
       <Text
-        x={816}
-        y={86}
-        width={408}
-        height={22}
         style={{
+          position: "absolute",
+          left: 816,
+          top: 86,
+          width: 408,
+          height: 22,
           fontSize: 13,
           color: colors.darkMuted,
           textWrap: "nowrap",
@@ -286,11 +311,12 @@ export function OpeningPage() {
       {/* Footer */}
       <Rule x={56} y={672} width={1168} height={1} color={colors.darkLine} />
       <Text
-        x={56}
-        y={680}
-        width={960}
-        height={20}
         style={{
+          position: "absolute",
+          left: 56,
+          top: 680,
+          width: 960,
+          height: 20,
           fontSize: 11,
           color: colors.darkSubtle,
           textWrap: "nowrap",
@@ -300,11 +326,12 @@ export function OpeningPage() {
         Industry Track · SC &apos;24 Fire-Flyer AI-HPC · Open-Source Week
       </Text>
       <Text
-        x={1100}
-        y={680}
-        width={124}
-        height={20}
         style={{
+          position: "absolute",
+          left: 1100,
+          top: 680,
+          width: 124,
+          height: 20,
           fontFamily: "metric",
           fontSize: 11,
           fontWeight: 700,

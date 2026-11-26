@@ -20,16 +20,28 @@ function Landscape({
   const clarity = stage / 4;
   return (
     <Fragment key={x}>
-      <Shape x={x} y={220} width={190} height={206} fill={colors.paperBright} />
+      <Shape
+        style={{
+          position: "absolute",
+          left: x,
+          top: 220,
+          width: 190,
+          height: 206,
+          background: colors.paperBright,
+        }}
+      />
       {stage > 0 && (
         <Fragment key={x}>
           <Shape
             geometry={preset("ellipse")}
-            x={x + 126}
-            y={252}
-            width={30}
-            height={30}
-            fill={{ color: colors.sun, alpha: clarity }}
+            style={{
+              position: "absolute",
+              left: x + 126,
+              top: 252,
+              width: 30,
+              height: 30,
+              background: { color: colors.sun, alpha: clarity },
+            }}
           />
           <Shape
             geometry={path(
@@ -38,11 +50,14 @@ function Landscape({
                 viewBox: [190, 206],
               },
             )}
-            x={x}
-            y={220}
-            width={190}
-            height={206}
-            fill={{ color: colors.cobalt, alpha: clarity }}
+            style={{
+              position: "absolute",
+              left: x,
+              top: 220,
+              width: 190,
+              height: 206,
+              background: { color: colors.cobalt, alpha: clarity },
+            }}
           />
           <Shape
             geometry={path(
@@ -51,11 +66,14 @@ function Landscape({
                 viewBox: [190, 206],
               },
             )}
-            x={x}
-            y={220}
-            width={190}
-            height={206}
-            fill={{ color: colors.ink, alpha: clarity * 0.85 }}
+            style={{
+              position: "absolute",
+              left: x,
+              top: 220,
+              width: 190,
+              height: 206,
+              background: { color: colors.ink, alpha: clarity * 0.85 },
+            }}
           />
         </Fragment>
       )}
@@ -64,18 +82,21 @@ function Landscape({
         return (
           <Shape
             key={index}
-            x={x + random(index, 1) * (190 - size)}
-            y={220 + random(index, 2) * (206 - size)}
-            width={size}
-            height={size}
-            fill={{
-              color:
-                index % 7 === 0
-                  ? colors.sun
-                  : index % 3 === 0
-                    ? colors.cyan
-                    : colors.cobalt,
-              alpha: (1 - clarity) * (0.25 + random(index, 4) * 0.7),
+            style={{
+              position: "absolute",
+              left: x + random(index, 1) * (190 - size),
+              top: 220 + random(index, 2) * (206 - size),
+              width: size,
+              height: size,
+              background: {
+                color:
+                  index % 7 === 0
+                    ? colors.sun
+                    : index % 3 === 0
+                      ? colors.cyan
+                      : colors.cobalt,
+                alpha: (1 - clarity) * (0.25 + random(index, 4) * 0.7),
+              },
             }}
           />
         );
@@ -125,11 +146,15 @@ export function DiffusionPage() {
       }}
     >
       <Text
-        x={64}
-        y={158}
-        width={1148}
-        height={38}
-        style={{ fontSize: 18, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 158,
+          width: 1148,
+          height: 38,
+          fontSize: 18,
+          color: colors.muted,
+        }}
       >
         从随机噪声出发，模型反复估计并移除噪声，让满足文字条件的结构逐步浮现。
       </Text>
@@ -139,11 +164,16 @@ export function DiffusionPage() {
           <Fragment key={x}>
             <Landscape x={x} stage={stage} />
             <Text
-              x={x}
-              y={440}
-              width={190}
-              height={26}
-              style={{ fontSize: 14, color: colors.cobalt, align: "center" }}
+              style={{
+                position: "absolute",
+                left: x,
+                top: 440,
+                width: 190,
+                height: 26,
+                fontSize: 14,
+                color: colors.cobalt,
+                align: "center",
+              }}
             >
               {
                 ["纯噪声", "结构浮现", "轮廓形成", "细节收敛", "生成图像"][
@@ -152,11 +182,16 @@ export function DiffusionPage() {
               }
             </Text>
             <Text
-              x={x}
-              y={468}
-              width={190}
-              height={22}
-              style={{ fontSize: 12, color: colors.muted, align: "center" }}
+              style={{
+                position: "absolute",
+                left: x,
+                top: 468,
+                width: 190,
+                height: 22,
+                fontSize: 12,
+                color: colors.muted,
+                align: "center",
+              }}
             >
               {["t = T", "t = ¾T", "t = ½T", "t = ¼T", "t = 0"][stage]}
             </Text>
@@ -169,11 +204,12 @@ export function DiffusionPage() {
         return (
           <Fragment key={x}>
             <Text
-              x={x}
-              y={534}
-              width={86}
-              height={42}
               style={{
+                position: "absolute",
+                left: x,
+                top: 534,
+                width: 86,
+                height: 42,
                 fontFamily: "display",
                 fontSize: 30,
                 color: colors.cobalt,
@@ -182,20 +218,29 @@ export function DiffusionPage() {
               {milestone.year}
             </Text>
             <Text
-              x={x + 92}
-              y={538}
-              width={250}
-              height={30}
-              style={{ fontSize: 19, color: colors.ink }}
+              style={{
+                position: "absolute",
+                left: x + 92,
+                top: 538,
+                width: 250,
+                height: 30,
+                fontSize: 19,
+                color: colors.ink,
+              }}
             >
               {milestone.title} {milestone.source}
             </Text>
             <Text
-              x={x + 92}
-              y={576}
-              width={282}
-              height={66}
-              style={{ fontSize: 14, lineHeight: 22, color: colors.muted }}
+              style={{
+                position: "absolute",
+                left: x + 92,
+                top: 576,
+                width: 282,
+                height: 66,
+                fontSize: 14,
+                lineHeight: 22,
+                color: colors.muted,
+              }}
             >
               {milestone.body}
             </Text>

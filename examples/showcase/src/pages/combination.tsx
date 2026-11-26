@@ -7,13 +7,23 @@ import { colors } from "../theme.ts";
 export function CombinationPage() {
   return (
     <Slide id="combination" background={colors.paper}>
-      <Shape x={0} y={0} width={410} height={720} fill={colors.ink} />
-      <Text
-        x={60}
-        y={74}
-        width={290}
-        height={30}
+      <Shape
         style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 410,
+          height: 720,
+          background: colors.ink,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 60,
+          top: 74,
+          width: 290,
+          height: 30,
           fontSize: 16,
           fontWeight: 700,
           letterSpacing: 2,
@@ -23,11 +33,12 @@ export function CombinationPage() {
         15 / TOGETHER
       </Text>
       <Text
-        x={56}
-        y={126}
-        width={320}
-        height={130}
         style={{
+          position: "absolute",
+          left: 56,
+          top: 126,
+          width: 320,
+          height: 130,
           fontSize: 52,
           fontWeight: 700,
           lineHeight: 57,
@@ -37,11 +48,16 @@ export function CombinationPage() {
         Pieces,{`\n`}together.
       </Text>
       <Text
-        x={62}
-        y={274}
-        width={280}
-        height={60}
-        style={{ fontSize: 18, lineHeight: 25, color: colors.accentSoft }}
+        style={{
+          position: "absolute",
+          left: 62,
+          top: 274,
+          width: 280,
+          height: 60,
+          fontSize: 18,
+          lineHeight: 25,
+          color: colors.accentSoft,
+        }}
       >
         Lorem ipsum dolor sit amet, consectetur adipiscing elit.
       </Text>
@@ -55,11 +71,15 @@ export function CombinationPage() {
         </Step>
       </Box>
       <Text
-        x={480}
-        y={86}
-        width={670}
-        height={70}
-        style={{ fontSize: 48, fontWeight: 700 }}
+        style={{
+          position: "absolute",
+          left: 480,
+          top: 86,
+          width: 670,
+          height: 70,
+          fontSize: 48,
+          fontWeight: 700,
+        }}
       >
         Lorem ipsum dolor sit.
       </Text>
@@ -79,13 +99,27 @@ export function CombinationPage() {
           },
         ]}
       />
-      <Shape x={484} y={574} width={44} height={5} fill={colors.current} />
+      <Shape
+        style={{
+          position: "absolute",
+          left: 484,
+          top: 574,
+          width: 44,
+          height: 5,
+          background: colors.current,
+        }}
+      />
       <Text
-        x={550}
-        y={558}
-        width={560}
-        height={62}
-        style={{ fontSize: 20, lineHeight: 28, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 550,
+          top: 558,
+          width: 560,
+          height: 62,
+          fontSize: 20,
+          lineHeight: 28,
+          color: colors.muted,
+        }}
       >
         Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
         tempor.

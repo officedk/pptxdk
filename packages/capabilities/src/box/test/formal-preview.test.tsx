@@ -12,6 +12,7 @@ import { emit } from "@pptxdk/emit";
 import { paint } from "@pptxdk/preview";
 import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
+import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -24,7 +25,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
+      resolution,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -41,19 +42,15 @@ describe("Box static preview positive and negative behaviors", () => {
         width: 140,
         height: 80,
         padding: 12,
-        backgroundColor: "cardTone",
-        borderColor: "#0F172A",
-        borderWidth: 2,
-        borderStyle: "solid",
+        background: "cardTone",
+        border: { color: "#0F172A", width: 2, style: "solid" },
         opacity: 0.85,
         rotate: 90,
       },
     }).append(
       shape({
         id: "card-dot",
-        width: 24,
-        height: 24,
-        fill: "#FACC15",
+        style: { width: 24, height: 24, background: "#FACC15" },
       }),
     );
 
@@ -82,15 +79,12 @@ describe("Box static preview positive and negative behaviors", () => {
               width: 100,
               height: 60,
               padding: 8,
-              borderColor: "#16A34A",
-              borderWidth: 3,
+              border: { color: "#16A34A", width: 3 },
             },
           }).append(
             shape({
               id: "inner-rect",
-              width: 30,
-              height: 20,
-              fill: "#0EA5E9",
+              style: { width: 30, height: 20, background: "#0EA5E9" },
             }),
           ),
         ),
@@ -99,7 +93,7 @@ describe("Box static preview positive and negative behaviors", () => {
 
     const first = await previewDoc(doc);
     const page = first.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     // Transparent outer box does not emit a native shape object; only visible boxes and child shapes become objects.
@@ -116,14 +110,14 @@ describe("Box static preview positive and negative behaviors", () => {
       page.svg.indexOf('fill="#FACC15"'),
     );
     const rotatedCard = page.nodes.find((n) => n.authorId === "visible-card")!;
-    expect(rotatedCard.screenBox?.width).toBeCloseTo(80);
-    expect(rotatedCard.screenBox?.height).toBeCloseTo(140);
+    expect(rotatedCard.bounds?.width).toBeCloseTo(80);
+    expect(rotatedCard.bounds?.height).toBeCloseTo(140);
 
     // Mutate after preview and rebuild: prior PNG, SVG, and PPTX remain untouched.
     const firstSvg = page.svg;
     const firstPng = page.png.slice();
     const firstPptx = first.pptx.slice();
-    mutableCard.style({ backgroundColor: "#059669" });
+    mutableCard.style({ background: "#059669" });
     const second = await previewDoc(doc);
     assert.equal(first.pages[0]?.svg, firstSvg);
     assert.deepEqual(first.pages[0]?.png, firstPng);
@@ -153,16 +147,13 @@ describe("Box static preview positive and negative behaviors", () => {
                   width: 120,
                   height: 60,
                   padding: 8,
-                  backgroundColor: "#E2E8F0",
-                  borderColor: "#334155",
-                  borderWidth: 2,
+                  background: "#E2E8F0",
+                  border: { color: "#334155", width: 2 },
                 },
               },
               createElement(Shape, {
                 id: "jsx-child",
-                width: 40,
-                height: 20,
-                fill: "#EF4444",
+                style: { width: 40, height: 20, background: "#EF4444" },
               }),
             ),
           ),
@@ -170,7 +161,7 @@ describe("Box static preview positive and negative behaviors", () => {
       ),
     );
     const jsxResult = await previewDoc(jsxDoc);
-    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(jsxResult.pages[0]?.errors, []);
     assert.ok(jsxResult.pages[0]?.png !== undefined);
     expect(jsxResult.pages[0]?.svg).toContain('fill="#E2E8F0"');
   });
@@ -198,7 +189,7 @@ describe("Box static preview positive and negative behaviors", () => {
             top: 20,
             width: 100,
             height: 50,
-            backgroundImage: linearGradient(90, "#1D4ED8", "#9333EA"),
+            background: linearGradient(90, "#1D4ED8", "#9333EA"),
             borderRadius: 10,
           },
         }),
@@ -210,7 +201,7 @@ describe("Box static preview positive and negative behaviors", () => {
             top: 20,
             width: 100,
             height: 50,
-            backgroundImage: radialGradient("#FEF3C7", "#1E3A8A"),
+            background: radialGradient("#FEF3C7", "#1E3A8A"),
           },
         }),
         box({
@@ -221,7 +212,7 @@ describe("Box static preview positive and negative behaviors", () => {
             top: 20,
             width: 80,
             height: 50,
-            backgroundImage: { image: validPng },
+            background: { image: validPng },
             borderRadius: 8,
           },
         }),
@@ -233,7 +224,7 @@ describe("Box static preview positive and negative behaviors", () => {
             top: 20,
             width: 80,
             height: 50,
-            backgroundImage: { image: validGif },
+            background: { image: validGif },
           },
         }),
         box({
@@ -244,10 +235,8 @@ describe("Box static preview positive and negative behaviors", () => {
             top: 100,
             width: 140,
             height: 60,
-            backgroundColor: "#E2E8F0",
-            borderColor: "#0F172A",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            background: "#E2E8F0",
+            border: { color: "#0F172A", width: 2, style: "dashed" },
             boxShadow: { blur: 4, distance: 6, angle: 90 },
           },
         }),
@@ -259,10 +248,8 @@ describe("Box static preview positive and negative behaviors", () => {
             top: 100,
             width: 140,
             height: 60,
-            backgroundColor: "#0EA5E9",
-            borderColor: "#0369A1",
-            borderWidth: 2,
-            borderStyle: "dotted",
+            background: "#0EA5E9",
+            border: { color: "#0369A1", width: 2, style: "dotted" },
             softEdge: 6,
           },
         }),
@@ -272,7 +259,7 @@ describe("Box static preview positive and negative behaviors", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     expect(page.svg).toContain("<linearGradient");
@@ -283,7 +270,7 @@ describe("Box static preview positive and negative behaviors", () => {
     expect(page.svg).toContain("stroke-dasharray");
   });
 
-  it("rejects corrupt PNG, JPEG, and GIF backgroundImage streams on Box with preview-corrupt-image while preserving valid sibling pages and PPTX", async () => {
+  it("rejects corrupt PNG, JPEG, and GIF background streams on Box with preview-corrupt-image while preserving valid sibling pages and PPTX", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const source = new PNG({ width: 20, height: 10 });
     for (let y = 0; y < 10; y += 1) {
@@ -326,14 +313,14 @@ describe("Box static preview positive and negative behaviors", () => {
               style: {
                 width: 100,
                 height: 50,
-                backgroundImage: { image: bytes },
+                background: { image: bytes },
               },
             }),
           ),
           slide({ id: "good-box-page" }).append(
             box({
               id: "ok",
-              style: { width: 100, height: 50, backgroundColor: "#10B981" },
+              style: { width: 100, height: 50, background: "#10B981" },
             }),
           ),
         ),
@@ -341,23 +328,19 @@ describe("Box static preview positive and negative behaviors", () => {
       assert.deepEqual((await validatePptx(result.pptx)).errors, [], label);
       assert.equal(result.pages[0]?.png, undefined, label);
       assert.equal(result.pages[0]?.svg, undefined, label);
-      assert.equal(result.pages[0]?.diagnostics[0]?.severity, "error", label);
-      assert.match(
-        result.pages[0]?.diagnostics[0]?.path ?? "",
-        /box\[bad\]/,
+      assert.equal(
+        result.pages[0]?.errors[0]?.code,
+        "preview-corrupt-image",
         label,
       );
-      assert.match(
-        result.pages[0]?.diagnostics[0]?.message ?? "",
-        /decode/i,
-        label,
-      );
+      assert.match(result.pages[0]?.errors[0]?.path ?? "", /box\[bad\]/, label);
+      assert.match(result.pages[0]?.errors[0]?.message ?? "", /decode/i, label);
       assert.ok(result.pages[1]?.png !== undefined, label);
-      assert.deepEqual(result.pages[1]?.diagnostics, [], label);
+      assert.deepEqual(result.pages[1]?.errors, [], label);
     }
   });
 
-  it("retains borderRadius clamp build warning on Box while emitting and painting cleanly", async () => {
+  it("clamps borderRadius exceeding half the short side on Box when emitting and painting", async () => {
     const resolveWith = createResolver(documentCapabilities);
     const resolution = resolveWith(
       deck({ width: 240, height: 120 }).append(
@@ -371,21 +354,25 @@ describe("Box static preview positive and negative behaviors", () => {
               width: 100,
               height: 40,
               borderRadius: 60,
-              backgroundColor: "#2563EB",
+              background: "#2563EB",
             },
           }),
         ),
       ),
     );
-    assert.ok(
-      resolution.report.diagnostics.some(
-        (d) => d.severity === "warning" && d.path.includes("box[pill]"),
-      ),
-    );
+    const pill = resolution.slide("clamped-box").get("pill");
+    assert.deepEqual(pill.box, { x: 20, y: 20, width: 100, height: 40 });
+    assert.deepEqual(pill.bounds, { x: 20, y: 20, width: 100, height: 40 });
     const emitted = emit(resolution);
     assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
+    const slide1Xml = strFromU8(
+      unzipSync(emitted.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    expect(slide1Xml).toContain('<a:gd name="adj" fmla="val 50000"/>');
     const painted = paint(resolution);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
+    expect(painted.pages[0]?.svg).toContain("M20 40 ");
+    expect(painted.pages[0]?.svg).toContain(" L100 20 ");
   });
 });

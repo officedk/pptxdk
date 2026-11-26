@@ -38,8 +38,8 @@ export const groupMechanismVerifications: Pick<
       assert.equal(textGroup?.members?.[1]?.text?.text, "Group Label");
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[1]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[1]?.errors, []);
+      assert.deepEqual(roundtrip.pages[1]?.errors, []);
       assert.ok(initial.pages[1]?.svg?.includes("rotate(12 "));
       assert.ok(initial.pages[1]?.svg?.includes("rotate(-18 "));
       assert.ok(roundtrip.pages[1]?.svg?.includes("rotate(12 "));

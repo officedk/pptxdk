@@ -96,28 +96,37 @@ export const imagePositiveScenario: CapabilityScenario = {
           id: "contain",
           src: samplePngBytes,
           fit: "contain",
-          x: 30,
-          y: 60,
-          width: 160,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 60,
+            width: 160,
+            height: 200,
+          },
         }),
         createElement(Image, {
           id: "cover",
           src: samplePngBytes,
           fit: "cover",
-          x: 240,
-          y: 60,
-          width: 160,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 60,
+            width: 160,
+            height: 200,
+          },
         }),
         createElement(Image, {
           id: "explicit-crop",
           src: samplePngBytes,
           crop: { left: 1 / 3 },
-          x: 450,
-          y: 60,
-          width: 160,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 450,
+            top: 60,
+            width: 160,
+            height: 200,
+          },
         }),
       ),
       createElement(
@@ -127,47 +136,63 @@ export const imagePositiveScenario: CapabilityScenario = {
           id: "jpeg-fill",
           src: sampleJpegBytes,
           fit: "fill",
-          x: 30,
-          y: 40,
-          width: 150,
-          height: 90,
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 40,
+            width: 150,
+            height: 90,
+          },
         }),
         createElement(Image, {
           id: "jpeg-rotated",
           src: sampleJpegBytes,
-          x: 220,
-          y: 55,
-          width: 120,
-          height: 60,
-          style: { rotate: 30 },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 55,
+            width: 120,
+            height: 60,
+            rotate: 30,
+          },
         }),
         createElement(Image, {
           id: "jpeg-flipped",
           src: sampleJpegBytes,
-          x: 30,
-          y: 190,
-          width: 140,
-          height: 70,
-          flipH: true,
-          flipV: true,
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 190,
+            width: 140,
+            height: 70,
+            flipH: true,
+            flipV: true,
+          },
         }),
         createElement(Shape, {
           id: "backdrop",
-          x: 390,
-          y: 110,
-          width: 180,
-          height: 140,
-          fill: "#0F172A",
-          style: { zIndex: 1 },
+          style: {
+            position: "absolute",
+            left: 390,
+            top: 110,
+            width: 180,
+            height: 140,
+            background: "#0F172A",
+            zIndex: 1,
+          },
         }),
         createElement(Image, {
           id: "jpeg-opacity",
           src: sampleJpegBytes,
-          x: 410,
-          y: 125,
-          width: 140,
-          height: 110,
-          style: { opacity: 0.6, zIndex: 2 },
+          style: {
+            position: "absolute",
+            left: 410,
+            top: 125,
+            width: 140,
+            height: 110,
+            opacity: 0.6,
+            zIndex: 2,
+          },
         }),
       ),
       createElement(
@@ -176,27 +201,36 @@ export const imagePositiveScenario: CapabilityScenario = {
         createElement(Image, {
           id: "shared-full",
           src: samplePngBytes,
-          x: 60,
-          y: 110,
-          width: 180,
-          height: 90,
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 110,
+            width: 180,
+            height: 90,
+          },
         }),
         createElement(Image, {
           id: "shared-top-cropped",
           src: samplePngBytes,
           crop: { top: 0.5 },
-          x: 340,
-          y: 110,
-          width: 180,
-          height: 90,
+          style: {
+            position: "absolute",
+            left: 340,
+            top: 110,
+            width: 180,
+            height: 90,
+          },
         }),
         createElement(Image, {
           id: "gif-sample",
           src: sampleGifBytes,
-          x: 260,
-          y: 230,
-          width: 60,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 260,
+            top: 230,
+            width: 60,
+            height: 60,
+          },
         }),
       ),
     );
@@ -208,28 +242,37 @@ export const imagePositiveScenario: CapabilityScenario = {
           id: "contain",
           src: samplePngBytes,
           fit: "contain",
-          x: 30,
-          y: 60,
-          width: 160,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 60,
+            width: 160,
+            height: 200,
+          },
         }),
         image({
           id: "cover",
           src: samplePngBytes,
           fit: "cover",
-          x: 240,
-          y: 60,
-          width: 160,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 60,
+            width: 160,
+            height: 200,
+          },
         }),
         image({
           id: "explicit-crop",
           src: samplePngBytes,
           crop: { left: 1 / 3 },
-          x: 450,
-          y: 60,
-          width: 160,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 450,
+            top: 60,
+            width: 160,
+            height: 200,
+          },
         }),
       ),
       slide({ id: "jpeg-transforms", background: "#FFFFFF" }).append(
@@ -237,79 +280,104 @@ export const imagePositiveScenario: CapabilityScenario = {
           id: "jpeg-fill",
           src: sampleJpegBytes,
           fit: "fill",
-          x: 30,
-          y: 40,
-          width: 150,
-          height: 90,
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 40,
+            width: 150,
+            height: 90,
+          },
         }),
         image({
           id: "jpeg-rotated",
           src: sampleJpegBytes,
-          x: 220,
-          y: 55,
-          width: 120,
-          height: 60,
-          style: { rotate: 30 },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 55,
+            width: 120,
+            height: 60,
+            rotate: 30,
+          },
         }),
         image({
           id: "jpeg-flipped",
           src: sampleJpegBytes,
-          x: 30,
-          y: 190,
-          width: 140,
-          height: 70,
-          flipH: true,
-          flipV: true,
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 190,
+            width: 140,
+            height: 70,
+            flipH: true,
+            flipV: true,
+          },
         }),
         shape({
           id: "backdrop",
-          x: 390,
-          y: 110,
-          width: 180,
-          height: 140,
-          fill: "#0F172A",
-          style: { zIndex: 1 },
+          style: {
+            position: "absolute",
+            left: 390,
+            top: 110,
+            width: 180,
+            height: 140,
+            background: "#0F172A",
+            zIndex: 1,
+          },
         }),
         image({
           id: "jpeg-opacity",
           src: sampleJpegBytes,
-          x: 410,
-          y: 125,
-          width: 140,
-          height: 110,
-          style: { opacity: 0.6, zIndex: 2 },
+          style: {
+            position: "absolute",
+            left: 410,
+            top: 125,
+            width: 140,
+            height: 110,
+            opacity: 0.6,
+            zIndex: 2,
+          },
         }),
       ),
       slide({ id: "shared-media-reuse", background: "#F8FAFC" }).append(
         image({
           id: "shared-full",
           src: samplePngBytes,
-          x: 60,
-          y: 110,
-          width: 180,
-          height: 90,
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 110,
+            width: 180,
+            height: 90,
+          },
         }),
         image({
           id: "shared-top-cropped",
           src: samplePngBytes,
           crop: { top: 0.5 },
-          x: 340,
-          y: 110,
-          width: 180,
-          height: 90,
+          style: {
+            position: "absolute",
+            left: 340,
+            top: 110,
+            width: 180,
+            height: 90,
+          },
         }),
         image({
           id: "gif-sample",
           src: sampleGifBytes,
-          x: 260,
-          y: 230,
-          width: 60,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 260,
+            top: 230,
+            width: 60,
+            height: 60,
+          },
         }),
       ),
     );
   },
-  assert({ author, pptx, preview, validation }) {
+  assert({ author, pptx, preview, resolution, validation }) {
     assert.equal(preview.pages.length, 3, author);
     assert.equal(validation.slides.length, 3, author);
 
@@ -333,10 +401,10 @@ export const imagePositiveScenario: CapabilityScenario = {
     );
 
     const p1 = preview.pages[0]!;
-    assert.deepEqual(p1.diagnostics, [], author);
-    const containNode = p1.nodes.find((n) => n.authorId === "contain")!;
+    assert.deepEqual(p1.errors, [], author);
+    const containLocator = resolution.slide("png-placement").get("contain");
     assert.deepEqual(
-      containNode.box,
+      containLocator.box,
       { x: 30, y: 120, width: 160, height: 80 },
       author,
     );
@@ -363,14 +431,16 @@ export const imagePositiveScenario: CapabilityScenario = {
     assert.match(slide1Xml, /<a:srcRect l="33333"\/>/u, author);
 
     const p2 = preview.pages[1]!;
-    assert.deepEqual(p2.diagnostics, [], author);
-    const rotatedNode = p2.nodes.find((n) => n.authorId === "jpeg-rotated")!;
+    assert.deepEqual(p2.errors, [], author);
+    const rotatedLocator = resolution
+      .slide("jpeg-transforms")
+      .get("jpeg-rotated");
     const rad = (30 * Math.PI) / 180;
-    expect(rotatedNode.screenBox?.width).toBeCloseTo(
+    expect(rotatedLocator.bounds?.width).toBeCloseTo(
       120 * Math.cos(rad) + 60 * Math.sin(rad),
       1,
     );
-    expect(rotatedNode.screenBox?.height).toBeCloseTo(
+    expect(rotatedLocator.bounds?.height).toBeCloseTo(
       120 * Math.sin(rad) + 60 * Math.cos(rad),
       1,
     );
@@ -389,7 +459,7 @@ export const imagePositiveScenario: CapabilityScenario = {
     );
 
     const p3 = preview.pages[2]!;
-    assert.deepEqual(p3.diagnostics, [], author);
+    assert.deepEqual(p3.errors, [], author);
     const p3Pixels = PNG.sync.read(Buffer.from(p3.png!));
     // Top-cropped shared-top-cropped at (340..520, 110..200): right side (480, 130) must be gold (not blue).
     const sharedRightTop = (130 * p3Pixels.width + 480) * 4;
@@ -425,68 +495,65 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
           id: "ellipse-dashed",
           src: samplePngBytes,
           geometry: "ellipse",
-          x: 24,
-          y: 30,
-          width: 130,
-          height: 90,
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 3,
-            borderStyle: "dashed",
+            position: "absolute",
+            left: 24,
+            top: 30,
+            width: 130,
+            height: 90,
+            border: { color: "#1E293B", width: 3, style: "dashed" },
           },
         }),
         createElement(Image, {
           id: "roundrect-dotted",
           src: sampleJpegBytes,
           geometry: preset("roundRect", { adj: 25000 }),
-          x: 180,
-          y: 30,
-          width: 130,
-          height: 90,
           style: {
-            borderColor: "#DC2626",
-            borderWidth: 2,
-            borderStyle: "dotted",
+            position: "absolute",
+            left: 180,
+            top: 30,
+            width: 130,
+            height: 90,
+            border: { color: "#DC2626", width: 2, style: "dotted" },
           },
         }),
         createElement(Image, {
           id: "star-gif",
           src: sampleGifBytes,
           geometry: preset("star5", { adj: 22000 }),
-          x: 340,
-          y: 30,
-          width: 110,
-          height: 110,
           style: {
-            borderColor: "#0F766E",
-            borderWidth: 2,
-            borderStyle: "solid",
+            position: "absolute",
+            left: 340,
+            top: 30,
+            width: 110,
+            height: 110,
+            border: { color: "#0F766E", width: 2, style: "solid" },
           },
         }),
         createElement(Image, {
           id: "smiley-png",
           src: samplePngBytes,
           geometry: "smileyFace",
-          x: 480,
-          y: 30,
-          width: 110,
-          height: 110,
           style: {
-            borderColor: "#0F172A",
-            borderWidth: 2,
+            position: "absolute",
+            left: 480,
+            top: 30,
+            width: 110,
+            height: 110,
+            border: { color: "#0F172A", width: 2 },
           },
         }),
         createElement(Image, {
           id: "custom-triangle",
           src: samplePngBytes,
           geometry: triangleMaskGeometry,
-          x: 24,
-          y: 170,
-          width: 140,
-          height: 120,
           style: {
-            borderColor: "#1D4ED8",
-            borderWidth: 2,
+            position: "absolute",
+            left: 24,
+            top: 170,
+            width: 140,
+            height: 120,
+            border: { color: "#1D4ED8", width: 2 },
           },
         }),
       ),
@@ -497,15 +564,15 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
           id: "arrow-shadow-flip-rot",
           src: samplePngBytes,
           geometry: "rightArrow",
-          x: 40,
-          y: 50,
-          width: 160,
-          height: 100,
-          flipH: true,
           style: {
+            position: "absolute",
+            left: 40,
+            top: 50,
+            width: 160,
+            height: 100,
+            flipH: true,
             rotate: 20,
-            borderColor: "#0F172A",
-            borderWidth: 2,
+            border: { color: "#0F172A", width: 2 },
             boxShadow: { color: "#000000", blur: 6, distance: 6, angle: 45 },
           },
         }),
@@ -513,33 +580,39 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
           id: "soft-diamond",
           src: sampleJpegBytes,
           geometry: "diamond",
-          x: 240,
-          y: 50,
-          width: 140,
-          height: 110,
-          style: { softEdge: 10 },
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 50,
+            width: 140,
+            height: 110,
+            softEdge: 10,
+          },
         }),
         createElement(Shape, {
           id: "opacity-backdrop",
-          x: 410,
-          y: 45,
-          width: 190,
-          height: 140,
-          fill: "#0F172A",
-          style: { zIndex: 1 },
+          style: {
+            position: "absolute",
+            left: 410,
+            top: 45,
+            width: 190,
+            height: 140,
+            background: "#0F172A",
+            zIndex: 1,
+          },
         }),
         createElement(Image, {
           id: "opacity-bordered",
           src: samplePngBytes,
           geometry: preset("roundRect", { adj: 15000 }),
-          x: 430,
-          y: 65,
-          width: 150,
-          height: 100,
           style: {
+            position: "absolute",
+            left: 430,
+            top: 65,
+            width: 150,
+            height: 100,
             opacity: 0.5,
-            borderColor: "#FFFFFF",
-            borderWidth: 4,
+            border: { color: "#FFFFFF", width: 4 },
             zIndex: 2,
           },
         }),
@@ -553,68 +626,65 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
           id: "ellipse-dashed",
           src: samplePngBytes,
           geometry: "ellipse",
-          x: 24,
-          y: 30,
-          width: 130,
-          height: 90,
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 3,
-            borderStyle: "dashed",
+            position: "absolute",
+            left: 24,
+            top: 30,
+            width: 130,
+            height: 90,
+            border: { color: "#1E293B", width: 3, style: "dashed" },
           },
         }),
         image({
           id: "roundrect-dotted",
           src: sampleJpegBytes,
           geometry: preset("roundRect", { adj: 25000 }),
-          x: 180,
-          y: 30,
-          width: 130,
-          height: 90,
           style: {
-            borderColor: "#DC2626",
-            borderWidth: 2,
-            borderStyle: "dotted",
+            position: "absolute",
+            left: 180,
+            top: 30,
+            width: 130,
+            height: 90,
+            border: { color: "#DC2626", width: 2, style: "dotted" },
           },
         }),
         image({
           id: "star-gif",
           src: sampleGifBytes,
           geometry: preset("star5", { adj: 22000 }),
-          x: 340,
-          y: 30,
-          width: 110,
-          height: 110,
           style: {
-            borderColor: "#0F766E",
-            borderWidth: 2,
-            borderStyle: "solid",
+            position: "absolute",
+            left: 340,
+            top: 30,
+            width: 110,
+            height: 110,
+            border: { color: "#0F766E", width: 2, style: "solid" },
           },
         }),
         image({
           id: "smiley-png",
           src: samplePngBytes,
           geometry: "smileyFace",
-          x: 480,
-          y: 30,
-          width: 110,
-          height: 110,
           style: {
-            borderColor: "#0F172A",
-            borderWidth: 2,
+            position: "absolute",
+            left: 480,
+            top: 30,
+            width: 110,
+            height: 110,
+            border: { color: "#0F172A", width: 2 },
           },
         }),
         image({
           id: "custom-triangle",
           src: samplePngBytes,
           geometry: triangleMaskGeometry,
-          x: 24,
-          y: 170,
-          width: 140,
-          height: 120,
           style: {
-            borderColor: "#1D4ED8",
-            borderWidth: 2,
+            position: "absolute",
+            left: 24,
+            top: 170,
+            width: 140,
+            height: 120,
+            border: { color: "#1D4ED8", width: 2 },
           },
         }),
       ),
@@ -623,15 +693,15 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
           id: "arrow-shadow-flip-rot",
           src: samplePngBytes,
           geometry: "rightArrow",
-          x: 40,
-          y: 50,
-          width: 160,
-          height: 100,
-          flipH: true,
           style: {
+            position: "absolute",
+            left: 40,
+            top: 50,
+            width: 160,
+            height: 100,
+            flipH: true,
             rotate: 20,
-            borderColor: "#0F172A",
-            borderWidth: 2,
+            border: { color: "#0F172A", width: 2 },
             boxShadow: { color: "#000000", blur: 6, distance: 6, angle: 45 },
           },
         }),
@@ -639,33 +709,39 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
           id: "soft-diamond",
           src: sampleJpegBytes,
           geometry: "diamond",
-          x: 240,
-          y: 50,
-          width: 140,
-          height: 110,
-          style: { softEdge: 10 },
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 50,
+            width: 140,
+            height: 110,
+            softEdge: 10,
+          },
         }),
         shape({
           id: "opacity-backdrop",
-          x: 410,
-          y: 45,
-          width: 190,
-          height: 140,
-          fill: "#0F172A",
-          style: { zIndex: 1 },
+          style: {
+            position: "absolute",
+            left: 410,
+            top: 45,
+            width: 190,
+            height: 140,
+            background: "#0F172A",
+            zIndex: 1,
+          },
         }),
         image({
           id: "opacity-bordered",
           src: samplePngBytes,
           geometry: preset("roundRect", { adj: 15000 }),
-          x: 430,
-          y: 65,
-          width: 150,
-          height: 100,
           style: {
+            position: "absolute",
+            left: 430,
+            top: 65,
+            width: 150,
+            height: 100,
             opacity: 0.5,
-            borderColor: "#FFFFFF",
-            borderWidth: 4,
+            border: { color: "#FFFFFF", width: 4 },
             zIndex: 2,
           },
         }),
@@ -677,7 +753,7 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
     assert.equal(validation.slides.length, 2, author);
 
     const p1 = preview.pages[0]!;
-    assert.deepEqual(p1.diagnostics, [], author);
+    assert.deepEqual(p1.errors, [], author);
     expect(p1.svg).toContain("<clipPath");
     expect(p1.svg).toContain("stroke-dasharray=");
     const p1Pixels = PNG.sync.read(Buffer.from(p1.png!));
@@ -704,7 +780,7 @@ export const imageMasksAndEffectsScenario: CapabilityScenario = {
     );
 
     const p2 = preview.pages[1]!;
-    assert.deepEqual(p2.diagnostics, [], author);
+    assert.deepEqual(p2.errors, [], author);
     expect(p2.svg).toContain("<feDropShadow");
     expect(p2.svg).toContain("<mask");
     // Border stroke-opacity must be 0.5 (not double-multiplied to 0.25).
@@ -746,26 +822,35 @@ export const imageRejectionScenario: CapabilityScenario = {
         createElement(Image, {
           id: "corrupt-gif-img",
           src: corruptGifBytes,
-          x: 20,
-          y: 20,
-          width: 40,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 40,
+            height: 40,
+          },
         }),
         createElement(Image, {
           id: "corrupt-png-img",
           src: corruptPngBytes,
-          x: 80,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
         createElement(Image, {
           id: "corrupt-jpeg-img",
           src: corruptJpegBytes,
-          x: 160,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
       ),
       createElement(
@@ -775,13 +860,13 @@ export const imageRejectionScenario: CapabilityScenario = {
           id: "valid-img",
           src: samplePngBytes,
           geometry: "ellipse",
-          x: 150,
-          y: 90,
-          width: 180,
-          height: 90,
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 2,
+            position: "absolute",
+            left: 150,
+            top: 90,
+            width: 180,
+            height: 90,
+            border: { color: "#1E293B", width: 2 },
             boxShadow: { blur: 4, distance: 3 },
           },
         }),
@@ -794,26 +879,35 @@ export const imageRejectionScenario: CapabilityScenario = {
         image({
           id: "corrupt-gif-img",
           src: corruptGifBytes,
-          x: 20,
-          y: 20,
-          width: 40,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 40,
+            height: 40,
+          },
         }),
         image({
           id: "corrupt-png-img",
           src: corruptPngBytes,
-          x: 80,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
         image({
           id: "corrupt-jpeg-img",
           src: corruptJpegBytes,
-          x: 160,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
       ),
       slide({ id: "valid-sibling-image", background: "#FFFFFF" }).append(
@@ -821,13 +915,13 @@ export const imageRejectionScenario: CapabilityScenario = {
           id: "valid-img",
           src: samplePngBytes,
           geometry: "ellipse",
-          x: 150,
-          y: 90,
-          width: 180,
-          height: 90,
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 2,
+            position: "absolute",
+            left: 150,
+            top: 90,
+            width: 180,
+            height: 90,
+            border: { color: "#1E293B", width: 2 },
             boxShadow: { blur: 4, distance: 3 },
           },
         }),
@@ -838,27 +932,27 @@ export const imageRejectionScenario: CapabilityScenario = {
     assert.equal(validation.slides[0]?.objects.length, 3, author);
 
     const p1 = preview.pages[0]!;
+    assert.equal(p1.svg, undefined, author);
     assert.equal(p1.png, undefined, author);
-    assert.equal(p1.diagnostics.length, 3, author);
+    assert.equal(p1.errors.length, 3, author);
     for (const id of [
       "corrupt-gif-img",
       "corrupt-png-img",
       "corrupt-jpeg-img",
     ]) {
       assert.ok(
-        p1.diagnostics.some(
-          (d) =>
-            d.severity === "error" &&
-            d.page === 1 &&
-            d.path.includes(`image[${id}]`) &&
-            /decode/i.test(d.message),
+        p1.errors.some(
+          (err) =>
+            err.code === "preview-corrupt-image" &&
+            err.path.includes(`image[${id}]`) &&
+            /decode/i.test(err.message),
         ),
-        `${author}: missing corrupt-image diagnostic for ${id}`,
+        `${author}: missing preview-corrupt-image error for ${id}`,
       );
     }
 
     const p2 = preview.pages[1]!;
-    assert.deepEqual(p2.diagnostics, [], author);
+    assert.deepEqual(p2.errors, [], author);
     assert.ok(p2.png !== undefined, author);
     const p2Pixels = PNG.sync.read(Buffer.from(p2.png));
     const redLeft = (135 * p2Pixels.width + 185) * 4;
@@ -888,39 +982,36 @@ export const imageSizingSoftBorderAndLinkScenario: CapabilityScenario = {
         createElement(Image, {
           id: "width-only",
           src: samplePngBytes,
-          x: 20,
-          y: 20,
-          width: 120,
+          style: { position: "absolute", left: 20, top: 20, width: 120 },
         }),
         createElement(Image, {
           id: "height-only",
           src: samplePngBytes,
-          x: 170,
-          y: 20,
-          height: 80,
+          style: { position: "absolute", left: 170, top: 20, height: 80 },
         }),
         createElement(Image, {
           id: "border-and-soft",
           src: sampleJpegBytes,
-          x: 340,
-          y: 20,
-          width: 120,
-          height: 80,
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 3,
+            position: "absolute",
+            left: 340,
+            top: 20,
+            width: 120,
+            height: 80,
+            border: { color: "#1E293B", width: 3 },
             softEdge: 5,
           },
         }),
         createElement(Image, {
           id: "large-soft-linked",
           src: samplePngBytes,
-          x: 490,
-          y: 20,
-          width: 100,
-          height: 80,
           link: { url: "https://example.com" },
           style: {
+            position: "absolute",
+            left: 490,
+            top: 20,
+            width: 100,
+            height: 80,
             softEdge: 50,
           },
         }),
@@ -933,52 +1024,49 @@ export const imageSizingSoftBorderAndLinkScenario: CapabilityScenario = {
         image({
           id: "width-only",
           src: samplePngBytes,
-          x: 20,
-          y: 20,
-          width: 120,
+          style: { position: "absolute", left: 20, top: 20, width: 120 },
         }),
         image({
           id: "height-only",
           src: samplePngBytes,
-          x: 170,
-          y: 20,
-          height: 80,
+          style: { position: "absolute", left: 170, top: 20, height: 80 },
         }),
         image({
           id: "border-and-soft",
           src: sampleJpegBytes,
-          x: 340,
-          y: 20,
-          width: 120,
-          height: 80,
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 3,
+            position: "absolute",
+            left: 340,
+            top: 20,
+            width: 120,
+            height: 80,
+            border: { color: "#1E293B", width: 3 },
             softEdge: 5,
           },
         }),
         image({
           id: "large-soft-linked",
           src: samplePngBytes,
-          x: 490,
-          y: 20,
-          width: 100,
-          height: 80,
           link: { url: "https://example.com" },
           style: {
+            position: "absolute",
+            left: 490,
+            top: 20,
+            width: 100,
+            height: 80,
             softEdge: 50,
           },
         }),
       ),
     );
   },
-  assert({ author, preview, validation }) {
+  assert({ author, preview, resolution, validation }) {
     const page = preview.pages[0]!;
-    assert.deepEqual(page.diagnostics, [], author);
+    assert.deepEqual(page.errors, [], author);
     assert.ok(page.png !== undefined, author);
-    const widthOnly = page.nodes.find((n) => n.authorId === "width-only")!;
-    const heightOnly = page.nodes.find((n) => n.authorId === "height-only")!;
-    // samplePngBytes is 30x15 (2:1 aspect ratio)
+    const widthOnly = resolution.slide("sizing-and-links").get("width-only");
+    const heightOnly = resolution.slide("sizing-and-links").get("height-only");
+    // samplePngBytes is 120x60 (2:1 aspect ratio)
     assert.equal(widthOnly.box?.height, 60, author);
     assert.equal(heightOnly.box?.width, 160, author);
     expect(page.svg).toContain("<mask");

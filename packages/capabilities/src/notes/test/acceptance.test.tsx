@@ -25,8 +25,8 @@ import { Shape } from "@pptxdk/capabilities/shape-elements";
 import { P, SlideNumber, Span } from "@pptxdk/capabilities/text-elements";
 import {
   BuildError,
+  type BuildDiagnostic,
   type CapabilityModule,
-  type Diagnostic,
 } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import type { CommonNode } from "@pptxdk/core/document";
@@ -56,7 +56,6 @@ function previewDocWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(document);
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -69,7 +68,6 @@ function previewJsxWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(await expandDocument(element));
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -112,7 +110,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
         slide({ id: "notes-only" }).append(notes("Speaker only")),
       ),
     );
-    assert.deepEqual(notesOnlyResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(notesOnlyResult.pages[0]?.errors, []);
     assert.ok(notesOnlyResult.pages[0]?.png !== undefined);
     const notesOnlyPng = PNG.sync.read(
       Buffer.from(notesOnlyResult.pages[0].png),
@@ -136,11 +134,14 @@ describe("Notes capability acceptance & bound slide contract", () => {
       slide({ id: "trimmed-text" }).append(
         shape({
           id: "card",
-          x: 40,
-          y: 40,
-          width: 200,
-          height: 100,
-          fill: "#1D4ED8",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 200,
+            height: 100,
+            background: "#1D4ED8",
+          },
         }),
         notes(
           [
@@ -154,7 +155,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
       ),
     );
     const docResult = await previewDocTrimmed(doc);
-    assert.deepEqual(docResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(docResult.pages[0]?.errors, []);
     assert.ok(docResult.pages[0]?.png !== undefined);
     assert.deepEqual(docResult.report.slides[0]?.capabilities, {
       notes: { text: "Trimmed text check 1", paragraphCount: 1 },
@@ -169,11 +170,14 @@ describe("Notes capability acceptance & bound slide contract", () => {
           { id: "trimmed-text" },
           createElement(Shape, {
             id: "card",
-            x: 40,
-            y: 40,
-            width: 200,
-            height: 100,
-            fill: "#1D4ED8",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 200,
+              height: 100,
+              background: "#1D4ED8",
+            },
           }),
           createElement(
             Notes,
@@ -192,7 +196,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
         ),
       ),
     );
-    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(jsxResult.pages[0]?.errors, []);
     assert.ok(jsxResult.pages[0]?.png !== undefined);
     assert.deepEqual(jsxResult.report.slides[0]?.capabilities, {
       notes: { text: "Trimmed text check 1", paragraphCount: 1 },
@@ -200,7 +204,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
 
     async function expectBuildErrorCode(
       run: () => Promise<unknown>,
-    ): Promise<readonly Diagnostic[]> {
+    ): Promise<readonly BuildDiagnostic[]> {
       try {
         await run();
       } catch (error) {
@@ -234,7 +238,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
     );
     assert.deepEqual(
       dupHiddenDiags.map(({ code }) => code),
-      ["duplicate-notes"],
+      ["invalid-structure"],
     );
 
     const dupJsxDiags = await expectBuildErrorCode(() =>
@@ -253,7 +257,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
     );
     assert.deepEqual(
       dupJsxDiags.map(({ code }) => code),
-      ["duplicate-notes"],
+      ["invalid-structure"],
     );
 
     const badChildDiags = await expectBuildErrorCode(() =>
@@ -263,7 +267,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
         ),
       ),
     );
-    assert.equal(badChildDiags[0]?.code, "unsupported-text-child");
+    assert.equal(badChildDiags[0]?.code, "invalid-structure");
 
     const unknownPropDiags = await expectBuildErrorCode(() =>
       previewJsxTrimmed(
@@ -282,7 +286,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
         ),
       ),
     );
-    assert.equal(unknownPropDiags[0]?.code, "unknown-parameter");
+    assert.equal(unknownPropDiags[0]?.code, "unknown-prop");
 
     const missingHiddenDocDiags = await expectBuildErrorCode(() =>
       previewWithoutNotes(
@@ -322,13 +326,22 @@ describe("Notes capability acceptance & bound slide contract", () => {
       previewDocTrimmed(
         deck().append(
           slide({ id: "dup-id" }).append(
-            shape({ id: "same", x: 10, y: 10, width: 40, height: 20 }),
+            shape({
+              id: "same",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 40,
+                height: 20,
+              },
+            }),
             notes("body", { id: "same" }),
           ),
         ),
       ),
     );
-    assert.equal(dupIdDiags[0]?.code, "duplicate-author-id");
+    assert.equal(dupIdDiags[0]?.code, "duplicate-id");
   });
 
   it("migrates notesCapability to BoundSlideCapability with resolve-time claims, paint without notes leakage, and emit-only shared notes parts and font embedding", async () => {
@@ -386,7 +399,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 3);
     for (const page of painted.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
     }
     assert.equal(painted.pages[0]?.svg?.includes("Speaker slide"), false);
@@ -435,7 +448,7 @@ describe("Notes capability acceptance & bound slide contract", () => {
       ),
     );
     const missingGlyphResolution = resolve(missingGlyphDoc);
-    assert.deepEqual(paint(missingGlyphResolution).pages[0]?.diagnostics, []);
+    assert.deepEqual(paint(missingGlyphResolution).pages[0]?.errors, []);
     assert.deepEqual(
       (await validatePptx(emit(missingGlyphResolution).pptx)).errors,
       [],

@@ -82,11 +82,15 @@ describe("Speaker notes, slide order, hidden slides, and sections roundtrip", ()
         slide({ id: "intro" }).append(
           text("Slide One Title", {
             id: "s1-title",
-            x: 32,
-            y: 32,
-            width: 300,
-            height: 48,
-            style: { fontFamily: jostFont, fontSize: "20pt" },
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 32,
+              width: 300,
+              height: 48,
+              fontFamily: jostFont,
+              fontSize: "20pt",
+            },
           }),
           notes([
             paragraph("First slide cue"),
@@ -104,11 +108,14 @@ describe("Speaker notes, slide order, hidden slides, and sections roundtrip", ()
         slide({ id: "secret", hidden: true }).append(
           shape({
             id: "secret-box",
-            x: 40,
-            y: 40,
-            width: 120,
-            height: 80,
-            fill: "#334155",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 120,
+              height: 80,
+              background: "#334155",
+            },
           }),
           notes("Hidden slide notes"),
         ),
@@ -117,11 +124,14 @@ describe("Speaker notes, slide order, hidden slides, and sections roundtrip", ()
         slide({ id: "closing" }).append(
           shape({
             id: "closing-box",
-            x: 40,
-            y: 40,
-            width: 120,
-            height: 80,
-            fill: "#059669",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 120,
+              height: 80,
+              background: "#059669",
+            },
           }),
         ),
       ),
@@ -174,7 +184,7 @@ describe("Speaker notes, slide order, hidden slides, and sections roundtrip", ()
     // Paint never renders speaker notes onto the visible slide canvas.
     assert.equal(painted.pages.length, 3);
     for (const page of painted.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png instanceof Uint8Array);
       assert.ok(typeof page.svg === "string");
       assert.equal(page.svg.includes("Edited first slide cue"), false);

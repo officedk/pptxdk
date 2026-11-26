@@ -34,7 +34,15 @@ describe("text language (lang) validation", () => {
             style={{ lang: 123 }}
           >
             <Slide id="cover">
-              <Text x={0} y={0} width={200} height={100}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                }}
+              >
                 Deck non-string lang
               </Text>
             </Slide>
@@ -43,7 +51,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -57,7 +65,15 @@ describe("text language (lang) validation", () => {
               // @ts-expect-error non-string lang
               style={{ lang: true }}
             >
-              <Text x={0} y={0} width={200} height={100}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                }}
+              >
                 Slide non-string lang
               </Text>
             </Slide>
@@ -66,7 +82,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -78,7 +94,15 @@ describe("text language (lang) validation", () => {
         await build(
           <Deck style={{ lang: "invalid_tag" }}>
             <Slide id="cover">
-              <Text x={0} y={0} width={200} height={100}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                }}
+              >
                 Deck invalid lang
               </Text>
             </Slide>
@@ -87,7 +111,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -99,7 +123,15 @@ describe("text language (lang) validation", () => {
         await build(
           <Deck>
             <Slide id="cover" style={{ lang: "" }}>
-              <Text x={0} y={0} width={200} height={100}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                }}
+              >
                 Slide empty lang
               </Text>
             </Slide>
@@ -108,7 +140,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -121,7 +153,15 @@ describe("text language (lang) validation", () => {
           <Deck>
             <Slide id="cover">
               <Box style={{ lang: "zh_CN" }}>
-                <Text x={0} y={0} width={200} height={100}>
+                <Text
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 200,
+                    height: 100,
+                  }}
+                >
                   Box invalid lang
                 </Text>
               </Box>
@@ -131,7 +171,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -144,7 +184,15 @@ describe("text language (lang) validation", () => {
           <Deck>
             <Slide id="cover">
               <Group style={{ lang: "zh..CN" }}>
-                <Text x={0} y={0} width={200} height={100}>
+                <Text
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 200,
+                    height: 100,
+                  }}
+                >
                   Group invalid lang
                 </Text>
               </Group>
@@ -154,7 +202,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -167,11 +215,14 @@ describe("text language (lang) validation", () => {
           <Deck>
             <Slide id="cover">
               <Text
-                x={0}
-                y={0}
-                width={200}
-                height={100}
-                style={{ lang: "en_US" }}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                  lang: "en_US",
+                }}
               >
                 Text invalid lang
               </Text>
@@ -181,7 +232,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -194,20 +245,24 @@ describe("text language (lang) validation", () => {
           <Deck>
             <Slide id="cover">
               <Shape
-                x={0}
-                y={0}
-                width={200}
-                height={100}
-                text="Shape text"
-                style={{ lang: "bad_tag" }}
-              />
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                  lang: "bad_tag",
+                }}
+              >
+                Shape text
+              </Shape>
             </Slide>
           </Deck>,
         );
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -234,7 +289,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -261,7 +316,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -286,7 +341,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -299,11 +354,14 @@ describe("text language (lang) validation", () => {
           <Deck>
             <Slide id="cover">
               <Chart
-                x={0}
-                y={0}
-                width={300}
-                height={200}
-                style={{ lang: "invalid_chart" }}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 300,
+                  height: 200,
+                  lang: "invalid_chart",
+                }}
                 groups={[
                   {
                     kind: "bar",
@@ -321,7 +379,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -333,7 +391,15 @@ describe("text language (lang) validation", () => {
         await build(
           <Deck>
             <Slide id="cover">
-              <Text x={0} y={0} width={200} height={100}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                }}
+              >
                 <P style={{ lang: "bad_p" }}>
                   <Span>Paragraph content</Span>
                 </P>
@@ -344,7 +410,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -354,7 +420,15 @@ describe("text language (lang) validation", () => {
         await build(
           <Deck>
             <Slide id="cover">
-              <Text x={0} y={0} width={200} height={100}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                }}
+              >
                 <P>
                   <Span style={{ lang: "bad_span" }}>Span content</Span>
                 </P>
@@ -365,7 +439,7 @@ describe("text language (lang) validation", () => {
       },
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-text-lang");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         return true;
       },
     );
@@ -377,20 +451,35 @@ describe("omission of lang attribute when undeclared", () => {
     const result = await build(
       <Deck>
         <Slide id="slide-undeclared">
-          <Text x={50} y={50} width={300} height={150}>
+          <Text
+            style={{
+              position: "absolute",
+              left: 50,
+              top: 50,
+              width: 300,
+              height: 150,
+            }}
+          >
             <P>
               <Span>Run text</Span>
             </P>
             <P>{/* Empty paragraph to generate a:endParaRPr */}</P>
           </Text>
           <Shape
-            x={50}
-            y={220}
-            width={300}
-            height={100}
-            text="Shape text content"
-          />
-          <Table x={50} y={340} columns={[150, 150]}>
+            style={{
+              position: "absolute",
+              left: 50,
+              top: 220,
+              width: 300,
+              height: 100,
+            }}
+          >
+            Shape text content
+          </Shape>
+          <Table
+            style={{ position: "absolute", left: 50, top: 340 }}
+            columns={[150, 150]}
+          >
             <Row style={{ height: 40 }}>
               <Cell colSpan={2}>
                 <P>
@@ -412,10 +501,13 @@ describe("omission of lang attribute when undeclared", () => {
             </Row>
           </Table>
           <Chart
-            x={400}
-            y={50}
-            width={300}
-            height={200}
+            style={{
+              position: "absolute",
+              left: 400,
+              top: 50,
+              width: 300,
+              height: 200,
+            }}
             groups={[
               {
                 kind: "bar",
@@ -477,19 +569,34 @@ describe("inheritance and local overrides of text language (lang)", () => {
       <Deck style={{ lang: "zh-CN" }}>
         {/* Slide 1: inherits zh-CN from Deck */}
         <Slide id="slide-inherit">
-          <Text x={50} y={50} width={300} height={100}>
+          <Text
+            style={{
+              position: "absolute",
+              left: 50,
+              top: 50,
+              width: 300,
+              height: 100,
+            }}
+          >
             <P>
               <Span>Inherited zh-CN run</Span>
             </P>
           </Text>
           <Shape
-            x={50}
-            y={160}
-            width={300}
-            height={80}
-            text="Inherited zh-CN shape"
-          />
-          <Table x={50} y={260} columns={[150, 150]}>
+            style={{
+              position: "absolute",
+              left: 50,
+              top: 160,
+              width: 300,
+              height: 80,
+            }}
+          >
+            Inherited zh-CN shape
+          </Shape>
+          <Table
+            style={{ position: "absolute", left: 50, top: 260 }}
+            columns={[150, 150]}
+          >
             <Row style={{ height: 35 }}>
               {/* Cell overrides to ja with colSpan=2 */}
               <Cell colSpan={2} style={{ lang: "ja" }}>
@@ -514,10 +621,13 @@ describe("inheritance and local overrides of text language (lang)", () => {
             </Row>
           </Table>
           <Chart
-            x={400}
-            y={50}
-            width={300}
-            height={200}
+            style={{
+              position: "absolute",
+              left: 400,
+              top: 50,
+              width: 300,
+              height: 200,
+            }}
             groups={[
               {
                 kind: "bar",
@@ -534,7 +644,15 @@ describe("inheritance and local overrides of text language (lang)", () => {
         {/* Slide 2: overrides lang to en-US */}
         <Slide id="slide-override" style={{ lang: "en-US" }}>
           <Box style={{ width: 320, height: 180, lang: "de-DE" }}>
-            <Text x={10} y={10} width={300} height={150}>
+            <Text
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 300,
+                height: 150,
+              }}
+            >
               <P>
                 <Span>German paragraph (inherited from Box)</Span>
               </P>
@@ -547,16 +665,27 @@ describe("inheritance and local overrides of text language (lang)", () => {
             </Text>
           </Box>
           <Group style={{ width: 320, height: 100, lang: "es-ES" }}>
-            <Text x={10} y={10} width={300} height={80}>
+            <Text
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 300,
+                height: 80,
+              }}
+            >
               Spanish run (inherited from Group)
             </Text>
           </Group>
           <Chart
-            x={400}
-            y={50}
-            width={300}
-            height={200}
-            style={{ lang: "it-IT" }}
+            style={{
+              position: "absolute",
+              left: 400,
+              top: 50,
+              width: 300,
+              height: 200,
+              lang: "it-IT",
+            }}
             groups={[
               {
                 kind: "bar",
@@ -660,7 +789,15 @@ describe("artifact validator (validatePptx) lang checks", () => {
     const result = await build(
       <Deck style={{ lang: "zh-CN" }}>
         <Slide id="valid-slide">
-          <Text x={50} y={50} width={200} height={100}>
+          <Text
+            style={{
+              position: "absolute",
+              left: 50,
+              top: 50,
+              width: 200,
+              height: 100,
+            }}
+          >
             Hello
           </Text>
         </Slide>
@@ -686,10 +823,13 @@ describe("artifact validator (validatePptx) lang checks", () => {
       <Deck style={{ lang: "zh-CN" }}>
         <Slide id="valid-chart-slide">
           <Chart
-            x={50}
-            y={50}
-            width={300}
-            height={200}
+            style={{
+              position: "absolute",
+              left: 50,
+              top: 50,
+              width: 300,
+              height: 200,
+            }}
             groups={[
               {
                 kind: "bar",

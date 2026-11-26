@@ -9,13 +9,12 @@ import {
   type SlideBackground,
   type SlideStyle,
 } from "#/author-schemas.ts";
-import { CapabilityError } from "#/diagnostics.ts";
+import { BuildError, zodIssueToBuildDiagnostic } from "#/diagnostics.ts";
 import {
   masterPlaceholderMapSchema,
   masterTextStylesSchema,
   placeholderMapSchema,
   placeholderRoleSchema,
-  placeholderSzSchema,
   type EmptyPlaceholderMap,
   type MasterPlaceholderMap,
   type MasterTextStyles,
@@ -46,10 +45,6 @@ export type HeaderFooter = z.infer<typeof headerFooterSchema>;
 /** Geometry, placeholder metadata, and default text/style for a `dt`, `ftr`, or `sldNum` slot. */
 export const footerPlaceholderSpecSchema = z
   .strictObject({
-    x: z.number().finite().optional(),
-    y: z.number().finite().optional(),
-    width: z.number().finite().positive().optional(),
-    height: z.number().finite().positive().optional(),
     idx: z.number().int().nonnegative().optional(),
     size: placeholderSizeSchema.optional(),
     text: xml10StringSchema.optional(),
@@ -186,7 +181,7 @@ export const resolvedPlaceholderSchema = z
     key: z.string().min(1),
     type: placeholderRoleSchema,
     idx: z.number().int().nonnegative().optional(),
-    size: placeholderSzSchema.optional(),
+    size: placeholderSizeSchema.optional(),
     box: rectObservationSchema.optional(),
     style: z.record(z.string(), z.unknown()).readonly().optional(),
   })
@@ -215,10 +210,6 @@ export const resolvedSlideLayoutSchema = z
   .readonly();
 export type ResolvedSlideLayout = z.infer<typeof resolvedSlideLayoutSchema>;
 
-/** Transitional aliases retained until Ticket 11. */
-export const slideLayoutObservationSchema = resolvedSlideLayoutSchema;
-export type SlideLayoutObservation = ResolvedSlideLayout;
-
 export const resolvedMasterSchema = z
   .object({
     id: z.string().min(1),
@@ -233,10 +224,6 @@ export const resolvedMasterSchema = z
   })
   .readonly();
 export type ResolvedMaster = z.infer<typeof resolvedMasterSchema>;
-
-/** Transitional aliases retained until Ticket 11. */
-export const slideMasterObservationSchema = resolvedMasterSchema;
-export type SlideMasterObservation = ResolvedMaster;
 
 const slideLayoutDefinitionSymbol = Symbol.for(
   "@pptxdk/core/slide-layout-definition",
@@ -292,10 +279,14 @@ export function defineSlideLayout<
   const parsed = slideLayoutDataPropsSchema.safeParse(spec);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new CapabilityError(
-      "invalid-slide-layout",
-      first?.message ?? "Invalid slide layout specification",
-    );
+    throw new BuildError([
+      zodIssueToBuildDiagnostic(
+        "slide-layout",
+        "invalid-slide-layout",
+        first?.message ?? "Invalid slide layout specification",
+        first,
+      ),
+    ]);
   }
   const normalized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed.data)) {

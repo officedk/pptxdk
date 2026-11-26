@@ -15,7 +15,7 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type MorphKey,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
@@ -98,10 +98,6 @@ export const placeholderDeclarationPropsSchema = z.strictObject({
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
   link: linkTargetSchema.optional(),
   style: placeholderObjectStyleSchema.optional(),
-  x: z.number().finite().optional(),
-  y: z.number().finite().optional(),
-  width: z.number().finite().positive().optional(),
-  height: z.number().finite().positive().optional(),
 });
 
 export type PlaceholderDeclarationProps = z.infer<
@@ -125,7 +121,7 @@ export function createPlaceholderNode(
 }
 
 type ResolvedPlaceholderModel = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly name: string;
   readonly nativeRef: NativePlaceholderRef;
   readonly visual: ResolvedVisualModel;
@@ -435,12 +431,6 @@ export const placeholderCapability = {
     const inheritedPlaceholderGeometry =
       placeholder?.layoutPlaceholder?.geometry ??
       placeholder?.masterPlaceholder?.geometry;
-    const inheritedPlaceholderFlipH =
-      placeholder?.layoutPlaceholder?.flipH ??
-      placeholder?.masterPlaceholder?.flipH;
-    const inheritedPlaceholderFlipV =
-      placeholder?.layoutPlaceholder?.flipV ??
-      placeholder?.masterPlaceholder?.flipV;
     const visualStyle =
       placeholder !== undefined
         ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
@@ -454,12 +444,6 @@ export const placeholderCapability = {
       ...(inheritedPlaceholderGeometry === undefined
         ? {}
         : { geometry: inheritedPlaceholderGeometry }),
-      ...(inheritedPlaceholderFlipH === undefined
-        ? {}
-        : { flipH: inheritedPlaceholderFlipH }),
-      ...(inheritedPlaceholderFlipV === undefined
-        ? {}
-        : { flipV: inheritedPlaceholderFlipV }),
       layoutOnlyWhenInvisible: true,
     });
 
@@ -467,10 +451,10 @@ export const placeholderCapability = {
       placeholder === undefined
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
-    const rawX = placeholderGeometry?.x ?? input.props["x"];
-    const rawY = placeholderGeometry?.y ?? input.props["y"];
-    const rawWidth = placeholderGeometry?.width ?? input.props["width"];
-    const rawHeight = placeholderGeometry?.height ?? input.props["height"];
+    const rawX = placeholderGeometry?.x;
+    const rawY = placeholderGeometry?.y;
+    const rawWidth = placeholderGeometry?.width;
+    const rawHeight = placeholderGeometry?.height;
 
     const native: BoundObjectNativeCollaboration = {
       ...(morphKey === undefined ? {} : { morphKey }),
@@ -487,7 +471,7 @@ export const placeholderCapability = {
         : {}),
 
       resolve(resolveContext: ObjectResolveContext): ObjectResolution {
-        const box: GeometryBox = {
+        const box: Rect = {
           x:
             resolveContext.layoutBox?.x ??
             (typeof rawX === "number" ? rawX : 0),
@@ -524,12 +508,6 @@ export const placeholderCapability = {
           ...(inheritedPlaceholderGeometry === undefined
             ? {}
             : { geometry: inheritedPlaceholderGeometry }),
-          ...(inheritedPlaceholderFlipH === undefined
-            ? {}
-            : { flipH: inheritedPlaceholderFlipH }),
-          ...(inheritedPlaceholderFlipV === undefined
-            ? {}
-            : { flipV: inheritedPlaceholderFlipV }),
           layoutOnlyWhenInvisible: !hasBox,
         });
         const spPrFlags: PlaceholderSpPrFlags = {
@@ -541,15 +519,8 @@ export const placeholderCapability = {
             rawSlideStyle,
             "borderRadius",
           ),
-          hasFill:
-            hasLocalDeclaration(rawSlideStyle, "background") ||
-            hasLocalDeclaration(rawSlideStyle, "backgroundColor") ||
-            hasLocalDeclaration(rawSlideStyle, "backgroundImage"),
-          hasBorder:
-            hasLocalDeclaration(rawSlideStyle, "border") ||
-            hasLocalDeclaration(rawSlideStyle, "borderColor") ||
-            hasLocalDeclaration(rawSlideStyle, "borderWidth") ||
-            hasLocalDeclaration(rawSlideStyle, "borderStyle"),
+          hasFill: hasLocalDeclaration(rawSlideStyle, "background"),
+          hasBorder: hasLocalDeclaration(rawSlideStyle, "border"),
           hasEffects:
             hasLocalDeclaration(rawSlideStyle, "boxShadow") ||
             hasLocalDeclaration(rawSlideStyle, "softEdge"),

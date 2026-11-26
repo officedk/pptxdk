@@ -2,15 +2,12 @@ import { createRequire } from "node:module";
 
 import {
   CapabilityError,
-  type BuildQuery,
   type Resolution,
   type ResolutionReport,
   type SlideLocator,
 } from "@pptxdk/core/build";
 import type {
-  GeometryBox,
   PreviewTransform,
-  PreviewWarning,
   Rect,
   ResolvedLayout,
   ResolvedObject,
@@ -24,48 +21,40 @@ import type { Resvg as ResvgClass } from "@resvg/resvg-js";
 import {
   PreviewPageRangeError,
   paintOptionsSchema,
-  previewDiagnosticSchema,
   previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
   previewPlaceholderSchema,
-  previewSeveritySchema,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
   type PaintOptions,
-  type PreviewDiagnostic,
   type PreviewError,
   type PreviewOptions,
   type PreviewPlaceholder,
-  type PreviewSeverity,
   type ScreenGeometry,
   type ScreenPoint,
 } from "#/options.ts";
 
-export type { PreviewTransform, PreviewWarning };
+export type { PreviewTransform };
 export {
   PreviewPageRangeError,
   paintOptionsSchema,
-  previewDiagnosticSchema,
   previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
   previewPlaceholderSchema,
-  previewSeveritySchema,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
 };
 export type {
   PaintOptions,
-  PreviewDiagnostic,
   PreviewError,
   PreviewOptions,
   PreviewPlaceholder,
-  PreviewSeverity,
   ScreenGeometry,
   ScreenPoint,
 };
@@ -74,12 +63,7 @@ export type PreviewNode = Omit<ResolvedObject, "corners"> & {
   readonly path: string;
   readonly bounds?: Rect;
   readonly corners?: readonly ScreenPoint[];
-  /** Transitional alias retained until Ticket 11. */
-  readonly screenBox?: Rect;
 };
-
-/** Transitional alias retained until Ticket 11. */
-export type PreviewNodeObservation = PreviewNode;
 
 export type PreviewPageResult = {
   readonly id: string;
@@ -90,8 +74,6 @@ export type PreviewPageResult = {
   readonly layouts: readonly ResolvedLayout[];
   readonly errors: readonly PreviewError[];
   readonly placeholders: readonly PreviewPlaceholder[];
-  /** Transitional property retained until Ticket 11. */
-  readonly diagnostics: readonly PreviewDiagnostic[];
 };
 
 export type PaintResult = {
@@ -103,8 +85,6 @@ export type PreviewResult = {
   readonly pages: readonly PreviewPageResult[];
   readonly slides: readonly SlideLocator[];
   slide(id: string): SlideLocator;
-  /** Transitional property retained until Ticket 11. */
-  readonly query: BuildQuery;
 };
 
 const defaultCanvasBackground =
@@ -120,7 +100,7 @@ function roundScreenMetric(value: number): number {
  * Applies the local object transform first, followed by enclosing group transforms outward.
  */
 export function screenGeometry(
-  box: GeometryBox,
+  box: Rect,
   transforms: readonly PreviewTransform[],
 ): ScreenGeometry {
   const corners: { x: number; y: number }[] = [
@@ -608,7 +588,6 @@ export function paint(
               : {
                   corners: screen.corners,
                   bounds: screen.screenBox,
-                  screenBox: screen.screenBox,
                 }),
             path: nodePaths.get(object.id) ?? object.path,
           }),
@@ -620,16 +599,6 @@ export function paint(
 
     const pageErrors = Object.freeze([...errors]);
     const pagePlaceholders = Object.freeze([...placeholders]);
-    const pageDiagnostics: readonly PreviewDiagnostic[] = Object.freeze(
-      pageErrors.map((err) =>
-        Object.freeze({
-          severity: "error" as const,
-          page: pageNumber,
-          path: err.path,
-          message: err.message,
-        }),
-      ),
-    );
     if (pageErrors.length > 0) {
       pages.push(
         Object.freeze({
@@ -639,7 +608,6 @@ export function paint(
           layouts: slideObservation.layouts ?? Object.freeze([]),
           errors: pageErrors,
           placeholders: pagePlaceholders,
-          diagnostics: pageDiagnostics,
         }),
       );
       continue;
@@ -673,7 +641,6 @@ export function paint(
         layouts: slideObservation.layouts ?? Object.freeze([]),
         errors: pageErrors,
         placeholders: pagePlaceholders,
-        diagnostics: pageDiagnostics,
       }),
     );
   }

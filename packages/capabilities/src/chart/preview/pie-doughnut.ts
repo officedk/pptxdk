@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import { mergeDataLabels } from "../chart-labels.ts";
 import type { ParsedDoughnutGroup, ParsedPieGroup } from "../chart-model.ts";
@@ -111,7 +111,7 @@ function buildSlicePath(options: {
 export function renderPieOrDoughnutGroup(options: {
   readonly group: ParsedPieGroup | ParsedDoughnutGroup;
   readonly groupIndex: number;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly theme: ThemeContext;
 }): {
   readonly svg: string;

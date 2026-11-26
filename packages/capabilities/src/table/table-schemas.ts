@@ -2,7 +2,6 @@ import {
   CapabilityError,
   backgroundValueSchema,
   borderValueSchema,
-  colorValueSchema,
   layoutStyleSchema,
   linkTargetSchema,
   nativePlaceholderRefSchema,
@@ -117,7 +116,6 @@ const tableRowOwnStyleObjectSchema = z.strictObject({
   /** When unspecified, row height is determined from text measurement of unmerged cells in this row. */
   height: textPositiveSizeSchema.optional(),
   background: backgroundValueSchema.optional(),
-  backgroundColor: colorValueSchema.optional(),
   border: borderValueSchema.optional(),
 });
 
@@ -129,20 +127,13 @@ export const tableRowStyleSchema = z
   .readonly();
 export type TableRowStyle = z.infer<typeof tableRowStyleSchema>;
 
-export const tableBorderStyleSchema = z.enum(["solid", "dashed", "dotted"]);
-export type TableBorderStyle = z.infer<typeof tableBorderStyleSchema>;
-
 const tableCellOwnStyleObjectSchema = z.strictObject({
   background: backgroundValueSchema.optional(),
-  backgroundColor: colorValueSchema.optional(),
   border: borderValueSchema.optional(),
   borderTop: borderValueSchema.optional(),
   borderRight: borderValueSchema.optional(),
   borderBottom: borderValueSchema.optional(),
   borderLeft: borderValueSchema.optional(),
-  borderColor: colorValueSchema.optional(),
-  borderWidth: z.number().finite().nonnegative().optional(),
-  borderStyle: tableBorderStyleSchema.optional(),
   padding: textPaddingValueSchema.optional(),
   paddingTop: z.number().finite().nonnegative().optional(),
   paddingRight: z.number().finite().nonnegative().optional(),
@@ -169,10 +160,6 @@ const tableDeclarationPropsObjectSchema = z.strictObject({
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
-  x: textCoordinateSchema.optional(),
-  y: textCoordinateSchema.optional(),
-  /** Provides allocatable width for fr columns; when omitted, all columns are sized to natural content width. */
-  width: textPositiveSizeSchema.optional(),
   columns: z.array(tableColumnSchema).nonempty().readonly(),
   style: tableStyleSchema.optional(),
   enter: motionPropsShape.enter,
@@ -462,62 +449,6 @@ export function parseTableCellPadding(
   }
 }
 
-/** Validates cell border width, style, and color via Zod schemas and shared theme color resolver. */
-export function parseTableCellBorder(
-  style: Readonly<Record<string, unknown>>,
-  resolveColor: (
-    value: unknown,
-    label: string,
-    path?: string,
-  ) => ResolvedColor | undefined,
-  theme: ThemeContext,
-  path: string,
-): TableCellBorder | undefined {
-  const borderColor = resolveColor(style["borderColor"], "borderColor", path);
-  const widthValue = style["borderWidth"];
-  const styleValue = style["borderStyle"];
-
-  if (widthValue !== undefined) {
-    const parsedWidth = z.number().finite().nonnegative().safeParse(widthValue);
-    if (!parsedWidth.success) {
-      throw new CapabilityError(
-        "invalid-table-border",
-        "borderWidth must be a finite non-negative pixel number",
-        path,
-      );
-    }
-  }
-  if (styleValue !== undefined) {
-    const parsedStyle = tableBorderStyleSchema.safeParse(styleValue);
-    if (!parsedStyle.success) {
-      throw new CapabilityError(
-        "invalid-table-border",
-        "borderStyle must be solid, dashed, or dotted",
-        path,
-      );
-    }
-  }
-
-  const width =
-    typeof widthValue === "number"
-      ? widthValue
-      : borderColor === undefined
-        ? 0
-        : 1;
-  if (width === 0) return undefined;
-  assertTableEmuExtent(width, "borderWidth", path);
-  return {
-    color: borderColor ?? theme.resolveColor("dk1"),
-    width,
-    dash:
-      styleValue === "dashed"
-        ? "dash"
-        : styleValue === "dotted"
-          ? "dot"
-          : "solid",
-  };
-}
-
 /** Validates a single unified `BorderValue` (`"none"` or `{ color, width?, style? }`) on Table, Row, or Cell. */
 export function parseTableBorderValue(
   value: unknown,
@@ -589,40 +520,17 @@ export function parseTableLayerBorder(
 export function resolveTableCellBorders(
   style: Readonly<Record<string, unknown>>,
   inheritedBorder: TableCellBorder | undefined,
-  resolveColor: (
-    value: unknown,
-    label: string,
-    path?: string,
-  ) => ResolvedColor | undefined,
   theme: ThemeContext,
   path: string,
 ): TableCellBorders {
-  const hasNewBorder =
-    Object.hasOwn(style, "border") && style["border"] !== undefined;
-  const hasLegacyBorder =
-    (Object.hasOwn(style, "borderColor") &&
-      style["borderColor"] !== undefined) ||
-    (Object.hasOwn(style, "borderWidth") &&
-      style["borderWidth"] !== undefined) ||
-    (Object.hasOwn(style, "borderStyle") && style["borderStyle"] !== undefined);
-  if (hasNewBorder && hasLegacyBorder) {
-    throw new CapabilityError(
-      "unsupported-style-combination",
-      "Cell.style.border cannot be set together with borderColor, borderWidth, or borderStyle",
-      path,
-    );
-  }
-
   let baseBorder = inheritedBorder;
-  if (hasNewBorder) {
+  if (Object.hasOwn(style, "border") && style["border"] !== undefined) {
     baseBorder = parseTableBorderValue(
       style["border"],
       "Cell.style.border",
       theme,
       path,
     );
-  } else if (hasLegacyBorder) {
-    baseBorder = parseTableCellBorder(style, resolveColor, theme, path);
   }
 
   const sideBorder = (

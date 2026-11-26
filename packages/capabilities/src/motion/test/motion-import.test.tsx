@@ -980,10 +980,13 @@ describe("Motion mechanisms, roundtrip target identity, Morph continuity, owners
             {
               id: "broken-pic",
               src: png1x1,
-              x: 40,
-              y: 40,
-              width: 80,
-              height: 80,
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 40,
+                width: 80,
+                height: 80,
+              },
               enter: fade({ duration: 200 }),
             } as never,
           ),

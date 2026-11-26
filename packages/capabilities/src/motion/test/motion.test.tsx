@@ -25,7 +25,6 @@ import {
   repeat,
   transitionCapability,
   transitions,
-  type MotionObservation,
   useMotionScope,
   wipe,
   zoom,
@@ -51,6 +50,7 @@ import { createElement, Fragment, type ReactNode } from "react";
 import { describe, it } from "vitest";
 
 import { build, build as buildDocument } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const png = new Uint8Array(
   Buffer.from(
@@ -387,7 +387,7 @@ describe("object motion", () => {
     const result = await build(createElement(RepeatedSpinDeck));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effect = motion.steps[0]?.effects[0];
     const scope = motion.scopes?.[0];
 
@@ -423,7 +423,7 @@ describe("object motion", () => {
   it("keeps continuous breathe without natural completion and waits only for finite body scopes", async () => {
     const result = await build(createElement(RepeatedAndBreathingDeck));
     const slide = result.report.slides[0];
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const effects = motion.steps.flatMap((step) => step.effects);
     const bodyEffect = effects.find(
       ({ target }) => target.authorId === "finite-body",
@@ -686,7 +686,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effect = motion.steps[0]?.effects[0];
     assert.deepEqual(
       [effect?.startMs, effect?.endMs, effect?.durationMs, effect?.repeatCount],
@@ -733,7 +733,7 @@ describe("object motion", () => {
     );
     const breatheMotion = breatheResult.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const breatheEffect = breatheMotion.steps[0]?.effects[0];
     assert.deepEqual(
       [breatheEffect?.durationMs, breatheEffect?.endMs],
@@ -771,7 +771,7 @@ describe("object motion", () => {
     const result = await build(createElement(TimeProjectionDeck, nestedDelays));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effect = motion.steps[0]?.effects[0];
     assert.deepEqual(
       [effect?.startMs, effect?.endMs],
@@ -801,7 +801,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, endMs, completion }) => [
         target.authorId,
@@ -1114,7 +1114,7 @@ describe("object motion", () => {
       assert.ok(target);
       const motion = result.report.slides[0]?.capabilities?.[
         "motion"
-      ] as MotionObservation;
+      ] as ResolvedMotion;
       assert.deepEqual(
         motion.steps[0]?.effects.map(
           ({ target: effectTarget, preset, durationMs, by }) => [
@@ -1237,7 +1237,7 @@ describe("object motion", () => {
 
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, startMs, endMs }) => [
         target.range,
@@ -1358,7 +1358,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const effects = motion.steps[0]?.effects ?? [];
     const source = effects.find(({ target }) => target.authorId === "letters");
     const follower = effects.find(
@@ -1545,7 +1545,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, by, startMs, endMs }) => [
         target.authorId,
@@ -1753,7 +1753,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1885,7 +1885,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects
         .filter(({ target }) => target.authorId === "duplicate-seriesElements")
@@ -2048,7 +2048,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const seriesElements = motion.steps[0]?.effects
       .filter(({ target }) => target.authorId === "multi-group-series-elements")
       .map(({ target }) => target.range);
@@ -2160,7 +2160,7 @@ describe("object motion", () => {
         );
         assert.ok(slide !== undefined, `${kind}/${by}`);
         const motion = slide.capabilities?.["motion"] as
-          | MotionObservation
+          | ResolvedMotion
           | undefined;
         const ranges =
           motion?.steps[0]?.effects.map(({ target }) => target.range) ?? [];
@@ -2480,7 +2480,7 @@ describe("object motion", () => {
     const result = await build(createElement(PointSequenceDeck));
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const chartEffects = motion.steps[0]?.effects.filter(
       ({ target }) => target.authorId === "point-sequence-chart",
     );
@@ -2847,7 +2847,7 @@ describe("object motion", () => {
     const target = result.report.slides[0]?.objects[0];
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(motion.steps, [
       {
         trigger: "auto",
@@ -2960,7 +2960,7 @@ describe("object motion", () => {
     );
     const observation = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       observation.steps[0]?.effects.map(({ target, preset }) => [
         target.authorId,
@@ -3131,7 +3131,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps.map((step) => [
         step.trigger,
@@ -3225,7 +3225,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset, from, easing }) => [
         target.authorId,
@@ -3317,7 +3317,7 @@ describe("object motion", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(
         ({ target, preset, durationMs, delayMs }) => [
@@ -3556,14 +3556,14 @@ describe("object motion", () => {
           { id: "whole-text-projection" },
           createElement(Text, {
             id: "mixed-text",
-            x: 800,
-            y: 500,
-            width: 400,
-            height: 160,
             style: {
-              backgroundColor: "#38BDF8",
-              borderColor: "#1D4ED8",
-              borderWidth: 4,
+              position: "absolute",
+              left: 800,
+              top: 500,
+              width: 400,
+              height: 160,
+              background: "#38BDF8",
+              border: { color: "#1D4ED8", width: 4 },
             },
             enter: [
               fly({ from: "left", duration: 4000 }),
@@ -3584,7 +3584,7 @@ describe("object motion", () => {
     const textObject = result.report.slides[0]?.objects[0];
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset, by, endMs }) => [
         target.authorId,
@@ -3765,14 +3765,14 @@ describe("object motion", () => {
           { id: "whole-text-background-array" },
           createElement(Text, {
             id: "filled-whole-array",
-            x: 800,
-            y: 500,
-            width: 400,
-            height: 160,
             style: {
-              backgroundColor: "#38BDF8",
-              borderColor: "#1D4ED8",
-              borderWidth: 4,
+              position: "absolute",
+              left: 800,
+              top: 500,
+              width: 400,
+              height: 160,
+              background: "#38BDF8",
+              border: { color: "#1D4ED8", width: 4 },
             },
             enter: [fly({ from: "left", duration: 4000 }), fade()],
             children: [
@@ -3856,14 +3856,14 @@ describe("object motion", () => {
             { key: preset, id: slideId },
             createElement(Text, {
               id: `${preset}-text`,
-              x: 800,
-              y: 500,
-              width: 400,
-              height: 160,
               style: {
-                backgroundColor: "#38BDF8",
-                borderColor: "#1D4ED8",
-                borderWidth: 4,
+                position: "absolute",
+                left: 800,
+                top: 500,
+                width: 400,
+                height: 160,
+                background: "#38BDF8",
+                border: { color: "#1D4ED8", width: 4 },
               },
               enter: effect,
               children: [
@@ -3966,14 +3966,14 @@ describe("object motion", () => {
           { id: "whole-stretch-common-center" },
           createElement(Text, {
             id: "stretched-text",
-            x: 800,
-            y: 500,
-            width: 400,
-            height: 160,
             style: {
-              backgroundColor: "#38BDF8",
-              borderColor: "#1D4ED8",
-              borderWidth: 4,
+              position: "absolute",
+              left: 800,
+              top: 500,
+              width: 400,
+              height: 160,
+              background: "#38BDF8",
+              border: { color: "#1D4ED8", width: 4 },
             },
             enter: stretch({ duration: 2000 }),
             children: [
@@ -4059,17 +4059,24 @@ describe("object motion", () => {
           createElement(
             Step,
             { n: 1 },
-            createElement(Shape, {
-              id: "whole-shape-entry",
-              x: 120,
-              y: 140,
-              width: 360,
-              height: 96,
-              fill: "#0070C0",
-              text: "Whole shape entrance",
-              textStyle: { fontSize: 20, color: "#FFFFFF" },
-              enter: fade({ duration: 300 }),
-            }),
+            createElement(
+              Shape,
+              {
+                id: "whole-shape-entry",
+                style: {
+                  position: "absolute",
+                  left: 120,
+                  top: 140,
+                  width: 360,
+                  height: 96,
+                  background: "#0070C0",
+                  fontSize: 20,
+                  color: "#FFFFFF",
+                },
+                enter: fade({ duration: 300 }),
+              },
+              "Whole shape entrance",
+            ),
           ),
         ),
       ),
@@ -4080,7 +4087,7 @@ describe("object motion", () => {
     assert.ok(shape !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset }) => [
         target.authorId,
@@ -4163,12 +4170,16 @@ describe("object motion", () => {
                 Shape,
                 {
                   id: `${id}-shape`,
-                  x: 100,
-                  y: 100,
-                  width: 400,
-                  height: 160,
-                  fill: "#0070C0",
-                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  style: {
+                    position: "absolute",
+                    left: 100,
+                    top: 100,
+                    width: 400,
+                    height: 160,
+                    background: "#0070C0",
+                    fontSize: 20,
+                    color: "#FFFFFF",
+                  },
                   enter: [
                     whole,
                     fade({ by: "paragraph", duration: 700, delay: 1500 }),
@@ -4222,12 +4233,16 @@ describe("object motion", () => {
               Shape,
               {
                 id: "mixed-fly-shape",
-                x: 100,
-                y: 100,
-                width: 400,
-                height: 160,
-                fill: "#0070C0",
-                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                style: {
+                  position: "absolute",
+                  left: 100,
+                  top: 100,
+                  width: 400,
+                  height: 160,
+                  background: "#0070C0",
+                  fontSize: 20,
+                  color: "#FFFFFF",
+                },
                 enter: [
                   fly({ duration: 4000 }),
                   fade({ by: "paragraph", duration: 700, delay: 1500 }),
@@ -4246,7 +4261,7 @@ describe("object motion", () => {
     assert.ok(shapeId !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset, by, endMs }) => [
         target.authorId,
@@ -4533,12 +4548,16 @@ describe("object motion", () => {
                 Shape,
                 {
                   id: `${item.id}-shape`,
-                  x: 100,
-                  y: 100,
-                  width: 400,
-                  height: 160,
-                  fill: "#0070C0",
-                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  style: {
+                    position: "absolute",
+                    left: 100,
+                    top: 100,
+                    width: 400,
+                    height: 160,
+                    background: "#0070C0",
+                    fontSize: 20,
+                    color: "#FFFFFF",
+                  },
                   enter: [
                     item.effect,
                     fade({ by: "paragraph", duration: 700, delay: 1500 }),
@@ -4627,12 +4646,16 @@ describe("object motion", () => {
               Shape,
               {
                 id: "mixed-spin-negative-shape",
-                x: 100,
-                y: 100,
-                width: 400,
-                height: 160,
-                fill: "#0070C0",
-                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                style: {
+                  position: "absolute",
+                  left: 100,
+                  top: 100,
+                  width: 400,
+                  height: 160,
+                  background: "#0070C0",
+                  fontSize: 20,
+                  color: "#FFFFFF",
+                },
                 enter: [
                   spinIn({ duration: 1000 }),
                   fade({ by: "paragraph", duration: 700, delay: 300 }),
@@ -4756,12 +4779,16 @@ describe("object motion", () => {
                 Shape,
                 {
                   id: `${item.id}-shape`,
-                  x: 100,
-                  y: 100,
-                  width: 400,
-                  height: 160,
-                  fill: "#0070C0",
-                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  style: {
+                    position: "absolute",
+                    left: 100,
+                    top: 100,
+                    width: 400,
+                    height: 160,
+                    background: "#0070C0",
+                    fontSize: 20,
+                    color: "#FFFFFF",
+                  },
                   enter: item.enter,
                 },
                 createElement(P, { key: "first" }, "First paragraph"),
@@ -4775,7 +4802,7 @@ describe("object motion", () => {
       assert.deepEqual(file.errors, [], item.id);
       const motion = result.report.slides[0]?.capabilities?.[
         "motion"
-      ] as MotionObservation;
+      ] as ResolvedMotion;
       assert.equal(motion.steps[0]?.effects.length, 4, item.id);
     }
 
@@ -4785,12 +4812,16 @@ describe("object motion", () => {
           documentStep({ n: 1 }).append(
             documentShape({
               id: "document-same-fly-instances-shape",
-              x: 100,
-              y: 100,
-              width: 400,
-              height: 160,
-              fill: "#0070C0",
-              textStyle: { fontSize: 20, color: "#FFFFFF" },
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 100,
+                width: 400,
+                height: 160,
+                background: "#0070C0",
+                fontSize: 20,
+                color: "#FFFFFF",
+              },
               enter: [
                 documentFly({ duration: 1000 }),
                 documentFly({ duration: 1000 }),
@@ -4822,12 +4853,16 @@ describe("object motion", () => {
               Shape,
               {
                 id: "same-parameter-companion-shape",
-                x: 100,
-                y: 100,
-                width: 400,
-                height: 160,
-                fill: "#0070C0",
-                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                style: {
+                  position: "absolute",
+                  left: 100,
+                  top: 100,
+                  width: 400,
+                  height: 160,
+                  background: "#0070C0",
+                  fontSize: 20,
+                  color: "#FFFFFF",
+                },
                 enter: [
                   fly({ duration: 1000 }),
                   fly({ duration: 1000 }),
@@ -4900,11 +4935,14 @@ describe("object motion", () => {
               { scope: source, publishEnd: source.cue("ready") },
               createElement(Shape, {
                 id: "schedule-source",
-                x: 20,
-                y: 20,
-                width: 80,
-                height: 40,
-                fill: "#336699",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 20,
+                  width: 80,
+                  height: 40,
+                  background: "#336699",
+                },
                 enter: fade({ duration: 100 }),
               }),
             ),
@@ -4919,12 +4957,16 @@ describe("object motion", () => {
                 Shape,
                 {
                   id: "schedule-mixed",
-                  x: 100,
-                  y: 100,
-                  width: 400,
-                  height: 160,
-                  fill: "#0070C0",
-                  textStyle: { fontSize: 20, color: "#FFFFFF" },
+                  style: {
+                    position: "absolute",
+                    left: 100,
+                    top: 100,
+                    width: 400,
+                    height: 160,
+                    background: "#0070C0",
+                    fontSize: 20,
+                    color: "#FFFFFF",
+                  },
                   enter: [
                     fly({ duration: 4000, delay: 100 }),
                     fade({ by: "paragraph", duration: 700, delay: 1500 }),
@@ -4940,11 +4982,14 @@ describe("object motion", () => {
               { scope: follower, startAt: after(mixed.cue("done"), 20) },
               createElement(Shape, {
                 id: "schedule-follower",
-                x: 20,
-                y: 80,
-                width: 80,
-                height: 40,
-                fill: "#993366",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 80,
+                  width: 80,
+                  height: 40,
+                  background: "#993366",
+                },
                 enter: fade({ duration: 100 }),
               }),
             ),
@@ -4998,12 +5043,16 @@ describe("object motion", () => {
               Shape,
               {
                 id: "paragraph-shape-entry",
-                x: 120,
-                y: 140,
-                width: 360,
-                height: 140,
-                fill: "#0070C0",
-                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                style: {
+                  position: "absolute",
+                  left: 120,
+                  top: 140,
+                  width: 360,
+                  height: 140,
+                  background: "#0070C0",
+                  fontSize: 20,
+                  color: "#FFFFFF",
+                },
                 enter: fade({ by: "paragraph", duration: 300 }),
               },
               createElement(P, { key: "first" }, "First paragraph"),
@@ -5019,7 +5068,7 @@ describe("object motion", () => {
     assert.ok(shape !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target }) => target.range),
       [
@@ -5074,12 +5123,16 @@ describe("object motion", () => {
               Shape,
               {
                 id: "whole-shape-array-entry",
-                x: 120,
-                y: 140,
-                width: 360,
-                height: 140,
-                fill: "#F97316",
-                textStyle: { fontSize: 20, color: "#111827" },
+                style: {
+                  position: "absolute",
+                  left: 120,
+                  top: 140,
+                  width: 360,
+                  height: 140,
+                  background: "#F97316",
+                  fontSize: 20,
+                  color: "#111827",
+                },
                 enter: [
                   fade({ duration: 200 }),
                   fly({ from: "left", duration: 300 }),
@@ -5098,7 +5151,7 @@ describe("object motion", () => {
     assert.ok(shape !== undefined);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target, preset }) => [
         target.range,
@@ -5158,12 +5211,16 @@ describe("object motion", () => {
               Shape,
               {
                 id: "whole-shape-background-role-entry",
-                x: 120,
-                y: 140,
-                width: 360,
-                height: 140,
-                fill: "#0070C0",
-                textStyle: { fontSize: 20, color: "#FFFFFF" },
+                style: {
+                  position: "absolute",
+                  left: 120,
+                  top: 140,
+                  width: 360,
+                  height: 140,
+                  background: "#0070C0",
+                  fontSize: 20,
+                  color: "#FFFFFF",
+                },
                 enter: fade({ duration: 300 }),
               },
               createElement(P, { key: "first" }, "First paragraph"),
@@ -5258,14 +5315,14 @@ describe("object motion", () => {
             { n: 1 },
             createElement(Text, {
               id: "split-background-text",
-              x: 100,
-              y: 100,
-              width: 400,
-              height: 160,
               style: {
-                backgroundColor: "#FEF3C7",
-                borderColor: "#1D4ED8",
-                borderWidth: 2,
+                position: "absolute",
+                left: 100,
+                top: 100,
+                width: 400,
+                height: 160,
+                background: "#FEF3C7",
+                border: { color: "#1D4ED8", width: 2 },
               },
               enter: fade({ duration: 300 }),
               children: [
@@ -5283,19 +5340,25 @@ describe("object motion", () => {
             { n: 1 },
             createElement(Text, {
               id: "word-text",
-              x: 100,
-              y: 100,
-              width: 400,
-              height: 120,
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 100,
+                width: 400,
+                height: 120,
+              },
               enter: fade({ by: "word" }),
               children: [createElement(P, { key: "one" }, "Word one two")],
             }),
             createElement(Text, {
               id: "letter-text",
-              x: 100,
-              y: 300,
-              width: 400,
-              height: 120,
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 300,
+                width: 400,
+                height: 120,
+              },
               enter: fade({ by: "letter" }),
               children: [createElement(P, { key: "one" }, "Letter")],
             }),
@@ -5315,18 +5378,24 @@ describe("object motion", () => {
               },
               createElement(Shape, {
                 id: "group-shape",
-                x: 100,
-                y: 100,
-                width: 80,
-                height: 80,
-                fill: "#F97316",
+                style: {
+                  position: "absolute",
+                  left: 100,
+                  top: 100,
+                  width: 80,
+                  height: 80,
+                  background: "#F97316",
+                },
               }),
               createElement(Text, {
                 id: "group-text",
-                x: 200,
-                y: 100,
-                width: 200,
-                height: 80,
+                style: {
+                  position: "absolute",
+                  left: 200,
+                  top: 100,
+                  width: 200,
+                  height: 80,
+                },
                 enter: fade(),
                 children: [createElement(P, { key: "one" }, "Group text")],
               }),
@@ -5335,12 +5404,15 @@ describe("object motion", () => {
               Shape,
               {
                 id: "array-shape",
-                x: 100,
-                y: 300,
-                width: 300,
-                height: 120,
-                fill: "#0070C0",
-                textStyle: { fontSize: 20 },
+                style: {
+                  position: "absolute",
+                  left: 100,
+                  top: 300,
+                  width: 300,
+                  height: 120,
+                  background: "#0070C0",
+                  fontSize: 20,
+                },
                 enter: [fade(), fly({ from: "left" })],
               },
               createElement(P, { key: "one" }, "Array text"),
@@ -5384,11 +5456,14 @@ describe("object motion", () => {
               { scope: source, publishEnd: source.cue("ready") },
               createElement(Shape, {
                 id: "cue-source",
-                x: 20,
-                y: 20,
-                width: 80,
-                height: 40,
-                fill: "#336699",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 20,
+                  width: 80,
+                  height: 40,
+                  background: "#336699",
+                },
                 enter: fade(),
               }),
             ),
@@ -5397,11 +5472,14 @@ describe("object motion", () => {
               { scope: follower, startAt: after(source.cue("ready"), 20) },
               createElement(Shape, {
                 id: "cue-follower",
-                x: 20,
-                y: 80,
-                width: 80,
-                height: 40,
-                fill: "#993366",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 80,
+                  width: 80,
+                  height: 40,
+                  background: "#993366",
+                },
                 enter: fade(),
               }),
             ),
@@ -5450,11 +5528,14 @@ describe("object motion", () => {
               },
               createElement(Shape, {
                 id: "first-click-member",
-                x: 320,
-                y: 230,
-                width: 82,
-                height: 82,
-                fill: "#F97316",
+                style: {
+                  position: "absolute",
+                  left: 320,
+                  top: 230,
+                  width: 82,
+                  height: 82,
+                  background: "#F97316",
+                },
               }),
             ),
           ),
@@ -5463,14 +5544,14 @@ describe("object motion", () => {
             { n: 2 },
             createElement(Text, {
               id: "future-text",
-              x: 180,
-              y: 405,
-              width: 600,
-              height: 55,
               style: {
-                backgroundColor: "#FEF3C7",
-                borderColor: "#1D4ED8",
-                borderWidth: 2,
+                position: "absolute",
+                left: 180,
+                top: 405,
+                width: 600,
+                height: 55,
+                background: "#FEF3C7",
+                border: { color: "#1D4ED8", width: 2 },
               },
               enter: fade({ duration: 500 }),
               children: [
@@ -5489,14 +5570,14 @@ describe("object motion", () => {
           { id: "paragraph-delay-control" },
           createElement(Text, {
             id: "paragraph-delay-text",
-            x: 130,
-            y: 150,
-            width: 700,
-            height: 290,
             style: {
-              backgroundColor: "#DBEAFE",
-              borderColor: "#2563EB",
-              borderWidth: 2,
+              position: "absolute",
+              left: 130,
+              top: 150,
+              width: 700,
+              height: 290,
+              background: "#DBEAFE",
+              border: { color: "#2563EB", width: 2 },
             },
             enter: [
               fly({ duration: 4000, from: "left" }),
@@ -5708,14 +5789,14 @@ describe("object motion", () => {
             },
             createElement(Text, {
               id: "animated-text-member",
-              x: 130,
-              y: 150,
-              width: 400,
-              height: 180,
               style: {
-                backgroundColor: "#FEF3C7",
-                borderColor: "#1D4ED8",
-                borderWidth: 3,
+                position: "absolute",
+                left: 130,
+                top: 150,
+                width: 400,
+                height: 180,
+                background: "#FEF3C7",
+                border: { color: "#1D4ED8", width: 3 },
               },
               enter: fade({ duration: 4000 }),
               children: [
@@ -5729,11 +5810,14 @@ describe("object motion", () => {
             }),
             createElement(Shape, {
               id: "static-orange-member",
-              x: 600,
-              y: 220,
-              width: 55,
-              height: 55,
-              fill: "#F97316",
+              style: {
+                position: "absolute",
+                left: 600,
+                top: 220,
+                width: 55,
+                height: 55,
+                background: "#F97316",
+              },
             }),
           ),
         ),
@@ -5746,7 +5830,7 @@ describe("object motion", () => {
     const text = group?.members?.find(
       ({ authorId: testId }) => testId === "animated-text-member",
     );
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const projection = motion.nativeProjections?.find(
       ({ logicalTargetId, preset }) =>
         logicalTargetId === group?.id && preset === "spin",
@@ -5869,14 +5953,14 @@ describe("object motion", () => {
             },
             createElement(Text, {
               id: "paragraph-build-text",
-              x: 100,
-              y: 100,
-              width: 330,
-              height: 160,
               style: {
-                backgroundColor: "#FEF3C7",
-                borderColor: "#1D4ED8",
-                borderWidth: 2,
+                position: "absolute",
+                left: 100,
+                top: 100,
+                width: 330,
+                height: 160,
+                background: "#FEF3C7",
+                border: { color: "#1D4ED8", width: 2 },
               },
               enter: fade({ by: "paragraph", duration: 700, delay: 1500 }),
               children: [
@@ -5886,11 +5970,14 @@ describe("object motion", () => {
             }),
             createElement(Shape, {
               id: "paragraph-build-shape",
-              x: 550,
-              y: 240,
-              width: 70,
-              height: 70,
-              fill: "#F97316",
+              style: {
+                position: "absolute",
+                left: 550,
+                top: 240,
+                width: 70,
+                height: 70,
+                background: "#F97316",
+              },
             }),
           ),
         ),
@@ -5950,10 +6037,13 @@ describe("object motion", () => {
             { id: "word-build-group", emphasis: spin({ duration: 4000 }) },
             createElement(Text, {
               id: "word-build-text",
-              x: 100,
-              y: 100,
-              width: 330,
-              height: 160,
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 100,
+                width: 330,
+                height: 160,
+              },
               enter: fade({ by: "word", duration: 700, delay: 1500 }),
               children: [
                 createElement(P, { key: "first" }, "A first paragraph."),
@@ -5962,11 +6052,14 @@ describe("object motion", () => {
             }),
             createElement(Shape, {
               id: "word-build-shape",
-              x: 550,
-              y: 240,
-              width: 70,
-              height: 70,
-              fill: "#F97316",
+              style: {
+                position: "absolute",
+                left: 550,
+                top: 240,
+                width: 70,
+                height: 70,
+                background: "#F97316",
+              },
             }),
           ),
         ),
@@ -6019,10 +6112,13 @@ describe("object motion", () => {
             { id: "whole-array-group", emphasis: spin({ duration: 4000 }) },
             createElement(Text, {
               id: "whole-array-text",
-              x: 100,
-              y: 100,
-              width: 330,
-              height: 160,
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 100,
+                width: 330,
+                height: 160,
+              },
               enter: fade({ duration: 700 }),
               emphasis: spin({ duration: 900 }),
               children: [
@@ -6032,11 +6128,14 @@ describe("object motion", () => {
             }),
             createElement(Shape, {
               id: "whole-array-shape",
-              x: 550,
-              y: 240,
-              width: 70,
-              height: 70,
-              fill: "#F97316",
+              style: {
+                position: "absolute",
+                left: 550,
+                top: 240,
+                width: 70,
+                height: 70,
+                background: "#F97316",
+              },
             }),
           ),
         ),
@@ -6079,22 +6178,28 @@ describe("object motion", () => {
             },
             createElement(Shape, {
               id: "cross-step-orange",
-              x: 465,
-              y: 250,
-              width: 58,
-              height: 58,
-              fill: "#F97316",
+              style: {
+                position: "absolute",
+                left: 465,
+                top: 250,
+                width: 58,
+                height: 58,
+                background: "#F97316",
+              },
             }),
             createElement(
               Step,
               { n: 1 },
               createElement(Shape, {
                 id: "cross-step-green",
-                x: 320,
-                y: 230,
-                width: 82,
-                height: 82,
-                fill: "#16A34A",
+                style: {
+                  position: "absolute",
+                  left: 320,
+                  top: 230,
+                  width: 82,
+                  height: 82,
+                  background: "#16A34A",
+                },
                 emphasis: repeat(
                   breathe({
                     period: 1600,
@@ -6116,7 +6221,7 @@ describe("object motion", () => {
     const green = group?.members?.find(
       ({ authorId: testId }) => testId === "cross-step-green",
     );
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const steps = motion.steps;
     assert.equal(steps[0]?.trigger, "auto");
     assert.equal(steps[1]?.trigger, "click");
@@ -6173,11 +6278,14 @@ describe("object motion", () => {
             },
             createElement(Shape, {
               id: "breathing-member",
-              x: 40,
-              y: 40,
-              width: 40,
-              height: 40,
-              fill: "#164E3D",
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 40,
+                width: 40,
+                height: 40,
+                background: "#164E3D",
+              },
               emphasis: repeat(
                 breathe({ period: 1600, from: "#164E3D", to: "#4ADE80" }),
                 "forever",
@@ -6185,11 +6293,14 @@ describe("object motion", () => {
             }),
             createElement(Shape, {
               id: "static-member",
-              x: 100,
-              y: 50,
-              width: 30,
-              height: 30,
-              fill: "#F97316",
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 50,
+                width: 30,
+                height: 30,
+                background: "#F97316",
+              },
             }),
           ),
         ),
@@ -6199,7 +6310,7 @@ describe("object motion", () => {
     const group = slide?.objects.find(
       ({ authorId: testId }) => testId === "spinning-group",
     );
-    const motion = slide?.capabilities?.["motion"] as MotionObservation;
+    const motion = slide?.capabilities?.["motion"] as ResolvedMotion;
     const logicalSpin = motion.steps[0]?.effects.find(
       ({ preset, target }) => preset === "spin" && target.id === group?.id,
     );
@@ -6290,10 +6401,13 @@ describe("object motion", () => {
           { id: "text-motion-array" },
           createElement(Text, {
             id: "array-text",
-            x: 800,
-            y: 500,
-            width: 400,
-            height: 160,
+            style: {
+              position: "absolute",
+              left: 800,
+              top: 500,
+              width: 400,
+              height: 160,
+            },
             enter: [
               fly({ from: "left", duration: 4000 }),
               spinIn({ duration: 4000 }),
@@ -6310,7 +6424,7 @@ describe("object motion", () => {
     const textObject = result.report.slides[0]?.objects[0];
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ preset }) => preset),
       ["fly", "spinIn", "fade", "fade"],
@@ -6425,10 +6539,13 @@ describe("object motion", () => {
           { id: "whole-text-motion-array" },
           createElement(Text, {
             id: "whole-array-text",
-            x: 800,
-            y: 500,
-            width: 400,
-            height: 160,
+            style: {
+              position: "absolute",
+              left: 800,
+              top: 500,
+              width: 400,
+              height: 160,
+            },
             enter: [
               fly({ from: "left", duration: 4000 }),
               spinIn({ duration: 4000 }),
@@ -6447,7 +6564,7 @@ describe("object motion", () => {
     );
     const logicalMotion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       logicalMotion.steps[0]?.effects.map(({ preset, target, by }) => [
         preset,
@@ -6510,10 +6627,13 @@ describe("object motion", () => {
             { key: preset, id: `whole-${preset}` },
             createElement(Text, {
               id: `${preset}-text`,
-              x: 800,
-              y: 500,
-              width: 400,
-              height: 160,
+              style: {
+                position: "absolute",
+                left: 800,
+                top: 500,
+                width: 400,
+                height: 160,
+              },
               [property]: effect,
               children: [
                 createElement(
@@ -6582,11 +6702,14 @@ describe("object motion", () => {
           { id: "rotated-whole-spin-in" },
           createElement(Text, {
             id: "rotated-text",
-            x: 20,
-            y: 20,
-            width: 200,
-            height: 100,
-            style: { rotate: 12 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 200,
+              height: 100,
+              rotate: 12,
+            },
             enter: spinIn({ duration: 1000 }),
             children: [
               createElement(P, { key: "first" }, "First paragraph"),
@@ -6623,10 +6746,13 @@ describe("object motion", () => {
             { key: slideId, id: slideId },
             createElement(Text, {
               id: slideId,
-              x: 71.12345,
-              y: 83.12345,
-              width: 317.12345,
-              height: 127.12345,
+              style: {
+                position: "absolute",
+                left: 71.12345,
+                top: 83.12345,
+                width: 317.12345,
+                height: 127.12345,
+              },
               ...(slideId === "fractional-spin-in"
                 ? { enter: spinIn({ duration: 1234 }) }
                 : { emphasis: spin({ duration: 1234, from: 137.25 }) }),
@@ -6703,15 +6829,15 @@ describe("object motion", () => {
     const cases = [
       {
         id: "rounding-down",
-        x: (1_000_000 + 0.25) / 9525,
-        y: (2_000_000 + 0.75) / 9525,
+        left: (1_000_000 + 0.25) / 9525,
+        top: (2_000_000 + 0.75) / 9525,
         width: (3_000_000 + 0.25) / 9525,
         height: (1_000_000 + 0.75) / 9525,
       },
       {
         id: "rounding-up",
-        x: (1_500_000 + 0.75) / 9525,
-        y: (2_500_000 + 0.25) / 9525,
+        left: (1_500_000 + 0.75) / 9525,
+        top: (2_500_000 + 0.25) / 9525,
         width: (2_000_000 + 0.75) / 9525,
         height: (1_500_000 + 0.25) / 9525,
       },
@@ -6730,7 +6856,7 @@ describe("object motion", () => {
             createElement(Text, {
               key: testId,
               id: testId,
-              ...box,
+              style: { position: "absolute", ...box },
               emphasis: spin({ duration: 1234, from: 137.25 }),
               children: createElement(P, {}, testId),
             }),
@@ -7199,8 +7325,8 @@ describe("object motion", () => {
         ),
       ),
     );
-    const slide = result.query.getSlide("relative-spin");
-    const queryEffects = motionSchedule(slide.observation)?.steps.flatMap(
+    const slide = result.slide("relative-spin");
+    const queryEffects = motionSchedule(slide)?.steps.flatMap(
       ({ effects }) => effects,
     );
     const positiveQueryEffect = queryEffects?.find(
@@ -7305,7 +7431,7 @@ describe("object motion", () => {
     );
     const groupMotion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const groupProjection = groupMotion.nativeProjections?.find(
       ({ logicalTargetId, preset }) =>
         logicalTargetId === negativeGroup?.id && preset === "spin",
@@ -7570,7 +7696,7 @@ describe("object motion", () => {
     const disabledScope = await build(scopeDeck({ motion: false }));
     const disabledScopeMotion = disabledScope.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation | undefined;
+    ] as ResolvedMotion | undefined;
     assert.ok(disabledScopeMotion);
     assert.equal(
       disabledScopeMotion.steps.flatMap(({ effects }) => effects).length,

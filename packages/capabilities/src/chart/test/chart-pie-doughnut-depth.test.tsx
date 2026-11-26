@@ -586,7 +586,9 @@ describe("pie and doughnut depth", () => {
       categories: ["A", "B"],
     };
     const series = [{ name: "S", values: [1, 2] }];
-    const base = { x: 0, y: 0, width: 200, height: 120 } as const;
+    const base = {
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
+    } as const;
     const cases: {
       readonly id: string;
       readonly code: string;

@@ -82,9 +82,6 @@ export type BuildOptions = z.infer<typeof buildOptionsSchema>;
 export const emitOptionsSchema = buildOptionsSchema;
 export type EmitOptions = z.infer<typeof emitOptionsSchema>;
 
-export const diagnosticSeveritySchema = z.enum(["error", "warning"]);
-export type DiagnosticSeverity = z.infer<typeof diagnosticSeveritySchema>;
-
 const diagnosticFontStyleSchema = z.enum(["normal", "italic"]);
 
 export const buildDiagnosticFontUnavailableReasonSchema = z.enum([
@@ -244,11 +241,6 @@ export const buildDiagnosticSchema = z.discriminatedUnion("code", [
   }),
 ]);
 export type BuildDiagnostic = z.infer<typeof buildDiagnosticSchema>;
-
-/** Transitional alias retained until Ticket 11 removes legacy Diagnostic references. */
-export const diagnosticSchema = buildDiagnosticSchema;
-/** Transitional alias retained until Ticket 11 removes legacy Diagnostic references. */
-export type Diagnostic = BuildDiagnostic;
 
 const previewFontStyleSchema = diagnosticFontStyleSchema;
 

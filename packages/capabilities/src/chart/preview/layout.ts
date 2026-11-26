@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import { mergeDataLabels } from "../chart-labels.ts";
@@ -160,7 +160,7 @@ function hasPointDataLabels(parsed: ParsedChart): {
 
 export function computeChartLayout(options: {
   readonly parsed: ParsedChart;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly scales: ReadonlyMap<string, AxisScale>;
   readonly baseChartTextStyle: TextStyle | undefined;
   readonly baseFontSizePx: number;
@@ -183,13 +183,13 @@ export function computeChartLayout(options: {
       : [];
 
   if (parsed.plotArea !== undefined) {
-    const plotRect: GeometryBox = {
+    const plotRect: Rect = {
       x: box.x + parsed.plotArea.left,
       y: box.y + parsed.plotArea.top,
       width: parsed.plotArea.width,
       height: parsed.plotArea.height,
     };
-    let titleBox: GeometryBox | undefined;
+    let titleBox: Rect | undefined;
     if (parsed.title !== undefined) {
       const topRoom = Math.max(0, parsed.plotArea.top - 4);
       const t = titleTextOf(parsed.title);
@@ -210,7 +210,7 @@ export function computeChartLayout(options: {
       };
     }
     let measuredLegend: MeasuredLegend | undefined;
-    let legendBox: GeometryBox | undefined;
+    let legendBox: Rect | undefined;
     if (
       parsed.legend !== undefined &&
       parsed.legend !== false &&
@@ -270,7 +270,7 @@ export function computeChartLayout(options: {
       }
     }
 
-    const axisTitleBoxes = new Map<string, GeometryBox>();
+    const axisTitleBoxes = new Map<string, Rect>();
     const labelZones = new Map<
       string,
       {
@@ -354,7 +354,7 @@ export function computeChartLayout(options: {
     height: Math.max(4, box.height - 2 * padY),
   };
 
-  let titleBox: GeometryBox | undefined;
+  let titleBox: Rect | undefined;
   if (parsed.title !== undefined) {
     const t = titleTextOf(parsed.title);
     const titleStyle = mergeChartTextStyle(baseChartTextStyle, t.style);
@@ -381,7 +381,7 @@ export function computeChartLayout(options: {
   }
 
   let measuredLegend: MeasuredLegend | undefined;
-  let legendBox: GeometryBox | undefined;
+  let legendBox: Rect | undefined;
   if (
     parsed.legend !== undefined &&
     parsed.legend !== false &&
@@ -587,7 +587,7 @@ export function computeChartLayout(options: {
   }
 
   // Reserve outer band for axis titles beyond label bands.
-  const axisTitleBoxes = new Map<string, GeometryBox>();
+  const axisTitleBoxes = new Map<string, Rect>();
   const titleEdgeOffset: Record<EdgeSide, number> = {
     top: edges.top,
     bottom: edges.bottom,
@@ -655,7 +655,7 @@ export function computeChartLayout(options: {
     titleEdgeOffset.bottom *= ratio;
   }
 
-  const plotRect: GeometryBox = {
+  const plotRect: Rect = {
     x: avail.x + edges.left,
     y: avail.y + edges.top,
     width: Math.max(4, avail.width - edges.left - edges.right),

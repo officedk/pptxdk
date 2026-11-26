@@ -682,7 +682,6 @@ describe("typed stage errors & schemas — PreviewError, PreviewPlaceholder, and
     expect(previewed.pages).toHaveLength(1);
     const page = previewed.pages[0]!;
     expect(page.errors).toEqual([]);
-    expect(page.diagnostics).toEqual([]);
     expect(typeof page.svg).toBe("string");
     expect(page.png).toBeInstanceOf(Uint8Array);
     expect(page.png!.byteLength).toBeGreaterThan(0);
@@ -808,7 +807,7 @@ describe("typed stage errors & schemas — PreviewError, PreviewPlaceholder, and
     );
 
     const resolution = resolve(doc);
-    expect(resolution.report.diagnostics).toEqual([]);
+    expect("diagnostics" in resolution.report).toBe(false);
 
     const clampedShape = resolution
       .slide("painted-former-warnings")
@@ -826,18 +825,18 @@ describe("typed stage errors & schemas — PreviewError, PreviewPlaceholder, and
     });
 
     const built = await build(doc);
-    expect(built.report.diagnostics).toEqual([]);
+    expect("diagnostics" in built.report).toBe(false);
 
     // Verify OOXML roundRect adjustment clamping (<= 50000) is preserved in slide1.xml.
     const parts = unzipSync(built.pptx);
     const slide1Xml = strFromU8(parts["ppt/slides/slide1.xml"]!);
     expect(slide1Xml).toContain('fmla="val 50000"');
 
-    // Preview Page 1: zero diagnostics/errors, and overset cell retains SVG <clipPath> from textMetrics.
+    // Preview Page 1: zero errors, no diagnostics property, and overset cell retains SVG <clipPath> from textMetrics.
     const paintedPage1 = await preview(doc, { pages: [1] });
-    expect(paintedPage1.report.diagnostics).toEqual([]);
+    expect("diagnostics" in paintedPage1.report).toBe(false);
     expect(paintedPage1.pages[0]?.errors).toEqual([]);
-    expect(paintedPage1.pages[0]?.diagnostics).toEqual([]);
+    expect("diagnostics" in (paintedPage1.pages[0] ?? {})).toBe(false);
     expect(paintedPage1.pages[0]?.svg).toContain("<clipPath");
     expect(paintedPage1.pages[0]?.png).toBeInstanceOf(Uint8Array);
   });

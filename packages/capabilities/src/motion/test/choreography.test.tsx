@@ -7,7 +7,6 @@ import {
   fade,
   motionSchedule,
   transitions,
-  type MotionObservation,
 } from "@pptxdk/capabilities";
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
@@ -32,19 +31,20 @@ import {
   build as buildAny,
   buildDocument as build,
 } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const jsx = { ...capabilities, Deck, Slide, expandDocument, build: buildAny };
 
 function motionOf(
   result: Awaited<ReturnType<typeof build>>,
   index = 0,
-): MotionObservation {
+): ResolvedMotion {
   return result.report.slides[index]?.capabilities?.[
     "motion"
-  ] as MotionObservation;
+  ] as ResolvedMotion;
 }
 
-function effectMap(motion: MotionObservation | undefined) {
+function effectMap(motion: ResolvedMotion | undefined) {
   return new Map(
     motion?.steps
       .flatMap((entry) => entry.effects)
@@ -494,10 +494,13 @@ describe("plain authoring choreography", () => {
               { enter: fade({ duration: 70 }), style },
               createElement(jsx.Shape, {
                 id: "jsx-inherited",
-                x: 4,
-                y: 4,
-                width: 20,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 4,
+                  top: 4,
+                  width: 20,
+                  height: 20,
+                },
               }),
             ),
           ),
@@ -518,10 +521,13 @@ describe("plain authoring choreography", () => {
               { motion: false, enter: fade(), style },
               createElement(jsx.Shape, {
                 id: "jsx-disabled",
-                x: 4,
-                y: 4,
-                width: 20,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 4,
+                  top: 4,
+                  width: 20,
+                  height: 20,
+                },
                 enter: fade(),
               }),
             ),
@@ -874,10 +880,13 @@ describe("plain authoring choreography", () => {
               },
               createElement(jsx.Shape, {
                 id: "card-child",
-                x: 8,
-                y: 8,
-                width: 40,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 8,
+                  top: 8,
+                  width: 40,
+                  height: 20,
+                },
               }),
             ),
             createElement(
@@ -885,10 +894,13 @@ describe("plain authoring choreography", () => {
               { scope: source, publishEnd: source.cue("ready") },
               createElement(jsx.Shape, {
                 id: "source",
-                x: 10,
-                y: 20,
-                width: 40,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 20,
+                  width: 40,
+                  height: 20,
+                },
                 enter: fade({ duration: 100 }),
               }),
             ),
@@ -897,10 +909,13 @@ describe("plain authoring choreography", () => {
               { scope: follower, startAt: after(source.cue("ready"), 20) },
               createElement(jsx.Shape, {
                 id: "follower",
-                x: 10,
-                y: 50,
-                width: 40,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 50,
+                  width: 40,
+                  height: 20,
+                },
                 enter: fade({ duration: 40 }),
               }),
             ),
@@ -910,10 +925,13 @@ describe("plain authoring choreography", () => {
             {},
             createElement(jsx.Shape, {
               id: "independent",
-              x: 10,
-              y: 80,
-              width: 40,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 80,
+                width: 40,
+                height: 20,
+              },
               enter: fade({ duration: 30 }),
             }),
           ),
@@ -933,7 +951,7 @@ describe("plain authoring choreography", () => {
         ({ authorId: testId, kind, box }) => [testId, kind, box],
       ),
     );
-    const normalize = (motion: MotionObservation) => ({
+    const normalize = (motion: ResolvedMotion) => ({
       steps: motion.steps.map((entry) => [
         entry.trigger,
         entry.number,
@@ -960,8 +978,6 @@ describe("plain authoring choreography", () => {
       normalize(motionOf(pureResult)),
       normalize(motionOf(jsxResult)),
     );
-    assert.deepEqual(pureResult.report.diagnostics, []);
-    assert.deepEqual(jsxResult.report.diagnostics, []);
     assert.deepEqual((await validatePptx(jsxResult.pptx)).errors, []);
   });
 

@@ -13,21 +13,7 @@ import {
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
-const legacyGroupPropKeys = new Set(["bounds", "flipH", "flipV"]);
-
-const legacyVisualStyleKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
-const groupAllowedPropKeys = new Set(
-  groupDeclarationPropsKeys.filter((key) => !legacyGroupPropKeys.has(key)),
-);
+const groupAllowedPropKeys = new Set(groupDeclarationPropsKeys);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -47,16 +33,6 @@ function serializeGroupStyleProp(
       "Group.style must be a plain object",
       "@style",
     );
-  }
-  for (const [key, entryValue] of Object.entries(style)) {
-    if (entryValue === undefined) continue;
-    if (legacyVisualStyleKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `Group.style does not support legacy property ${JSON.stringify(key)}`,
-        `@style.${key}`,
-      );
-    }
   }
   const parsed = groupStyleSchema.safeParse(style);
   if (!parsed.success) {

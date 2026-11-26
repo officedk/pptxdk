@@ -436,7 +436,7 @@ describe("Ticket 04: orthogonal visual and content props", () => {
     const vanPreview = await preview(vanDoc);
     for (const previewResult of [jsxPreview, vanPreview]) {
       assert.equal(previewResult.pages.length, 2);
-      assert.deepEqual(previewResult.pages[0]?.diagnostics, []);
+      assert.deepEqual(previewResult.pages[0]?.errors, []);
       assert.ok(
         previewResult.pages[0]?.svg?.includes("<linearGradient"),
         "Static preview paints Shape linearGradient",
@@ -815,7 +815,7 @@ describe("Ticket 04: orthogonal visual and content props", () => {
 
       const previewResult = await preview(doc);
       assert.equal(previewResult.pages.length, 1);
-      assert.deepEqual(previewResult.pages[0]?.diagnostics, []);
+      assert.deepEqual(previewResult.pages[0]?.errors, []);
       const svg = previewResult.pages[0]?.svg ?? "";
       assert.ok(
         svg.includes("scale(-1 -1)"),
@@ -1050,7 +1050,7 @@ describe("Ticket 04: orthogonal visual and content props", () => {
 
       const previewResult = await preview(doc);
       assert.equal(previewResult.pages.length, 1);
-      assert.deepEqual(previewResult.pages[0]?.diagnostics, []);
+      assert.deepEqual(previewResult.pages[0]?.errors, []);
     }
 
     const overloadBuilt = await build(contentOverloadDoc);

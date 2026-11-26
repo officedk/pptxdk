@@ -12,7 +12,7 @@ import {
   type FontFaceStyle,
   type FontReference,
   type FontSize,
-  type GeometryBox,
+  type Rect,
   type PlaceholderResolutionContext,
   type ResolvedColor,
   type Shadow,
@@ -2978,7 +2978,7 @@ function shapeListPrefix(
  */
 export function previewTextBoxOutlines(options: {
   readonly paragraphs: readonly Paragraph[];
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly insets?: {
     readonly top: number;
     readonly right: number;
@@ -3213,7 +3213,7 @@ function renderDecorationRectSvg(
 /** Renders box-level positioned glyph outlines into SVG path fragments without importing textCapability. */
 export function renderTextOutlinesSvg(options: {
   readonly paragraphs: readonly Paragraph[];
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly theme: ThemeContext;
   readonly insets?: {
     readonly top: number;

@@ -10,17 +10,15 @@ import {
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
   type CapabilitySubPartObservation,
-  type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolution,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedColor,
+  type Rect,
   type ResolvedTable,
   type ResolvedTableCell as ResolvedTableCellObservation,
   type ResolvedTableRow,
@@ -162,23 +160,6 @@ function pathLabel(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() !== "" ? value : fallback;
 }
 
-function color(
-  value: unknown,
-  label: string,
-  theme: ThemeContext,
-  path?: string,
-): ResolvedColor | undefined {
-  if (value === undefined) return undefined;
-  try {
-    return theme.resolveColor(value as ColorValue);
-  } catch (error) {
-    if (error instanceof CapabilityError) {
-      fail(error.code, `${label}: ${error.message}`, path);
-    }
-    throw error;
-  }
-}
-
 function textStyle(
   styleValue: unknown,
   label: string,
@@ -227,30 +208,18 @@ function parseLayerBackground(
   theme: ThemeContext,
   path?: string,
 ): { readonly declared: boolean; readonly value?: unknown } {
-  const hasNewBg =
-    Object.hasOwn(style, "background") && style["background"] !== undefined;
-  const hasOldBg =
-    Object.hasOwn(style, "backgroundColor") &&
-    style["backgroundColor"] !== undefined;
-  if (hasNewBg && hasOldBg) {
-    fail(
-      "unsupported-style-combination",
-      `${label}.style.background cannot be set together with backgroundColor`,
-      path,
-    );
-  }
-  if (!hasNewBg && !hasOldBg) {
+  if (
+    !Object.hasOwn(style, "background") ||
+    style["background"] === undefined
+  ) {
     return { declared: false };
   }
-  const raw = hasNewBg ? style["background"] : style["backgroundColor"];
-  const fieldLabel = hasNewBg
-    ? `${label}.style.background`
-    : `${label}.style.backgroundColor`;
+  const raw = style["background"];
   try {
     resolveBackgroundValue(theme, raw, undefined);
   } catch (error) {
     if (error instanceof CapabilityError) {
-      fail(error.code, `${fieldLabel}: ${error.message}`, path);
+      fail(error.code, `${label}.style.background: ${error.message}`, path);
     }
     throw error;
   }
@@ -477,7 +446,6 @@ function prepareRows(
       const borders = resolveTableCellBorders(
         cellStyle.style,
         row.border,
-        (value, label, itemPath) => color(value, label, theme, itemPath),
         theme,
         cellPath,
       );
@@ -548,7 +516,7 @@ function prepareRows(
 
 type ResolvedTableCell = {
   readonly cell: ParsedCell;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly fill: ResolvedFill;
   readonly body: ResolvedTextBody;
   readonly hasText: boolean;
@@ -1144,16 +1112,11 @@ export const tableCapability = {
       rows,
       cells,
       contract,
-      declaredX: placeholderGeometry?.x ?? input.props["x"],
-      declaredY: placeholderGeometry?.y ?? input.props["y"],
-      declaredWidth:
-        placeholderGeometry?.width ??
-        contract.layoutStyle.width ??
-        input.props["width"],
+      declaredX: placeholderGeometry?.x,
+      declaredY: placeholderGeometry?.y,
+      declaredWidth: placeholderGeometry?.width ?? contract.layoutStyle.width,
       declaredHeight:
-        placeholderGeometry?.height ??
-        contract.layoutStyle.height ??
-        input.props["height"],
+        placeholderGeometry?.height ?? contract.layoutStyle.height,
     };
 
     const authorId =
@@ -1298,7 +1261,7 @@ export const tableCapability = {
         );
         const width = widths.reduce((sum, value) => sum + value, 0);
         const height = heights.reduce((sum, value) => sum + value, 0);
-        const box: GeometryBox = { x, y, width, height };
+        const box: Rect = { x, y, width, height };
         const columnOffsets: number[] = [];
         let offsetX = x;
         for (const w of widths) {
@@ -1311,7 +1274,7 @@ export const tableCapability = {
           rowOffsets.push(offsetY);
           offsetY += h;
         }
-        const cellBoxes = new Map<ParsedCell, GeometryBox>();
+        const cellBoxes = new Map<ParsedCell, Rect>();
         for (const cell of cells) {
           cellBoxes.set(cell, {
             x: columnOffsets[cell.column] ?? x,
@@ -1477,26 +1440,6 @@ export const tableCapability = {
               textMetrics,
             };
           });
-        const tableParts = [
-          ...resolvedRowObservations.map((rowObs) => ({
-            kind: "row" as const,
-            ...(rowObs.id === undefined ? {} : { authorId: rowObs.id }),
-            row: rowObs.index,
-            box: rowObs.box,
-            text: matrix[rowObs.index]?.join("\t") ?? "",
-          })),
-          ...resolvedCellObservations.map((cellObs) => ({
-            kind: "cell" as const,
-            ...(cellObs.id === undefined ? {} : { authorId: cellObs.id }),
-            row: cellObs.row,
-            column: cellObs.column,
-            rowSpan: cellObs.rowSpan,
-            colSpan: cellObs.colSpan,
-            box: cellObs.box,
-            text: cellObs.text,
-            textMetrics: cellObs.textMetrics,
-          })),
-        ];
         const subParts: CapabilitySubPartObservation[] =
           resolvedRowObservations.map((rowObs) => ({
             kind: "row",
@@ -1527,9 +1470,6 @@ export const tableCapability = {
               rowSpan,
               colSpan,
             })),
-          columnWidths: [...widths],
-          rowHeights: [...heights],
-          parts: tableParts,
         };
         const annotations = motionAnnotations(motionProps, {
           kind: "table",

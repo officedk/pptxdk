@@ -185,7 +185,6 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     const previewResult = await preview(doc, { pages: [2] });
     assert.deepEqual(Object.keys(previewResult).toSorted(), [
       "pages",
-      "query",
       "report",
       "slide",
       "slides",

@@ -87,11 +87,11 @@ function runJsxModules(modules: readonly CapabilityModule[]) {
       resolveOptionsFrom(options),
     );
     const emitted = emit(resolution, options);
-    const query = emittedBuildQuery(emitted.report, resolution.query);
+    const query = emittedBuildQuery(emitted.report, resolution);
     return {
       ...emitted,
       slides: query.slides,
-      slide: (id: string) => query.getSlide(id),
+      slide: (id: string) => query.slide(id),
     };
   };
 }
@@ -101,11 +101,11 @@ function runDocModules(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode, options?: BuildOptions) => {
     const resolution = resolveWith(document, resolveOptionsFrom(options));
     const emitted = emit(resolution, options);
-    const query = emittedBuildQuery(emitted.report, resolution.query);
+    const query = emittedBuildQuery(emitted.report, resolution);
     return {
       ...emitted,
       slides: query.slides,
-      slide: (id: string) => query.getSlide(id),
+      slide: (id: string) => query.slide(id),
     };
   };
 }
@@ -2205,12 +2205,7 @@ describe("bound object capability contract", () => {
     const resolution = resolve({ children: [deckNode] });
 
     assert.equal(Object.isFrozen(resolution), true);
-    assert.deepEqual(Object.keys(resolution), [
-      "report",
-      "slides",
-      "slide",
-      "query",
-    ]);
+    assert.deepEqual(Object.keys(resolution), ["report", "slides", "slide"]);
     assert.equal(Object.getOwnPropertySymbols(resolution).length, 0);
 
     // Neither emit nor paint ran during resolve.

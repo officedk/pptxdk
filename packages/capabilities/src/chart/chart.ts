@@ -11,7 +11,7 @@ import {
   type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type LayoutStyle,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
@@ -894,7 +894,7 @@ function displayBlanksAs(
 
 type ResolvedChartModel = {
   readonly parsed: ParsedChart;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly name: string;
   readonly textStyles: ChartTextStyleXml;
   readonly fontUses: readonly FontEmbeddingUse[];
@@ -1240,14 +1240,9 @@ export const chartCapability = {
       placeholder === undefined
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
-    const rawWidth =
-      placeholderGeometry?.width ??
-      contract.layoutStyle.width ??
-      (input.props["width"] as number | undefined);
+    const rawWidth = placeholderGeometry?.width ?? contract.layoutStyle.width;
     const rawHeight =
-      placeholderGeometry?.height ??
-      contract.layoutStyle.height ??
-      (input.props["height"] as number | undefined);
+      placeholderGeometry?.height ?? contract.layoutStyle.height;
     const declaredWidth =
       rawWidth !== undefined
         ? parseChartExtentBySchema(rawWidth, "width")
@@ -1256,8 +1251,8 @@ export const chartCapability = {
       rawHeight !== undefined
         ? parseChartExtentBySchema(rawHeight, "height")
         : undefined;
-    const rawX = placeholderGeometry?.x ?? input.props["x"];
-    const rawY = placeholderGeometry?.y ?? input.props["y"];
+    const rawX = placeholderGeometry?.x;
+    const rawY = placeholderGeometry?.y;
     const declaredX =
       rawX !== undefined ? parseChartCoordinateBySchema(rawX, "x") : undefined;
     const declaredY =
@@ -1350,7 +1345,7 @@ export const chartCapability = {
           resolveContext.layoutBox?.height ??
           declaredHeight ??
           width * (9 / 16);
-        const box: GeometryBox = { x, y, width, height };
+        const box: Rect = { x, y, width, height };
 
         if (parsed.plotArea !== undefined) {
           if (

@@ -388,18 +388,7 @@ export type BoxShadowValue = z.infer<typeof boxShadowValueSchema>;
 export const visualStyleSchema = z
   .strictObject({
     background: backgroundValueSchema.optional(),
-    backgroundColor: colorValueSchema.optional(),
-    backgroundImage: z
-      .union([
-        linearGradientSchema,
-        radialGradientSchema,
-        imageBackgroundSchema,
-      ])
-      .optional(),
     border: borderValueSchema.optional(),
-    borderColor: colorValueSchema.optional(),
-    borderWidth: z.number().finite().optional(),
-    borderStyle: borderStyleSchema.optional(),
     borderRadius: z.number().finite().optional(),
     opacity: z.number().finite().optional(),
     boxShadow: boxShadowValueSchema.optional(),

@@ -18,8 +18,6 @@ import {
   targets,
   type BuildDiagnostic,
   type BuildOptions,
-  type Diagnostic,
-  type DiagnosticSeverity,
   type EmitOptions,
   type Extension,
   type FontEmbeddingMode,
@@ -103,11 +101,9 @@ export type {
   ResolvedSlideLayout,
   SlideLayoutDataProps,
   SlideLayoutDefinition,
-  SlideLayoutObservation,
   SlideLayoutProps,
   SlideLayoutType,
   SlideMasterDataProps,
-  SlideMasterObservation,
   SlideMasterProps,
 } from "#/masters.ts";
 export type {
@@ -124,7 +120,6 @@ export type {
   PlaceholderOrient,
   PlaceholderResolutionContext,
   PlaceholderStyle,
-  PlaceholderSz,
   TextList,
   TextPlaceholderRole,
 } from "#/placeholders.ts";
@@ -148,9 +143,6 @@ export type Rect = {
   readonly width: number;
   readonly height: number;
 };
-
-/** Transitional alias retained until Ticket 11. */
-export type GeometryBox = Rect;
 
 export type FontStyleDescriptor = {
   readonly family: string;
@@ -269,9 +261,6 @@ export type ResolvedObject = {
   readonly members?: readonly ResolvedObject[];
 };
 
-/** Transitional alias retained until Ticket 11. */
-export type ObjectObservation = ResolvedObject;
-
 export type LayoutChildReference = {
   readonly kind: "layout" | "object";
   readonly id: number;
@@ -287,9 +276,6 @@ export type ResolvedLayout = {
   readonly rowHeights?: readonly number[];
   readonly children: readonly LayoutChildReference[];
 };
-
-/** Transitional alias retained until Ticket 11. */
-export type LayoutObservation = ResolvedLayout;
 
 export type ResolvedTableRow = {
   readonly index: number;
@@ -324,26 +310,6 @@ export type ResolvedTable = {
     readonly rowSpan: number;
     readonly colSpan: number;
   }[];
-  /** Transitional aliases retained until Ticket 11. */
-  readonly columnWidths: readonly number[];
-  readonly rowHeights: readonly number[];
-  /** Identities and final geometries of rows and cells are submitted by the table module in shared layout results. */
-  readonly parts?: readonly NativeTablePartObservation[];
-};
-
-/** Transitional alias retained until Ticket 11. */
-export type NativeTableObservation = ResolvedTable;
-
-export type NativeTablePartObservation = {
-  readonly kind: "row" | "cell";
-  readonly authorId?: string;
-  readonly row: number;
-  readonly column?: number;
-  readonly rowSpan?: number;
-  readonly colSpan?: number;
-  readonly box: Rect;
-  readonly text: string;
-  readonly textMetrics?: TextMetrics;
 };
 
 export type ResolvedSlide = {
@@ -363,20 +329,9 @@ export type ResolvedSlide = {
   readonly capabilities?: Readonly<Record<string, unknown>>;
 };
 
-/** Transitional alias retained until Ticket 11. */
-export type SlideObservation = ResolvedSlide;
-
 export type ResolutionDimensionsSummary = {
   readonly width: number;
   readonly height: number;
-};
-
-/** Transitional deprecated report diagnostic entry retained until Ticket 11 removes `.diagnostics` from reports. */
-export type LegacyReportDiagnostic = {
-  readonly severity: DiagnosticSeverity;
-  readonly path: string;
-  readonly code: string;
-  readonly message: string;
 };
 
 export type ResolutionReport = {
@@ -387,16 +342,12 @@ export type ResolutionReport = {
   readonly fonts: readonly FontUsage[];
   readonly masters?: readonly ResolvedMaster[];
   readonly slides: readonly ResolvedSlide[];
-  /** @deprecated Transitional empty array retained until Ticket 11 removes `.diagnostics` from reports. */
-  readonly diagnostics: readonly LegacyReportDiagnostic[];
 };
 
 export type Resolution = {
   readonly report: ResolutionReport;
   readonly slides: readonly SlideLocator[];
   slide(id: string): SlideLocator;
-  /** Transitional property retained until Ticket 11. */
-  readonly query: BuildQuery;
 };
 
 export type BuildReport = {
@@ -412,8 +363,6 @@ export type BuildReport = {
   readonly fonts: readonly FontUsage[];
   readonly masters?: readonly ResolvedMaster[];
   readonly slides: readonly ResolvedSlide[];
-  /** @deprecated Transitional empty array retained until Ticket 11 removes `.diagnostics` from reports. */
-  readonly diagnostics: readonly LegacyReportDiagnostic[];
 };
 
 export type BuildResult = {
@@ -421,23 +370,11 @@ export type BuildResult = {
   readonly report: BuildReport;
   readonly slides: readonly SlideLocator[];
   slide(id: string): SlideLocator;
-  /** Transitional property retained until Ticket 11. */
-  readonly query: BuildQuery;
 };
 
 export type EmitResult = {
   readonly pptx: Uint8Array;
   readonly report: BuildReport;
-};
-
-export type LocatorObservation = {
-  readonly evidence: "generation";
-  readonly authorId?: string;
-  readonly box?: Rect;
-  readonly text?: string;
-  readonly textMetrics?: TextMetrics;
-  readonly objects: readonly ResolvedObject[];
-  readonly resources?: readonly LocatorResourceObservation[];
 };
 
 export type ResourceObservation = {
@@ -453,8 +390,6 @@ export type LocatorResourceObservation = ResourceObservation & {
 /** Read-only locator and field observation for formal content in a successful build. */
 export type Locator = {
   readonly id?: string;
-  /** Transitional alias for `id`, retained until Ticket 11. */
-  readonly authorId?: string;
   readonly kind: string;
   readonly path: string;
   readonly box?: Rect;
@@ -479,28 +414,13 @@ export type Locator = {
   /** Direct structural child locators, including anonymous and named nodes. */
   children(): readonly Locator[];
   descendants(): readonly Locator[];
-  /** Transitional method retained until Ticket 11. */
-  observe(): LocatorObservation;
 };
 
 export type SlideLocator = Locator & {
   readonly id: string;
-  readonly authorId?: string;
   readonly index: number;
   readonly dimensions: ResolutionDimensionsSummary;
   readonly footer?: ResolvedFooter;
-  /** Transitional property retained until Ticket 11. */
-  readonly observation: ResolvedSlide;
-};
-
-/** Transitional alias retained until Ticket 11. */
-export type SlideQuery = SlideLocator;
-
-export type BuildQuery = {
-  readonly evidence: "generation";
-  readonly slides: readonly SlideLocator[];
-  /** Page lookup by author id in this build. */
-  getSlide(id: string): SlideLocator;
 };
 
 /** Generic node in the React host tree, without exposing React or renderer internal objects. */
@@ -777,15 +697,10 @@ export type CapabilityResourceClaim = {
 };
 
 export type PreviewTransform = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly angle: number;
   readonly flipH: boolean;
   readonly flipV: boolean;
-};
-
-export type PreviewWarning = {
-  readonly message: string;
-  readonly path?: string;
 };
 
 /**
@@ -826,13 +741,6 @@ export type BoundContainerCollaboration = {
   readonly propagatesBaseline?: boolean;
   /** True when overflowing the slide canvas emits a layout container overflow warning. Defaults to true. */
   readonly checksCanvasOverflow?: boolean;
-};
-
-export type CapabilityWarning = {
-  readonly code: string;
-  readonly message: string;
-  /** Subpath relative to the native object, used for precisely locating cell diagnostics. */
-  readonly path?: string;
 };
 
 export type ResolvedLink = {
@@ -897,7 +805,6 @@ export type PaintPlaceholderRecord = {
 export type PaintOutput = {
   readonly svg: string;
   readonly placeholders?: readonly PaintPlaceholderRecord[];
-  readonly warnings?: readonly PreviewWarning[];
 };
 
 /** Internal capability protocol result returned by `BoundObjectCapability.resolve()`. */
@@ -911,7 +818,6 @@ export type ObjectResolution = {
   readonly annotations?: readonly CapabilityAnnotation[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];
   readonly fontUsages?: readonly CapabilityFontUsageClaim[];
-  readonly warnings?: readonly CapabilityWarning[];
   emit(context: EmitContext): EmitOutput;
   paint?(context: PaintContext): PaintOutput;
 };
@@ -1047,7 +953,6 @@ export type SlidePaintContext = {
 export type SlidePaintOutput = {
   readonly svg: string;
   readonly placeholders?: readonly PaintPlaceholderRecord[];
-  readonly warnings?: readonly PreviewWarning[];
 };
 
 /** Internal capability protocol result returned by `BoundSlideCapability.resolveSlide()`. */
@@ -1057,7 +962,6 @@ export type SlideResolution = {
   readonly extensions: readonly Extension[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];
   readonly fontUsages?: readonly CapabilityFontUsageClaim[];
-  readonly warnings?: readonly CapabilityWarning[];
   emit(context: SlideEmitContext): SlideEmitOutput;
   paint?(context: SlidePaintContext): SlidePaintOutput;
 };
@@ -1185,12 +1089,6 @@ export type RegisteredCapabilityModule =
   | CapabilityModule
   | TransparentCapabilityModule;
 
-export type {
-  BuildDiagnostic,
-  Diagnostic,
-  DiagnosticSeverity,
-  PreviewError,
-  PreviewPlaceholder,
-};
+export type { BuildDiagnostic, PreviewError, PreviewPlaceholder };
 
 // DeckProps, SlideProps, and SectionProps are derived from Zod schemas in author-schemas.ts.

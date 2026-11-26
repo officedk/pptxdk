@@ -250,7 +250,7 @@ describe("shape capability codegen", () => {
         height: 50,
       },
       text: "Inline",
-    }).append(paragraph("Child"));
+    } as never).append(paragraph("Child"));
 
     const legacyTextDoc = deck({ width: 960, height: 540 }).append(
       slide({ id: "s1" }).append(legacyTextShape),

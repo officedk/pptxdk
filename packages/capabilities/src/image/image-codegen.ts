@@ -21,25 +21,6 @@ import {
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
-const legacyImagePropKeys = new Set([
-  "x",
-  "y",
-  "width",
-  "height",
-  "flipH",
-  "flipV",
-]);
-
-const legacyVisualStyleKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
 const imageDescriptorAllowedKeys = new Set([
   "image",
   "fit",
@@ -48,9 +29,7 @@ const imageDescriptorAllowedKeys = new Set([
 ]);
 
 const imageAllowedPropKeys = new Set(
-  Object.keys(imageDeclarationPropsSchema.unwrap().shape).filter(
-    (key) => !legacyImagePropKeys.has(key),
-  ),
+  Object.keys(imageDeclarationPropsSchema.unwrap().shape),
 );
 
 const dummyImageBytes = new Uint8Array([0]);
@@ -114,17 +93,6 @@ function validateImageNativePlaceholder(
   value: unknown,
   ctx: CodegenContext,
 ): void {
-  if (
-    isPlainObject(value) &&
-    Object.hasOwn(value, "sz") &&
-    value["sz"] !== undefined
-  ) {
-    ctx.fail(
-      "unexpressible-value",
-      "Image.nativePlaceholder.sz is no longer supported; use size",
-      "@nativePlaceholder.sz",
-    );
-  }
   const parsed = nativePlaceholderRefSchema.safeParse(value);
   if (!parsed.success) {
     ctx.fail(
@@ -146,16 +114,6 @@ function serializeImageStyleProp(
       "Image.style must be a plain object",
       "@style",
     );
-  }
-  for (const [key, entryValue] of Object.entries(style)) {
-    if (entryValue === undefined) continue;
-    if (legacyVisualStyleKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `Image.style does not support legacy property ${JSON.stringify(key)}`,
-        `@style.${key}`,
-      );
-    }
   }
   const parsed = imageStyleSchema.safeParse(style);
   if (!parsed.success) {

@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { ParsedScatterGroup } from "../chart-model.ts";
 import type { ChartDisplayBlanksAs } from "../chart-types.ts";
@@ -29,7 +29,7 @@ export function renderScatterGroup(options: {
   readonly group: ParsedScatterGroup;
   readonly groupIndex: number;
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly displayBlanksAs: ChartDisplayBlanksAs | undefined;
   readonly theme: ThemeContext;
 }): {

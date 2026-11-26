@@ -9,7 +9,7 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
@@ -86,7 +86,7 @@ type ImageCrop = {
 };
 
 type ImagePlacement = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly sourceCrop: ImageCrop;
 };
 
@@ -405,7 +405,7 @@ function imagePlacement(
   image: { readonly width?: number; readonly height?: number },
   fit: ImageFit,
   crop: Partial<ImageCrop> | undefined,
-  allocated: GeometryBox,
+  allocated: Rect,
 ): ImagePlacement {
   const { width, height } = allocated;
   const box = { ...allocated };
@@ -491,15 +491,10 @@ function dimension(
 
 function requestedDimension(
   style: Readonly<Record<string, unknown>>,
-  props: Readonly<Record<string, unknown>>,
   name: "width" | "height",
 ): unknown {
   const styled = style[name];
-  return styled === undefined
-    ? props[name]
-    : typeof styled === "number"
-      ? styled
-      : undefined;
+  return typeof styled === "number" ? styled : undefined;
 }
 
 function parseCropValues(
@@ -663,8 +658,6 @@ export const imageCapability = {
     const crop = parseCropValues(input.props["crop"]);
     const image = readImageSource(input.props["src"]);
     const geometry = input.props["geometry"] as Geometry | undefined;
-    const flipH = input.props["flipH"] as boolean | undefined;
-    const flipV = input.props["flipV"] as boolean | undefined;
 
     // Validate geometry and visual properties during bind before layout runs.
     resolveVisualModel({
@@ -672,8 +665,6 @@ export const imageCapability = {
       style: imageStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
       ...(geometry !== undefined ? { geometry } : {}),
-      ...(flipH !== undefined ? { flipH } : {}),
-      ...(flipV !== undefined ? { flipV } : {}),
       image: true,
     });
 
@@ -683,19 +674,17 @@ export const imageCapability = {
         : resolvePlaceholderGeometry(placeholder, input.props);
     const hasLocalVisualOverride =
       geometry !== undefined ||
-      flipH === true ||
-      flipV === true ||
       [...imageVisualStyleKeys].some(
         (key) => key !== "opacity" && hasLocalDeclaration(rawSlideStyle, key),
       );
-    const declaredX = placeholderGeometry?.x ?? input.props["x"];
-    const declaredY = placeholderGeometry?.y ?? input.props["y"];
+    const declaredX = placeholderGeometry?.x;
+    const declaredY = placeholderGeometry?.y;
     const requestedWidth =
       placeholderGeometry?.width ??
-      requestedDimension(rawSlideStyle ?? {}, input.props, "width");
+      requestedDimension(rawSlideStyle ?? {}, "width");
     const requestedHeight =
       placeholderGeometry?.height ??
-      requestedDimension(rawSlideStyle ?? {}, input.props, "height");
+      requestedDimension(rawSlideStyle ?? {}, "height");
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -803,8 +792,6 @@ export const imageCapability = {
           style: imageStyle,
           box,
           ...(geometry === undefined ? {} : { geometry }),
-          ...(flipH === undefined ? {} : { flipH }),
-          ...(flipV === undefined ? {} : { flipV }),
           image: true,
         });
         const name =

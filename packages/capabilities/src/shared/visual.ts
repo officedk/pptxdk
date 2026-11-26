@@ -218,10 +218,9 @@ export const lineEndStyleKeys = Object.keys(
   lineEndStyleSchema.unwrap().shape,
 ) as readonly (keyof LineEndStyle)[];
 
-export type ShapeVisualStyle = Omit<CoreVisualStyle, "border"> &
-  LineEndStyle & {
-    readonly border?: ShapeBorderValue;
-  };
+export type ShapeVisualStyle = Omit<CoreVisualStyle, "border"> & {
+  readonly border?: ShapeBorderValue;
+};
 
 export const visualStyleKeys = Object.keys(
   visualStyleSchema.unwrap().shape,
@@ -232,10 +231,6 @@ export type ShapePropertiesOptions = {
   readonly style: VisualStyleRecord;
   readonly box: ShapeBox;
   readonly geometry?: Geometry;
-  readonly flipH?: boolean;
-  readonly flipV?: boolean;
-  /** Legacy top-level fill property of shape capability. */
-  readonly fill?: ColorValue;
   readonly image?: boolean;
   /** Allows `startArrow` / `endArrow` inside `style.border` (Shape only). */
   readonly allowBorderArrows?: boolean;
@@ -591,54 +586,6 @@ export function resolveImageBackgroundSpec(
   };
 }
 
-/** Normalizes legacy fill props (`Shape.fill`, `backgroundColor`, `backgroundImage`) into `style.background`. */
-export function normalizeLegacyFillStyle(
-  style: VisualStyleRecord,
-  explicitFill?: ColorValue,
-): VisualStyleRecord {
-  const hasNewBackground =
-    Object.hasOwn(style, "background") && style["background"] !== undefined;
-  const hasBgColor =
-    Object.hasOwn(style, "backgroundColor") &&
-    style["backgroundColor"] !== undefined;
-  const hasBgImage =
-    Object.hasOwn(style, "backgroundImage") &&
-    style["backgroundImage"] !== undefined;
-  const hasExplicitFill = explicitFill !== undefined;
-
-  if (hasNewBackground) {
-    if (hasExplicitFill || hasBgColor || hasBgImage) {
-      invalid(
-        "unsupported-style-combination",
-        "style.background cannot be set together with fill, backgroundColor, or backgroundImage",
-      );
-    }
-    return style;
-  }
-  if (hasExplicitFill) {
-    if (hasBgColor || hasBgImage) {
-      invalid(
-        "unsupported-style-combination",
-        "Shape.fill cannot be set together with style.backgroundColor or backgroundImage",
-      );
-    }
-    return { ...style, background: explicitFill };
-  }
-  if (hasBgColor && hasBgImage) {
-    invalid(
-      "unsupported-style-combination",
-      "backgroundColor and backgroundImage cannot be set simultaneously",
-    );
-  }
-  if (hasBgImage) {
-    return { ...style, background: style["backgroundImage"] };
-  }
-  if (hasBgColor) {
-    return { ...style, background: style["backgroundColor"] };
-  }
-  return style;
-}
-
 /** Resolves a unified `BackgroundValue` (`"none"`, color, gradient, or `{ image, fit?, position?, opacity? }`). */
 export function resolveBackgroundValue(
   theme: ThemeContext,
@@ -666,35 +613,21 @@ export function resolveBackgroundValue(
 function resolveVisualFill(
   theme: ThemeContext,
   style: VisualStyleRecord,
-  explicitFill: ColorValue | undefined,
   opacity: number | undefined,
 ): ResolvedFill {
-  const normalized = normalizeLegacyFillStyle(style, explicitFill);
   try {
-    return resolveBackgroundValue(theme, normalized["background"], opacity);
+    return resolveBackgroundValue(theme, style["background"], opacity);
   } catch (error) {
     if (
       error instanceof CapabilityError &&
-      error.details?.["field"] === undefined
+      error.details?.["field"] === undefined &&
+      Object.hasOwn(style, "background") &&
+      style["background"] !== undefined
     ) {
-      const field =
-        Object.hasOwn(style, "background") && style["background"] !== undefined
-          ? "style.background"
-          : explicitFill !== undefined
-            ? "fill"
-            : Object.hasOwn(style, "backgroundImage") &&
-                style["backgroundImage"] !== undefined
-              ? "style.backgroundImage"
-              : Object.hasOwn(style, "backgroundColor") &&
-                  style["backgroundColor"] !== undefined
-                ? "style.backgroundColor"
-                : undefined;
-      if (field !== undefined) {
-        throw new CapabilityError(error.code, error.message, error.path, {
-          ...error.details,
-          field,
-        });
-      }
+      throw new CapabilityError(error.code, error.message, error.path, {
+        ...error.details,
+        field: "style.background",
+      });
     }
     throw error;
   }
@@ -706,115 +639,46 @@ function resolveVisualBorder(
   opacity: number | undefined,
   allowBorderArrows: boolean,
 ): ResolvedBorder | undefined {
-  const hasNewBorder =
-    Object.hasOwn(style, "border") && style["border"] !== undefined;
-  const hasLegacyBorder = (
-    [
-      "borderColor",
-      "borderWidth",
-      "borderStyle",
-      "startArrow",
-      "endArrow",
-    ] as const
-  ).some((key) => Object.hasOwn(style, key) && style[key] !== undefined);
-  if (hasNewBorder && hasLegacyBorder) {
-    invalid(
-      "unsupported-style-combination",
-      "style.border cannot be set together with borderColor, borderWidth, borderStyle, startArrow, or endArrow",
-    );
+  if (!Object.hasOwn(style, "border") || style["border"] === undefined) {
+    return undefined;
   }
-  if (hasNewBorder) {
-    const rawBorder = style["border"];
-    if (rawBorder === "none") {
-      return undefined;
-    }
-    const parsed = (
-      allowBorderArrows ? shapeBorderValueSchema : borderValueSchema
-    ).safeParse(rawBorder);
-    if (!parsed.success || parsed.data === "none") {
-      const issue = parsed.success ? undefined : parsed.error.issues[0];
-      if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
-        invalid(
-          "invalid-visual-style",
-          `border contains unsupported property ${issue.keys[0]}`,
-        );
-      }
+  const rawBorder = style["border"];
+  if (rawBorder === "none") {
+    return undefined;
+  }
+  const parsed = (
+    allowBorderArrows ? shapeBorderValueSchema : borderValueSchema
+  ).safeParse(rawBorder);
+  if (!parsed.success || parsed.data === "none") {
+    const issue = parsed.success ? undefined : parsed.error.issues[0];
+    if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
       invalid(
         "invalid-visual-style",
-        issue?.message ?? "Invalid border declaration",
+        `border contains unsupported property ${issue.keys[0]}`,
       );
     }
-    const width = parsed.data.width ?? 1;
-    if (width === 0) {
-      return undefined;
-    }
-    lineWidthEmu(width);
-    const startArrow = (
-      parsed.data as { readonly startArrow?: ArrowType | undefined }
-    ).startArrow;
-    const endArrow = (
-      parsed.data as { readonly endArrow?: ArrowType | undefined }
-    ).endArrow;
-    return {
-      color: withOpacity(theme.resolveColor(parsed.data.color), opacity),
-      width,
-      style: parsed.data.style ?? "solid",
-      ...(startArrow === undefined ? {} : { startArrow }),
-      ...(endArrow === undefined ? {} : { endArrow }),
-    };
-  }
-
-  const color = style["borderColor"];
-  const width =
-    style["borderWidth"] === undefined
-      ? 1
-      : finite(style["borderWidth"], "borderWidth");
-  if (width < 0) {
     invalid(
       "invalid-visual-style",
-      "borderWidth must be a non-negative number",
+      issue?.message ?? "Invalid border declaration",
     );
   }
-  const parsedBorder = visualStyleSchema.safeParse(
-    style["borderStyle"] === undefined
-      ? {}
-      : { borderStyle: style["borderStyle"] },
-  );
-  if (!parsedBorder.success) {
-    invalid(
-      "invalid-visual-style",
-      "borderStyle must be solid, dashed, or dotted",
-    );
-  }
-  const parsedLineEnds = lineEndStyleSchema.safeParse({
-    ...(style["startArrow"] === undefined
-      ? {}
-      : { startArrow: style["startArrow"] }),
-    ...(style["endArrow"] === undefined ? {} : { endArrow: style["endArrow"] }),
-  });
-  if (!parsedLineEnds.success) {
-    const field = String(
-      parsedLineEnds.error.issues[0]?.path[0] ?? "startArrow",
-    );
-    invalid(
-      "invalid-visual-style",
-      `${field} must be none, triangle, stealth, arrow, diamond, or oval`,
-    );
-  }
-  if (color === undefined || width === 0) {
+  const width = parsed.data.width ?? 1;
+  if (width === 0) {
     return undefined;
   }
   lineWidthEmu(width);
+  const startArrow = (
+    parsed.data as { readonly startArrow?: ArrowType | undefined }
+  ).startArrow;
+  const endArrow = (
+    parsed.data as { readonly endArrow?: ArrowType | undefined }
+  ).endArrow;
   return {
-    color: withOpacity(theme.resolveColor(color as ColorValue), opacity),
+    color: withOpacity(theme.resolveColor(parsed.data.color), opacity),
     width,
-    style: parsedBorder.data.borderStyle ?? "solid",
-    ...(parsedLineEnds.data.startArrow === undefined
-      ? {}
-      : { startArrow: parsedLineEnds.data.startArrow }),
-    ...(parsedLineEnds.data.endArrow === undefined
-      ? {}
-      : { endArrow: parsedLineEnds.data.endArrow }),
+    style: parsed.data.style ?? "solid",
+    ...(startArrow === undefined ? {} : { startArrow }),
+    ...(endArrow === undefined ? {} : { endArrow }),
   };
 }
 
@@ -824,8 +688,6 @@ export function hasVisibleBoxStyle(
 ): boolean {
   if (style === undefined || typeof style !== "object" || style === null)
     return false;
-  const borderWidth =
-    style["borderWidth"] === undefined ? 1 : (style["borderWidth"] as number);
   const hasNewBorder =
     style["border"] !== undefined &&
     style["border"] !== "none" &&
@@ -836,10 +698,7 @@ export function hasVisibleBoxStyle(
     );
   return (
     (style["background"] !== undefined && style["background"] !== "none") ||
-    style["backgroundColor"] !== undefined ||
-    style["backgroundImage"] !== undefined ||
     hasNewBorder ||
-    (style["borderColor"] !== undefined && borderWidth > 0) ||
     (style["boxShadow"] !== undefined && style["boxShadow"] !== "none")
   );
 }
@@ -855,8 +714,6 @@ export function resolveVisualModel(
   const warnings: VisualWarning[] = [];
 
   for (const [name, value] of [
-    ["flipH", options.flipH],
-    ["flipV", options.flipV],
     ["flipH", style["flipH"]],
     ["flipV", style["flipV"]],
   ] as const) {
@@ -864,14 +721,8 @@ export function resolveVisualModel(
       invalid("invalid-visual-style", `${name} must be a boolean`);
     }
   }
-  const flipH =
-    style["flipH"] !== undefined
-      ? (style["flipH"] as boolean)
-      : Boolean(options.flipH);
-  const flipV =
-    style["flipV"] !== undefined
-      ? (style["flipV"] as boolean)
-      : Boolean(options.flipV);
+  const flipH = Boolean(style["flipH"]);
+  const flipV = Boolean(style["flipV"]);
 
   const opacity =
     style["opacity"] === undefined
@@ -897,7 +748,7 @@ export function resolveVisualModel(
     );
   }
 
-  const fill = resolveVisualFill(theme, style, options.fill, opacity);
+  const fill = resolveVisualFill(theme, style, opacity);
   const border = resolveVisualBorder(
     theme,
     style,
@@ -922,8 +773,7 @@ export function resolveVisualModel(
     }
   }
 
-  const hasVisibleStyle =
-    (options.fill !== undefined && !options.image) || hasVisibleBoxStyle(style);
+  const hasVisibleStyle = hasVisibleBoxStyle(style);
   const layoutOnlyWhenInvisible = Boolean(options.layoutOnlyWhenInvisible);
   const resolvedGeometry = resolveGeometry({
     geometry: options.geometry,

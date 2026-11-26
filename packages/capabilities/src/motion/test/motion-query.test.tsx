@@ -12,7 +12,6 @@ import {
   Text,
   useMotionScope,
   motionSchedule,
-  type MotionObservation,
 } from "@pptxdk/capabilities";
 import { BuildQueryError } from "@pptxdk/core";
 import { Deck, Slide } from "@pptxdk/react";
@@ -21,6 +20,7 @@ import { createElement, Fragment } from "react";
 import { describe, it } from "vitest";
 
 import { build } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 function KnownRelationsDeck() {
   const source = useMotionScope();
@@ -532,9 +532,7 @@ describe("motionSchedule", () => {
       const result = await build(
         createElement(EmptyIntervalDeck, { sourceDuration }),
       );
-      const step = motionSchedule(
-        result.query.getSlide("empty-interval").observation,
-      )?.steps[0];
+      const step = motionSchedule(result.slide("empty-interval"))?.steps[0];
       assert.ok(step);
       const empty = step.scopes.find(({ members }) => members.length === 0);
       const finite = step.effects.find(
@@ -561,9 +559,8 @@ describe("motionSchedule", () => {
     }
 
     const unknownResult = await build(createElement(EmptyIntervalDeck));
-    const unknownStep = motionSchedule(
-      unknownResult.query.getSlide("empty-interval").observation,
-    )?.steps[0];
+    const unknownStep = motionSchedule(unknownResult.slide("empty-interval"))
+      ?.steps[0];
     assert.ok(unknownStep);
     const empty = unknownStep.scopes.find(
       ({ members }) => members.length === 0,
@@ -603,9 +600,7 @@ describe("motionSchedule", () => {
     const result = await build(createElement(DeclarationClosureDeck));
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
-    const motion = motionSchedule(
-      result.query.getSlide("motion-declaration-closure").observation,
-    );
+    const motion = motionSchedule(result.slide("motion-declaration-closure"));
     const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
     const click = motion?.steps.find(
       ({ trigger, number }) => trigger === "click" && number === 1,
@@ -744,8 +739,8 @@ describe("motionSchedule", () => {
 
   it("preserves effect instances and named cue declarations and queries precise relationships", async () => {
     const result = await build(createElement(KnownRelationsDeck));
-    const slide = result.query.getSlide("motion-relations");
-    const motion = motionSchedule(slide.observation);
+    const slide = result.slide("motion-relations");
+    const motion = motionSchedule(slide);
 
     assert.equal(motion?.evidence, "generation");
     assert.equal(motion?.steps.length, 1);
@@ -838,8 +833,8 @@ describe("motionSchedule", () => {
 
   it("coverage results retain items with unknown completion and no natural completion", async () => {
     const result = await build(createElement(MixedIntervalsDeck));
-    const slide = result.query.getSlide("motion-coverage");
-    const motion = motionSchedule(slide.observation);
+    const slide = result.slide("motion-coverage");
+    const motion = motionSchedule(slide);
     const step = motion?.steps[0];
     assert.ok(step);
     assert.deepEqual(step.effects.map(({ end }) => end.state).sort(), [
@@ -891,9 +886,7 @@ describe("motionSchedule", () => {
 
   it("preserves cross-step declaration closures and distinguishes structural parent-child from current step schedule", async () => {
     const result = await build(createElement(DeclaredScopeClosureDeck));
-    const motion = motionSchedule(
-      result.query.getSlide("scope-closure").observation,
-    );
+    const motion = motionSchedule(result.slide("scope-closure"));
     const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
     const click = motion?.steps.find(
       ({ trigger, number }) => trigger === "click" && number === 1,
@@ -945,7 +938,7 @@ describe("motionSchedule", () => {
     );
     const reportMotion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const reportParent = reportMotion.scopes?.find(
       ({ id }) => id === automaticParent.ref.id,
     );
@@ -977,9 +970,7 @@ describe("motionSchedule", () => {
 
   it("exposes only effect observation fields and freezes their nested values", async () => {
     const result = await build(createElement(WordMotionDeck));
-    const step = motionSchedule(
-      result.query.getSlide("word-projection").observation,
-    )?.steps[0];
+    const step = motionSchedule(result.slide("word-projection"))?.steps[0];
     assert.ok(step);
     const effect = step.effects.find(
       ({ target }) => target.authorId === "word-text",
@@ -1014,12 +1005,8 @@ describe("motionSchedule", () => {
   it("returns different clocks across steps and throws query errors on cross-build references", async () => {
     const first = await build(createElement(ClickStepsDeck));
     const second = await build(createElement(ClickStepsDeck));
-    const firstMotion = motionSchedule(
-      first.query.getSlide("motion-steps").observation,
-    );
-    const secondMotion = motionSchedule(
-      second.query.getSlide("motion-steps").observation,
-    );
+    const firstMotion = motionSchedule(first.slide("motion-steps"));
+    const secondMotion = motionSchedule(second.slide("motion-steps"));
     assert.equal(firstMotion?.steps.length, 2);
     assert.equal(secondMotion?.steps.length, 2);
     const firstStep = firstMotion?.steps[0];
@@ -1056,12 +1043,11 @@ describe("motionSchedule", () => {
     assert.throws(
       () =>
         motionSchedule({
-          ...first.query.getSlide("motion-steps").observation,
+          ...first.report.slides[0]!,
           capabilities: {
-            ...first.query.getSlide("motion-steps").observation.capabilities,
+            ...first.report.slides[0]!.capabilities,
             motion: {
-              ...(first.query.getSlide("motion-steps").observation
-                .capabilities?.["motion"] as object),
+              ...(first.report.slides[0]!.capabilities?.["motion"] as object),
             },
           },
         }),

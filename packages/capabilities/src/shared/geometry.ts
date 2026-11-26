@@ -11,7 +11,7 @@ import {
   presetGeometryTuple,
   type CustomGeometry,
   type Geometry,
-  type GeometryBox,
+  type Rect,
   type GeometryPath,
   type PathCommand,
   type PresetGeometry,
@@ -89,7 +89,7 @@ export type EvaluatedGeometryPath = {
 
 export type EvaluatedGeometry = {
   readonly paths: readonly EvaluatedGeometryPath[];
-  readonly textRect: GeometryBox;
+  readonly textRect: Rect;
 };
 
 /** Complete DrawingML preset geometry enumeration from ECMA-376 ST_ShapeType. */
@@ -1025,7 +1025,7 @@ function drawingMlArcToLocalCubics(
 function evaluatePresetGeometry(
   name: PresetGeometryName,
   adjust: Readonly<Record<string, number>>,
-  box: GeometryBox,
+  box: Rect,
 ): EvaluatedGeometry {
   const def: PresetShapeDefinition = presetDefinitions[name];
   // Evaluate guides in EMU space to preserve ECMA-376 precision on small pixel boxes.
@@ -1144,7 +1144,7 @@ function evaluatePresetGeometry(
   const rectT = arg(rectTokens[1]);
   const rectR = arg(rectTokens[2]);
   const rectB = arg(rectTokens[3]);
-  const textRect: GeometryBox = {
+  const textRect: Rect = {
     x: box.x + (rectL / W) * box.width,
     y: box.y + (rectT / H) * box.height,
     width: Math.max(0, ((rectR - rectL) / W) * box.width),
@@ -1282,7 +1282,7 @@ function evaluatePresetGeometry(
 
 function evaluateCustomGeometry(
   geometry: Extract<ResolvedGeometry, { readonly kind: "custom" }>,
-  box: GeometryBox,
+  box: Rect,
 ): EvaluatedGeometry {
   const mapX = (value: number) => box.x + (value * box.width) / geometry.width;
   const mapY = (value: number) =>
@@ -1338,7 +1338,7 @@ function evaluateCustomGeometry(
 /** Exhaustively evaluates any ResolvedGeometry into page-space SVG paths and embedded textRect. */
 export function evaluateGeometry(
   geometry: ResolvedGeometry,
-  box: GeometryBox,
+  box: Rect,
 ): EvaluatedGeometry {
   switch (geometry.kind) {
     case "preset":

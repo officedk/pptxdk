@@ -1164,10 +1164,7 @@ describe("native Cartesian charts", () => {
       { name: "T", values: [3, 4] },
     ];
     const base = {
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 120,
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
     } as const;
     const invalidCases: {
       readonly id: string;

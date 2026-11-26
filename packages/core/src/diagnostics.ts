@@ -687,3 +687,50 @@ export function capabilityErrorToDiagnostic(
         : `${basePath}/${error.path}`;
   return toBuildDiagnostic(path, error.code, error.message, error.details);
 }
+
+/** Converts a Zod validation issue into a structured `BuildDiagnostic`, mapping unrecognized keys to `unknown-prop`. */
+export function zodIssueToBuildDiagnostic(
+  path: string,
+  fallbackCode: string,
+  fallbackMessage: string,
+  issue:
+    | {
+        readonly code: string;
+        readonly message: string;
+        readonly path: readonly PropertyKey[];
+        readonly keys?: readonly string[];
+      }
+    | undefined,
+  pathPrefix?: string,
+): BuildDiagnostic {
+  const pathSegments = [
+    ...(pathPrefix === undefined ? [] : [pathPrefix]),
+    ...(issue === undefined ? [] : issue.path.map(String)),
+  ];
+  if (
+    issue?.code === "unrecognized_keys" &&
+    issue.keys !== undefined &&
+    issue.keys[0] !== undefined
+  ) {
+    const prop = issue.keys[0];
+    const inStyle = pathSegments.includes("style");
+    const field = [...pathSegments, prop].join(".");
+    return toBuildDiagnostic(
+      path,
+      inStyle ? "unknown-style" : "unknown-parameter",
+      issue.message,
+      {
+        prop,
+        field,
+        scope: inStyle ? "style" : "props",
+      },
+    );
+  }
+  const field = pathSegments.length > 0 ? pathSegments.join(".") : undefined;
+  return toBuildDiagnostic(
+    path,
+    field?.startsWith("style") ? "invalid-style" : fallbackCode,
+    issue?.message ?? fallbackMessage,
+    field === undefined ? undefined : { field },
+  );
+}

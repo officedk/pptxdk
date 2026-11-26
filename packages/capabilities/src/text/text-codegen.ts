@@ -22,22 +22,8 @@ import {
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
-const legacyTextPropKeys = new Set(["x", "y", "width", "height"]);
-
-const legacyVisualStyleKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
 const textAllowedPropKeys = new Set(
-  Object.keys(textAuthorPropsSchema.unwrap().shape).filter(
-    (key) => !legacyTextPropKeys.has(key),
-  ),
+  Object.keys(textAuthorPropsSchema.unwrap().shape),
 );
 const paragraphAllowedPropKeys = new Set(
   Object.keys(paragraphAuthorPropsSchema.unwrap().shape),
@@ -62,17 +48,6 @@ function validateRichTextNativePlaceholder(
   value: unknown,
   ctx: CodegenContext,
 ): void {
-  if (
-    isPlainRecord(value) &&
-    Object.hasOwn(value, "sz") &&
-    value["sz"] !== undefined
-  ) {
-    ctx.fail(
-      "unexpressible-value",
-      `${nodeType}.nativePlaceholder.sz is no longer supported; use size`,
-      "@nativePlaceholder.sz",
-    );
-  }
   const parsed = nativePlaceholderRefSchema.safeParse(value);
   if (!parsed.success) {
     ctx.fail(
@@ -95,16 +70,6 @@ function serializeRichTextStyleProp(
       `${nodeType}.style must be a plain object`,
       "@style",
     );
-  }
-  for (const [key, entryValue] of Object.entries(style)) {
-    if (entryValue === undefined) continue;
-    if (legacyVisualStyleKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `${nodeType}.style does not support legacy property ${JSON.stringify(key)}`,
-        `@style.${key}`,
-      );
-    }
   }
   const schema =
     nodeType === "text"

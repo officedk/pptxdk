@@ -1026,33 +1026,6 @@ describe("public build entry", () => {
       );
       assert.match(xml, /<a:fld id="\{[0-9A-F-]+\}" type="slidenum">/u);
     }
-
-    await assert.rejects(
-      shapeBuild(
-        deck(
-          createElement(
-            Shape,
-            {
-              id: "conflicting-shape-body",
-              style: {
-                position: "absolute",
-                left: 10,
-                top: 10,
-                width: 100,
-                height: 40,
-              },
-              text: "literal",
-            },
-            createElement(SlideNumber, {}),
-          ),
-        ),
-      ),
-      (error: unknown) =>
-        error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-structure" &&
-        error.diagnostics[0]?.path ===
-          "deck/slide[cover]/shape[conflicting-shape-body]",
-    );
   });
 
   it("includes Text, Shape, and Table page number fields into the same Chart character subset", async () => {
@@ -3996,10 +3969,7 @@ describe("public build entry", () => {
       createElement(Shape, {
         id: "invalid-name",
         name: "hello\u0000world",
-        x: 0,
-        y: 0,
-        width: 40,
-        height: 30,
+        style: { position: "absolute", left: 0, top: 0, width: 40, height: 30 },
       }),
     );
     const invalidText = deck(
@@ -4007,10 +3977,13 @@ describe("public build entry", () => {
         Text,
         {
           id: "invalid-text",
-          x: 0,
-          y: 0,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 40,
+            height: 30,
+          },
         },
         "hello\u0000world",
       ),
@@ -4047,9 +4020,7 @@ describe("public build entry", () => {
           deck(
             createElement(Shape, {
               id: "too-small",
-              x: 0,
-              y: 0,
-              ...size,
+              style: { position: "absolute", left: 0, top: 0, ...size },
             }),
           ),
         ),
@@ -4076,11 +4047,14 @@ describe("public build entry", () => {
           { id: "extent-boundary" },
           createElement(Shape, {
             id: "extent-boundary",
-            x: 0,
-            y: 0,
-            // This pixel value rounds to the shape size upper bound after standard conversion.
-            width: 225457.60073490813,
-            height: 0.00006,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              // This pixel value rounds to the shape size upper bound after standard conversion.
+              width: 225457.60073490813,
+              height: 0.00006,
+            },
           }),
         ),
       ),
@@ -4098,10 +4072,13 @@ describe("public build entry", () => {
       deck(
         createElement(Shape, {
           id: "oversized",
-          x: 0,
-          y: 0,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 40,
+            height: 30,
+          },
         }),
       ),
     );
@@ -4202,10 +4179,13 @@ describe("public build entry", () => {
           id: "badge",
           name: "badge",
           geometry: "ellipse",
-          x: 32,
-          y: 48,
-          width: 120,
-          height: 72,
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 48,
+            width: 120,
+            height: 72,
+          },
         }),
       ),
     );
@@ -4249,10 +4229,7 @@ describe("public build entry", () => {
       }, []);
       return createElement(Shape, {
         id: "from-component",
-        x: 8,
-        y: 9,
-        width: 40,
-        height: 30,
+        style: { position: "absolute", left: 8, top: 9, width: 40, height: 30 },
       });
     }
 
@@ -4302,14 +4279,20 @@ describe("public build entry", () => {
         },
         [],
       );
-      return createElement(Shape, {
-        id: "cleanup-before-build",
-        x: 0,
-        y: 0,
-        width: 240,
-        height: 48,
-        text: "Cleanup before build",
-      });
+      return createElement(
+        Shape,
+        {
+          id: "cleanup-before-build",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
+        },
+        "Cleanup before build",
+      );
     }
 
     const result = emit(
@@ -4361,10 +4344,13 @@ describe("public build entry", () => {
         createElement(Shape, {
           id: "options-visible-to-capabilities",
           geometry: "triangle",
-          x: 0,
-          y: 0,
-          width: 80,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 80,
+            height: 60,
+          },
         }),
       ),
       { signal: controller.signal },
@@ -4396,10 +4382,7 @@ describe("public build entry", () => {
     const unknownParameter = deck(
       createElement(UncheckedShape, {
         id: "unknown-prop",
-        x: 0,
-        y: 0,
-        width: 20,
-        height: 20,
+        style: { position: "absolute", left: 0, top: 0, width: 20, height: 20 },
         mystery: true,
       }),
     );
@@ -4423,10 +4406,13 @@ describe("public build entry", () => {
               deck(
                 createElement(Shape, {
                   id: "trimmed-shape",
-                  x: 0,
-                  y: 0,
-                  width: 20,
-                  height: 20,
+                  style: {
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 20,
+                    height: 20,
+                  },
                 }),
               ),
             ),
@@ -4452,11 +4438,14 @@ describe("public build entry", () => {
             createElement(Shape, {
               id: "triangle",
               geometry: "triangle",
-              x: 0,
-              y: 0,
-              width: 80,
-              height: 60,
-              fill: "#FFAA00",
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 80,
+                height: 60,
+                background: "#FFAA00",
+              },
             }),
           ),
         ),
@@ -4997,10 +4986,13 @@ describe("public build entry", () => {
           { id: "cover" },
           createElement(Shape, {
             id: "overflowing",
-            x: 90,
-            y: 70,
-            width: 30,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 90,
+              top: 70,
+              width: 30,
+              height: 20,
+            },
           }),
         ),
       ),
@@ -5033,10 +5025,13 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "unknown-geometry",
             geometry: "madeUpShape" as never,
-            x: 0,
-            y: 0,
-            width: 20,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
       ),
@@ -5052,10 +5047,13 @@ describe("public build entry", () => {
         deck(
           createElement(Shape, {
             id: "zero-size",
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 0,
+              height: 20,
+            },
           }),
         ),
       ),
@@ -5083,18 +5081,24 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "a1",
             morphKey: cardA,
-            x: 40,
-            y: 60,
-            width: 120,
-            height: 80,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 60,
+              width: 120,
+              height: 80,
+            },
           }),
           createElement(Shape, {
             id: "b1",
             morphKey: cardB,
-            x: 200,
-            y: 60,
-            width: 120,
-            height: 80,
+            style: {
+              position: "absolute",
+              left: 200,
+              top: 60,
+              width: 120,
+              height: 80,
+            },
           }),
         ),
         createElement(
@@ -5106,18 +5110,24 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "b2",
             morphKey: cardB,
-            x: 260,
-            y: 100,
-            width: 160,
-            height: 100,
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 100,
+              width: 160,
+              height: 100,
+            },
           }),
           createElement(Shape, {
             id: "a2",
             morphKey: cardA,
-            x: 80,
-            y: 120,
-            width: 140,
-            height: 90,
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 120,
+              width: 140,
+              height: 90,
+            },
           }),
         ),
       ),
@@ -5148,15 +5158,26 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "card-1",
             morphKey: card,
-            x: 40,
-            y: 40,
-            width: 120,
-            height: 80,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 120,
+              height: 80,
+            },
           }),
           createElement(
             Group,
             { id: "grp-1", morphKey: cluster },
-            createElement(Shape, { x: 220, y: 40, width: 80, height: 60 }),
+            createElement(Shape, {
+              style: {
+                position: "absolute",
+                left: 220,
+                top: 40,
+                width: 80,
+                height: 60,
+              },
+            }),
           ),
         ),
         createElement(
@@ -5168,23 +5189,37 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "card-2",
             morphKey: card,
-            x: 100,
-            y: 120,
-            width: 150,
-            height: 90,
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 120,
+              width: 150,
+              height: 90,
+            },
           }),
           createElement(
             Group,
             { id: "grp-2", morphKey: cluster },
-            createElement(Shape, { x: 320, y: 120, width: 100, height: 70 }),
+            createElement(Shape, {
+              style: {
+                position: "absolute",
+                left: 320,
+                top: 120,
+                width: 100,
+                height: 70,
+              },
+            }),
           ),
           createElement(Shape, {
             id: "manual-top",
             name: "!!morph-1",
-            x: 500,
-            y: 40,
-            width: 100,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 500,
+              top: 40,
+              width: 100,
+              height: 60,
+            },
           }),
         ),
         createElement(
@@ -5196,10 +5231,13 @@ describe("public build entry", () => {
             createElement(Shape, {
               id: "manual-group-member",
               name: "!!morph-2",
-              x: 40,
-              y: 40,
-              width: 90,
-              height: 60,
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 40,
+                width: 90,
+                height: 60,
+              },
             }),
           ),
           createElement(
@@ -5222,10 +5260,13 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "manual-hidden",
             name: "!!morph-4",
-            x: 40,
-            y: 40,
-            width: 100,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 100,
+              height: 60,
+            },
           }),
         ),
       ),
@@ -5270,10 +5311,13 @@ describe("public build entry", () => {
             createElement(Shape, {
               id: "card-1",
               morphKey: card,
-              x: 40,
-              y: 40,
-              width: 120,
-              height: 80,
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 40,
+                width: 120,
+                height: 80,
+              },
             }),
             createElement(
               Box,
@@ -5281,10 +5325,13 @@ describe("public build entry", () => {
               createElement(Shape, {
                 id: "pruned-child",
                 name: "!!morph-1",
-                x: 10,
-                y: 10,
-                width: 40,
-                height: 40,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 40,
+                  height: 40,
+                },
               }),
             ),
             createElement(Notes, {}, "!!morph-1"),
@@ -5298,10 +5345,13 @@ describe("public build entry", () => {
             createElement(Shape, {
               id: "card-2",
               morphKey: card,
-              x: 200,
-              y: 120,
-              width: 160,
-              height: 100,
+              style: {
+                position: "absolute",
+                left: 200,
+                top: 120,
+                width: 160,
+                height: 100,
+              },
             }),
           ),
         ),
@@ -5332,18 +5382,24 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "a1",
             morphKey: firstKey,
-            x: 40,
-            y: 40,
-            width: 100,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 100,
+              height: 60,
+            },
           }),
           createElement(Shape, {
             id: "b1",
             morphKey: secondKey,
-            x: 200,
-            y: 40,
-            width: 100,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 200,
+              top: 40,
+              width: 100,
+              height: 60,
+            },
           }),
         ),
         createElement(
@@ -5355,26 +5411,35 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "a2",
             morphKey: firstKey,
-            x: 80,
-            y: 100,
-            width: 140,
-            height: 80,
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 100,
+              width: 140,
+              height: 80,
+            },
           }),
           createElement(Shape, {
             id: "b2",
             morphKey: secondKey,
-            x: 260,
-            y: 100,
-            width: 140,
-            height: 80,
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 100,
+              width: 140,
+              height: 80,
+            },
           }),
           createElement(Shape, {
             id: "reserved",
             name: "!!morph-1",
-            x: 460,
-            y: 40,
-            width: 90,
-            height: 50,
+            style: {
+              position: "absolute",
+              left: 460,
+              top: 40,
+              width: 90,
+              height: 50,
+            },
           }),
         ),
       );

@@ -438,10 +438,13 @@ describe("React asynchronous content in public build", () => {
         Text,
         {
           id: "cleanup-abort",
-          x: 0,
-          y: 0,
-          width: 240,
-          height: 48,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
         },
         "完成内容",
       );

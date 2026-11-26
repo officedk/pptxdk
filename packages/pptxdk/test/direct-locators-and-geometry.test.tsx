@@ -11,7 +11,6 @@ import {
   fade,
   font,
   motionSchedule,
-  observeMotion,
   resolve,
   type Locator,
   type MotionSchedule,
@@ -86,21 +85,28 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
             Text,
             {
               id: "headline",
-              x: 0,
-              y: 0,
-              width: 240,
-              height: 40,
-              style: { fontFamily: jostFont, fontSize: 18 },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 240,
+                height: 40,
+                fontFamily: jostFont,
+                fontSize: 18,
+              },
             },
             "Hello direct locator",
           ),
         ),
         createElement(Image, {
           id: "badge",
-          x: 400,
-          y: 30,
-          width: 48,
-          height: 48,
+          style: {
+            position: "absolute",
+            left: 400,
+            top: 30,
+            width: 48,
+            height: 48,
+          },
           src: pixelPng,
         }),
       ),
@@ -168,11 +174,6 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
     assert.equal(badgeLocator.kind, "image");
     assert.ok((badgeLocator.resources?.length ?? 0) >= 1);
     assert.equal(badgeLocator.resources?.[0]?.contentType, "image/png");
-    // Transitional bridges remain intact until Ticket 11.
-    assert.equal(
-      built.query.getSlide("intro").get("badge").observe().authorId,
-      "badge",
-    );
 
     // PreviewResult & previewFromSource expose slides & slide(id).
     const previewed = await preview(jsxDeck);
@@ -193,7 +194,7 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
           )};`,
           `export default deck({ width: 480, height: 270 }).append(`,
           `  slide({ id: "cover" }).append(`,
-          `    text("From source", { id: "title", x: 10, y: 12, width: 200, height: 30 }),`,
+          `    text("From source", { id: "title", style: { position: "absolute", left: 10, top: 12, width: 200, height: 30 } }),`,
           `  ),`,
           `);`,
         ].join("\n"),
@@ -239,29 +240,38 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
         { id: "geom" },
         createElement(Shape, {
           id: "plain",
-          x: 10,
-          y: 20,
-          width: 80,
-          height: 40,
-          fill: "#111111",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 20,
+            width: 80,
+            height: 40,
+            background: "#111111",
+          },
         }),
         createElement(Shape, {
           id: "rot90",
-          x: 100,
-          y: 100,
-          width: 80,
-          height: 40,
-          fill: "#222222",
-          style: { rotate: 90 },
+          style: {
+            position: "absolute",
+            left: 100,
+            top: 100,
+            width: 80,
+            height: 40,
+            background: "#222222",
+            rotate: 90,
+          },
         }),
         createElement(Shape, {
           id: "flipped",
-          x: 240,
-          y: 50,
-          width: 60,
-          height: 30,
-          fill: "#333333",
-          flipH: true,
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 50,
+            width: 60,
+            height: 30,
+            background: "#333333",
+            flipH: true,
+          },
         }),
         createElement(
           Group,
@@ -271,19 +281,25 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
           },
           createElement(Shape, {
             id: "member",
-            x: 300,
-            y: 120,
-            width: 100,
-            height: 40,
-            fill: "#444444",
+            style: {
+              position: "absolute",
+              left: 300,
+              top: 120,
+              width: 100,
+              height: 40,
+              background: "#444444",
+            },
           }),
           createElement(Shape, {
             id: "member2",
-            x: 340,
-            y: 180,
-            width: 60,
-            height: 20,
-            fill: "#555555",
+            style: {
+              position: "absolute",
+              left: 340,
+              top: 180,
+              width: 60,
+              height: 20,
+              background: "#555555",
+            },
           }),
         ),
       ),
@@ -351,12 +367,11 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
       { x: 350, y: 110 },
     ]);
 
-    // Also verify PreviewNode carries matching bounds + transitional screenBox.
+    // Also verify PreviewNode carries matching bounds.
     const painted = paint(resolution);
     const previewRotNode: PreviewNode | undefined =
       painted.pages[0]?.nodes.find((node) => node.authorId === "rot90");
     assert.deepEqual(previewRotNode?.bounds, rot90.bounds);
-    assert.deepEqual(previewRotNode?.screenBox, rot90.bounds);
   });
 
   it("unconditionally populates ResolvedTable rows and anchor cells with box, span, text, textMetrics, and row/cell Locators", async () => {
@@ -369,10 +384,14 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
         createElement(
           Table,
           {
-            x: 20,
-            y: 30,
             columns: [100, 120, 80],
-            style: { fontFamily: jostFont, fontSize: 14 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 30,
+              fontFamily: jostFont,
+              fontSize: 14,
+            },
           },
           createElement(
             Row,
@@ -392,10 +411,14 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
           Table,
           {
             id: "named-tbl",
-            x: 20,
-            y: 140,
             columns: [100, 100],
-            style: { fontFamily: jostFont, fontSize: 14 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 140,
+              fontFamily: jostFont,
+              fontSize: 14,
+            },
           },
           createElement(
             Row,
@@ -525,8 +548,8 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
               alignSelf: "center",
               gridColumn: "1",
               gridRow: "1",
+              background: "#2563EB",
             },
-            fill: "#2563EB",
           }),
           createElement(
             Box,
@@ -615,17 +638,13 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
       placeholders: {
         title: {
           type: "title",
-          y: 30,
-          style: { color: "#2563EB" },
+          style: { top: 30, color: "#2563EB" },
         },
         body: {
           type: "body",
           idx: 1,
-          sz: "half",
-          x: 40,
-          y: 100,
-          width: 560,
-          height: 180,
+          size: "half",
+          style: { left: 40, top: 100, width: 560, height: 180 },
         },
       },
     });
@@ -640,11 +659,11 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
           placeholders: {
             title: {
               type: "title",
-              x: 40,
-              y: 20,
-              width: 560,
-              height: 60,
               style: {
+                left: 40,
+                top: 20,
+                width: 560,
+                height: 60,
                 fontFamily: jostFont,
                 fontSize: 28,
                 color: "#1E293B",
@@ -658,40 +677,52 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
           },
           footerPlaceholders: {
             dateTime: {
-              x: 40,
-              y: 310,
-              width: 140,
-              height: 24,
               text: "2026-11-25",
-              style: { fontFamily: jostFont, fontSize: 10 },
+              style: {
+                left: 40,
+                top: 310,
+                width: 140,
+                height: 24,
+                fontFamily: jostFont,
+                fontSize: 10,
+              },
               visible: true,
             },
             footer: {
-              x: 200,
-              y: 310,
-              width: 220,
-              height: 24,
               text: "Default Footer",
-              style: { fontFamily: jostFont, fontSize: 10 },
+              style: {
+                left: 200,
+                top: 310,
+                width: 220,
+                height: 24,
+                fontFamily: jostFont,
+                fontSize: 10,
+              },
               visible: true,
             },
             slideNumber: {
-              x: 500,
-              y: 310,
-              width: 100,
-              height: 24,
-              style: { fontFamily: jostFont, fontSize: 10 },
+              style: {
+                left: 500,
+                top: 310,
+                width: 100,
+                height: 24,
+                fontFamily: jostFont,
+                fontSize: 10,
+              },
               visible: true,
             },
           },
         },
         createElement(Shape, {
           id: "master-bar",
-          x: 0,
-          y: 0,
-          width: 640,
-          height: 8,
-          fill: "#0F172A",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 8,
+            background: "#0F172A",
+          },
         }),
         createElement(
           SlideLayout,
@@ -700,11 +731,15 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
             Text,
             {
               id: "layout-tag",
-              x: 40,
-              y: 286,
-              width: 120,
-              height: 20,
-              style: { fontFamily: jostFont, fontSize: 10 },
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 286,
+                width: 120,
+                height: 20,
+                fontFamily: jostFont,
+                fontSize: 10,
+              },
             },
             "Layout Tag",
           ),
@@ -723,11 +758,14 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
         },
         createElement(Shape, {
           id: "badge",
-          x: 480,
-          y: 120,
-          width: 80,
-          height: 40,
-          fill: "#10B981",
+          style: {
+            position: "absolute",
+            left: 480,
+            top: 120,
+            width: 80,
+            height: 40,
+            background: "#10B981",
+          },
           enter: fade({ duration: 400 }),
         }),
       ),
@@ -829,6 +867,5 @@ describe("Ticket 02: direct locators, Resolved* geometry, and motionSchedule", (
     assert.equal(effectObs.start.ms, 0);
     assert.equal(effectObs.end.state, "known");
     assert.equal(effectObs.end.ms, 400);
-    assert.equal(observeMotion(s1Loc), scheduleFromLocator);
   });
 });

@@ -19,6 +19,7 @@ import {
   CapabilityError,
   capabilityErrorToDiagnostic,
   toBuildDiagnostic,
+  zodIssueToBuildDiagnostic,
 } from "#/diagnostics.ts";
 import {
   LayoutPass,
@@ -33,10 +34,10 @@ import {
   type FooterPlaceholderSpec,
   type FooterPlaceholders,
   type HeaderFooter,
+  type ResolvedMaster,
   type ResolvedPlaceholder,
+  type ResolvedSlideLayout,
   type SlideLayoutDefinition,
-  type SlideLayoutObservation,
-  type SlideMasterObservation,
 } from "#/masters.ts";
 import { getMorphKeyLabel, isMorphKey, type MorphKey } from "#/morph.ts";
 import {
@@ -81,6 +82,7 @@ import type {
   BoundContainerCollaboration,
   BoundObjectCapability,
   BoundSlideCapability,
+  BuildDiagnostic,
   CapabilityChild,
   CapabilityContribution,
   CapabilityElement,
@@ -90,31 +92,27 @@ import type {
   CapabilityModule,
   CapabilityResourceClaim,
   CapabilitySubPartObservation,
-  CapabilityWarning,
-  Diagnostic,
   Extension,
   FontUsage,
-  GeometryBox,
   LayoutChildReference,
-  LayoutObservation,
   NativeElementKind,
   ObjectCapabilityModule,
-  ObjectObservation,
   ObjectResolveContext,
   PlaceholderResolutionContext,
   PreviewTransform,
+  Rect,
   RegisteredCapabilityModule,
   Resolution,
   ResolutionReport,
   ResolveOptions,
   ResolvedFooter,
+  ResolvedLayout,
   ResolvedLink,
   ResolvedObject,
   ResolvedObjectChildren,
   ResolvedSlide,
   SlideCapabilityModule,
   SlideMasterInheritanceContext,
-  SlideObservation,
   SlideResolution,
   TransparentCapabilityModule,
 } from "#/types.ts";
@@ -204,7 +202,6 @@ type FontUsageAccumulator = {
 
 type DocumentResolveState = {
   readonly usedExtensions: Set<Extension>;
-  readonly warnings: Diagnostic[];
   readonly resourceClaims: Map<
     string,
     { identity: string; path: string; characters: string }
@@ -220,8 +217,8 @@ type SlideResolveState = {
   readonly index: number;
   nextId: number;
   nextNodeOrder: number;
-  readonly diagnostics: Diagnostic[];
-  readonly layouts: LayoutObservation[];
+  readonly diagnostics: BuildDiagnostic[];
+  readonly layouts: ResolvedLayout[];
   readonly contributions: CapabilityContribution[];
   readonly morphObjects: Map<MorphKey, MorphObject>;
   matchContinuityKinds: boolean;
@@ -255,12 +252,12 @@ type ResolvePassContext = {
 
 type ResolvedLayerEntry = {
   readonly layer: ResolvedObjectLayer;
-  readonly objects: readonly ObjectObservation[];
+  readonly objects: readonly ResolvedObject[];
   readonly reference: LayoutChildReference;
 };
 
 type ResolvedChildrenResult = {
-  readonly objects: readonly ObjectObservation[];
+  readonly objects: readonly ResolvedObject[];
   readonly references: readonly LayoutChildReference[];
   readonly content: readonly QueryContentNode[];
   readonly layers: readonly ResolvedObjectLayer[];
@@ -269,7 +266,7 @@ type ResolvedChildrenResult = {
 
 type ResolvedSlideResult = {
   readonly internal: InternalResolvedSlide;
-  readonly observation: SlideObservation;
+  readonly observation: ResolvedSlide;
   readonly morphObjects: ReadonlyMap<MorphKey, MorphObject>;
   readonly matchContinuityKinds: boolean;
   readonly linkedSlideIndexes: ReadonlySet<number>;
@@ -280,7 +277,7 @@ function diagnostic(
   code: string,
   message: string,
   details?: Readonly<Record<string, unknown>>,
-): Diagnostic {
+): BuildDiagnostic {
   return toBuildDiagnostic(path, code, message, details);
 }
 
@@ -298,7 +295,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function reportBox(box: GeometryBox): GeometryBox {
+function reportBox(box: Rect): Rect {
   // Reports show layout-derived geometry at hundredths of a pixel; capability measurement fallbacks keep their measured values.
   return {
     x: Math.round(box.x * 100) / 100,
@@ -658,18 +655,12 @@ function resolveSlides(
     const parsedMaster = slideMasterDataPropsSchema.safeParse(masterDataInput);
     if (!parsedMaster.success) {
       const firstIssue = parsedMaster.error.issues[0];
-      const issueField =
-        firstIssue !== undefined && firstIssue.path.length > 0
-          ? firstIssue.path.map(String).join(".")
-          : undefined;
       throw new BuildError([
-        diagnostic(
+        zodIssueToBuildDiagnostic(
           masterPath,
-          issueField?.startsWith("style")
-            ? "invalid-style"
-            : "invalid-slide-master",
-          firstIssue?.message ?? "Invalid SlideMaster declaration",
-          issueField === undefined ? undefined : { field: issueField },
+          "invalid-slide-master",
+          "Invalid SlideMaster declaration",
+          firstIssue,
         ),
       ]);
     }
@@ -870,18 +861,12 @@ function resolveSlides(
         slideLayoutDataPropsSchema.safeParse(layoutDataInput);
       if (!parsedLayout.success) {
         const firstIssue = parsedLayout.error.issues[0];
-        const issueField =
-          firstIssue !== undefined && firstIssue.path.length > 0
-            ? firstIssue.path.map(String).join(".")
-            : undefined;
         throw new BuildError([
-          diagnostic(
+          zodIssueToBuildDiagnostic(
             rawLayoutPath,
-            issueField?.startsWith("style")
-              ? "invalid-style"
-              : "invalid-slide-layout",
-            firstIssue?.message ?? "Invalid SlideLayout declaration",
-            issueField === undefined ? undefined : { field: issueField },
+            "invalid-slide-layout",
+            "Invalid SlideLayout declaration",
+            firstIssue,
           ),
         ]);
       }
@@ -1376,7 +1361,7 @@ function validateLink(
 function recordResourceClaims(
   claims: readonly CapabilityResourceClaim[] | undefined,
   document: DocumentResolveState,
-  diagnostics: Diagnostic[],
+  diagnostics: BuildDiagnostic[],
   path: string,
 ): void {
   for (const claim of claims ?? []) {
@@ -1465,23 +1450,6 @@ function summarizeDocumentFonts(
   }));
 }
 
-function recordCapabilityWarnings(
-  _warnings: readonly CapabilityWarning[] | undefined,
-  _document: DocumentResolveState,
-  _path: string,
-): void {
-  // Runtime warnings are silenced; observation fields carry all layout and font facts.
-}
-
-function checkCanvasOverflow(
-  _box: GeometryBox | undefined,
-  _dimensions: ResolutionDimensions,
-  _document: DocumentResolveState,
-  _path: string,
-): void {
-  // Canvas overflow is observable directly via ResolvedObject.box and bounds without warnings.
-}
-
 function recordObjectMorph(args: {
   readonly morphKey: MorphKey | undefined;
   readonly morphName: string | undefined;
@@ -1532,7 +1500,7 @@ function createObjectResolveContext(args: {
   readonly resolveContext: ResolvePassContext;
   readonly id: number;
   readonly path: string;
-  readonly layoutBox: GeometryBox | undefined;
+  readonly layoutBox: Rect | undefined;
   readonly theme: ThemeContext;
   readonly placeholder: PlaceholderResolutionContext | undefined;
   readonly insideGroup: boolean;
@@ -1585,7 +1553,7 @@ function resolveChildrenPass(
 ): ResolvedChildrenResult {
   const layers: {
     readonly layer: ResolvedObjectLayer;
-    readonly objects: readonly ObjectObservation[];
+    readonly objects: readonly ResolvedObject[];
     readonly reference: LayoutChildReference;
   }[] = [];
   const content: QueryContentNode[] = [];
@@ -1819,7 +1787,6 @@ function resolveChildrenPass(
         path,
       );
       recordFontUsages(resolvedObj.fontUsages, context.document, path);
-      recordCapabilityWarnings(resolvedObj.warnings, context.document, path);
       for (const annotation of resolvedObj.annotations ?? []) {
         context.slide.contributions.push({
           ...annotation,
@@ -1853,12 +1820,6 @@ function resolveChildrenPass(
         reference: { kind: "object", id: observation.id },
         children: subPartContentNodes(resolvedObj.parts),
       });
-      checkCanvasOverflow(
-        resolvedObj.observation.box,
-        context.dimensions,
-        context.document,
-        path,
-      );
       const layer: ResolvedObjectLayer = {
         declarationType: child.type,
         ...(authorId === undefined ? {} : { authorId }),
@@ -1936,7 +1897,7 @@ function resolveBoundContainer(args: {
   readonly insideGroup: boolean;
   readonly layers: {
     readonly layer: ResolvedObjectLayer;
-    readonly objects: readonly ObjectObservation[];
+    readonly objects: readonly ResolvedObject[];
     readonly reference: LayoutChildReference;
   }[];
   readonly content: QueryContentNode[];
@@ -2039,7 +2000,7 @@ function resolveBoundContainer(args: {
       }
     }
   }
-  let containerObservation: ObjectObservation | undefined;
+  let containerObservation: ResolvedObject | undefined;
   let memberResolved: ResolvedChildrenResult | undefined;
   let memberLayers: readonly ResolvedObjectLayer[] = [];
   let containerLayer: ResolvedObjectLayer | undefined;
@@ -2076,14 +2037,6 @@ function resolveBoundContainer(args: {
       if (box !== undefined) context.slide.layoutDerivedObjectIds.add(objectId);
       if (resolvedObj.transform !== undefined) {
         context.slide.transformsById.set(objectId, resolvedObj.transform);
-      }
-      if (container.checksCanvasOverflow === false) {
-        checkCanvasOverflow(
-          resolvedObj.observation.box,
-          context.dimensions,
-          context.document,
-          path,
-        );
       }
       recordObjectMorph({
         morphKey,
@@ -2125,7 +2078,6 @@ function resolveBoundContainer(args: {
         declaration: child,
       });
     }
-    recordCapabilityWarnings(resolvedObj.warnings, context.document, path);
     memberLayers = enclosesChildren ? (memberResolved?.layers ?? []) : [];
     containerLayer = {
       declarationType: child.type,
@@ -2433,7 +2385,7 @@ function collectNestedPlaceholders(
   modules: BoundCapabilityRegistry,
   parentPath: string,
   allowDirect: boolean,
-  diagnostics: Diagnostic[],
+  diagnostics: BuildDiagnostic[],
   onDirect?: (element: CapabilityElement, path: string) => void,
 ): void {
   children.forEach((child, index) => {
@@ -2489,7 +2441,7 @@ function buildSlidePlaceholderContexts(args: {
   readonly children: readonly CapabilityChild[];
   readonly rawPlaceholdersProp: unknown;
   readonly modules: BoundCapabilityRegistry;
-  readonly diagnostics: Diagnostic[];
+  readonly diagnostics: BuildDiagnostic[];
 }): WeakMap<CapabilityElement, PlaceholderResolutionContext> {
   const {
     slideId,
@@ -2536,11 +2488,12 @@ function buildSlidePlaceholderContexts(args: {
         const parsed = nativePlaceholderRefSchema.safeParse(rawNativePh);
         if (!parsed.success) {
           diagnostics.push(
-            diagnostic(
+            zodIssueToBuildDiagnostic(
               childPath,
               "invalid-slide-placeholder",
-              parsed.error.issues[0]?.message ??
-                "Invalid nativePlaceholder specification",
+              "Invalid nativePlaceholder specification",
+              parsed.error.issues[0],
+              "nativePlaceholder",
             ),
           );
           return;
@@ -2610,7 +2563,7 @@ function buildSlidePlaceholderContexts(args: {
         return;
       }
 
-      const nativeRefSize = layoutPlaceholder?.size ?? layoutPlaceholder?.sz;
+      const nativeRefSize = layoutPlaceholder?.size;
       const nativeRef =
         parsedNativePh ??
         ({
@@ -2671,7 +2624,7 @@ function resolveOwnerSlideCapabilities(args: {
   const slideCapabilities: ResolvedSlideCapabilityRecord[] = [];
   const capabilities: Record<string, unknown> = {};
   const continuityByDeclaration = new Map<string, boolean | undefined>();
-  const diagnostics: Diagnostic[] = [];
+  const diagnostics: BuildDiagnostic[] = [];
   const input: CapabilityInput = { type, props, children: [] };
 
   for (const module of modules.slideModules.values()) {
@@ -2719,7 +2672,6 @@ function resolveOwnerSlideCapabilities(args: {
         path,
       );
       recordFontUsages(resolvedSlideCap.fontUsages, document, path);
-      recordCapabilityWarnings(resolvedSlideCap.warnings, document, path);
       slideCapabilities.push({
         declaration: module.declaration,
         slot: module.slot,
@@ -2844,7 +2796,6 @@ function resolveSlideDeclaration(
   ).run(children, path, theme, node.props["style"], (element) =>
     placeholderContexts.get(element),
   );
-  document.warnings.push(...layout.warnings);
   const ownedOrder = { value: 0 };
   collectOwnedContributions(
     children,
@@ -2961,7 +2912,6 @@ function resolveSlideDeclaration(
         path,
       );
       recordFontUsages(resolvedSlideCap.fontUsages, document, path);
-      recordCapabilityWarnings(resolvedSlideCap.warnings, document, path);
       slideCapabilities.push({
         declaration: module.declaration,
         slot: module.slot,
@@ -3146,7 +3096,6 @@ function resolveSharedCanvasLayers(args: {
     1,
     options,
   ).run(children, path, theme, style);
-  document.warnings.push(...layout.warnings);
   const resolved = resolveChildrenPass(
     children,
     {
@@ -3244,7 +3193,7 @@ function resolveMasterOrLayoutSlideCapability(args: {
     for (const extension of resolvedCap.extensions) {
       document.usedExtensions.add(extension);
     }
-    const claimDiagnostics: Diagnostic[] = [];
+    const claimDiagnostics: BuildDiagnostic[] = [];
     recordResourceClaims(
       resolvedCap.resourceClaims,
       document,
@@ -3255,7 +3204,6 @@ function resolveMasterOrLayoutSlideCapability(args: {
     if (claimDiagnostics.length > 0) {
       throw new BuildError(claimDiagnostics);
     }
-    recordCapabilityWarnings(resolvedCap.warnings, document, path);
     return {
       declaration: module.declaration,
       slot: module.slot,
@@ -3392,7 +3340,7 @@ function buildResolvedPlaceholders(
           : styleValue;
     }
     const idx = spec.idx ?? masterPh?.idx;
-    const size = spec.size ?? spec.sz ?? masterPh?.size ?? masterPh?.sz;
+    const size = spec.size ?? masterPh?.size;
     result.push({
       key,
       type: spec.type,
@@ -3428,12 +3376,8 @@ function deriveFooterPlaceholdersFromMap(
       spec.style !== undefined || spec.listStyles?.[1] !== undefined
         ? { ...spec.style, ...spec.listStyles?.[1] }
         : undefined;
-    const sizeVal = spec.size ?? spec.sz;
+    const sizeVal = spec.size;
     const candidate = {
-      ...(spec.x === undefined ? {} : { x: spec.x }),
-      ...(spec.y === undefined ? {} : { y: spec.y }),
-      ...(spec.width === undefined ? {} : { width: spec.width }),
-      ...(spec.height === undefined ? {} : { height: spec.height }),
       ...(spec.idx === undefined ? {} : { idx: spec.idx }),
       ...(sizeVal === "full" || sizeVal === "half" || sizeVal === "quarter"
         ? { size: sizeVal }
@@ -3537,7 +3481,6 @@ function resolveDocument(
   ];
   const document: DocumentResolveState = {
     usedExtensions: new Set(boundSections?.extensions ?? []),
-    warnings: [],
     resourceClaims: new Map(),
     fontUsages: new Map(),
     morphNames: new Map(),
@@ -3566,7 +3509,7 @@ function resolveDocument(
   );
 
   const resolvedMasters: InternalResolvedSlideMaster[] = [];
-  const masterObservations: SlideMasterObservation[] = [];
+  const masterObservations: ResolvedMaster[] = [];
   const masterByKey = new Map<string, InternalResolvedSlideMaster>();
   const masterByLayoutKey = new Map<string, InternalResolvedSlideMaster>();
   const layoutByKey = new Map<string, InternalResolvedSlideLayout>();
@@ -3687,7 +3630,7 @@ function resolveDocument(
     );
 
     const resolvedLayouts: InternalResolvedSlideLayout[] = [];
-    const observedLayouts: SlideLayoutObservation[] = [];
+    const observedLayouts: ResolvedSlideLayout[] = [];
 
     for (const parsedLayout of parsedMaster.layouts) {
       parsedLayoutByKey.set(parsedLayout.key, {
@@ -4057,7 +4000,7 @@ function resolveDocument(
     );
   });
 
-  const morphDiagnostics: Diagnostic[] = [];
+  const morphDiagnostics: BuildDiagnostic[] = [];
   for (let index = 0; index < slides.length; index += 1) {
     const current = slides[index];
     const currentResult = resolvedSlides[index];
@@ -4114,7 +4057,6 @@ function resolveDocument(
     fonts: summarizeDocumentFonts(document.fontUsages),
     ...(masterObservations.length > 0 ? { masters: masterObservations } : {}),
     slides: slideObservations,
-    diagnostics: [],
   });
   const query = createBuildQuery(
     resolvedSlides.map((slide, index) => ({
@@ -4126,8 +4068,7 @@ function resolveDocument(
   const resolution: Resolution = Object.freeze({
     report,
     slides: query.slides,
-    slide: (id: string) => query.getSlide(id),
-    query,
+    slide: (id: string) => query.slide(id),
   });
   const internal: InternalResolution = {
     dimensions: size,
@@ -4144,7 +4085,6 @@ function resolveDocument(
     ...(boundSections === undefined ? {} : { sectionsEmitter: boundSections }),
     slides: resolvedSlides.map(({ internal: slideInternal }) => slideInternal),
     resourceClaims: document.resourceClaims,
-    warnings: [...document.warnings],
   };
   registerInternalResolution(resolution, internal);
   return resolution;

@@ -1,4 +1,4 @@
-import type { GeometryBox } from "@pptxdk/core/capability";
+import type { Rect } from "@pptxdk/core/capability";
 
 import type { ParsedCategoryAxis, ParsedValueAxis } from "../chart-model.ts";
 import type { ChartMarkerSymbol } from "../chart-types.ts";
@@ -79,9 +79,9 @@ export type CategoryAxisScale = {
   readonly reversed: boolean;
   mapIndex(index: number): number;
   mapBoundary(boundary: number): number;
-  mapScreen(t: number, plot: GeometryBox): number;
-  indexToScreen(index: number, plot: GeometryBox): number;
-  slotSpan(plot: GeometryBox): number;
+  mapScreen(t: number, plot: Rect): number;
+  indexToScreen(index: number, plot: Rect): number;
+  slotSpan(plot: Rect): number;
 };
 
 export type ValueAxisScale = {
@@ -95,10 +95,10 @@ export type ValueAxisScale = {
   readonly reversed: boolean;
   readonly numberFormat: string | undefined;
   mapValue(value: number): number;
-  mapScreen(t: number, plot: GeometryBox): number;
-  valueToScreen(value: number, plot: GeometryBox): number;
+  mapScreen(t: number, plot: Rect): number;
+  valueToScreen(value: number, plot: Rect): number;
   zeroValue(): number;
-  zeroScreen(plot: GeometryBox): number;
+  zeroScreen(plot: Rect): number;
 };
 
 export type AxisScale = CategoryAxisScale | ValueAxisScale;
@@ -125,10 +125,10 @@ export type ChartLegendEntry = {
 };
 
 export type ChartLayoutResult = {
-  readonly plotRect: GeometryBox;
-  readonly titleBox?: GeometryBox;
-  readonly legendBox?: GeometryBox;
-  readonly axisTitleBoxes: ReadonlyMap<string, GeometryBox>;
+  readonly plotRect: Rect;
+  readonly titleBox?: Rect;
+  readonly legendBox?: Rect;
+  readonly axisTitleBoxes: ReadonlyMap<string, Rect>;
   readonly labelZones: ReadonlyMap<
     string,
     {

@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import { mergeDataLabels } from "../chart-labels.ts";
@@ -20,7 +20,7 @@ import type {
 } from "./types.ts";
 
 type LabelPlacement = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly align: "left" | "center" | "right";
   readonly verticalAlign: "top" | "middle" | "bottom";
 };
@@ -312,7 +312,7 @@ function sliceLabelBox(options: {
 export function renderDataLabelsSvg(options: {
   readonly parsed: ParsedChart;
   readonly anchors: readonly PlottedPointAnchor[];
-  readonly chartBox: GeometryBox;
+  readonly chartBox: Rect;
   readonly baseChartTextStyle: TextStyle | undefined;
   readonly theme: ThemeContext;
   readonly slideNumber: number;

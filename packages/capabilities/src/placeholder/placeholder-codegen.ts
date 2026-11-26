@@ -17,16 +17,6 @@ const placeholderAllowedPropKeys = new Set([
   "style",
 ]);
 
-const legacyVisualStyleKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
 const placeholderCleanStyleSchema = z
   .strictObject({
     ...layoutStyleSchema.unwrap().shape,
@@ -46,17 +36,6 @@ function validatePlaceholderNativeRef(
   value: unknown,
   ctx: CodegenContext,
 ): void {
-  if (
-    isPlainRecord(value) &&
-    Object.hasOwn(value, "sz") &&
-    value["sz"] !== undefined
-  ) {
-    ctx.fail(
-      "unexpressible-value",
-      "Placeholder.nativePlaceholder.sz is no longer supported; use size",
-      "@nativePlaceholder.sz",
-    );
-  }
   const parsed = nativePlaceholderRefSchema.safeParse(value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -75,16 +54,6 @@ function validatePlaceholderStyle(value: unknown, ctx: CodegenContext): void {
       "Placeholder.style must be a plain object",
       "@style",
     );
-  }
-  for (const [key, entryValue] of Object.entries(value)) {
-    if (entryValue === undefined) continue;
-    if (legacyVisualStyleKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `Placeholder.style does not support legacy property ${JSON.stringify(key)}`,
-        `@style.${key}`,
-      );
-    }
   }
   const parsed = placeholderCleanStyleSchema.safeParse(value);
   if (!parsed.success) {

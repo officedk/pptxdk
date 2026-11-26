@@ -8,44 +8,12 @@ import { slideBackgroundSchema } from "@pptxdk/core/capability";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
 
-const legacyOwnerVisualKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
-const ownerStylePathPattern =
-  /^deck(?:\/(?:section\[[^\]]+\]\/)?slide\[[^\]]+\]|\/slide-master\[[^\]]+\](?:\/slide-layout\[[^\]]+\])?)?$/u;
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
-}
-
-function rejectLegacyOwnerStyleValue(
-  value: unknown,
-  ctx: CodegenContext,
-): undefined {
-  if (!ownerStylePathPattern.test(ctx.path) || !isPlainObject(value)) {
-    return undefined;
-  }
-  for (const [key, entryValue] of Object.entries(value)) {
-    if (entryValue !== undefined && legacyOwnerVisualKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `Owner style does not support legacy property ${JSON.stringify(key)}`,
-        `@style.${key}`,
-      );
-    }
-  }
-  return undefined;
 }
 
 /**
@@ -103,17 +71,6 @@ export function serializeGradientValue(
 export const slideBackgroundCodegen = defineSlideCodegen({
   slideProps: {
     background: (value, ctx) => {
-      if (isPlainObject(value)) {
-        for (const [key, entryValue] of Object.entries(value)) {
-          if (entryValue !== undefined && legacyOwnerVisualKeys.has(key)) {
-            ctx.fail(
-              "unexpressible-value",
-              `Slide.background does not support legacy property ${JSON.stringify(key)}`,
-              key,
-            );
-          }
-        }
-      }
       const parsed = slideBackgroundSchema.safeParse(value);
       if (!parsed.success) {
         ctx.fail(
@@ -125,9 +82,5 @@ export const slideBackgroundCodegen = defineSlideCodegen({
       return expr(ctx.emitValueExpr(parsed.data));
     },
   },
-  valueSerializers: [
-    rejectLegacyOwnerStyleValue,
-    serializeGradientValue,
-    serializeImageDescriptorValue,
-  ],
+  valueSerializers: [serializeGradientValue, serializeImageDescriptorValue],
 });

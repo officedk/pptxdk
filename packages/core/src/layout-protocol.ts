@@ -1,7 +1,6 @@
 import { BuildError, toBuildDiagnostic } from "#/diagnostics.ts";
 import type {
   CapabilityLayoutMeasurement,
-  GeometryBox,
   LayoutLength,
   LayoutStyle,
   Rect,
@@ -160,7 +159,7 @@ export type LayoutSolver = {
   solve(
     onCommit: (
       node: LayoutSolverNode,
-      box: GeometryBox,
+      box: Rect,
       meta?: LayoutCommitMetadata,
     ) => void,
   ): void;

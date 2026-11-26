@@ -1,23 +1,20 @@
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   createResolver,
-  type BuildQuery,
   type Resolution,
   type ResolutionReport,
 } from "@pptxdk/core/build";
-import type { PreviewTransform, PreviewWarning } from "@pptxdk/core/capability";
+import type { PreviewTransform } from "@pptxdk/core/capability";
 import type { CommonNode } from "@pptxdk/core/document";
 import {
   PreviewPageRangeError,
   paint,
   paintOptionsSchema,
-  previewDiagnosticSchema,
   previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
   previewPlaceholderSchema,
-  previewSeveritySchema,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
@@ -59,7 +56,6 @@ export async function preview(
     pages,
     slides: resolution.slides,
     slide: (id: string) => resolution.slide(id),
-    query: resolution.query,
   });
 }
 
@@ -67,35 +63,28 @@ export {
   PreviewPageRangeError,
   paint,
   paintOptionsSchema,
-  previewDiagnosticSchema,
   previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
   previewPlaceholderSchema,
-  previewSeveritySchema,
   screenGeometrySchema,
   screenPointSchema,
 };
 export type {
-  BuildQuery,
   PreviewError,
   PreviewPlaceholder,
   PreviewTransform,
-  PreviewWarning,
   Resolution,
   ResolutionReport,
 };
 export type {
   PaintOptions,
   PaintResult,
-  PreviewDiagnostic,
   PreviewNode,
-  PreviewNodeObservation,
   PreviewOptions,
   PreviewPageResult,
   PreviewResult,
-  PreviewSeverity,
   ScreenGeometry,
   ScreenPoint,
 } from "@pptxdk/preview";

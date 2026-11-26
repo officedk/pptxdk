@@ -38,13 +38,12 @@ export function emitBuildResult(
   options: BuildOptions = {},
 ): BuildResult {
   const emitted = emit(resolution, options);
-  const query = emittedBuildQuery(emitted.report, resolution.query);
+  const query = emittedBuildQuery(emitted.report, resolution);
   return Object.freeze({
     pptx: emitted.pptx,
     report: emitted.report,
     slides: query.slides,
-    slide: (id: string) => query.getSlide(id),
-    query,
+    slide: (id: string) => query.slide(id),
   });
 }
 

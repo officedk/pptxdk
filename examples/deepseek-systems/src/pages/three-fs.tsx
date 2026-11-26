@@ -76,12 +76,15 @@ export function ThreeFsPage() {
           return (
             <Shape
               key={layer.title}
-              x={68}
-              y={y}
-              width={576}
-              height={106}
-              fill={colors.paper}
-              style={{ borderColor: colors.line, borderWidth: 1 }}
+              style={{
+                position: "absolute",
+                left: 68,
+                top: y,
+                width: 576,
+                height: 106,
+                background: colors.paper,
+                border: { color: colors.line, width: 1 },
+              }}
             />
           );
         })}
@@ -98,11 +101,14 @@ export function ThreeFsPage() {
           return (
             <Shape
               key={`accent-${idx}`}
-              x={68}
-              y={y}
-              width={4}
-              height={106}
-              fill={accent}
+              style={{
+                position: "absolute",
+                left: 68,
+                top: y,
+                width: 4,
+                height: 106,
+                background: accent,
+              }}
             />
           );
         })}
@@ -111,11 +117,12 @@ export function ThreeFsPage() {
           return (
             <Text
               key={`title-${idx}`}
-              x={84}
-              y={y + 10}
-              width={368}
-              height={22}
               style={{
+                position: "absolute",
+                left: 84,
+                top: y + 10,
+                width: 368,
+                height: 22,
                 fontSize: 12.5,
                 color: colors.ink,
                 textWrap: "nowrap",
@@ -144,11 +151,12 @@ export function ThreeFsPage() {
           return (
             <Text
               key={`detail-${idx}`}
-              x={84}
-              y={y + 38}
-              width={544}
-              height={60}
               style={{
+                position: "absolute",
+                left: 84,
+                top: y + 38,
+                width: 544,
+                height: 60,
                 fontSize: 11,
                 lineHeight: 16,
                 color: colors.muted,
@@ -205,15 +213,6 @@ export function ThreeFsPage() {
       >
         <Chart
           id="three-fs-chart"
-          x={696}
-          y={274}
-          width={520}
-          height={212}
-          style={{
-            fontFamily: "body",
-            fontSize: 10.5,
-            color: colors.ink,
-          }}
           legend={false}
           axes={{
             category: {
@@ -260,14 +259,25 @@ export function ThreeFsPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 696,
+            top: 274,
+            width: 520,
+            height: 212,
+            fontFamily: "body",
+            fontSize: 10.5,
+            color: colors.ink,
+          }}
         />
         <Rule x={696} y={492} width={520} />
         <Text
-          x={696}
-          y={498}
-          width={520}
-          height={28}
           style={{
+            position: "absolute",
+            left: 696,
+            top: 498,
+            width: 520,
+            height: 28,
             fontSize: 10.5,
             color: colors.muted,
             textWrap: "nowrap",
@@ -280,20 +290,33 @@ export function ThreeFsPage() {
 
       {/* Right bottom: Inference KVCache on 3FS cost-benefit summary */}
       <Shape
-        x={680}
-        y={548}
-        width={552}
-        height={112}
-        fill={colors.surface}
-        style={{ borderColor: colors.line, borderWidth: 1 }}
-      />
-      <Shape x={680} y={548} width={4} height={112} fill={colors.copper} />
-      <Text
-        x={698}
-        y={558}
-        width={520}
-        height={22}
         style={{
+          position: "absolute",
+          left: 680,
+          top: 548,
+          width: 552,
+          height: 112,
+          background: colors.surface,
+          border: { color: colors.line, width: 1 },
+        }}
+      />
+      <Shape
+        style={{
+          position: "absolute",
+          left: 680,
+          top: 548,
+          width: 4,
+          height: 112,
+          background: colors.copper,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 698,
+          top: 558,
+          width: 520,
+          height: 22,
           fontSize: 13,
           color: colors.steel,
           textWrap: "nowrap",
@@ -302,11 +325,12 @@ export function ThreeFsPage() {
         为什么推理服务将 3FS 作为多轮上下文 KVCache 共享层？
       </Text>
       <Text
-        x={698}
-        y={584}
-        width={520}
-        height={64}
         style={{
+          position: "absolute",
+          left: 698,
+          top: 584,
+          width: 520,
+          height: 64,
           fontSize: 11,
           lineHeight: 16,
           color: colors.muted,

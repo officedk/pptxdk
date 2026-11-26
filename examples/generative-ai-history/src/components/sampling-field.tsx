@@ -28,14 +28,17 @@ export function SamplingField({
         <Shape
           key={ratio}
           geometry={preset("ellipse")}
-          x={center - (size * ratio) / 2}
-          y={middle - (size * ratio * 0.68) / 2}
-          width={size * ratio}
-          height={size * ratio * 0.68}
-          fill={transparent}
           style={{
-            borderColor: index === 2 ? colors.sun : ink,
-            borderWidth: index === 2 ? 2 : 1,
+            position: "absolute",
+            left: center - (size * ratio) / 2,
+            top: middle - (size * ratio * 0.68) / 2,
+            width: size * ratio,
+            height: size * ratio * 0.68,
+            background: transparent,
+            border: {
+              color: index === 2 ? colors.sun : ink,
+              width: index === 2 ? 2 : 1,
+            },
             opacity: index === 2 ? 0.9 : 0.35 + index * 0.12,
             rotate: index % 2 === 0 ? -12 : 9,
           }}
@@ -60,27 +63,34 @@ export function SamplingField({
           viewBox: [240, 80],
           fill: false,
         })}
-        x={center - size * 0.3}
-        y={middle - size * 0.075}
-        width={size * 0.6}
-        height={size * 0.15}
-        fill={transparent}
-        style={{ borderColor: colors.cyan, borderWidth: 2 }}
+        style={{
+          position: "absolute",
+          left: center - size * 0.3,
+          top: middle - size * 0.075,
+          width: size * 0.6,
+          height: size * 0.15,
+          background: transparent,
+          border: { color: colors.cyan, width: 2 },
+        }}
       />
       <Shape
-        x={center - 34}
-        y={middle - 34}
-        width={68}
-        height={68}
-        fill={colors.sun}
-        style={{ rotate: 45 }}
+        style={{
+          position: "absolute",
+          left: center - 34,
+          top: middle - 34,
+          width: 68,
+          height: 68,
+          background: colors.sun,
+          rotate: 45,
+        }}
       />
       <Text
-        x={center - 34}
-        y={middle - 39}
-        width={68}
-        height={68}
         style={{
+          position: "absolute",
+          left: center - 34,
+          top: middle - 39,
+          width: 68,
+          height: 68,
           fontFamily: "display",
           fontSize: 39,
           color: colors.indigo,

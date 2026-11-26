@@ -16,11 +16,12 @@ export function OpeningPage() {
   return (
     <Slide id="opening" background={colors.accent}>
       <Text
-        x={82}
-        y={74}
-        width={520}
-        height={30}
         style={{
+          position: "absolute",
+          left: 82,
+          top: 74,
+          width: 520,
+          height: 30,
           fontSize: 16,
           fontWeight: 700,
           letterSpacing: 2,
@@ -29,13 +30,23 @@ export function OpeningPage() {
       >
         DESIGN / IN MOTION
       </Text>
-      <Shape x={82} y={128} width={52} height={6} fill={colors.current} />
-      <Text
-        x={76}
-        y={190}
-        width={660}
-        height={190}
+      <Shape
         style={{
+          position: "absolute",
+          left: 82,
+          top: 128,
+          width: 52,
+          height: 6,
+          background: colors.current,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 76,
+          top: 190,
+          width: 660,
+          height: 190,
           fontSize: 84,
           fontWeight: 700,
           lineHeight: 88,
@@ -46,11 +57,16 @@ export function OpeningPage() {
       </Text>
       <Step n={2}>
         <Text
-          x={82}
-          y={432}
-          width={510}
-          height={68}
-          style={{ fontSize: 21, lineHeight: 30, color: colors.soft }}
+          style={{
+            position: "absolute",
+            left: 82,
+            top: 432,
+            width: 510,
+            height: 68,
+            fontSize: 21,
+            lineHeight: 30,
+            color: colors.soft,
+          }}
           enter={wipe({ from: "left", duration: motion.reveal })}
         >
           Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
@@ -60,59 +76,78 @@ export function OpeningPage() {
       <Step n={1}>
         <Group id="opening-mark" enter={spinIn({ duration: motion.settle })}>
           <Shape
-            x={842}
-            y={150}
-            width={360}
-            height={360}
             geometry={preset("ellipse")}
-            fill={colors.surface}
+            style={{
+              position: "absolute",
+              left: 842,
+              top: 150,
+              width: 360,
+              height: 360,
+              background: colors.surface,
+            }}
           />
           <Shape
-            x={874}
-            y={182}
-            width={296}
-            height={296}
             geometry={preset("ellipse")}
-            fill={colors.accent}
+            style={{
+              position: "absolute",
+              left: 874,
+              top: 182,
+              width: 296,
+              height: 296,
+              background: colors.accent,
+            }}
           />
           <Shape
-            x={962}
-            y={272}
-            width={120}
-            height={120}
             geometry={preset("ellipse")}
-            fill={colors.ink}
+            style={{
+              position: "absolute",
+              left: 962,
+              top: 272,
+              width: 120,
+              height: 120,
+              background: colors.ink,
+            }}
           />
           <Shape
-            x={1012}
-            y={242}
-            width={20}
-            height={180}
-            fill={colors.current}
+            style={{
+              position: "absolute",
+              left: 1012,
+              top: 242,
+              width: 20,
+              height: 180,
+              background: colors.current,
+            }}
           />
           <Shape
-            x={932}
-            y={322}
-            width={180}
-            height={20}
-            fill={colors.current}
+            style={{
+              position: "absolute",
+              left: 932,
+              top: 322,
+              width: 180,
+              height: 20,
+              background: colors.current,
+            }}
           />
         </Group>
       </Step>
       <Shape
-        x={1130}
-        y={568}
-        width={54}
-        height={54}
-        fill={colors.ink}
-        style={{ rotate: 12 }}
+        style={{
+          position: "absolute",
+          left: 1130,
+          top: 568,
+          width: 54,
+          height: 54,
+          background: colors.ink,
+          rotate: 12,
+        }}
       />
       <Text
-        x={82}
-        y={642}
-        width={180}
-        height={28}
         style={{
+          position: "absolute",
+          left: 82,
+          top: 642,
+          width: 180,
+          height: 28,
           fontSize: 15,
           fontFamily: "medium",
           fontWeight: 500,

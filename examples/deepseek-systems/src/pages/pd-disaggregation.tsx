@@ -76,11 +76,12 @@ export function PdDisaggregationPage({
       >
         <Table
           id="pd-comparison-table"
-          x={66}
-          y={168}
-          width={1148}
           columns={[196, 286, 286, 380]}
           style={{
+            position: "absolute",
+            left: 66,
+            top: 168,
+            width: 1148,
             fontFamily: "body",
             fontSize: 10.5,
             color: colors.ink,
@@ -89,7 +90,7 @@ export function PdDisaggregationPage({
           <Row
             style={{
               height: 34,
-              backgroundColor: colors.steel,
+              background: colors.steel,
               color: colors.surface,
               verticalAlign: "middle",
             }}
@@ -100,7 +101,7 @@ export function PdDisaggregationPage({
             <Cell
               style={{
                 padding: [4, 8],
-                backgroundColor: colors.compute,
+                background: colors.compute,
                 color: colors.surface,
               }}
             >
@@ -109,7 +110,7 @@ export function PdDisaggregationPage({
             <Cell
               style={{
                 padding: [4, 8],
-                backgroundColor: colors.comm,
+                background: colors.comm,
                 color: colors.surface,
               }}
             >
@@ -127,7 +128,7 @@ export function PdDisaggregationPage({
                 key={row.dim}
                 style={{
                   height: 39,
-                  backgroundColor: rowBg,
+                  background: rowBg,
                   color: colors.ink,
                   verticalAlign: "middle",
                 }}
@@ -135,9 +136,8 @@ export function PdDisaggregationPage({
                 <Cell
                   style={{
                     padding: [3, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
                     color: colors.steel,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P>{row.dim}</P>
@@ -145,10 +145,9 @@ export function PdDisaggregationPage({
                 <Cell
                   style={{
                     padding: [3, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
-                    backgroundColor: idx === 2 ? colors.computeSoft : rowBg,
+                    background: idx === 2 ? colors.computeSoft : rowBg,
                     color: idx === 2 ? colors.compute : colors.ink,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P>{row.prefill}</P>
@@ -156,10 +155,9 @@ export function PdDisaggregationPage({
                 <Cell
                   style={{
                     padding: [3, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
-                    backgroundColor: idx === 2 ? colors.commSoft : rowBg,
+                    background: idx === 2 ? colors.commSoft : rowBg,
                     color: idx === 2 ? colors.commText : colors.ink,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P>{row.decode}</P>
@@ -167,9 +165,8 @@ export function PdDisaggregationPage({
                 <Cell
                   style={{
                     padding: [3, 8],
-                    borderColor: colors.line,
-                    borderWidth: 1,
                     color: colors.muted,
+                    border: { color: colors.line, width: 1 },
                   }}
                 >
                   <P>{row.reason}</P>
@@ -194,36 +191,42 @@ export function PdDisaggregationPage({
         <Shape
           id="morph-sm-frame"
           morphKey={scope.handle("sm-frame")}
-          x={68}
-          y={490}
-          width={540}
-          height={102}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 490,
+            width: 540,
+            height: 102,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <Shape
           id="morph-sm-mode-tag"
           morphKey={scope.handle("sm-mode-tag")}
-          x={84}
-          y={502}
-          width={248}
-          height={24}
-          fill={colors.compute}
-          text="Prefill 模式 · EP32 (4 节点 32 卡)"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 502,
+            width: 248,
+            height: 24,
+            background: colors.compute,
             fontSize: 11.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          Prefill 模式 · EP32 (4 节点 32 卡)
+        </Shape>
         <Text
           morphKey={scope.handle("sm-ratio-caption")}
-          x={344}
-          y={504}
-          width={250}
-          height={20}
           style={{
+            position: "absolute",
+            left: 344,
+            top: 504,
+            width: 250,
+            height: 20,
             fontFamily: "metric",
             fontSize: 12,
             fontWeight: 700,
@@ -239,43 +242,48 @@ export function PdDisaggregationPage({
         <Shape
           id="morph-sm-compute-bar"
           morphKey={scope.handle("sm-compute-bar")}
-          x={84}
-          y={536}
-          width={410}
-          height={42}
-          fill={colors.compute}
-          text="108 计算 SMs (81.8%) · 密集执行 MLA 注意力与 MoE 矩阵乘"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 536,
+            width: 410,
+            height: 42,
+            background: colors.compute,
             fontSize: 11.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          108 计算 SMs (81.8%) · 密集执行 MLA 注意力与 MoE 矩阵乘
+        </Shape>
         {/* 24 Comm SMs bar (width 94 of 508) */}
         <Shape
           id="morph-sm-comm-bar"
           morphKey={scope.handle("sm-comm-bar")}
-          x={498}
-          y={536}
-          width={96}
-          height={42}
-          fill={colors.comm}
-          text="24 通信 SMs"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 498,
+            top: 536,
+            width: 96,
+            height: 42,
+            background: colors.comm,
             fontSize: 11,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          24 通信 SMs
+        </Shape>
 
         <Text
-          x={68}
-          y={604}
-          width={540}
-          height={44}
           style={{
+            position: "absolute",
+            left: 68,
+            top: 604,
+            width: 540,
+            height: 44,
             fontSize: 11,
             lineHeight: 16,
             color: colors.muted,
@@ -308,61 +316,69 @@ export function PdDisaggregationPage({
           tone="compute"
         />
         <Shape
-          x={782}
-          y={496}
-          width={118}
-          height={36}
-          fill={colors.compute}
-          text="MB-A 注意力计算"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 782,
+            top: 496,
+            width: 118,
+            height: 36,
+            background: colors.compute,
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          MB-A 注意力计算
+        </Shape>
         <Shape
-          x={906}
-          y={496}
-          width={118}
-          height={36}
-          fill={colors.copper}
-          text="MB-B 注意力计算"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 906,
+            top: 496,
+            width: 118,
+            height: 36,
+            background: colors.copper,
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          MB-B 注意力计算
+        </Shape>
         <Shape
-          x={1030}
-          y={496}
-          width={90}
-          height={36}
-          fill={colors.compute}
-          text="MB-A 专家乘"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 1030,
+            top: 496,
+            width: 90,
+            height: 36,
+            background: colors.compute,
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          MB-A 专家乘
+        </Shape>
         <Shape
-          x={1126}
-          y={496}
-          width={88}
-          height={36}
-          fill={colors.copper}
-          text="MB-B 专家乘"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 1126,
+            top: 496,
+            width: 88,
+            height: 36,
+            background: colors.copper,
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          MB-B 专家乘
+        </Shape>
 
         {/* Comm Stream Row */}
         <SemanticTag
@@ -374,69 +390,78 @@ export function PdDisaggregationPage({
           tone="comm"
         />
         <Shape
-          x={782}
-          y={544}
-          width={118}
-          height={36}
-          fill={colors.slot}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
-          text="等待 MB-A 注意力"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 782,
+            top: 544,
+            width: 118,
+            height: 36,
+            background: colors.slot,
+            border: { color: colors.line, width: 1 },
             fontSize: 10,
             color: colors.muted,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          等待 MB-A 注意力
+        </Shape>
         <Shape
-          x={906}
-          y={544}
-          width={118}
-          height={36}
-          fill={colors.comm}
-          text="MB-A Dispatch"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 906,
+            top: 544,
+            width: 118,
+            height: 36,
+            background: colors.comm,
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          MB-A Dispatch
+        </Shape>
         <Shape
-          x={1030}
-          y={544}
-          width={90}
-          height={36}
-          fill={colors.comm}
-          text="MB-B Dispatch"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 1030,
+            top: 544,
+            width: 90,
+            height: 36,
+            background: colors.comm,
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          MB-B Dispatch
+        </Shape>
         <Shape
-          x={1126}
-          y={544}
-          width={88}
-          height={36}
-          fill={colors.comm}
-          text="MB-A Combine"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 1126,
+            top: 544,
+            width: 88,
+            height: 36,
+            background: colors.comm,
             fontSize: 10.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          MB-A Combine
+        </Shape>
 
         <Text
-          x={664}
-          y={596}
-          width={550}
-          height={50}
           style={{
+            position: "absolute",
+            left: 664,
+            top: 596,
+            width: 550,
+            height: 50,
             fontSize: 11,
             lineHeight: 16,
             color: colors.muted,

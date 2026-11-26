@@ -34,17 +34,16 @@ export function InfoCard({
         minHeight: 340,
         padding: 32,
         gap: 20,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.soft,
+        background: colors.surface,
+        border: { color: colors.soft, width: 1 },
         borderRadius: 6,
         ...style,
       }}
     >
-      <Box style={{ width: 44, height: 5, backgroundColor: colors.accent }} />
+      <Box style={{ width: 44, height: 5, background: colors.accent }} />
       <Text
-        height="auto"
         style={{
+          height: "auto",
           fontSize: 60,
           fontFamily: "medium",
           fontWeight: 500,
@@ -55,15 +54,23 @@ export function InfoCard({
       </Text>
       <MotionScope scope={reveal} mode="sequence">
         <Text
-          height="auto"
-          style={{ fontSize: 30, fontWeight: 700, color: colors.ink }}
+          style={{
+            height: "auto",
+            fontSize: 30,
+            fontWeight: 700,
+            color: colors.ink,
+          }}
           enter={wipe({ from: "left", duration: motion.reveal })}
         >
           {title}
         </Text>
         <Text
-          height="auto"
-          style={{ fontSize: 20, lineHeight: 28, color: colors.muted }}
+          style={{
+            height: "auto",
+            fontSize: 20,
+            lineHeight: 28,
+            color: colors.muted,
+          }}
           enter={floatUp({ duration: motion.reveal })}
         >
           {body}

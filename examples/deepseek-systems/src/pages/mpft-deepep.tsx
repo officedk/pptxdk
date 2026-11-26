@@ -54,15 +54,6 @@ export function MpftDeepEpPage() {
       >
         <Chart
           id="deepep-bandwidth-chart"
-          x={64}
-          y={168}
-          width={556}
-          height={252}
-          style={{
-            fontFamily: "body",
-            fontSize: 10.5,
-            color: colors.ink,
-          }}
           legend="top"
           axes={{
             category: {
@@ -108,13 +99,24 @@ export function MpftDeepEpPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 64,
+            top: 168,
+            width: 556,
+            height: 252,
+            fontFamily: "body",
+            fontSize: 10.5,
+            color: colors.ink,
+          }}
         />
         <Text
-          x={68}
-          y={428}
-          width={548}
-          height={32}
           style={{
+            position: "absolute",
+            left: 68,
+            top: 428,
+            width: 548,
+            height: 32,
             fontSize: 10.5,
             lineHeight: 15,
             color: colors.muted,
@@ -160,20 +162,33 @@ export function MpftDeepEpPage() {
 
       {/* Left Bottom footer card: Traffic isolation */}
       <Shape
-        x={48}
-        y={584}
-        width={588}
-        height={76}
-        fill={colors.surface}
-        style={{ borderColor: colors.line, borderWidth: 1 }}
-      />
-      <Shape x={48} y={584} width={4} height={76} fill={colors.comm} />
-      <Text
-        x={64}
-        y={594}
-        width={556}
-        height={20}
         style={{
+          position: "absolute",
+          left: 48,
+          top: 584,
+          width: 588,
+          height: 76,
+          background: colors.surface,
+          border: { color: colors.line, width: 1 },
+        }}
+      />
+      <Shape
+        style={{
+          position: "absolute",
+          left: 48,
+          top: 584,
+          width: 4,
+          height: 76,
+          background: colors.comm,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 594,
+          width: 556,
+          height: 20,
           fontSize: 12.5,
           color: colors.steel,
           textWrap: "nowrap",
@@ -182,11 +197,12 @@ export function MpftDeepEpPage() {
         InfiniBand 虚拟通道 (VL) 硬件级流量隔离：
       </Text>
       <Text
-        x={64}
-        y={616}
-        width={556}
-        height={34}
         style={{
+          position: "absolute",
+          left: 64,
+          top: 616,
+          width: 556,
+          height: 34,
           fontSize: 11,
           lineHeight: 15.5,
           color: colors.muted,
@@ -209,21 +225,25 @@ export function MpftDeepEpPage() {
       >
         {/* Top half of right panel: MPFT Topology Diagram */}
         <Shape
-          x={672}
-          y={170}
-          width={540}
-          height={186}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 672,
+            top: 170,
+            width: 540,
+            height: 186,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
 
         {/* Layer 1: 8 Independent Two-Layer Fat-Tree Planes */}
         <Text
-          x={686}
-          y={178}
-          width={512}
-          height={18}
           style={{
+            position: "absolute",
+            left: 686,
+            top: 178,
+            width: 512,
+            height: 18,
             fontSize: 11,
             color: colors.commText,
             textWrap: "nowrap",
@@ -235,14 +255,14 @@ export function MpftDeepEpPage() {
         {[0, 1, 2, 3, 4, 5, 6, 7].map((plane) => (
           <Shape
             key={plane}
-            x={686 + plane * 64}
-            y={200}
-            width={58}
-            height={34}
-            fill={plane % 2 === 0 ? colors.comm : colors.commSoft}
-            style={{ borderColor: colors.comm, borderWidth: 1 }}
-            text={`Plane ${plane}`}
-            textStyle={{
+            style={{
+              position: "absolute",
+              left: 686 + plane * 64,
+              top: 200,
+              width: 58,
+              height: 34,
+              background: plane % 2 === 0 ? colors.comm : colors.commSoft,
+              border: { color: colors.comm, width: 1 },
               fontFamily: "metric",
               fontSize: 10,
               fontWeight: 700,
@@ -250,21 +270,21 @@ export function MpftDeepEpPage() {
               align: "center",
               verticalAlign: "middle",
             }}
-          />
+          >{`Plane ${plane}`}</Shape>
         ))}
 
         {/* Layer 2: 8x 400G IB NICs paired 1:1 with 8x H800 GPUs */}
         {[0, 1, 2, 3, 4, 5, 6, 7].map((gpu) => (
           <Shape
             key={`gpu-${gpu}`}
-            x={686 + gpu * 64}
-            y={246}
-            width={58}
-            height={44}
-            fill={colors.surface}
-            style={{ borderColor: colors.compute, borderWidth: 1 }}
-            text={`GPU ${gpu}\nNIC ${gpu}`}
-            textStyle={{
+            style={{
+              position: "absolute",
+              left: 686 + gpu * 64,
+              top: 246,
+              width: 58,
+              height: 44,
+              background: colors.surface,
+              border: { color: colors.compute, width: 1 },
               fontFamily: "metric",
               fontSize: 9.5,
               fontWeight: 700,
@@ -272,24 +292,27 @@ export function MpftDeepEpPage() {
               align: "center",
               verticalAlign: "middle",
             }}
-          />
+          >{`GPU ${gpu}\nNIC ${gpu}`}</Shape>
         ))}
 
         {/* Layer 3: Intra-node NVLink / NVSwitch fabric */}
         <Shape
-          x={686}
-          y={302}
-          width={506}
-          height={42}
-          fill={colors.compute}
-          text="机内全互连 NVLink / NVSwitch 交换矩阵 (400 GB/s 双向带宽 · 承担跨网卡平面转发)"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 686,
+            top: 302,
+            width: 506,
+            height: 42,
+            background: colors.compute,
             fontSize: 11.5,
             color: colors.surface,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          机内全互连 NVLink / NVSwitch 交换矩阵 (400 GB/s 双向带宽 ·
+          承担跨网卡平面转发)
+        </Shape>
 
         {/* Divider */}
         <Rule x={672} y={368} width={540} />
@@ -300,12 +323,15 @@ export function MpftDeepEpPage() {
           return (
             <Shape
               key={mode.title}
-              x={672}
-              y={boxY}
-              width={540}
-              height={124}
-              fill={colors.paper}
-              style={{ borderColor: colors.line, borderWidth: 1 }}
+              style={{
+                position: "absolute",
+                left: 672,
+                top: boxY,
+                width: 540,
+                height: 124,
+                background: colors.paper,
+                border: { color: colors.line, width: 1 },
+              }}
             />
           );
         })}
@@ -315,11 +341,14 @@ export function MpftDeepEpPage() {
           return (
             <Shape
               key={`bar-${idx}`}
-              x={672}
-              y={boxY}
-              width={4}
-              height={124}
-              fill={accent}
+              style={{
+                position: "absolute",
+                left: 672,
+                top: boxY,
+                width: 4,
+                height: 124,
+                background: accent,
+              }}
             />
           );
         })}
@@ -328,11 +357,12 @@ export function MpftDeepEpPage() {
           return (
             <Text
               key={`title-${idx}`}
-              x={688}
-              y={boxY + 10}
-              width={340}
-              height={22}
               style={{
+                position: "absolute",
+                left: 688,
+                top: boxY + 10,
+                width: 340,
+                height: 22,
                 fontSize: 13,
                 color: colors.ink,
                 textWrap: "nowrap",
@@ -361,11 +391,12 @@ export function MpftDeepEpPage() {
           return (
             <Text
               key={`metrics-${idx}`}
-              x={688}
-              y={boxY + 36}
-              width={508}
-              height={20}
               style={{
+                position: "absolute",
+                left: 688,
+                top: boxY + 36,
+                width: 508,
+                height: 20,
                 fontSize: 11.5,
                 color:
                   mode.tone === "compute" ? colors.compute : colors.commText,
@@ -381,11 +412,12 @@ export function MpftDeepEpPage() {
           return (
             <Text
               key={`desc-${idx}`}
-              x={688}
-              y={boxY + 60}
-              width={510}
-              height={54}
               style={{
+                position: "absolute",
+                left: 688,
+                top: boxY + 60,
+                width: 510,
+                height: 54,
                 fontSize: 11,
                 lineHeight: 16,
                 color: colors.muted,

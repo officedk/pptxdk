@@ -987,15 +987,35 @@ function textBoxVisualStyle(
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
 ): NonNullable<TextDeclarationProps["style"]> {
-  const { startArrow, endArrow, ...supportedVisualStyle } = appearanceStyle;
-  if (startArrow !== undefined || endArrow !== undefined) {
+  const {
+    startArrow,
+    endArrow,
+    border: rawBorder,
+    ...restVisualStyle
+  } = appearanceStyle;
+  let border: NonNullable<TextDeclarationProps["style"]>["border"];
+  let hasHeadArrow = startArrow !== undefined;
+  let hasTailArrow = endArrow !== undefined;
+  if (rawBorder === "none") {
+    border = "none";
+  } else if (rawBorder !== undefined) {
+    const {
+      startArrow: borderStartArrow,
+      endArrow: borderEndArrow,
+      ...plainBorder
+    } = rawBorder;
+    if (borderStartArrow !== undefined) hasHeadArrow = true;
+    if (borderEndArrow !== undefined) hasTailArrow = true;
+    border = plainBorder;
+  }
+  if (hasHeadArrow || hasTailArrow) {
     diagnostics.push({
       code: "unsupported-mechanism",
       category: "unsupported",
       disposition: "omitted",
       location,
       namespaceUri: A_NS,
-      localName: startArrow !== undefined ? "headEnd" : "tailEnd",
+      localName: hasHeadArrow ? "headEnd" : "tailEnd",
       mechanismHint: "textbox-line-arrow",
     });
   }
@@ -1039,7 +1059,8 @@ function textBoxVisualStyle(
   }
 
   return {
-    ...supportedVisualStyle,
+    ...restVisualStyle,
+    ...(border === undefined ? {} : { border }),
     ...(borderRadius === undefined ? {} : { borderRadius }),
     ...(rotate === undefined ? {} : { rotate }),
   };
@@ -1158,7 +1179,7 @@ export function readTextBoxSp(
     return { diagnostics };
   }
 
-  const visualStyle = textBoxVisualStyle(
+  const rawVisualStyle = textBoxVisualStyle(
     visuals.style,
     visuals.geometry,
     { width: visuals.transform.width, height: visuals.transform.height },
@@ -1166,6 +1187,19 @@ export function readTextBoxSp(
     location,
     diagnostics,
   );
+  // Free text boxes are transparent and borderless by default; strip default <a:noFill/> / <a:ln><a:noFill/></a:ln>.
+  const {
+    background: rawBg,
+    border: rawBorder,
+    ...restFreeVisuals
+  } = rawVisualStyle;
+  const visualStyle: NonNullable<TextDeclarationProps["style"]> = {
+    ...restFreeVisuals,
+    ...(rawBg === undefined || rawBg === "none" ? {} : { background: rawBg }),
+    ...(rawBorder === undefined || rawBorder === "none"
+      ? {}
+      : { border: rawBorder }),
+  };
 
   const imported = readRichTextBody(txBody, part, slideIndex, diagnostics);
   const { boxStyle, singleText, paragraphsToPopulate } =
@@ -1174,11 +1208,14 @@ export function readTextBoxSp(
   const props: TextDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(link === undefined ? {} : { link }),
-    x: visuals.transform.x,
-    y: visuals.transform.y,
-    width: visuals.transform.width,
-    height: visuals.transform.height,
-    ...(Object.keys(boxStyle).length === 0 ? {} : { style: boxStyle }),
+    style: {
+      position: "absolute",
+      left: visuals.transform.x,
+      top: visuals.transform.y,
+      width: visuals.transform.width,
+      height: visuals.transform.height,
+      ...boxStyle,
+    },
   };
 
   const node = createTextNode(props);
@@ -1285,17 +1322,19 @@ export function readTextPlaceholderSp(
       }
     | undefined;
   let rotate: number | undefined;
+  let flipH: true | undefined;
+  let flipV: true | undefined;
   let fallbackUnits = { w: 0, h: 0 };
   const xfrm = spPr.child(A_NS, "xfrm");
   if (xfrm !== undefined) {
     const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
     const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
-    if (
-      parsedXfrm.success &&
-      parsedXfrm.data.rot !== undefined &&
-      parsedXfrm.data.rot !== 0
-    ) {
-      rotate = parsedXfrm.data.rot / 60_000;
+    if (parsedXfrm.success) {
+      if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
+        rotate = parsedXfrm.data.rot / 60_000;
+      }
+      if (parsedXfrm.data.flipH === true) flipH = true;
+      if (parsedXfrm.data.flipV === true) flipV = true;
     }
     const off = xfrm.child(A_NS, "off");
     const ext = xfrm.child(A_NS, "ext");
@@ -1336,9 +1375,24 @@ export function readTextPlaceholderSp(
     context.masterPlaceholders,
     nativeRef.type,
   );
-  const inheritedWidth = layoutPlaceholder?.width ?? masterPlaceholder?.width;
-  const inheritedHeight =
-    layoutPlaceholder?.height ?? masterPlaceholder?.height;
+  const layoutPhWidth =
+    typeof layoutPlaceholder?.style?.width === "number"
+      ? layoutPlaceholder.style.width
+      : undefined;
+  const layoutPhHeight =
+    typeof layoutPlaceholder?.style?.height === "number"
+      ? layoutPlaceholder.style.height
+      : undefined;
+  const masterPhWidth =
+    typeof masterPlaceholder?.style?.width === "number"
+      ? masterPlaceholder.style.width
+      : undefined;
+  const masterPhHeight =
+    typeof masterPlaceholder?.style?.height === "number"
+      ? masterPlaceholder.style.height
+      : undefined;
+  const inheritedWidth = layoutPhWidth ?? masterPhWidth;
+  const inheritedHeight = layoutPhHeight ?? masterPhHeight;
   const inheritedPlaceholderBox =
     inheritedWidth !== undefined && inheritedHeight !== undefined
       ? { width: inheritedWidth, height: inheritedHeight }
@@ -1376,9 +1430,24 @@ export function readTextPlaceholderSp(
   const { boxStyle, singleText, paragraphsToPopulate } =
     flattenImportedTextBody(imported, visualStyle);
 
+  const combinedStyle: NonNullable<TextDeclarationProps["style"]> = {
+    ...(localBox === undefined
+      ? {}
+      : {
+          position: "absolute",
+          left: localBox.x,
+          top: localBox.y,
+          width: localBox.width,
+          height: localBox.height,
+        }),
+    ...(flipH === undefined ? {} : { flipH }),
+    ...(flipV === undefined ? {} : { flipV }),
+    ...boxStyle,
+  };
+
   let validatedStyle: TextDeclarationProps["style"] | undefined;
-  if (Object.keys(boxStyle).length > 0) {
-    const parsedStyle = placeholderStyleSchema.safeParse(boxStyle);
+  if (Object.keys(combinedStyle).length > 0) {
+    const parsedStyle = placeholderStyleSchema.safeParse(combinedStyle);
     if (parsedStyle.success) {
       validatedStyle = parsedStyle.data;
     } else {
@@ -1398,7 +1467,6 @@ export function readTextPlaceholderSp(
     ...(link === undefined ? {} : { link }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
     nativePlaceholder: nativeRef,
-    ...localBox,
     ...(validatedStyle === undefined ? {} : { style: validatedStyle }),
   };
 

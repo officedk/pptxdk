@@ -6,7 +6,7 @@ import {
   masterTextStylesSchema,
   placeholderOrientSchema,
   placeholderRoleSchema,
-  placeholderSzSchema,
+  placeholderSizeSchema,
   schemeColorNameSchema,
   slideLayoutTypeSchema,
   type ColorMap,
@@ -544,19 +544,13 @@ function readPlaceholderSpList(
       : "obj";
     const idxParsed = ooxmlNonNegativeIntSchema.safeParse(ph.attr("idx"));
     const idx = idxParsed.success ? idxParsed.data : undefined;
-    const szParsed = placeholderSzSchema.safeParse(ph.attr("sz"));
+    const sizeParsed = placeholderSizeSchema.safeParse(ph.attr("sz"));
     const orientParsed = placeholderOrientSchema.safeParse(ph.attr("orient"));
     const customPromptParsed = ooxmlBoolSchema.safeParse(
       ph.attr("hasCustomPrompt"),
     );
 
-    let x: number | undefined;
-    let y: number | undefined;
-    let width: number | undefined;
-    let height: number | undefined;
     let geometry: Geometry | undefined;
-    let flipH: boolean | undefined;
-    let flipV: boolean | undefined;
     const styleProps: Record<string, unknown> = {};
     const spPr = sp.child(P_NS, "spPr");
     if (spPr !== undefined) {
@@ -574,13 +568,7 @@ function readPlaceholderSpList(
         location: phLocation,
         diagnostics,
       });
-      x = importedSpPr.x;
-      y = importedSpPr.y;
-      width = importedSpPr.width;
-      height = importedSpPr.height;
       geometry = importedSpPr.geometry;
-      flipH = importedSpPr.flipH;
-      flipV = importedSpPr.flipV;
       if (importedSpPr.style !== undefined) {
         Object.assign(styleProps, importedSpPr.style);
       }
@@ -692,19 +680,13 @@ function readPlaceholderSpList(
       type: phType,
       ...(explicitType ? {} : { explicitType: false }),
       ...(idx === undefined ? {} : { idx }),
-      ...(szParsed.success ? { sz: szParsed.data } : {}),
+      ...(sizeParsed.success ? { size: sizeParsed.data } : {}),
       ...(orientParsed.success ? { orient: orientParsed.data } : {}),
       ...(customPromptParsed.success && customPromptParsed.data
         ? { hasCustomPrompt: true }
         : {}),
       ...(name === undefined ? {} : { name }),
-      ...(x === undefined ? {} : { x }),
-      ...(y === undefined ? {} : { y }),
-      ...(width === undefined ? {} : { width }),
-      ...(height === undefined ? {} : { height }),
       ...(geometry === undefined ? {} : { geometry }),
-      ...(flipH ? { flipH: true } : {}),
-      ...(flipV ? { flipV: true } : {}),
       ...(style === undefined ? {} : { style }),
       ...(listStyles === undefined ? {} : { listStyles }),
       ...(promptText === undefined ? {} : { promptText }),

@@ -415,7 +415,7 @@ function resolveSlideFooterModel(args: {
     const defaults = slotDefaultMeta[slot];
     const slideStyleSpec: FooterPlaceholderSpec | undefined =
       slideOverride.explicit && slideOverride.style !== undefined
-        ? { style: slideOverride.style as FooterPlaceholderSpec["style"] }
+        ? { style: slideOverride.style }
         : undefined;
     const box = resolveBoxFromSpecs(
       slot,
@@ -954,21 +954,25 @@ function readFooterPlaceholderImport(
       existingRaw === undefined
         ? {}
         : footerPlaceholdersSchema.parse(existingRaw);
-    const spec: FooterPlaceholderSpec = {
-      ...(box === undefined
-        ? {}
+    const specStyle = mergeFooterStyle(
+      box === undefined
+        ? undefined
         : {
-            x: box.x,
-            y: box.y,
+            position: "absolute",
+            left: box.x,
+            top: box.y,
             width: box.width,
             height: box.height,
-          }),
+          },
+      style,
+    ) as FooterPlaceholderSpec["style"];
+    const spec: FooterPlaceholderSpec = {
       ...(parsedPh.data.idx === undefined ? {} : { idx: parsedPh.data.idx }),
       ...(parsedPh.data.sz === undefined ? {} : { size: parsedPh.data.sz }),
       ...(slot !== "slideNumber" && combinedText !== ""
         ? { text: combinedText }
         : {}),
-      ...(style === undefined ? {} : { style }),
+      ...(specStyle === undefined ? {} : { style: specStyle }),
       // Imported master/layout footer templates only appear on slides that explicitly realize them.
       visible: false,
     };

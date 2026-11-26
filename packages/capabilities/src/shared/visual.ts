@@ -218,7 +218,10 @@ export const lineEndStyleKeys = Object.keys(
   lineEndStyleSchema.unwrap().shape,
 ) as readonly (keyof LineEndStyle)[];
 
-export type ShapeVisualStyle = CoreVisualStyle & LineEndStyle;
+export type ShapeVisualStyle = Omit<CoreVisualStyle, "border"> &
+  LineEndStyle & {
+    readonly border?: ShapeBorderValue;
+  };
 
 export const visualStyleKeys = Object.keys(
   visualStyleSchema.unwrap().shape,
@@ -1757,9 +1760,8 @@ export function readSpPrAppearance(
   diagnostics: ImportDiagnostic[],
 ): ImportedSpPrAppearance {
   let geometry: Geometry | undefined;
-  let backgroundColor: ColorValue | undefined;
-  let backgroundImage: ShapeVisualStyle["backgroundImage"];
-  let opacity: number | undefined;
+  let background: CoreVisualStyle["background"];
+  let hasNoFill = false;
   let border: ImportedLineBorder = {};
   let effects: ReturnType<typeof readEffectList> = {};
 
@@ -1789,18 +1791,21 @@ export function readSpPrAppearance(
         );
         break;
       case "noFill":
+        hasNoFill = true;
         break;
       case "solidFill":
-        backgroundColor = readDrawingColor(child, location, diagnostics);
+        background = readDrawingColor(child, location, diagnostics);
         break;
       case "gradFill":
-        backgroundImage = readGradientFill(child, location, diagnostics);
+        background = readGradientFill(child, location, diagnostics);
         break;
       case "blipFill": {
         const blip = readBlipFill(child, pkg, location, diagnostics);
         if (blip !== undefined) {
-          backgroundImage = { image: blip.image };
-          if (blip.opacity !== undefined) opacity = blip.opacity;
+          background = {
+            image: blip.image,
+            ...(blip.opacity === undefined ? {} : { opacity: blip.opacity }),
+          };
         }
         break;
       }
@@ -1827,23 +1832,33 @@ export function readSpPrAppearance(
     }
   }
 
+  const resolvedBackground = background ?? (hasNoFill ? "none" : undefined);
+  const resolvedBorder: ShapeBorderValue | undefined =
+    border.borderColor !== undefined
+      ? {
+          color: border.borderColor,
+          ...(border.borderWidth === undefined
+            ? {}
+            : { width: border.borderWidth }),
+          ...(border.borderStyle === undefined
+            ? {}
+            : { style: border.borderStyle }),
+          ...(border.startArrow === undefined
+            ? {}
+            : { startArrow: border.startArrow }),
+          ...(border.endArrow === undefined
+            ? {}
+            : { endArrow: border.endArrow }),
+        }
+      : border.noFill === true
+        ? "none"
+        : undefined;
+
   const style: ShapeVisualStyle = {
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
-    ...(backgroundImage === undefined ? {} : { backgroundImage }),
-    ...(border.borderColor === undefined
+    ...(resolvedBackground === undefined
       ? {}
-      : { borderColor: border.borderColor }),
-    ...(border.borderWidth === undefined
-      ? {}
-      : { borderWidth: border.borderWidth }),
-    ...(border.borderStyle === undefined
-      ? {}
-      : { borderStyle: border.borderStyle }),
-    ...(border.startArrow === undefined
-      ? {}
-      : { startArrow: border.startArrow }),
-    ...(border.endArrow === undefined ? {} : { endArrow: border.endArrow }),
-    ...(opacity === undefined ? {} : { opacity }),
+      : { background: resolvedBackground }),
+    ...(resolvedBorder === undefined ? {} : { border: resolvedBorder }),
     ...(effects.boxShadow === undefined
       ? {}
       : { boxShadow: effects.boxShadow }),
@@ -1897,6 +1912,8 @@ export function readSpPrVisuals(
   const style: ShapeVisualStyle = {
     ...appearance.style,
     ...(transform.rotate === undefined ? {} : { rotate: transform.rotate }),
+    ...(transform.flipH === true ? { flipH: true } : {}),
+    ...(transform.flipV === true ? { flipV: true } : {}),
   };
 
   return {

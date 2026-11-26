@@ -762,8 +762,30 @@ export function readShapeSp(
         })()
       : undefined;
 
+  const { border: rawBorder, ...restVisualStyle } = visuals.style;
+  const effectiveVisualStyle =
+    rawBorder === "none" ? restVisualStyle : visuals.style;
+
+  const singlePlainTextStyle: Omit<ParagraphStyle, "list"> | undefined =
+    hasEffectiveText &&
+    singlePlainRun !== undefined &&
+    singleParagraph !== undefined
+      ? (() => {
+          const { list: _list, ...restPStyle } = singleParagraph.style;
+          return {
+            ...restPStyle,
+            ...singlePlainRun.style,
+          };
+        })()
+      : undefined;
+
   const shapeStyle: NonNullable<ShapeDeclarationProps["style"]> = {
-    ...visuals.style,
+    position: "absolute",
+    left: mappedBox.x,
+    top: mappedBox.y,
+    width: mappedBox.width,
+    height: mappedBox.height,
+    ...effectiveVisualStyle,
     ...(hasEffectiveTextBody && importedText?.paddingTop !== undefined
       ? { paddingTop: importedText.paddingTop }
       : {}),
@@ -782,41 +804,22 @@ export function readShapeSp(
     ...(hasEffectiveTextBody && importedText?.textWrap !== undefined
       ? { textWrap: importedText.textWrap }
       : {}),
+    ...singlePlainTextStyle,
     ...emptyParagraphTextStyle,
   };
-
-  const singleTextStyle: TextStyle | undefined =
-    hasEffectiveText &&
-    singlePlainRun !== undefined &&
-    singleParagraph !== undefined
-      ? {
-          ...singleParagraph.style,
-          ...singlePlainRun.style,
-        }
-      : undefined;
 
   const props: ShapeDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(link === undefined ? {} : { link }),
     ...(visuals.geometry === undefined ? {} : { geometry: visuals.geometry }),
-    ...(visuals.transform.flipH ? { flipH: true } : {}),
-    ...(visuals.transform.flipV ? { flipV: true } : {}),
-    x: mappedBox.x,
-    y: mappedBox.y,
-    width: mappedBox.width,
-    height: mappedBox.height,
-    ...(Object.keys(shapeStyle).length === 0 ? {} : { style: shapeStyle }),
-    ...(hasEffectiveText && singlePlainRun !== undefined
-      ? { text: singlePlainRun.text }
-      : {}),
-    ...(singleTextStyle !== undefined && Object.keys(singleTextStyle).length > 0
-      ? { textStyle: singleTextStyle }
-      : {}),
+    style: shapeStyle,
   };
 
   const node = createShapeNode(props);
   if (hasStyledEmptyParagraph) {
     node.content("");
+  } else if (hasEffectiveText && singlePlainRun !== undefined) {
+    node.content(singlePlainRun.text);
   } else if (
     hasEffectiveText &&
     importedText !== undefined &&

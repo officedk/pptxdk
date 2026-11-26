@@ -151,7 +151,7 @@ export function readNvPrPlaceholder(
     type: parsedRole.data,
     explicitType,
     ...(idxParsed.success ? { idx: idxParsed.data } : {}),
-    ...(rawPh["sz"] !== undefined ? { sz: rawPh["sz"] } : {}),
+    ...(rawPh["sz"] !== undefined ? { size: rawPh["sz"] } : {}),
     ...(rawPh["orient"] !== undefined ? { orient: rawPh["orient"] } : {}),
     ...(hasPromptParsed.success && hasPromptParsed.data
       ? { hasCustomPrompt: true }

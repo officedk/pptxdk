@@ -514,7 +514,9 @@ describe("multi-ring doughnut charts", () => {
   });
 
   it("rejects independent categories outside doughnut and malformed per-ring domains", async () => {
-    const base = { x: 0, y: 0, width: 200, height: 120 } as const;
+    const base = {
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
+    } as const;
     const invalidCases: {
       readonly id: string;
       readonly code?: string;

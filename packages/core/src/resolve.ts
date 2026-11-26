@@ -19,6 +19,7 @@ import {
   CapabilityError,
   capabilityErrorToDiagnostic,
   toBuildDiagnostic,
+  zodIssueToBuildDiagnostic,
 } from "#/diagnostics.ts";
 import {
   LayoutPass,
@@ -654,18 +655,12 @@ function resolveSlides(
     const parsedMaster = slideMasterDataPropsSchema.safeParse(masterDataInput);
     if (!parsedMaster.success) {
       const firstIssue = parsedMaster.error.issues[0];
-      const issueField =
-        firstIssue !== undefined && firstIssue.path.length > 0
-          ? firstIssue.path.map(String).join(".")
-          : undefined;
       throw new BuildError([
-        diagnostic(
+        zodIssueToBuildDiagnostic(
           masterPath,
-          issueField?.startsWith("style")
-            ? "invalid-style"
-            : "invalid-slide-master",
-          firstIssue?.message ?? "Invalid SlideMaster declaration",
-          issueField === undefined ? undefined : { field: issueField },
+          "invalid-slide-master",
+          "Invalid SlideMaster declaration",
+          firstIssue,
         ),
       ]);
     }
@@ -866,18 +861,12 @@ function resolveSlides(
         slideLayoutDataPropsSchema.safeParse(layoutDataInput);
       if (!parsedLayout.success) {
         const firstIssue = parsedLayout.error.issues[0];
-        const issueField =
-          firstIssue !== undefined && firstIssue.path.length > 0
-            ? firstIssue.path.map(String).join(".")
-            : undefined;
         throw new BuildError([
-          diagnostic(
+          zodIssueToBuildDiagnostic(
             rawLayoutPath,
-            issueField?.startsWith("style")
-              ? "invalid-style"
-              : "invalid-slide-layout",
-            firstIssue?.message ?? "Invalid SlideLayout declaration",
-            issueField === undefined ? undefined : { field: issueField },
+            "invalid-slide-layout",
+            "Invalid SlideLayout declaration",
+            firstIssue,
           ),
         ]);
       }
@@ -2499,11 +2488,12 @@ function buildSlidePlaceholderContexts(args: {
         const parsed = nativePlaceholderRefSchema.safeParse(rawNativePh);
         if (!parsed.success) {
           diagnostics.push(
-            diagnostic(
+            zodIssueToBuildDiagnostic(
               childPath,
               "invalid-slide-placeholder",
-              parsed.error.issues[0]?.message ??
-                "Invalid nativePlaceholder specification",
+              "Invalid nativePlaceholder specification",
+              parsed.error.issues[0],
+              "nativePlaceholder",
             ),
           );
           return;
@@ -2573,7 +2563,7 @@ function buildSlidePlaceholderContexts(args: {
         return;
       }
 
-      const nativeRefSize = layoutPlaceholder?.size ?? layoutPlaceholder?.sz;
+      const nativeRefSize = layoutPlaceholder?.size;
       const nativeRef =
         parsedNativePh ??
         ({
@@ -3350,7 +3340,7 @@ function buildResolvedPlaceholders(
           : styleValue;
     }
     const idx = spec.idx ?? masterPh?.idx;
-    const size = spec.size ?? spec.sz ?? masterPh?.size ?? masterPh?.sz;
+    const size = spec.size ?? masterPh?.size;
     result.push({
       key,
       type: spec.type,
@@ -3386,12 +3376,8 @@ function deriveFooterPlaceholdersFromMap(
       spec.style !== undefined || spec.listStyles?.[1] !== undefined
         ? { ...spec.style, ...spec.listStyles?.[1] }
         : undefined;
-    const sizeVal = spec.size ?? spec.sz;
+    const sizeVal = spec.size;
     const candidate = {
-      ...(spec.x === undefined ? {} : { x: spec.x }),
-      ...(spec.y === undefined ? {} : { y: spec.y }),
-      ...(spec.width === undefined ? {} : { width: spec.width }),
-      ...(spec.height === undefined ? {} : { height: spec.height }),
       ...(spec.idx === undefined ? {} : { idx: spec.idx }),
       ...(sizeVal === "full" || sizeVal === "half" || sizeVal === "quarter"
         ? { size: sizeVal }

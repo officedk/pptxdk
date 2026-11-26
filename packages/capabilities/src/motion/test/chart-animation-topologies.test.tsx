@@ -482,10 +482,13 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`shared-combo-${by}`}
               name={`shared-combo-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
               {...sharedCombo}
               enter={fade({ by, duration: 100 })}
             />
@@ -566,10 +569,13 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`mixed-domain-${by}`}
               name={`mixed-domain-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
               {...mixedDomainCombo}
               enter={fade({ by, duration: 100 })}
             />

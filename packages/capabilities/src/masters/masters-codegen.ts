@@ -15,34 +15,6 @@ import {
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
 
-const legacyPlaceholderSpecKeys = new Set([
-  "x",
-  "y",
-  "width",
-  "height",
-  "flipH",
-  "flipV",
-  "sz",
-]);
-
-const legacyPlaceholderVisualKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
-const legacyFooterPlaceholderKeys = new Set([
-  "x",
-  "y",
-  "width",
-  "height",
-  "sz",
-]);
-
 const masterOrLayoutPathPattern =
   /^deck\/slide-master\[[^\]]+\](?:\/slide-layout\[[^\]]+\])?$/u;
 
@@ -61,13 +33,6 @@ function serializePlaceholderStyleValue(
   const entries: [string, unknown][] = [];
   for (const [key, value] of Object.entries(style)) {
     if (value === undefined) continue;
-    if (legacyPlaceholderVisualKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `Placeholder.style does not support legacy property ${JSON.stringify(key)}`,
-        `@placeholders.style.${key}`,
-      );
-    }
     if (key === "background") {
       const serializedImage = serializeImageDescriptorValue(value, ctx);
       entries.push([key, serializedImage ?? value]);
@@ -88,17 +53,6 @@ function serializeMasterOrLayoutPlaceholderSpec(
     !placeholderRoleSchema.safeParse(value["type"]).success
   ) {
     return undefined;
-  }
-
-  for (const [key, entryValue] of Object.entries(value)) {
-    if (entryValue === undefined) continue;
-    if (legacyPlaceholderSpecKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `Placeholder spec does not support legacy property ${JSON.stringify(key)}; use size and style`,
-        `@placeholders.${key}`,
-      );
-    }
   }
 
   const parsed = layoutPlaceholderSpecSchema.safeParse(value);
@@ -144,23 +98,6 @@ function serializeFooterPlaceholdersValue(
       "unexpressible-value",
       `Invalid footerPlaceholders declaration: ${parsed.error.issues[0]?.message ?? "invalid value"}`,
     );
-  }
-  if (isPlainRecord(value)) {
-    for (const [slotKey, slotSpec] of Object.entries(value)) {
-      if (!isPlainRecord(slotSpec)) continue;
-      for (const [propKey, propValue] of Object.entries(slotSpec)) {
-        if (
-          propValue !== undefined &&
-          legacyFooterPlaceholderKeys.has(propKey)
-        ) {
-          ctx.fail(
-            "unexpressible-value",
-            `footerPlaceholders.${slotKey} does not support legacy property ${JSON.stringify(propKey)}; use size and style`,
-            `${slotKey}.${propKey}`,
-          );
-        }
-      }
-    }
   }
   return expr(ctx.emitValueExpr(value));
 }

@@ -69,7 +69,6 @@ export type {
   PlaceholderOrient,
   PlaceholderSize,
   PlaceholderStyle,
-  PlaceholderSz,
   RadialGradient,
   Rect,
   ResolvedFooter,

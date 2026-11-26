@@ -1,5 +1,6 @@
 import {
   CapabilityError,
+  resolvePlaceholderBoxFromLayers,
   type CapabilityInput,
   type LayoutPlaceholderSpec,
   type Rect,
@@ -2820,17 +2821,18 @@ function buildOwnerMotionSteps(
         }
         spid = entry.spid;
         targetName = entry.name;
+        const resolvedBox = resolvePlaceholderBoxFromLayers([entry.spec]);
         if (
-          entry.spec.x !== undefined &&
-          entry.spec.y !== undefined &&
-          entry.spec.width !== undefined &&
-          entry.spec.height !== undefined
+          typeof resolvedBox.x === "number" &&
+          typeof resolvedBox.y === "number" &&
+          typeof resolvedBox.width === "number" &&
+          typeof resolvedBox.height === "number"
         ) {
           box = {
-            x: entry.spec.x,
-            y: entry.spec.y,
-            width: entry.spec.width,
-            height: entry.spec.height,
+            x: resolvedBox.x,
+            y: resolvedBox.y,
+            width: resolvedBox.width,
+            height: resolvedBox.height,
           };
         }
       } else {

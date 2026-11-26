@@ -76,10 +76,6 @@ export type ContentPlaceholderRole = z.infer<typeof placeholderRoleSchema>;
 export const placeholderSizeSchema = z.enum(["full", "half", "quarter"]);
 export type PlaceholderSize = z.infer<typeof placeholderSizeSchema>;
 
-/** Transitional aliases retained until Ticket 11. */
-export const placeholderSzSchema = placeholderSizeSchema;
-export type PlaceholderSz = PlaceholderSize;
-
 export const placeholderOrientSchema = z.enum(["horz", "vert"]);
 export type PlaceholderOrient = z.infer<typeof placeholderOrientSchema>;
 
@@ -124,17 +120,10 @@ const basePlaceholderSpecSchema = z.strictObject({
   explicitType: z.boolean().optional(),
   idx: z.number().int().nonnegative().optional(),
   size: placeholderSizeSchema.optional(),
-  sz: placeholderSzSchema.optional(),
   orient: placeholderOrientSchema.optional(),
   hasCustomPrompt: z.boolean().optional(),
   name: z.string().optional(),
-  x: z.number().finite().optional(),
-  y: z.number().finite().optional(),
-  width: z.number().finite().positive().optional(),
-  height: z.number().finite().positive().optional(),
   geometry: geometrySchema.optional(),
-  flipH: z.boolean().optional(),
-  flipV: z.boolean().optional(),
   style: placeholderStyleSchema.optional(),
   listStyles: placeholderListStylesSchema.optional(),
   promptText: z.string().optional(),
@@ -180,7 +169,6 @@ export const nativePlaceholderRefSchema = z
     explicitType: z.boolean().optional(),
     idx: z.number().int().nonnegative().optional(),
     size: placeholderSizeSchema.optional(),
-    sz: placeholderSzSchema.optional(),
     orient: placeholderOrientSchema.optional(),
     hasCustomPrompt: z.boolean().optional(),
   })
@@ -201,10 +189,6 @@ export type PlaceholderResolutionContext = {
 };
 
 export type PlaceholderBoxLayer = {
-  readonly x?: unknown;
-  readonly y?: unknown;
-  readonly width?: unknown;
-  readonly height?: unknown;
   readonly style?: Readonly<Record<string, unknown>> | undefined;
 };
 
@@ -220,8 +204,8 @@ function resolvePlaceholderScalar(
 }
 
 /**
- * Cascades box coordinates (`left`/`right`/`inset`/`width`/`x` and `top`/`bottom`/`inset`/`height`/`y`)
- * across Master -> Layout -> Slide placeholder layers, resolving percentages against `slideDimensions`.
+ * Cascades box coordinates (`left`/`right`/`inset`/`width` and `top`/`bottom`/`inset`/`height`)
+ * across Master -> Layout -> Slide placeholder style layers, resolving percentages against `slideDimensions`.
  */
 export function resolvePlaceholderBoxFromLayers(
   layers: readonly (PlaceholderBoxLayer | undefined)[],
@@ -247,66 +231,38 @@ export function resolvePlaceholderBoxFromLayers(
       !Array.isArray(layer.style)
         ? layer.style
         : undefined;
+    if (style === undefined) continue;
     const hasOwn = (obj: Readonly<Record<string, unknown>>, key: string) =>
       Object.hasOwn(obj, key) && obj[key] !== undefined;
-    const hasLeft =
-      (style !== undefined &&
-        (hasOwn(style, "left") || hasOwn(style, "inset"))) ||
-      hasOwn(layer as Readonly<Record<string, unknown>>, "x");
-    const hasRight =
-      style !== undefined && (hasOwn(style, "right") || hasOwn(style, "inset"));
-    const hasWidth =
-      (style !== undefined && hasOwn(style, "width")) ||
-      hasOwn(layer as Readonly<Record<string, unknown>>, "width");
-    const hasTop =
-      (style !== undefined &&
-        (hasOwn(style, "top") || hasOwn(style, "inset"))) ||
-      hasOwn(layer as Readonly<Record<string, unknown>>, "y");
-    const hasBottom =
-      style !== undefined &&
-      (hasOwn(style, "bottom") || hasOwn(style, "inset"));
-    const hasHeight =
-      (style !== undefined && hasOwn(style, "height")) ||
-      hasOwn(layer as Readonly<Record<string, unknown>>, "height");
+    const hasLeft = hasOwn(style, "left") || hasOwn(style, "inset");
+    const hasRight = hasOwn(style, "right") || hasOwn(style, "inset");
+    const hasWidth = hasOwn(style, "width");
+    const hasTop = hasOwn(style, "top") || hasOwn(style, "inset");
+    const hasBottom = hasOwn(style, "bottom") || hasOwn(style, "inset");
+    const hasHeight = hasOwn(style, "height");
 
     if (hasRight && !hasLeft) accLeft = undefined;
     if (hasLeft && !hasRight && hasWidth) accRight = undefined;
     if (hasLeft) {
-      accLeft =
-        style !== undefined && hasOwn(style, "left")
-          ? style["left"]
-          : style !== undefined && hasOwn(style, "inset")
-            ? style["inset"]
-            : layer.x;
+      accLeft = hasOwn(style, "left") ? style["left"] : style["inset"];
     }
     if (hasRight) {
-      accRight = hasOwn(style!, "right") ? style!["right"] : style!["inset"];
+      accRight = hasOwn(style, "right") ? style["right"] : style["inset"];
     }
     if (hasWidth) {
-      accWidth =
-        style !== undefined && hasOwn(style, "width")
-          ? style["width"]
-          : layer.width;
+      accWidth = style["width"];
     }
 
     if (hasBottom && !hasTop) accTop = undefined;
     if (hasTop && !hasBottom && hasHeight) accBottom = undefined;
     if (hasTop) {
-      accTop =
-        style !== undefined && hasOwn(style, "top")
-          ? style["top"]
-          : style !== undefined && hasOwn(style, "inset")
-            ? style["inset"]
-            : layer.y;
+      accTop = hasOwn(style, "top") ? style["top"] : style["inset"];
     }
     if (hasBottom) {
-      accBottom = hasOwn(style!, "bottom") ? style!["bottom"] : style!["inset"];
+      accBottom = hasOwn(style, "bottom") ? style["bottom"] : style["inset"];
     }
     if (hasHeight) {
-      accHeight =
-        style !== undefined && hasOwn(style, "height")
-          ? style["height"]
-          : layer.height;
+      accHeight = style["height"];
     }
   }
 

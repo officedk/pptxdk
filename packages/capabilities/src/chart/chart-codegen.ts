@@ -18,10 +18,7 @@ import {
   parseChartGroupBySchema,
 } from "./chart-schemas.ts";
 
-const legacyChartPropKeys = new Set(["x", "y", "width", "height"]);
-const chartAllowedPropKeySet = new Set(
-  chartAllowedPropKeys.filter((key) => !legacyChartPropKeys.has(key)),
-);
+const chartAllowedPropKeySet = new Set(chartAllowedPropKeys);
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

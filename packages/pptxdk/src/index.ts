@@ -283,7 +283,6 @@ export type {
   PlaceholderOrient,
   PlaceholderSize,
   PlaceholderStyle,
-  PlaceholderSz,
   PreviewError,
   PreviewPlaceholder,
   PreviewTransform,

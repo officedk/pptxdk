@@ -10,7 +10,6 @@ import {
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
   type CapabilitySubPartObservation,
-  type ColorValue,
   type EmitContext,
   type EmitOutput,
   type NativePlaceholderRef,
@@ -20,7 +19,6 @@ import {
   type PaintContext,
   type PaintOutput,
   type Rect,
-  type ResolvedColor,
   type ResolvedTable,
   type ResolvedTableCell as ResolvedTableCellObservation,
   type ResolvedTableRow,
@@ -162,23 +160,6 @@ function pathLabel(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() !== "" ? value : fallback;
 }
 
-function color(
-  value: unknown,
-  label: string,
-  theme: ThemeContext,
-  path?: string,
-): ResolvedColor | undefined {
-  if (value === undefined) return undefined;
-  try {
-    return theme.resolveColor(value as ColorValue);
-  } catch (error) {
-    if (error instanceof CapabilityError) {
-      fail(error.code, `${label}: ${error.message}`, path);
-    }
-    throw error;
-  }
-}
-
 function textStyle(
   styleValue: unknown,
   label: string,
@@ -227,30 +208,18 @@ function parseLayerBackground(
   theme: ThemeContext,
   path?: string,
 ): { readonly declared: boolean; readonly value?: unknown } {
-  const hasNewBg =
-    Object.hasOwn(style, "background") && style["background"] !== undefined;
-  const hasOldBg =
-    Object.hasOwn(style, "backgroundColor") &&
-    style["backgroundColor"] !== undefined;
-  if (hasNewBg && hasOldBg) {
-    fail(
-      "unsupported-style-combination",
-      `${label}.style.background cannot be set together with backgroundColor`,
-      path,
-    );
-  }
-  if (!hasNewBg && !hasOldBg) {
+  if (
+    !Object.hasOwn(style, "background") ||
+    style["background"] === undefined
+  ) {
     return { declared: false };
   }
-  const raw = hasNewBg ? style["background"] : style["backgroundColor"];
-  const fieldLabel = hasNewBg
-    ? `${label}.style.background`
-    : `${label}.style.backgroundColor`;
+  const raw = style["background"];
   try {
     resolveBackgroundValue(theme, raw, undefined);
   } catch (error) {
     if (error instanceof CapabilityError) {
-      fail(error.code, `${fieldLabel}: ${error.message}`, path);
+      fail(error.code, `${label}.style.background: ${error.message}`, path);
     }
     throw error;
   }
@@ -477,7 +446,6 @@ function prepareRows(
       const borders = resolveTableCellBorders(
         cellStyle.style,
         row.border,
-        (value, label, itemPath) => color(value, label, theme, itemPath),
         theme,
         cellPath,
       );
@@ -1144,16 +1112,11 @@ export const tableCapability = {
       rows,
       cells,
       contract,
-      declaredX: placeholderGeometry?.x ?? input.props["x"],
-      declaredY: placeholderGeometry?.y ?? input.props["y"],
-      declaredWidth:
-        placeholderGeometry?.width ??
-        contract.layoutStyle.width ??
-        input.props["width"],
+      declaredX: placeholderGeometry?.x,
+      declaredY: placeholderGeometry?.y,
+      declaredWidth: placeholderGeometry?.width ?? contract.layoutStyle.width,
       declaredHeight:
-        placeholderGeometry?.height ??
-        contract.layoutStyle.height ??
-        input.props["height"],
+        placeholderGeometry?.height ?? contract.layoutStyle.height,
     };
 
     const authorId =

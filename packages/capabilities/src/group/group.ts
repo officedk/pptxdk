@@ -35,7 +35,6 @@ import {
 import { groupCodegen } from "./group-codegen.ts";
 import {
   groupDeclarationPropsKeys,
-  groupDeclarationPropsSchema,
   groupStyleSchema,
 } from "./group-declaration.ts";
 import { groupImportHandler } from "./group-import.ts";
@@ -287,27 +286,6 @@ export const groupCapability = {
     const flipH = Boolean(rawFlipH);
     const flipV = Boolean(rawFlipV);
 
-    let explicitBox:
-      | {
-          readonly x: number;
-          readonly y: number;
-          readonly width: number;
-          readonly height: number;
-        }
-      | undefined;
-    if (input.props["bounds"] !== undefined) {
-      const parsedBounds = groupDeclarationPropsSchema
-        .unwrap()
-        .shape.bounds.safeParse(input.props["bounds"]);
-      if (!parsedBounds.success) {
-        throw new CapabilityError(
-          "invalid-group-geometry",
-          parsedBounds.error.issues[0]?.message ?? "Invalid Group bounds",
-        );
-      }
-      explicitBox = parsedBounds.data;
-    }
-
     const theme = context.theme.with(
       input.props["theme"] as ThemeScope | undefined,
       textStyleFrom(styleRecord),
@@ -378,16 +356,7 @@ export const groupCapability = {
         const hasLayoutHeight = hasExplicitHeight;
 
         let outputGeometry: Rect;
-        if (
-          !isPositioned &&
-          explicitBox !== undefined &&
-          !hasExplicitWidth &&
-          !hasExplicitHeight
-        ) {
-          // Transitional bridge (Tickets 03-10): imported groups with Group.bounds keep
-          // slide-space members un-offset until Ticket 06 migrates group-import.
-          outputGeometry = explicitBox;
-        } else if (isPositioned) {
+        if (isPositioned) {
           const memberBounds = geometry.pixels;
           if (layoutBox !== undefined) {
             const resolvedWidth =
@@ -415,7 +384,7 @@ export const groupCapability = {
               height: resolvedHeight,
             };
           } else {
-            outputGeometry = explicitBox ?? memberBounds;
+            outputGeometry = memberBounds;
           }
         } else {
           const memberBounds = geometry.pixels;

@@ -120,7 +120,6 @@ export type {
   PlaceholderOrient,
   PlaceholderResolutionContext,
   PlaceholderStyle,
-  PlaceholderSz,
   TextList,
   TextPlaceholderRole,
 } from "#/placeholders.ts";

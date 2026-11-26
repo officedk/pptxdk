@@ -156,7 +156,6 @@ export {
   placeholderOrientSchema,
   placeholderRoleSchema,
   placeholderStyleSchema,
-  placeholderSzSchema,
   resolvePlaceholderBoxFromLayers,
   textListBulletSchema,
   textListNumberSchema,
@@ -178,7 +177,6 @@ export type {
   PlaceholderOrient,
   PlaceholderResolutionContext,
   PlaceholderStyle,
-  PlaceholderSz,
   TextList,
   TextPlaceholderRole,
 } from "#/types.ts";

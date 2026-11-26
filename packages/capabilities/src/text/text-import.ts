@@ -987,15 +987,10 @@ function textBoxVisualStyle(
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
 ): NonNullable<TextDeclarationProps["style"]> {
-  const {
-    startArrow,
-    endArrow,
-    border: rawBorder,
-    ...restVisualStyle
-  } = appearanceStyle;
+  const { border: rawBorder, ...restVisualStyle } = appearanceStyle;
   let border: NonNullable<TextDeclarationProps["style"]>["border"];
-  let hasHeadArrow = startArrow !== undefined;
-  let hasTailArrow = endArrow !== undefined;
+  let hasHeadArrow = false;
+  let hasTailArrow = false;
   if (rawBorder === "none") {
     border = "none";
   } else if (rawBorder !== undefined) {

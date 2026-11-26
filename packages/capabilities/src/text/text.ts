@@ -372,14 +372,11 @@ export const textCapability = {
       placeholder === undefined
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
-    const declaredX = placeholderGeometry?.x ?? input.props["x"];
-    const declaredY = placeholderGeometry?.y ?? input.props["y"];
-    const declaredWidth = placeholderGeometry?.width ?? input.props["width"];
+    const declaredX = placeholderGeometry?.x;
+    const declaredY = placeholderGeometry?.y;
+    const declaredWidth = placeholderGeometry?.width;
     if (declaredX !== undefined) coordinate(declaredX, "x");
     if (declaredY !== undefined) coordinate(declaredY, "y");
-    if (input.props["width"] !== undefined) {
-      size(input.props["width"], "width");
-    }
     if (declaredWidth !== undefined && typeof declaredWidth === "number") {
       size(declaredWidth, "width");
     }
@@ -398,9 +395,7 @@ export const textCapability = {
 
     const insets = textInsets(input.props["style"], placeholder);
     const styleHeight = layoutStyleValue(input, "height");
-    const requestedHeight = height(
-      placeholderGeometry?.height ?? styleHeight ?? input.props["height"],
-    );
+    const requestedHeight = height(placeholderGeometry?.height ?? styleHeight);
 
     const {
       paragraphs,
@@ -424,12 +419,6 @@ export const textCapability = {
     const inheritedPlaceholderGeometry =
       placeholder?.layoutPlaceholder?.geometry ??
       placeholder?.masterPlaceholder?.geometry;
-    const inheritedPlaceholderFlipH =
-      placeholder?.layoutPlaceholder?.flipH ??
-      placeholder?.masterPlaceholder?.flipH;
-    const inheritedPlaceholderFlipV =
-      placeholder?.layoutPlaceholder?.flipV ??
-      placeholder?.masterPlaceholder?.flipV;
     const visualStyle =
       placeholder !== undefined
         ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
@@ -443,12 +432,6 @@ export const textCapability = {
       ...(inheritedPlaceholderGeometry === undefined
         ? {}
         : { geometry: inheritedPlaceholderGeometry }),
-      ...(inheritedPlaceholderFlipH === undefined
-        ? {}
-        : { flipH: inheritedPlaceholderFlipH }),
-      ...(inheritedPlaceholderFlipV === undefined
-        ? {}
-        : { flipV: inheritedPlaceholderFlipV }),
     });
 
     const authorId =
@@ -587,12 +570,6 @@ export const textCapability = {
           ...(inheritedPlaceholderGeometry === undefined
             ? {}
             : { geometry: inheritedPlaceholderGeometry }),
-          ...(inheritedPlaceholderFlipH === undefined
-            ? {}
-            : { flipH: inheritedPlaceholderFlipH }),
-          ...(inheritedPlaceholderFlipV === undefined
-            ? {}
-            : { flipV: inheritedPlaceholderFlipV }),
         });
         const name =
           resolveContext.morphName ??
@@ -648,15 +625,8 @@ export const textCapability = {
                       rawSlideStyle,
                       "borderRadius",
                     ),
-                    hasFill:
-                      hasLocalDeclaration(rawSlideStyle, "background") ||
-                      hasLocalDeclaration(rawSlideStyle, "backgroundColor") ||
-                      hasLocalDeclaration(rawSlideStyle, "backgroundImage"),
-                    hasBorder:
-                      hasLocalDeclaration(rawSlideStyle, "border") ||
-                      hasLocalDeclaration(rawSlideStyle, "borderColor") ||
-                      hasLocalDeclaration(rawSlideStyle, "borderWidth") ||
-                      hasLocalDeclaration(rawSlideStyle, "borderStyle"),
+                    hasFill: hasLocalDeclaration(rawSlideStyle, "background"),
+                    hasBorder: hasLocalDeclaration(rawSlideStyle, "border"),
                     hasEffects:
                       hasLocalDeclaration(rawSlideStyle, "boxShadow") ||
                       hasLocalDeclaration(rawSlideStyle, "softEdge"),

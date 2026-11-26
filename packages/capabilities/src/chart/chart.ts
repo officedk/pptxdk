@@ -1240,14 +1240,9 @@ export const chartCapability = {
       placeholder === undefined
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
-    const rawWidth =
-      placeholderGeometry?.width ??
-      contract.layoutStyle.width ??
-      (input.props["width"] as number | undefined);
+    const rawWidth = placeholderGeometry?.width ?? contract.layoutStyle.width;
     const rawHeight =
-      placeholderGeometry?.height ??
-      contract.layoutStyle.height ??
-      (input.props["height"] as number | undefined);
+      placeholderGeometry?.height ?? contract.layoutStyle.height;
     const declaredWidth =
       rawWidth !== undefined
         ? parseChartExtentBySchema(rawWidth, "width")
@@ -1256,8 +1251,8 @@ export const chartCapability = {
       rawHeight !== undefined
         ? parseChartExtentBySchema(rawHeight, "height")
         : undefined;
-    const rawX = placeholderGeometry?.x ?? input.props["x"];
-    const rawY = placeholderGeometry?.y ?? input.props["y"];
+    const rawX = placeholderGeometry?.x;
+    const rawY = placeholderGeometry?.y;
     const declaredX =
       rawX !== undefined ? parseChartCoordinateBySchema(rawX, "x") : undefined;
     const declaredY =

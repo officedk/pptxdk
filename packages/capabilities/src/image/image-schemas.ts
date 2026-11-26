@@ -73,9 +73,6 @@ const coreVisualShape = visualStyleSchema.unwrap().shape;
 const imageVisualStyleObjectSchema = z.strictObject({
   background: coreVisualShape.background,
   border: coreVisualShape.border,
-  borderColor: coreVisualShape.borderColor,
-  borderWidth: coreVisualShape.borderWidth,
-  borderStyle: coreVisualShape.borderStyle,
   opacity: coreVisualShape.opacity,
   boxShadow: coreVisualShape.boxShadow,
   softEdge: coreVisualShape.softEdge,
@@ -111,14 +108,7 @@ const imageDeclarationPropsObjectSchema = z.strictObject({
   src: imageSourceSchema,
   /** Alternative text for the image. */
   alt: z.string().optional(),
-  /** Position and bounds in px; position defaults to 0, width and height default to original image dimensions. */
-  x: imageCoordinateValueSchema.optional(),
-  y: imageCoordinateValueSchema.optional(),
-  width: imageExtentValueSchema.optional(),
-  height: imageExtentValueSchema.optional(),
   geometry: geometrySchema.optional(),
-  flipH: z.boolean().optional(),
-  flipV: z.boolean().optional(),
   style: imageStyleSchema.optional(),
   /** `fill` stretches, `cover` crops centered, `contain` preserves aspect ratio; defaults to `fill`. */
   fit: imageFitSchema.optional(),

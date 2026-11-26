@@ -8,11 +8,12 @@ import type {
   PlaceholderLevelStyle,
   PlaceholderListStyles,
 } from "@pptxdk/core";
-import type {
-  EmittedSlideLayoutSpec,
-  EmittedSlideMasterSpec,
-  MastersEmitDriver,
-  PptxRelationship,
+import {
+  resolvePlaceholderBoxFromLayers,
+  type EmittedSlideLayoutSpec,
+  type EmittedSlideMasterSpec,
+  type MastersEmitDriver,
+  type PptxRelationship,
 } from "@pptxdk/core/capability";
 import {
   createThemeContext,
@@ -472,7 +473,7 @@ function ooxmlAnchor(value: NonNullable<TextStyle["verticalAlign"]>): string {
 export function placeholderRefXml(ref: NativePlaceholderRef): string {
   const attrs: string[] = [];
   if (ref.explicitType !== false) attrs.push(`type="${xmlEscape(ref.type)}"`);
-  const size = ref.size ?? ref.sz;
+  const size = ref.size;
   if (size !== undefined) attrs.push(`sz="${xmlEscape(size)}"`);
   if (ref.orient !== undefined) attrs.push(`orient="${xmlEscape(ref.orient)}"`);
   if (ref.idx !== undefined) attrs.push(`idx="${ref.idx}"`);
@@ -689,7 +690,7 @@ function placeholderShapesXml(
     .map(([key, spec], index) => {
       const id = 2 + index;
       const name = xmlEscape(spec.name ?? key);
-      const size = spec.size ?? spec.sz;
+      const size = spec.size;
       const phXml = placeholderRefXml({
         type: spec.type,
         ...(spec.explicitType === undefined
@@ -702,15 +703,16 @@ function placeholderShapesXml(
           ? {}
           : { hasCustomPrompt: spec.hasCustomPrompt }),
       });
+      const resolvedBox = resolvePlaceholderBoxFromLayers([spec]);
       const hasBox =
-        spec.x !== undefined &&
-        spec.y !== undefined &&
-        spec.width !== undefined &&
-        spec.height !== undefined;
+        typeof resolvedBox.x === "number" &&
+        typeof resolvedBox.y === "number" &&
+        typeof resolvedBox.width === "number" &&
+        typeof resolvedBox.height === "number";
       const spPr =
         placeholderSpPrByKey?.[key] ??
         (hasBox
-          ? `<p:spPr><a:xfrm><a:off x="${pxToEmu(spec.x)}" y="${pxToEmu(spec.y)}"/><a:ext cx="${pxToEmu(spec.width)}" cy="${pxToEmu(spec.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
+          ? `<p:spPr><a:xfrm><a:off x="${pxToEmu(resolvedBox.x as number)}" y="${pxToEmu(resolvedBox.y as number)}"/><a:ext cx="${pxToEmu(resolvedBox.width as number)}" cy="${pxToEmu(resolvedBox.height as number)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
           : "<p:spPr/>");
       const mergedLvl1 =
         styleAsLevel1(spec.style) === undefined &&

@@ -137,14 +137,6 @@ function defaultSlotBox(
 
 function hasExplicitGeometry(spec: FooterPlaceholderSpec | undefined): boolean {
   if (spec === undefined) return false;
-  if (
-    spec.x !== undefined ||
-    spec.y !== undefined ||
-    spec.width !== undefined ||
-    spec.height !== undefined
-  ) {
-    return true;
-  }
   const style = spec.style as Readonly<Record<string, unknown>> | undefined;
   if (style === undefined) return false;
   return (
@@ -179,10 +171,7 @@ function resolveBoxFromSpecs(
   ...specs: readonly (FooterPlaceholderSpec | undefined)[]
 ): Rect {
   const fallback = defaultSlotBox(slot, dimensions);
-  const resolved = resolvePlaceholderBoxFromLayers(
-    [fallback, ...specs],
-    dimensions,
-  );
+  const resolved = resolvePlaceholderBoxFromLayers(specs, dimensions);
   return {
     x: typeof resolved.x === "number" ? resolved.x : fallback.x,
     y: typeof resolved.y === "number" ? resolved.y : fallback.y,

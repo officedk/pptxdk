@@ -15,32 +15,8 @@ import {
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
-const legacyShapePropKeys = new Set([
-  "x",
-  "y",
-  "width",
-  "height",
-  "flipH",
-  "flipV",
-  "fill",
-  "text",
-  "textStyle",
-]);
-
-const legacyVisualStyleKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
 const shapeAllowedPropKeys = new Set(
-  Object.keys(shapeDeclarationPropsSchema.unwrap().shape).filter(
-    (key) => !legacyShapePropKeys.has(key),
-  ),
+  Object.keys(shapeDeclarationPropsSchema.unwrap().shape),
 );
 
 const shapeAllowedChildKinds = new Set([
@@ -293,16 +269,6 @@ function serializeShapeStyleProp(
       "@style",
     );
   }
-  for (const [key, entryValue] of Object.entries(style)) {
-    if (entryValue === undefined) continue;
-    if (legacyVisualStyleKeys.has(key)) {
-      ctx.fail(
-        "unexpressible-value",
-        `Shape.style does not support legacy property ${JSON.stringify(key)}`,
-        `@style.${key}`,
-      );
-    }
-  }
   const parsed = shapeStyleSchema.safeParse(style);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -337,18 +303,6 @@ function collectShapeProps(
   const entries: [string, unknown][] = [];
   for (const [key, value] of Object.entries(node.props)) {
     if (value === undefined) continue;
-    if (
-      key === "nativePlaceholder" &&
-      isPlainRecord(value) &&
-      Object.hasOwn(value, "sz") &&
-      value["sz"] !== undefined
-    ) {
-      ctx.fail(
-        "unexpressible-value",
-        "Shape.nativePlaceholder.sz is no longer supported; use size",
-        "@nativePlaceholder.sz",
-      );
-    }
     if (!shapeAllowedPropKeys.has(key)) {
       ctx.fail(
         "invalid-document",

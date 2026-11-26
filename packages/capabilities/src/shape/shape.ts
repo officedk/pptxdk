@@ -10,7 +10,6 @@ import {
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
-  type ColorValue,
   type EmitContext,
   type EmitOutput,
   type ObjectCapabilityModule,
@@ -113,51 +112,9 @@ function shapeTextStyle(
   if (layoutStyle["lang"] !== undefined) {
     assertValidLang(layoutStyle["lang"]);
   }
-  const inherited = Object.fromEntries(
+  return Object.fromEntries(
     Object.entries(layoutStyle).filter(([key]) => textStyleKeys.has(key)),
   );
-  const explicit = props["textStyle"];
-  if (explicit === undefined) return inherited;
-  if (
-    typeof explicit !== "object" ||
-    explicit === null ||
-    Array.isArray(explicit)
-  ) {
-    throw new CapabilityError(
-      "invalid-style",
-      "Shape.textStyle must be an object",
-    );
-  }
-  const explicitObj = explicit as Record<string, unknown>;
-  if (explicitObj["lang"] !== undefined) {
-    assertValidLang(explicitObj["lang"]);
-  }
-  return { ...inherited, ...explicitObj };
-}
-
-function shapeTextContent(
-  input: CapabilityInput,
-  path?: string,
-): readonly unknown[] {
-  const text = input.props["text"];
-  if (text !== undefined) {
-    if (typeof text !== "string") {
-      throw new CapabilityError(
-        "invalid-text",
-        "Shape.text must be a string",
-        path,
-      );
-    }
-    if (input.children.length > 0) {
-      throw new CapabilityError(
-        "conflicting-text-content",
-        "Shape.text and Shape children text cannot be declared simultaneously",
-        path,
-      );
-    }
-    return text === "" ? [] : [{ type: "#text", text }];
-  }
-  return input.children;
 }
 
 function validateCoordinate(
@@ -375,50 +332,18 @@ export const shapeCapability = {
     const morphKey = parseMorphKey(input.props["morphKey"]);
     const link = parseLinkTarget(input.props["link"]);
 
-    const declaredX = input.props["x"];
-    const declaredY = input.props["y"];
-    if (declaredX !== undefined) {
-      validateCoordinate(declaredX, "x");
-    }
-    if (declaredY !== undefined) {
-      validateCoordinate(declaredY, "y");
-    }
-    if (input.props["width"] !== undefined) {
-      validateSize(input.props["width"], "width");
-    }
-    if (input.props["height"] !== undefined) {
-      validateSize(input.props["height"], "height");
-    }
-
-    const textProp = input.props["text"];
-    if (textProp !== undefined && typeof textProp !== "string") {
-      throw new CapabilityError("invalid-text", "Shape.text must be a string");
-    }
-    if (textProp !== undefined && input.children.length > 0) {
-      throw new CapabilityError(
-        "conflicting-text-content",
-        "Shape.text and Shape children text cannot be declared simultaneously",
-      );
-    }
-
     const layoutStyleRecord = record(input.props["style"]);
-    const hasDeclaredTextOrPaddingStyle =
-      input.props["textStyle"] !== undefined ||
-      Object.keys(layoutStyleRecord).some(
-        (key) =>
-          textStyleKeys.has(key) ||
-          (paddingStyleKeys as readonly string[]).includes(key),
-      );
-    const hasNonEmptyText =
-      (typeof textProp === "string" && textProp !== "") ||
-      (textProp === undefined &&
-        input.children.some(
-          (child) =>
-            !("text" in child && typeof child.text === "string") ||
-            child.text !== "",
-        ));
-    const hasExplicitEmptyText =
-      textProp === "" || (input.children.length > 0 && !hasNonEmptyText);
+    const hasDeclaredTextOrPaddingStyle = Object.keys(layoutStyleRecord).some(
+      (key) =>
+        textStyleKeys.has(key) ||
+        (paddingStyleKeys as readonly string[]).includes(key),
+    );
+    const hasNonEmptyText = input.children.some(
+      (child) =>
+        !("text" in child && typeof child.text === "string") ||
+        child.text !== "",
+    );
+    const hasExplicitEmptyText = input.children.length > 0 && !hasNonEmptyText;
     const hasTextBody = hasNonEmptyText || hasDeclaredTextOrPaddingStyle;
 
     const allowedStyleKeys = new Set<string>(shapeStyleKeys);
@@ -435,7 +360,6 @@ export const shapeCapability = {
       ? textInsets(input.props["style"])
       : { top: 0, right: 0, bottom: 0, left: 0 };
 
-    const textChildren = shapeTextContent(input);
     const rawTextStyle = shapeTextStyle(input.props);
     const effectiveTextStyle = {
       ...rawTextStyle,
@@ -443,7 +367,7 @@ export const shapeCapability = {
     };
     const { paragraphs, style: parsedTextStyle } = hasTextBody
       ? parseTextContent(
-          textChildren,
+          input.children,
           effectiveTextStyle,
           context.theme,
           { slideNumber: context.slideNumber },
@@ -462,10 +386,6 @@ export const shapeCapability = {
 
     const visualStyle = { ...record(input.props["style"]) };
     const geometry = input.props["geometry"] as Geometry | undefined;
-    const flipH = input.props["flipH"] as boolean | undefined;
-    const flipV = input.props["flipV"] as boolean | undefined;
-    const fill = input.props["fill"] as ColorValue | undefined;
-    const explicitText = typeof textProp === "string" ? textProp : undefined;
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -487,9 +407,6 @@ export const shapeCapability = {
       box: { x: 0, y: 0, width: 100, height: 100 },
       allowBorderArrows: true,
       ...(geometry !== undefined ? { geometry } : {}),
-      ...(flipH !== undefined ? { flipH } : {}),
-      ...(flipV !== undefined ? { flipV } : {}),
-      ...(fill !== undefined ? { fill } : {}),
     });
 
     const declaredWidth = contract.width;
@@ -559,8 +476,8 @@ export const shapeCapability = {
         const box =
           resolveContext.layoutBox === undefined
             ? {
-                x: validateCoordinate(declaredX, "x"),
-                y: validateCoordinate(declaredY, "y"),
+                x: validateCoordinate(undefined, "x"),
+                y: validateCoordinate(undefined, "y"),
                 width: validateSize(declaredWidth, "width"),
                 height: validateSize(declaredHeight, "height"),
               }
@@ -576,9 +493,6 @@ export const shapeCapability = {
           box,
           allowBorderArrows: true,
           ...(geometry === undefined ? {} : { geometry }),
-          ...(flipH === undefined ? {} : { flipH }),
-          ...(flipV === undefined ? {} : { flipV }),
-          ...(fill === undefined ? {} : { fill }),
         });
         const geometryName =
           visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
@@ -660,11 +574,9 @@ export const shapeCapability = {
             geometry: geometryName,
             box,
             ...(resolvedText === undefined
-              ? explicitText !== undefined
-                ? { text: explicitText }
-                : hasExplicitEmptyText
-                  ? { text: "" }
-                  : {}
+              ? hasExplicitEmptyText
+                ? { text: "" }
+                : {}
               : {
                   text: resolvedText.text,
                   textMetrics:

@@ -19,21 +19,8 @@ import {
   tableTextStyleKeys,
 } from "./table-schemas.ts";
 
-const legacyTablePropKeys = new Set(["x", "y", "width", "height"]);
-const legacyVisualStyleKeys = new Set([
-  "backgroundColor",
-  "backgroundImage",
-  "borderColor",
-  "borderWidth",
-  "borderStyle",
-  "startArrow",
-  "endArrow",
-]);
-
 const tableAllowedPropKeys = new Set(
-  Object.keys(tableDeclarationPropsSchema.unwrap().shape).filter(
-    (key) => !legacyTablePropKeys.has(key),
-  ),
+  Object.keys(tableDeclarationPropsSchema.unwrap().shape),
 );
 const rowAllowedPropKeys = new Set(
   Object.keys(rowDeclarationPropsSchema.unwrap().shape),
@@ -43,15 +30,10 @@ const cellAllowedPropKeys = new Set(
 );
 
 const tableCleanStyleKeys = new Set(tableStyleKeys);
-const rowCleanStyleKeys = new Set([
-  ...tableTextStyleKeys,
-  ...rowStyleKeys.filter((key) => !legacyVisualStyleKeys.has(key)),
-]);
+const rowCleanStyleKeys = new Set([...tableTextStyleKeys, ...rowStyleKeys]);
 const cellCleanStyleKeys = new Set([
   ...tableTextStyleKeys,
-  ...Object.keys(tableCellStyleSchema.unwrap().shape).filter(
-    (key) => !legacyVisualStyleKeys.has(key),
-  ),
+  ...Object.keys(tableCellStyleSchema.unwrap().shape),
 ]);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -96,7 +78,7 @@ function validateTableLayerStyle(
   }
   for (const [key, value] of Object.entries(style)) {
     if (value === undefined) continue;
-    if (legacyVisualStyleKeys.has(key) || !allowedKeys.has(key)) {
+    if (!allowedKeys.has(key)) {
       ctx.fail(
         "unexpressible-value",
         `${layerLabel}.style does not support property ${JSON.stringify(key)}`,

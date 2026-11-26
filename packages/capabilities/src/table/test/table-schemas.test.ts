@@ -62,7 +62,7 @@ describe("table Zod v4 schemas", () => {
     assert.equal(
       tableRowStyleSchema.safeParse({
         height: 32,
-        backgroundColor: "#1E293B",
+        background: "#1E293B",
         color: "#FFFFFF",
       }).success,
       true,
@@ -70,16 +70,25 @@ describe("table Zod v4 schemas", () => {
     assert.equal(tableRowStyleSchema.safeParse({ height: 0 }).success, false);
     assert.equal(
       tableCellStyleSchema.safeParse({
-        backgroundColor: "#EFF6FF",
-        borderColor: "#2563EB",
-        borderWidth: 2,
-        borderStyle: "dashed",
+        background: "#EFF6FF",
+        border: { color: "#2563EB", width: 2, style: "dashed" },
         padding: [6, 10],
       }).success,
       true,
     );
     assert.equal(
-      tableCellStyleSchema.safeParse({ borderStyle: "double" }).success,
+      tableCellStyleSchema.safeParse({
+        background: "none",
+        border: "none",
+        borderTop: { color: "#0F172A", width: 1, style: "solid" },
+        borderBottom: "none",
+      }).success,
+      true,
+    );
+    assert.equal(
+      tableCellStyleSchema.safeParse({
+        border: { color: "#0F172A", style: "double" },
+      }).success,
       false,
     );
   });
@@ -88,9 +97,7 @@ describe("table Zod v4 schemas", () => {
     assert.equal(
       tableDeclarationPropsSchema.safeParse({
         id: "pricing",
-        x: 20,
-        y: 30,
-        width: 360,
+        style: { position: "absolute", left: 20, top: 30, width: 360 },
         columns: [120, "1fr", "auto"],
       }).success,
       true,

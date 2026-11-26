@@ -80,22 +80,28 @@ export const transitionPositiveScenario: CapabilityScenario = {
         createElement(Shape, {
           id: "hero-before",
           morphKey: hero,
-          x: 60,
-          y: 110,
-          width: 140,
-          height: 140,
-          fill: "#2563EB",
-          style: { borderColor: "#1E3A8A", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 110,
+            width: 140,
+            height: 140,
+            border: { color: "#1E3A8A", width: 2 },
+            background: "#2563EB",
+          },
         }),
         createElement(Shape, {
           id: "badge-before",
           morphKey: badge,
           geometry: "ellipse",
-          x: 240,
-          y: 150,
-          width: 60,
-          height: 60,
-          fill: "#0F172A",
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 150,
+            width: 60,
+            height: 60,
+            background: "#0F172A",
+          },
         }),
       ),
       createElement(
@@ -113,31 +119,40 @@ export const transitionPositiveScenario: CapabilityScenario = {
         createElement(Shape, {
           id: "hero-after",
           morphKey: hero,
-          x: 360,
-          y: 70,
-          width: 220,
-          height: 160,
-          fill: "#059669",
-          style: { borderColor: "#064E3B", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 360,
+            top: 70,
+            width: 220,
+            height: 160,
+            border: { color: "#064E3B", width: 2 },
+            background: "#059669",
+          },
         }),
         createElement(Shape, {
           id: "badge-after",
           morphKey: badge,
           geometry: "ellipse",
-          x: 80,
-          y: 210,
-          width: 90,
-          height: 90,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 210,
+            width: 90,
+            height: 90,
+            background: "#D97706",
+          },
         }),
         createElement(Shape, {
           id: "entering-card",
           morphKey: entering,
-          x: 80,
-          y: 50,
-          width: 180,
-          height: 80,
-          fill: "#7C3AED",
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 50,
+            width: 180,
+            height: 80,
+            background: "#7C3AED",
+          },
         }),
       ),
       createElement(
@@ -152,11 +167,14 @@ export const transitionPositiveScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "outro-card",
-          x: 180,
-          y: 110,
-          width: 280,
-          height: 140,
-          fill: "#F59E0B",
+          style: {
+            position: "absolute",
+            left: 180,
+            top: 110,
+            width: 280,
+            height: 140,
+            background: "#F59E0B",
+          },
         }),
       ),
     );
@@ -177,22 +195,28 @@ export const transitionPositiveScenario: CapabilityScenario = {
         shape({
           id: "hero-before",
           morphKey: hero,
-          x: 60,
-          y: 110,
-          width: 140,
-          height: 140,
-          fill: "#2563EB",
-          style: { borderColor: "#1E3A8A", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 110,
+            width: 140,
+            height: 140,
+            border: { color: "#1E3A8A", width: 2 },
+            background: "#2563EB",
+          },
         }),
         shape({
           id: "badge-before",
           morphKey: badge,
           geometry: "ellipse",
-          x: 240,
-          y: 150,
-          width: 60,
-          height: 60,
-          fill: "#0F172A",
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 150,
+            width: 60,
+            height: 60,
+            background: "#0F172A",
+          },
         }),
       ),
       slide({
@@ -208,31 +232,40 @@ export const transitionPositiveScenario: CapabilityScenario = {
         shape({
           id: "hero-after",
           morphKey: hero,
-          x: 360,
-          y: 70,
-          width: 220,
-          height: 160,
-          fill: "#059669",
-          style: { borderColor: "#064E3B", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 360,
+            top: 70,
+            width: 220,
+            height: 160,
+            border: { color: "#064E3B", width: 2 },
+            background: "#059669",
+          },
         }),
         shape({
           id: "badge-after",
           morphKey: badge,
           geometry: "ellipse",
-          x: 80,
-          y: 210,
-          width: 90,
-          height: 90,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 210,
+            width: 90,
+            height: 90,
+            background: "#D97706",
+          },
         }),
         shape({
           id: "entering-card",
           morphKey: entering,
-          x: 80,
-          y: 50,
-          width: 180,
-          height: 80,
-          fill: "#7C3AED",
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 50,
+            width: 180,
+            height: 80,
+            background: "#7C3AED",
+          },
         }),
       ),
       slide({
@@ -245,11 +278,14 @@ export const transitionPositiveScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "outro-card",
-          x: 180,
-          y: 110,
-          width: 280,
-          height: 140,
-          fill: "#F59E0B",
+          style: {
+            position: "absolute",
+            left: 180,
+            top: 110,
+            width: 280,
+            height: 140,
+            background: "#F59E0B",
+          },
         }),
       ),
     );
@@ -257,7 +293,7 @@ export const transitionPositiveScenario: CapabilityScenario = {
   async assert({ author, pptx, preview }) {
     assert.equal(preview.pages.length, 3, author);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, [], `${author} p${page.page}`);
+      assert.deepEqual(page.errors, [], `${author} p${page.page}`);
       assert.ok(page.png !== undefined, `${author} p${page.page} png`);
     }
 
@@ -389,11 +425,14 @@ export const transitionBaselineVariantsScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "s1-card",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "#2563EB",
+          },
         }),
       ),
       createElement(
@@ -405,11 +444,14 @@ export const transitionBaselineVariantsScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "s2-card",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "#059669",
+          },
         }),
       ),
       createElement(
@@ -423,11 +465,14 @@ export const transitionBaselineVariantsScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "s3-card",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "#D97706",
+          },
         }),
       ),
     );
@@ -441,11 +486,14 @@ export const transitionBaselineVariantsScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "s1-card",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "#2563EB",
+          },
         }),
       ),
       slide({
@@ -455,11 +503,14 @@ export const transitionBaselineVariantsScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "s2-card",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "#059669",
+          },
         }),
       ),
       slide({
@@ -471,11 +522,14 @@ export const transitionBaselineVariantsScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "s3-card",
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 80,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 80,
+            background: "#D97706",
+          },
         }),
       ),
     );
@@ -535,7 +589,7 @@ const runDocBuild = async (document: CommonNode, options?: BuildOptions) =>
 export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
   {
     id: "morph-with-fallback-rejected-on-baseline-only",
-    expectedCode: "forbidden-mechanism",
+    expectedCode: "target-violation",
     options: { target: targets.baselineOnly },
     jsx() {
       return createElement(
@@ -558,7 +612,7 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
   },
   {
     id: "morph-duration-rejected-when-p14-omitted",
-    expectedCode: "forbidden-mechanism",
+    expectedCode: "target-violation",
     options: {
       target: {
         ...targets.transitional,
@@ -593,7 +647,7 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
   },
   {
     id: "cross-object-morph-kind-mismatch-box-vs-chart",
-    expectedCode: "morph-object-kind-mismatch",
+    expectedCode: "invalid-continuity",
     jsx() {
       const key = createMorphScope().handle("panel");
       return createElement(
@@ -604,7 +658,7 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
           { id: "src" },
           createElement(Box, {
             morphKey: key,
-            style: { width: 120, height: 80, backgroundColor: "#1D4ED8" },
+            style: { width: 120, height: 80, background: "#1D4ED8" },
           }),
         ),
         createElement(
@@ -615,10 +669,6 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
           },
           createElement(Chart, {
             morphKey: key,
-            x: 20,
-            y: 20,
-            width: 240,
-            height: 140,
             groups: [
               {
                 kind: "column",
@@ -626,6 +676,13 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
                 series: [{ name: "S", values: [1] }],
               },
             ],
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 240,
+              height: 140,
+            },
           }),
         ),
       );
@@ -636,7 +693,7 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
         slide({ id: "src" }).append(
           box({
             morphKey: key,
-            style: { width: 120, height: 80, backgroundColor: "#1D4ED8" },
+            style: { width: 120, height: 80, background: "#1D4ED8" },
           }),
         ),
         slide({
@@ -645,10 +702,6 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
         }).append(
           chart({
             morphKey: key,
-            x: 20,
-            y: 20,
-            width: 240,
-            height: 140,
             groups: [
               {
                 kind: "column",
@@ -656,6 +709,13 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
                 series: [{ name: "S", values: [1] }],
               },
             ],
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 240,
+              height: 140,
+            },
           }),
         ),
       );
@@ -663,7 +723,7 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
   },
   {
     id: "morph-inside-group-rejected",
-    expectedCode: "morph-inside-group",
+    expectedCode: "invalid-continuity",
     jsx() {
       const key = createMorphScope().handle("member");
       return createElement(
@@ -677,10 +737,13 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
             null,
             createElement(Shape, {
               morphKey: key,
-              x: 20,
-              y: 20,
-              width: 60,
-              height: 40,
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 60,
+                height: 40,
+              },
             }),
           ),
         ),
@@ -693,10 +756,13 @@ export const transitionRejectionCases: readonly DualAuthorRejectionCase[] = [
           group().append(
             shape({
               morphKey: key,
-              x: 20,
-              y: 20,
-              width: 60,
-              height: 40,
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 60,
+                height: 40,
+              },
             }),
           ),
         ),

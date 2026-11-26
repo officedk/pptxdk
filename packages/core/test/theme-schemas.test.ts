@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 
 import { CapabilityError } from "@pptxdk/core";
 import {
+  backgroundValueSchema,
+  borderObjectSchema,
+  borderValueSchema,
+  boxShadowValueSchema,
   colorMapOverrideSchema,
   colorMapSchema,
   colorValueSchema,
@@ -35,6 +39,10 @@ import {
   themeShadeSchema,
   validateTextStyle,
   visualStyleSchema,
+  type BackgroundValue,
+  type BorderObject,
+  type BorderValue,
+  type BoxShadowValue,
   type ColorMap,
   type ColorMapOverride,
   type ColorValue,
@@ -129,20 +137,43 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       distance: 2,
       angle: 45,
     });
+    const bgSolid: BackgroundValue = backgroundValueSchema.parse("#FFFFFF");
+    const bgNone: BackgroundValue = backgroundValueSchema.parse("none");
+    const bgGrad: BackgroundValue = backgroundValueSchema.parse(linear);
+    const borderObj: BorderObject = borderObjectSchema.parse({
+      color: "#000000",
+      width: 1,
+      style: "dashed",
+    });
+    const borderVal: BorderValue = borderValueSchema.parse(borderObj);
+    const borderNone: BorderValue = borderValueSchema.parse("none");
+    const shadowNone: BoxShadowValue = boxShadowValueSchema.parse("none");
     const visual: VisualStyle = visualStyleSchema.parse({
-      backgroundColor: "#FFFFFF",
-      backgroundImage: linear,
-      borderColor: "#000000",
-      borderWidth: 1,
-      borderStyle: "dashed",
+      background: bgGrad,
+      border: borderVal,
       borderRadius: 6,
       opacity: 0.9,
       boxShadow: shadow,
       softEdge: 2,
       rotate: 15,
+      flipH: true,
+      flipV: false,
     });
+    const visualClear: VisualStyle = visualStyleSchema.parse({
+      background: bgNone,
+      border: borderNone,
+      boxShadow: shadowNone,
+      flipH: false,
+      flipV: true,
+    });
+    assert.equal(bgSolid, "#FFFFFF");
     assert.equal(radial.type, "radial-gradient");
-    assert.equal(visual.borderStyle, "dashed");
+    assert.equal(visual.flipH, true);
+    assert.equal(visual.flipV, false);
+    assert.deepEqual(visual.border, borderObj);
+    assert.equal(visualClear.background, "none");
+    assert.equal(visualClear.border, "none");
+    assert.equal(visualClear.boxShadow, "none");
 
     // Preserve native units ("32pt" vs 32 vs "32px") through schema & validateTextStyle
     for (const fontSize of ["32pt", 32, "32px"] as const) {

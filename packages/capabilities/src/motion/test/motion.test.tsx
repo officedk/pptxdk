@@ -21,7 +21,7 @@ import {
   Step,
   Text,
   motionCapability,
-  observeMotion,
+  motionSchedule,
   repeat,
   transitionCapability,
   transitions,
@@ -114,12 +114,15 @@ function RepeatedSpinDeck() {
         { scope: body },
         createElement(Shape, {
           id: "three-turns",
-          x: 20,
-          y: 20,
-          width: 40,
-          height: 40,
-          fill: "#164E3D",
           emphasis: repeat(spin({ duration: 100, from: 0 }), 3),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 40,
+            height: 40,
+            background: "#164E3D",
+          },
         }),
       ),
     ),
@@ -153,11 +156,14 @@ function TimeProjectionDeck({
           { scope: inner, delay: innerDelay },
           createElement(Shape, {
             id: "timed-repeat",
-            x: 0,
-            y: 0,
-            width: 20,
-            height: 20,
             emphasis: repeat(spin({ duration }), repeatCount),
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
       ),
@@ -185,25 +191,31 @@ function RepeatedAndBreathingDeck() {
           createElement(Shape, {
             id: "finite-body",
             name: "Finite body - spin three turns",
-            x: 20,
-            y: 20,
-            width: 40,
-            height: 40,
-            fill: "#164E3D",
             emphasis: repeat(spin({ duration: 1200 }), 3),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 40,
+              height: 40,
+              background: "#164E3D",
+            },
           }),
           createElement(Shape, {
             id: "finite-breathe",
             name: "Finite body - two breathe cycles",
-            x: 20,
-            y: 70,
-            width: 20,
-            height: 20,
-            fill: "#FFFFFF",
             emphasis: repeat(
               breathe({ period: 2000, from: "#164E3D", to: "#4ADE80" }),
               2,
             ),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 70,
+              width: 20,
+              height: 20,
+              background: "#FFFFFF",
+            },
           }),
         ),
         createElement(
@@ -219,11 +231,6 @@ function RepeatedAndBreathingDeck() {
             createElement(Shape, {
               id: "infinite-lamp",
               name: "Group member - breathe until slide exit",
-              x: 80,
-              y: 20,
-              width: 40,
-              height: 40,
-              fill: "#164E3D",
               emphasis: repeat(
                 breathe({
                   period: 1600,
@@ -232,6 +239,14 @@ function RepeatedAndBreathingDeck() {
                 }),
                 "forever",
               ),
+              style: {
+                position: "absolute",
+                left: 80,
+                top: 20,
+                width: 40,
+                height: 40,
+                background: "#164E3D",
+              },
             }),
           ),
         ),
@@ -241,12 +256,15 @@ function RepeatedAndBreathingDeck() {
         { scope: afterBody, startAt: body.end },
         createElement(Shape, {
           id: "after-body",
-          x: 140,
-          y: 20,
-          width: 40,
-          height: 40,
-          fill: "#4ADE80",
           enter: fade({ duration: 100 }),
+          style: {
+            position: "absolute",
+            left: 140,
+            top: 20,
+            width: 40,
+            height: 40,
+            background: "#4ADE80",
+          },
         }),
       ),
       createElement(
@@ -254,12 +272,15 @@ function RepeatedAndBreathingDeck() {
         { n: 1 },
         createElement(Shape, {
           id: "first-click",
-          x: 20,
-          y: 80,
-          width: 40,
-          height: 20,
-          fill: "#3B82F6",
           enter: fade({ duration: 80 }),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 80,
+            width: 40,
+            height: 20,
+            background: "#3B82F6",
+          },
         }),
       ),
       createElement(
@@ -267,12 +288,15 @@ function RepeatedAndBreathingDeck() {
         { n: 2 },
         createElement(Shape, {
           id: "second-click",
-          x: 80,
-          y: 80,
-          width: 40,
-          height: 20,
-          fill: "#F97316",
           enter: fade({ duration: 80 }),
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 80,
+            width: 40,
+            height: 20,
+            background: "#F97316",
+          },
         }),
       ),
     ),
@@ -281,11 +305,14 @@ function RepeatedAndBreathingDeck() {
       { id: "after-breathing-slide" },
       createElement(Shape, {
         id: "next-page",
-        x: 20,
-        y: 20,
-        width: 40,
-        height: 40,
-        fill: "#4ADE80",
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 20,
+          width: 40,
+          height: 40,
+          background: "#4ADE80",
+        },
       }),
     ),
   );
@@ -309,36 +336,45 @@ function InfiniteSequenceTail({
         { scope: sequence, mode: "sequence" },
         createElement(Shape, {
           id: "before-lamp",
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
           enter: fade({ duration: 100 }),
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+          },
         }),
         createElement(
           MotionScope,
           { scope: lamp },
           createElement(Shape, {
             id: "tail-lamp",
-            x: 30,
-            y: 0,
-            width: 20,
-            height: 20,
-            fill: "#164E3D",
             emphasis: repeat(
               breathe({ period: 1600, from: "#164E3D", to: "#4ADE80" }),
               "forever",
             ),
+            style: {
+              position: "absolute",
+              left: 30,
+              top: 0,
+              width: 20,
+              height: 20,
+              background: "#164E3D",
+            },
           }),
         ),
         blockAfter
           ? createElement(Shape, {
               id: "blocked-follower",
-              x: 60,
-              y: 0,
-              width: 20,
-              height: 20,
               enter: fade({ duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 60,
+                top: 0,
+                width: 20,
+                height: 20,
+              },
             })
           : null,
       ),
@@ -678,16 +714,19 @@ describe("object motion", () => {
           { id: "maximum-breathe-period" },
           createElement(Shape, {
             id: "maximum-breathe-period",
-            x: 0,
-            y: 0,
-            width: 20,
-            height: 20,
-            fill: "#164E3D",
             emphasis: breathe({
               period: maxPeriod,
               from: "#164E3D",
               to: "#4ADE80",
             }),
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+              background: "#164E3D",
+            },
           }),
         ),
       ),
@@ -750,7 +789,7 @@ describe("object motion", () => {
       build(createElement(TimeProjectionDeck, unsafeTotal)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-motion-time");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );
@@ -811,60 +850,60 @@ describe("object motion", () => {
         props: {
           enter: repeat(fade({ duration: 100 }), 2),
         },
-        code: "unsupported-repeat",
+        code: "invalid-prop",
       },
       {
         id: "repeat-zero",
         props: { emphasis: repeat(spin(), 0) },
-        code: "invalid-repeat-count",
+        code: "invalid-prop",
       },
       {
         id: "repeat-missing-count",
         props: { emphasis: repeat(spin(), undefined as never) },
-        code: "invalid-repeat-count",
+        code: "invalid-prop",
       },
       {
         id: "repeat-count-limit",
         props: { emphasis: repeat(spin(), 4_294_968) },
-        code: "invalid-repeat-count",
+        code: "invalid-prop",
       },
       {
         id: "repeat-duration-limit",
         props: {
           emphasis: repeat(spin({ duration: 4_294_967_296 }), 1),
         },
-        code: "invalid-repeat-duration",
+        code: "invalid-prop",
       },
       {
         id: "repeat-forever-spin",
         props: { emphasis: repeat(spin(), "forever") },
-        code: "unsupported-repeat",
+        code: "invalid-prop",
       },
       {
         id: "repeat-granularity",
         props: { emphasis: repeat(spin({ by: "letter" }), 2) },
-        code: "unsupported-repeat-combination",
+        code: "invalid-prop",
       },
       {
         id: "repeat-breathe-granularity",
         props: {
-          fill: "#164E3D",
+          style: { background: "#164E3D" },
           emphasis: repeat(breathe(breatheWithGranularity), 2),
         },
-        code: "unsupported-repeat-combination",
+        code: "invalid-prop",
       },
       {
         id: "breathe-unsupported-duration",
         props: {
-          fill: "#164E3D",
+          style: { background: "#164E3D" },
           emphasis: breathe(breatheWithUnsupportedDuration),
         },
-        code: "unknown-parameter",
+        code: "unknown-prop",
       },
       {
         id: "breathe-null-easing",
         props: {
-          fill: "#164E3D",
+          style: { background: "#164E3D" },
           emphasis: breathe({
             period: 2000,
             from: "#164E3D",
@@ -872,12 +911,12 @@ describe("object motion", () => {
             easing: null,
           } as never),
         },
-        code: "invalid-easing",
+        code: "invalid-prop",
       },
       {
         id: "breathe-false-easing",
         props: {
-          fill: "#164E3D",
+          style: { background: "#164E3D" },
           emphasis: breathe({
             period: 2000,
             from: "#164E3D",
@@ -885,7 +924,7 @@ describe("object motion", () => {
             easing: false,
           } as never),
         },
-        code: "invalid-easing",
+        code: "invalid-prop",
       },
       {
         id: "odd-breathe-period",
@@ -896,7 +935,7 @@ describe("object motion", () => {
             to: "#4ADE80",
           }),
         },
-        code: "invalid-breathe-period",
+        code: "invalid-prop",
       },
       {
         id: "breathe-period-limit",
@@ -912,7 +951,7 @@ describe("object motion", () => {
       {
         id: "dark-breathe-endpoint",
         props: {
-          fill: "#FFFFFF",
+          style: { background: "#FFFFFF" },
           emphasis: breathe({
             period: 1600,
             from: "#FFFFFF",
@@ -945,11 +984,14 @@ describe("object motion", () => {
               { id: `invalid-${testId}` },
               createElement(Shape, {
                 id: testId,
-                x: 0,
-                y: 0,
-                width: 20,
-                height: 20,
                 ...props,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 20,
+                  height: 20,
+                },
               } as never),
             ),
           ),
@@ -988,11 +1030,14 @@ describe("object motion", () => {
               },
               createElement(Shape, {
                 id: "group-breathe-child",
-                x: 20,
-                y: 20,
-                width: 20,
-                height: 20,
-                fill: "#164E3D",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 20,
+                  width: 20,
+                  height: 20,
+                  background: "#164E3D",
+                },
               }),
             ),
           ),
@@ -1051,11 +1096,14 @@ describe("object motion", () => {
               Text,
               {
                 id: testId,
-                x: 0,
-                y: 0,
-                width: 200,
-                height: 100,
                 enter,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 100,
+                },
               },
               ...children,
             ),
@@ -1171,11 +1219,14 @@ describe("object motion", () => {
             Text,
             {
               id: "paragraphs",
-              x: 10,
-              y: 10,
-              width: 240,
-              height: 100,
               enter: fade({ by: "paragraph", duration: 300 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 240,
+                height: 100,
+              },
             },
             createElement(P, null, "First"),
             createElement(P, null, "Second"),
@@ -1245,15 +1296,18 @@ describe("object motion", () => {
             {
               id: "letters",
               name: "letters",
-              x: 10,
-              y: 10,
-              width: 240,
-              height: 60,
               enter: fade({
                 by: "letter",
                 duration: 1000,
                 intervalMs: 500,
               }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 240,
+                height: 60,
+              },
             },
             "LATE EARLY",
           ),
@@ -1261,12 +1315,15 @@ describe("object motion", () => {
         createElement(Text, {
           id: "words",
           name: "words",
-          x: 10,
-          y: 70,
-          width: 240,
-          height: 40,
           enter: fade({ by: "word", duration: 600 }),
           children: "First second",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 70,
+            width: 240,
+            height: 40,
+          },
         }),
         createElement(
           MotionScope,
@@ -1274,11 +1331,15 @@ describe("object motion", () => {
           createElement(Shape, {
             id: "after-letters",
             name: "after-letters",
-            x: 10,
-            y: 90,
-            style: { width: 60, height: 30 },
-            fill: "#123456",
             enter: fade({ duration: 200 }),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 90,
+              width: 60,
+              height: 30,
+              background: "#123456",
+            },
           }),
         ),
       );
@@ -1438,10 +1499,6 @@ describe("object motion", () => {
           createElement(Chart, {
             id: "series-chart",
             name: "series-chart",
-            x: 10,
-            y: 10,
-            width: 210,
-            height: 200,
             groups: [
               {
                 kind: "column",
@@ -1453,14 +1510,17 @@ describe("object motion", () => {
               },
             ],
             enter: wipe({ by: "series", duration: 400, from: "left" }),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 210,
+              height: 200,
+            },
           }),
           createElement(Chart, {
             id: "category-chart",
             name: "category-chart",
-            x: 240,
-            y: 10,
-            width: 210,
-            height: 200,
             groups: [
               {
                 kind: "line",
@@ -1472,6 +1532,13 @@ describe("object motion", () => {
               },
             ],
             enter: fade({ by: "category", duration: 300 }),
+            style: {
+              position: "absolute",
+              left: 240,
+              top: 10,
+              width: 210,
+              height: 200,
+            },
           }),
         ),
       ),
@@ -1660,12 +1727,15 @@ describe("object motion", () => {
       createElement(Chart, {
         id: `xy-${by}`,
         name: `xy-${by}`,
-        x,
-        y: 10,
-        width: 200,
-        height: 200,
         groups,
         enter: fade({ by, duration: 100 }),
+        style: {
+          position: "absolute",
+          left: x,
+          top: 10,
+          width: 200,
+          height: 200,
+        },
       });
     const result = await build(
       createElement(
@@ -1799,12 +1869,15 @@ describe("object motion", () => {
             createElement(Chart, {
               id: `duplicate-${by}`,
               name: `duplicate-${by}`,
-              x: 10 + index * 220,
-              y: 10,
-              width: 200,
-              height: 200,
               groups,
               enter: fade({ by, duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 10 + index * 220,
+                top: 10,
+                width: 200,
+                height: 200,
+              },
             }),
           ),
         ),
@@ -1947,22 +2020,28 @@ describe("object motion", () => {
           createElement(Chart, {
             id: "multi-group-series-elements",
             name: "multi-group-series-elements",
-            x: 10,
-            y: 10,
-            width: 280,
-            height: 280,
             groups,
             enter: fade({ by: "seriesElements", duration: 100 }),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 280,
+              height: 280,
+            },
           }),
           createElement(Chart, {
             id: "multi-group-category-elements",
             name: "multi-group-category-elements",
-            x: 310,
-            y: 10,
-            width: 280,
-            height: 280,
             groups,
             enter: fade({ by: "categoryElements", duration: 100 }),
+            style: {
+              position: "absolute",
+              left: 310,
+              top: 10,
+              width: 280,
+              height: 280,
+            },
           }),
         ),
       ),
@@ -2059,12 +2138,15 @@ describe("object motion", () => {
               createElement(Chart, {
                 id: `${kind}-${by}`,
                 name: `${kind}-${by}`,
-                x: 10,
-                y: 10,
-                width: 460,
-                height: 250,
                 groups: [groupFor(kind)],
                 enter: fade({ by, duration: 100 + orderIndex }),
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 460,
+                  height: 250,
+                },
               }),
             ),
           ),
@@ -2152,12 +2234,15 @@ describe("object motion", () => {
           createElement(Chart, {
             id: "point-chart",
             name: "point-chart",
-            x: 10,
-            y: 10,
-            width: 460,
-            height: 250,
             groups,
             enter: fade({ by: "seriesElements", duration: 100 }),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 460,
+              height: 250,
+            },
           }),
         ),
       ),
@@ -2275,18 +2360,21 @@ describe("object motion", () => {
             { id: "non-chart-points" },
             createElement(Shape, {
               id: "not-a-chart",
-              x: 10,
-              y: 10,
-              width: 100,
-              height: 50,
               enter: fade({ by: "seriesElements" }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 50,
+              },
             }),
           ),
         ),
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-motion-granularity");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );
@@ -2300,10 +2388,6 @@ describe("object motion", () => {
             { id: "mixed-points" },
             createElement(Chart, {
               id: "mixed-chart",
-              x: 10,
-              y: 10,
-              width: 460,
-              height: 250,
               groups: [
                 {
                   kind: "column",
@@ -2315,13 +2399,20 @@ describe("object motion", () => {
                 },
               ],
               enter: [fade({ by: "series" }), fade({ by: "categoryElements" })],
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 460,
+                height: 250,
+              },
             }),
           ),
         ),
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-motion-granularity");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );
@@ -2342,10 +2433,6 @@ describe("object motion", () => {
             { scope: chartScope },
             createElement(Chart, {
               id: "point-sequence-chart",
-              x: 10,
-              y: 10,
-              width: 460,
-              height: 200,
               groups: [
                 {
                   kind: "column",
@@ -2360,6 +2447,13 @@ describe("object motion", () => {
                 },
               ],
               enter: fade({ by: "categoryElements", duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 460,
+                height: 200,
+              },
             }),
           ),
           createElement(
@@ -2370,11 +2464,14 @@ describe("object motion", () => {
             },
             createElement(Shape, {
               id: "point-sequence-follower",
-              x: 10,
-              y: 220,
-              width: 40,
-              height: 30,
               enter: fade({ duration: 50 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 220,
+                width: 40,
+                height: 30,
+              },
             }),
           ),
         ),
@@ -2419,10 +2516,6 @@ describe("object motion", () => {
       createElement(Chart, {
         id: testId,
         name: testId,
-        x,
-        y: 10,
-        width: 210,
-        height: 200,
         groups: [
           {
             kind: "column" as const,
@@ -2434,6 +2527,13 @@ describe("object motion", () => {
           },
         ],
         enter: fade({ by: "series", duration: 400 }),
+        style: {
+          position: "absolute",
+          left: x,
+          top: 10,
+          width: 210,
+          height: 200,
+        },
       });
     const result = await build(
       createElement(
@@ -2512,10 +2612,6 @@ describe("object motion", () => {
       createElement(Chart, {
         id: testId,
         name: testId,
-        x,
-        y: 10,
-        width: 210,
-        height: 200,
         groups: [
           {
             kind: "column" as const,
@@ -2527,6 +2623,13 @@ describe("object motion", () => {
           },
         ],
         enter: fade({ by: "series", duration: 400 }),
+        style: {
+          position: "absolute",
+          left: x,
+          top: 10,
+          width: 210,
+          height: 200,
+        },
       });
     const result = await build(
       createElement(
@@ -2537,10 +2640,13 @@ describe("object motion", () => {
           { id: "chart-build-negative" },
           createElement(Shape, {
             id: "not-a-chart",
-            x: 240,
-            y: 220,
-            width: 40,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 240,
+              top: 220,
+              width: 40,
+              height: 40,
+            },
           }),
           chart("first-chart", 10),
           chart("second-chart", 260),
@@ -2726,11 +2832,14 @@ describe("object motion", () => {
           createElement(Shape, {
             id: "moving",
             name: "moving",
-            x: 12,
-            y: 18,
-            width: 60,
-            height: 40,
             enter: effect,
+            style: {
+              position: "absolute",
+              left: 12,
+              top: 18,
+              width: 60,
+              height: 40,
+            },
           }),
         ),
       ),
@@ -2797,41 +2906,53 @@ describe("object motion", () => {
           createElement(Shape, {
             id: "shape-target",
             name: "shape-target",
-            x: 0,
-            y: 0,
-            width: 16,
-            height: 16,
             enter: fade(),
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 16,
+              height: 16,
+            },
           }),
           createElement(Text, {
             id: "text-target",
             name: "text-target",
-            x: 20,
-            y: 0,
-            width: 80,
-            height: 24,
             emphasis: spin({ from: -90 }),
             children: "Text target",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 0,
+              width: 80,
+              height: 24,
+            },
           }),
           createElement(Image, {
             id: "image-target",
             name: "image-target",
             src: png,
-            x: 110,
-            y: 0,
-            width: 16,
-            height: 16,
             enter: wipe({ from: "right" }),
+            style: {
+              position: "absolute",
+              left: 110,
+              top: 0,
+              width: 16,
+              height: 16,
+            },
           }),
           createElement(
             Group,
             { id: "group-target", name: "group-target", enter: zoom() },
             createElement(Shape, {
               id: "group-member",
-              x: 140,
-              y: 0,
-              width: 16,
-              height: 16,
+              style: {
+                position: "absolute",
+                left: 140,
+                top: 0,
+                width: 16,
+                height: 16,
+              },
             }),
           ),
         ),
@@ -2880,22 +3001,28 @@ describe("object motion", () => {
           { id: "steps" },
           createElement(Shape, {
             id: "automatic-entry",
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
             enter: fade(),
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 10,
+              height: 10,
+            },
           }),
           createElement(
             Step,
             { n: 1 },
             createElement(Shape, {
               id: "explicit-first",
-              x: 12,
-              y: 0,
-              width: 10,
-              height: 10,
               enter: fade({ duration: 200, delay: 50 }),
+              style: {
+                position: "absolute",
+                left: 12,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
           createElement(
@@ -2903,11 +3030,14 @@ describe("object motion", () => {
             {},
             createElement(Shape, {
               id: "generated-first",
-              x: 24,
-              y: 0,
-              width: 10,
-              height: 10,
               enter: fade({ duration: 300, delay: 10 }),
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
           createElement(
@@ -2915,11 +3045,14 @@ describe("object motion", () => {
             { n: 1 },
             createElement(Shape, {
               id: "explicit-second",
-              x: 36,
-              y: 0,
-              width: 10,
-              height: 10,
               enter: fade({ duration: 400, delay: 100 }),
+              style: {
+                position: "absolute",
+                left: 36,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
           createElement(
@@ -2927,11 +3060,14 @@ describe("object motion", () => {
             {},
             createElement(Shape, {
               id: "generated-second",
-              x: 48,
-              y: 0,
-              width: 10,
-              height: 10,
               enter: fade({ duration: 120, delay: 25 }),
+              style: {
+                position: "absolute",
+                left: 48,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
           createElement(
@@ -2939,30 +3075,39 @@ describe("object motion", () => {
             { n: 2 },
             createElement(Shape, {
               id: "disabled",
-              x: 60,
-              y: 0,
-              width: 10,
-              height: 10,
               motion: false,
               enter: floatDown(),
+              style: {
+                position: "absolute",
+                left: 60,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
             createElement(Shape, {
               id: "static",
-              x: 72,
-              y: 0,
-              width: 10,
-              height: 10,
+              style: {
+                position: "absolute",
+                left: 72,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
             createElement(
               Group,
               { id: "disabled-group", motion: false },
               createElement(Shape, {
                 id: "disabled-descendant",
-                x: 84,
-                y: 0,
-                width: 10,
-                height: 10,
                 enter: fade(),
+                style: {
+                  position: "absolute",
+                  left: 84,
+                  top: 0,
+                  width: 10,
+                  height: 10,
+                },
               }),
             ),
           ),
@@ -2971,11 +3116,14 @@ describe("object motion", () => {
             { n: 2 },
             createElement(Shape, {
               id: "explicit-after-ignored",
-              x: 96,
-              y: 0,
-              width: 10,
-              height: 10,
               enter: fade({ duration: 300, delay: 40 }),
+              style: {
+                position: "absolute",
+                left: 96,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
         ),
@@ -3062,11 +3210,14 @@ describe("object motion", () => {
             createElement(Shape, {
               key: testId,
               id: testId,
-              x: index * 20,
-              y: 0,
-              width: 16,
-              height: 16,
               [prop]: effect,
+              style: {
+                position: "absolute",
+                left: index * 20,
+                top: 0,
+                width: 16,
+                height: 16,
+              },
             }),
           ),
         ),
@@ -3123,34 +3274,43 @@ describe("object motion", () => {
           { id: "float-down" },
           createElement(Shape, {
             id: "down-default",
-            x: 20,
-            y: 20,
-            width: 24,
-            height: 24,
-            fill: "#164E3D",
             enter: floatDown(),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 24,
+              height: 24,
+              background: "#164E3D",
+            },
           }),
           createElement(Shape, {
             id: "down-custom",
-            x: 60,
-            y: 20,
-            width: 24,
-            height: 24,
-            fill: "#164E3D",
             enter: floatDown({
               duration: 250,
               delay: 40,
               easing: { decelerate: 0.5 },
             }),
+            style: {
+              position: "absolute",
+              left: 60,
+              top: 20,
+              width: 24,
+              height: 24,
+              background: "#164E3D",
+            },
           }),
           createElement(Shape, {
             id: "up-regression",
-            x: 100,
-            y: 20,
-            width: 24,
-            height: 24,
-            fill: "#164E3D",
             enter: floatUp(),
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 20,
+              width: 24,
+              height: 24,
+              background: "#164E3D",
+            },
           }),
         ),
       ),
@@ -3260,27 +3420,30 @@ describe("object motion", () => {
             },
             createElement(Shape, {
               id: "group-member",
-              x: 20,
-              y: 20,
-              width: 24,
-              height: 24,
-              fill: "#164E3D",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 24,
+                height: 24,
+                background: "#164E3D",
+              },
             }),
           ),
           createElement(
             Text,
             {
               id: "whole-down",
-              x: 80,
-              y: 20,
-              width: 180,
-              height: 100,
-              style: {
-                backgroundColor: "#38BDF8",
-                borderColor: "#1D4ED8",
-                borderWidth: 2,
-              },
               enter: floatDown({ duration: 250 }),
+              style: {
+                position: "absolute",
+                left: 80,
+                top: 20,
+                width: 180,
+                height: 100,
+                background: "#38BDF8",
+                border: { color: "#1D4ED8", width: 2 },
+              },
             },
             createElement(P, { key: "first" }, "First paragraph"),
             createElement(P, { key: "second" }, "Second paragraph"),
@@ -6602,11 +6765,6 @@ describe("object motion", () => {
           { id: "whole-fly-spin-in" },
           createElement(Text, {
             id: "whole-spin-in-text",
-            x: 180,
-            y: 140,
-            width: 420,
-            height: 160,
-            style: { rotate: 12, backgroundColor: "#FEF3C7" },
             enter: [
               fly({ from: "left", duration: 4000 }),
               spinIn({ duration: 4000 }),
@@ -6615,6 +6773,15 @@ describe("object motion", () => {
               createElement(P, { key: "long" }, "A long first paragraph"),
               createElement(P, { key: "short" }, "SHORT"),
             ],
+            style: {
+              position: "absolute",
+              left: 180,
+              top: 140,
+              width: 420,
+              height: 160,
+              rotate: 12,
+              background: "#FEF3C7",
+            },
           }),
         ),
         createElement(
@@ -6629,25 +6796,31 @@ describe("object motion", () => {
             },
             createElement(Text, {
               id: "formula-spin-text-member",
-              x: 110,
-              y: 130,
-              width: 260,
-              height: 120,
-              style: { backgroundColor: "#DBEAFE" },
               enter: fade({ duration: 4000 }),
               children: [
                 createElement(P, { key: "long" }, "A long member paragraph"),
                 createElement(P, { key: "short" }, "SHORT"),
               ],
+              style: {
+                position: "absolute",
+                left: 110,
+                top: 130,
+                width: 260,
+                height: 120,
+                background: "#DBEAFE",
+              },
             }),
             createElement(Shape, {
               id: "formula-spin-shape-member",
               name: "formula-spin-shape-member",
-              x: 470,
-              y: 230,
-              width: 64,
-              height: 64,
-              fill: "#F97316",
+              style: {
+                position: "absolute",
+                left: 470,
+                top: 230,
+                width: 64,
+                height: 64,
+                background: "#F97316",
+              },
             }),
           ),
         ),
@@ -6957,28 +7130,34 @@ describe("object motion", () => {
           { id: "relative-spin" },
           createElement(Shape, {
             id: "positive-spin-shape",
-            x: 80,
-            y: 60,
-            width: 64,
-            height: 64,
-            style: { rotate: 17 },
-            fill: "#F97316",
             emphasis: spin({ duration: 1200, by: 120 }),
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 60,
+              width: 64,
+              height: 64,
+              rotate: 17,
+              background: "#F97316",
+            },
           }),
           createElement(
             Text,
             {
               id: "legacy-spin-text",
-              x: 80,
-              y: 150,
-              width: 120,
-              height: 40,
               emphasis: spin({
                 duration: 1200,
                 from: 90,
                 by: "letter",
                 intervalMs: 50,
               }),
+              style: {
+                position: "absolute",
+                left: 80,
+                top: 150,
+                width: 120,
+                height: 40,
+              },
             },
             "two words",
           ),
@@ -6990,31 +7169,38 @@ describe("object motion", () => {
             },
             createElement(Text, {
               id: "negative-spin-text",
-              x: 220,
-              y: 130,
-              width: 240,
-              height: 120,
-              style: { rotate: 12, backgroundColor: "#FEF3C7" },
               enter: fade({ duration: 100 }),
               children: [
                 createElement(P, { key: "first" }, "First paragraph"),
                 createElement(P, { key: "second" }, "Second paragraph"),
               ],
+              style: {
+                position: "absolute",
+                left: 220,
+                top: 130,
+                width: 240,
+                height: 120,
+                rotate: 12,
+                background: "#FEF3C7",
+              },
             }),
             createElement(Shape, {
               id: "negative-spin-member",
-              x: 520,
-              y: 230,
-              width: 64,
-              height: 64,
-              fill: "#1D4ED8",
+              style: {
+                position: "absolute",
+                left: 520,
+                top: 230,
+                width: 64,
+                height: 64,
+                background: "#1D4ED8",
+              },
             }),
           ),
         ),
       ),
     );
     const slide = result.query.getSlide("relative-spin");
-    const queryEffects = observeMotion(slide.observation)?.steps.flatMap(
+    const queryEffects = motionSchedule(slide.observation)?.steps.flatMap(
       ({ effects }) => effects,
     );
     const positiveQueryEffect = queryEffects?.find(
@@ -7184,11 +7370,14 @@ describe("object motion", () => {
               { id: "invalid" },
               createElement(Shape, {
                 id: "invalid-effect",
-                x: 0,
-                y: 0,
-                width: 16,
-                height: 16,
                 enter: effect,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 16,
+                  height: 16,
+                },
               }),
             ),
           ),
@@ -7218,11 +7407,14 @@ describe("object motion", () => {
                   { id: "trimmed" },
                   createElement(Shape, {
                     id: "needs-motion",
-                    x: 0,
-                    y: 0,
-                    width: 16,
-                    height: 16,
                     enter: fade(),
+                    style: {
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      width: 16,
+                      height: 16,
+                    },
                   }),
                 ),
               ),
@@ -7250,11 +7442,14 @@ describe("object motion", () => {
           { id: "target" },
           createElement(Shape, {
             id: "target-object",
-            x: 0,
-            y: 0,
-            width: 16,
-            height: 16,
             enter: fade(),
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 16,
+              height: 16,
+            },
           }),
         ),
       ),
@@ -7297,11 +7492,8 @@ describe("object motion", () => {
     const animatedShape = (testId: string) =>
       createElement(Shape, {
         id: testId,
-        x: 0,
-        y: 0,
-        width: 20,
-        height: 20,
         enter: fade({ duration: 100 }),
+        style: { position: "absolute", left: 0, top: 0, width: 20, height: 20 },
       });
     const scopeDeck = (props: Record<string, unknown>) => {
       function ScopedMotion() {
@@ -7338,10 +7530,7 @@ describe("object motion", () => {
         element: slideDeck(
           createElement(
             Box,
-            {
-              motion: "false" as never,
-              style: { width: 100, height: 80 },
-            },
+            { motion: "false" as never, style: { width: 100, height: 80 } },
             animatedShape("box-child"),
           ),
         ),
@@ -7398,11 +7587,7 @@ describe("object motion", () => {
           Box,
           {
             motion: false,
-            style: {
-              width: 100,
-              height: 80,
-              backgroundColor: "#123456",
-            },
+            style: { width: 100, height: 80, background: "#123456" },
           },
           animatedShape("disabled-box-child"),
         ),
@@ -7423,37 +7608,37 @@ describe("object motion", () => {
       {
         id: "rotation-over-int32",
         props: { emphasis: spin({ from: 40_000 }) },
-        code: "invalid-rotation",
+        code: "invalid-prop",
       },
       {
         id: "rotation-too-large",
         props: { emphasis: spin({ from: 1e20 }) },
-        code: "invalid-rotation",
+        code: "invalid-prop",
       },
       {
         id: "rotation-null-from",
         props: { emphasis: spin({ from: null } as never) },
-        code: "invalid-rotation",
+        code: "invalid-prop",
       },
       {
         id: "rotation-by-over-int32",
         props: { emphasis: spin({ by: 40_000 }) },
-        code: "invalid-rotation",
+        code: "invalid-prop",
       },
       {
         id: "rotation-from-and-by",
         props: { emphasis: spin({ from: 90, by: -90 } as never) },
-        code: "invalid-motion",
+        code: "invalid-prop",
       },
       {
         id: "spin-in-enter",
         props: { enter: { ...spin(), kind: "entrance" } },
-        code: "invalid-motion",
+        code: "invalid-prop",
       },
       {
         id: "fade-as-emphasis",
         props: { emphasis: { ...fade(), kind: "emphasis" } },
-        code: "invalid-motion",
+        code: "invalid-prop",
       },
     ];
     for (const { id: testId, props, code } of cases) {
@@ -7467,11 +7652,14 @@ describe("object motion", () => {
               { id: "invalid-preset" },
               createElement(Shape, {
                 id: testId,
-                x: 0,
-                y: 0,
-                width: 16,
-                height: 16,
                 ...props,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 16,
+                  height: 16,
+                },
               } as never),
             ),
           ),
@@ -7506,11 +7694,14 @@ describe("object motion", () => {
               { id: "slot-order", transition: transitions.fade() },
               createElement(Shape, {
                 id: "timed",
-                x: 0,
-                y: 0,
-                width: 16,
-                height: 16,
                 enter: fade(),
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 16,
+                  height: 16,
+                },
               }),
             ),
           ),

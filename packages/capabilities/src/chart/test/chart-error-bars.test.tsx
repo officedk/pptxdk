@@ -62,10 +62,7 @@ function columnChart(
   kind: "column" | "bar" | "line" = "column",
 ): ChartProps {
   return {
-    x: 0,
-    y: 0,
-    width: 400,
-    height: 260,
+    style: { position: "absolute", left: 0, top: 0, width: 400, height: 260 },
     groups: [
       {
         kind,
@@ -230,10 +227,7 @@ describe("native chart error bars", () => {
       ],
     };
     const props: ChartProps = {
-      x: 0,
-      y: 0,
-      width: 420,
-      height: 260,
+      style: { position: "absolute", left: 0, top: 0, width: 420, height: 260 },
       groups: [group],
     };
     const result = await build(
@@ -391,7 +385,7 @@ describe("native chart error bars", () => {
           },
         ],
       },
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -411,7 +405,7 @@ describe("native chart error bars", () => {
           },
         ],
       },
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -421,7 +415,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "custom", plus: [1], minus: [1, 2, 3] },
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -431,7 +425,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "custom", plus: [1, 2, -3], minus: [1, 2, 3] },
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -445,7 +439,7 @@ describe("native chart error bars", () => {
           } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -455,7 +449,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "standardError", value: 2 } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -465,7 +459,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "fixed" } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -475,7 +469,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "fixed", value: 1, plus: [1, 1, 1] } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -489,7 +483,7 @@ describe("native chart error bars", () => {
           } as never,
         },
       ]),
-      "unknown-parameter",
+      "unknown-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -499,7 +493,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "fixed", value: -1 },
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -509,7 +503,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "percentage", value: Number.NaN },
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -523,7 +517,7 @@ describe("native chart error bars", () => {
           },
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -537,7 +531,7 @@ describe("native chart error bars", () => {
           },
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -547,7 +541,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "custom", plus: [1, 2, 3] } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -557,7 +551,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "fixed", value: 1, include: "sideways" } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -567,7 +561,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "bogus", value: 1 } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -577,7 +571,7 @@ describe("native chart error bars", () => {
           errorBars: { type: "fixed", value: 1, endCap: "yes" } as never,
         },
       ]),
-      "invalid-error-bars",
+      "invalid-prop",
     );
     await rejectsWithCode(
       columnChart([
@@ -597,10 +591,7 @@ describe("native chart error bars", () => {
 
   it("writes standard error, single-sided custom bars, and stacked groups", async () => {
     const area: ChartProps = {
-      x: 0,
-      y: 0,
-      width: 420,
-      height: 260,
+      style: { position: "absolute", left: 0, top: 0, width: 420, height: 260 },
       groups: [
         {
           kind: "area",
@@ -619,10 +610,7 @@ describe("native chart error bars", () => {
       ],
     };
     const stacked: ChartProps = {
-      x: 0,
-      y: 0,
-      width: 420,
-      height: 260,
+      style: { position: "absolute", left: 0, top: 0, width: 420, height: 260 },
       groups: [
         {
           kind: "column",
@@ -812,10 +800,7 @@ describe("native chart error bars", () => {
 
   it("builds line custom error bars for both and single sides through both entries", async () => {
     const props = (include: "both" | "plus" | "minus"): ChartProps => ({
-      x: 0,
-      y: 0,
-      width: 400,
-      height: 260,
+      style: { position: "absolute", left: 0, top: 0, width: 400, height: 260 },
       groups: [
         {
           kind: "line",
@@ -965,10 +950,7 @@ describe("native chart error bars", () => {
 
   it("combines series trendlines with custom error bars through both entries", async () => {
     const line: ChartProps = {
-      x: 0,
-      y: 0,
-      width: 420,
-      height: 260,
+      style: { position: "absolute", left: 0, top: 0, width: 420, height: 260 },
       groups: [
         {
           kind: "line",
@@ -998,10 +980,13 @@ describe("native chart error bars", () => {
       ],
     };
     const scatter: ChartProps = {
-      x: 0,
-      y: 280,
-      width: 420,
-      height: 260,
+      style: {
+        position: "absolute",
+        left: 0,
+        top: 280,
+        width: 420,
+        height: 260,
+      },
       groups: [
         {
           kind: "scatter",

@@ -11,7 +11,7 @@ import {
   spin,
   Step,
   Text,
-  observeMotion,
+  motionSchedule,
   useMotionScope,
   repeat,
   type MotionObservation,
@@ -28,11 +28,8 @@ import { build } from "../../../test/test-helpers.ts";
 function movingShape(testId: string, duration: number) {
   return createElement(Shape, {
     id: testId,
-    x: 0,
-    y: 0,
-    width: 20,
-    height: 20,
     enter: fade({ duration }),
+    style: { position: "absolute", left: 0, top: 0, width: 20, height: 20 },
   });
 }
 
@@ -44,16 +41,22 @@ function observedShape(
   duration: number,
   delay = 0,
 ) {
-  return createElement(Shape, {
-    id: testId,
-    x: 10,
-    y,
-    width: 280,
-    height: 24,
-    fill,
+  return createElement(
+    Shape,
+    {
+      id: testId,
+      enter: fade({ duration, delay }),
+      style: {
+        position: "absolute",
+        left: 10,
+        top: y,
+        width: 280,
+        height: 24,
+        background: fill,
+      },
+    },
     text,
-    enter: fade({ duration, delay }),
-  });
+  );
 }
 
 function unknownLetterText(testId: string, text: string, y: number) {
@@ -61,11 +64,8 @@ function unknownLetterText(testId: string, text: string, y: number) {
     Text,
     {
       id: testId,
-      x: 10,
-      y,
-      width: 280,
-      height: 32,
       enter: fade({ by: "letter", duration: 1000, intervalMs: 500 }),
+      style: { position: "absolute", left: 10, top: y, width: 280, height: 32 },
     },
     text,
   );
@@ -87,17 +87,23 @@ function TargetGroupStepEntry({
     createElement(
       MotionScope,
       { scope: sequence, mode: "sequence" },
-      createElement(Shape, {
-        id: "target-group-step-entry-source",
-        x: 5,
-        y: 5,
-        width: 150,
-        height: 30,
-        fill: "#000000",
-        text: "ABCD",
-        enter: fade({ by: "letter", duration: 350, intervalMs: 120 }),
-        emphasis: spin({ duration: 400 }),
-      }),
+      createElement(
+        Shape,
+        {
+          id: "target-group-step-entry-source",
+          enter: fade({ by: "letter", duration: 350, intervalMs: 120 }),
+          emphasis: spin({ duration: 400 }),
+          style: {
+            position: "absolute",
+            left: 5,
+            top: 5,
+            width: 150,
+            height: 30,
+            background: "#000000",
+          },
+        },
+        "ABCD",
+      ),
       createElement(
         MotionScope,
         { scope: sequenceFollower },
@@ -155,15 +161,18 @@ function SingleSourceUnknownStartAliases({
         ? movingShape("single-alias-source", 100)
         : createElement(Shape, {
             id: "single-alias-source",
-            x: 10,
-            y: 8,
-            width: 20,
-            height: 20,
-            fill: "#164E3D",
             emphasis: repeat(
               breathe({ period: 1000, from: "#164E3D", to: "#4ADE80" }),
               "forever",
             ),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 8,
+              width: 20,
+              height: 20,
+              background: "#164E3D",
+            },
           });
   const content = createElement(
     Fragment,
@@ -370,11 +379,14 @@ function SequenceStartCausality({
         Text,
         {
           id: "causality-source",
-          x: 10,
-          y: 8,
-          width: 280,
-          height: 32,
           enter: fade({ by: "letter", duration: 733, intervalMs: 211 }),
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 8,
+            width: 280,
+            height: 32,
+          },
         },
         "AB",
       )
@@ -384,11 +396,14 @@ function SequenceStartCausality({
         Text,
         {
           id: "causality-first",
-          x: 10,
-          y: 48,
-          width: 280,
-          height: 32,
           enter: fade({ by: "letter", duration: 733, intervalMs: 211 }),
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 48,
+            width: 280,
+            height: 32,
+          },
         },
         "AB",
       )
@@ -3195,7 +3210,7 @@ describe("component choreography scope", () => {
       build(createElement(EmptyScopeDeck, { includeSource: false })),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "missing-cue");
+        assert.equal(error.diagnostics[0]?.code, "broken-reference");
         return true;
       },
     );
@@ -3206,7 +3221,7 @@ describe("component choreography scope", () => {
       build(createElement(CyclicScopes)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "motion-cycle");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         return true;
       },
     );
@@ -3215,7 +3230,7 @@ describe("component choreography scope", () => {
       build(createElement(CrossStepScopes)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "cross-step-motion");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         return true;
       },
     );
@@ -3740,7 +3755,7 @@ describe("component choreography scope", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "no-natural-completion");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         return true;
       },
     );
@@ -7089,7 +7104,7 @@ describe("component choreography scope", () => {
           });
         }
 
-        const query = observeMotion(result.query.getSlide(slideId).observation);
+        const query = motionSchedule(result.slide(slideId));
         const queryStep = query?.steps[0];
         assert.equal(queryStep?.trigger, trigger);
         assert.deepEqual(
@@ -7578,7 +7593,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(parentEffect.startAfter, parent.startAfter);
     assert.deepEqual(aliasEffect.startAfter, alias.startAfter);
 
-    const query = observeMotion(
+    const query = motionSchedule(
       result.query.getSlide("universal-delay-unknown-alias").observation,
     );
     const step = query?.steps[0];
@@ -7634,7 +7649,7 @@ describe("component choreography scope", () => {
     assert.equal(parent.startMs, 4_294_967_295);
     assert.equal(alias.startMs, 4_294_967_314);
 
-    const query = observeMotion(
+    const query = motionSchedule(
       result.query.getSlide("universal-delay-known-alias").observation,
     );
     const step = query?.steps[0];
@@ -7690,7 +7705,7 @@ describe("component choreography scope", () => {
     assert.deepEqual(joined.startAfterAll, expectedDependencies);
     assert.deepEqual(effect.startAfterAll, expectedDependencies);
 
-    const query = observeMotion(
+    const query = motionSchedule(
       result.query.getSlide("universal-delay-condition-join").observation,
     );
     const queryEffect = query?.steps[0]?.effects.find(
@@ -7756,7 +7771,7 @@ describe("component choreography scope", () => {
       ).length,
       2,
     );
-    const query = observeMotion(
+    const query = motionSchedule(
       result.query.getSlide("multisource-late-start-alias").observation,
     );
     const queryAlias = query?.steps[0]?.effects.find(
@@ -7793,7 +7808,7 @@ describe("component choreography scope", () => {
       { scopeId: sourceC.id, point: "end", offsetMs: 4_294_968_596 },
     ];
     assert.deepEqual(joined.startAfterAll, expectedDependencies);
-    const query = observeMotion(
+    const query = motionSchedule(
       result.query.getSlide("multisource-spread-offset").observation,
     );
     const queryEffect = query?.steps[0]?.effects.find(
@@ -7852,7 +7867,7 @@ describe("component choreography scope", () => {
         ?.startAfterAll,
       expectedAfterB,
     );
-    const query = observeMotion(
+    const query = motionSchedule(
       result.query.getSlide("exact-host-offset-cancellation").observation,
     );
     assert.deepEqual(

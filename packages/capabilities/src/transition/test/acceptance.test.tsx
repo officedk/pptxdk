@@ -83,11 +83,14 @@ describe("Transition capability acceptance & bound slide contract", () => {
           createElement(Shape, {
             id: "hero-a",
             morphKey: hero,
-            x: 20,
-            y: 20,
-            width: 80,
-            height: 40,
-            fill: "#2563EB",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 40,
+              background: "#2563EB",
+            },
           }),
         ),
         createElement(
@@ -103,11 +106,14 @@ describe("Transition capability acceptance & bound slide contract", () => {
           createElement(Shape, {
             id: "hero-b",
             morphKey: hero,
-            x: 120,
-            y: 40,
-            width: 100,
-            height: 60,
-            fill: "#1D4ED8",
+            style: {
+              position: "absolute",
+              left: 120,
+              top: 40,
+              width: 100,
+              height: 60,
+              background: "#1D4ED8",
+            },
           }),
         ),
       ),
@@ -130,8 +136,8 @@ describe("Transition capability acceptance & bound slide contract", () => {
     // Paint succeeds on the same Resolution even when baselineOnly target rejects emit.
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 2);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
-    assert.deepEqual(painted.pages[1]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[1]?.errors, []);
     assert.ok(painted.pages[1]?.png !== undefined);
 
     assert.throws(
@@ -160,10 +166,13 @@ describe("Transition capability acceptance & bound slide contract", () => {
           createElement(Shape, {
             id: "shape-src",
             morphKey: hero,
-            x: 20,
-            y: 20,
-            width: 80,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 40,
+            },
           }),
         ),
         createElement(
@@ -176,10 +185,13 @@ describe("Transition capability acceptance & bound slide contract", () => {
             id: "img-dst",
             src: png1x1,
             morphKey: hero,
-            x: 20,
-            y: 20,
-            width: 80,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 40,
+            },
           }),
         ),
       ),

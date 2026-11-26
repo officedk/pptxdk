@@ -67,10 +67,7 @@ async function rejectsInBothEntries(
 
 function categoryChart(series: readonly ChartSeries[]): ChartProps {
   return {
-    x: 10,
-    y: 10,
-    width: 420,
-    height: 260,
+    style: { position: "absolute", left: 10, top: 10, width: 420, height: 260 },
     groups: [
       {
         kind: "column",
@@ -88,10 +85,7 @@ function scatterChart(
   series: Extract<ChartProps["groups"][number], { kind: "scatter" }>["series"],
 ): ChartProps {
   return {
-    x: 10,
-    y: 10,
-    width: 420,
-    height: 260,
+    style: { position: "absolute", left: 10, top: 10, width: 420, height: 260 },
     groups: [
       {
         kind: "scatter",
@@ -293,7 +287,7 @@ describe("trendlines", () => {
     const base = categoryChart([{ name: "S", values: [1, 2, 3, 4, 5] }]);
     const cases: readonly [string, ChartProps][] = [
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -303,7 +297,7 @@ describe("trendlines", () => {
         ]),
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -313,7 +307,7 @@ describe("trendlines", () => {
         ]),
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -323,7 +317,7 @@ describe("trendlines", () => {
         ]),
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -333,7 +327,7 @@ describe("trendlines", () => {
         ]),
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -343,7 +337,7 @@ describe("trendlines", () => {
         ]),
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -359,7 +353,7 @@ describe("trendlines", () => {
         ]),
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -382,7 +376,7 @@ describe("trendlines", () => {
         },
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -404,7 +398,7 @@ describe("trendlines", () => {
         },
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -414,7 +408,7 @@ describe("trendlines", () => {
         ]),
       ],
       [
-        "invalid-trendline",
+        "invalid-prop",
         categoryChart([
           {
             name: "S",
@@ -465,7 +459,7 @@ describe("trendlines", () => {
       ]),
     ];
     for (const props of cases) {
-      await rejectsInBothEntries(props, "invalid-trendline-domain");
+      await rejectsInBothEntries(props, "invalid-prop");
     }
   });
 
@@ -768,10 +762,13 @@ describe("trendlines", () => {
     );
 
     const pie = await built({
-      x: 10,
-      y: 10,
-      width: 320,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 320,
+        height: 220,
+      },
       groups: [
         {
           kind: "pie",

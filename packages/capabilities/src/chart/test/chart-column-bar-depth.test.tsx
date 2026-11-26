@@ -46,10 +46,6 @@ describe("column and bar depth", () => {
         <Slide id="chart-depth">
           <Chart
             id="depth"
-            x={24}
-            y={24}
-            width={560}
-            height={340}
             title={{
               text: "Quarterly revenue",
               style: {
@@ -62,7 +58,16 @@ describe("column and bar depth", () => {
             }}
             displayBlanksAs="zero"
             legend="bottom"
-            style={{ fontFamily: "Aptos", fontSize: "12pt", color: "#112233" }}
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 560,
+              height: 340,
+              fontFamily: "Aptos",
+              fontSize: "12pt",
+              color: "#112233",
+            }}
             plotArea={{ left: 72, top: 64, width: 456, height: 220 }}
             axes={{
               category: {
@@ -196,10 +201,13 @@ describe("column and bar depth", () => {
             <Chart
               key={variant.id}
               id={variant.id}
-              x={12 + (index % 3) * 214}
-              y={12 + Math.floor(index / 3) * 196}
-              width={200}
-              height={180}
+              style={{
+                position: "absolute",
+                left: 12 + (index % 3) * 214,
+                top: 12 + Math.floor(index / 3) * 196,
+                width: 200,
+                height: 180,
+              }}
               displayBlanksAs={variant.stacking === undefined ? "gap" : "zero"}
               groups={[
                 {
@@ -254,10 +262,13 @@ describe("column and bar depth", () => {
         <Slide id="axis-depth">
           <Chart
             id="axis-depth"
-            x={16}
-            y={16}
-            width={440}
-            height={260}
+            style={{
+              position: "absolute",
+              left: 16,
+              top: 16,
+              width: 440,
+              height: 260,
+            }}
             title="Log revenue"
             axes={{
               category: {
@@ -333,10 +344,7 @@ describe("column and bar depth", () => {
 
   it("diagnoses inapplicable or invalid column/bar depth options", async () => {
     const base = {
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 120,
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
       groups: [
         {
           kind: "column" as const,
@@ -346,10 +354,7 @@ describe("column and bar depth", () => {
       ],
     } satisfies ChartProps;
 
-    await rejectsWithCode(
-      { ...base, displayBlanksAs: "span" },
-      "invalid-chart-missing-values",
-    );
+    await rejectsWithCode({ ...base, displayBlanksAs: "span" }, "invalid-prop");
     await rejectsWithCode(
       {
         ...base,
@@ -363,7 +368,7 @@ describe("column and bar depth", () => {
           },
         ],
       },
-      "invalid-chart-missing-values",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -373,7 +378,7 @@ describe("column and bar depth", () => {
           value: { kind: "value" },
         },
       },
-      "invalid-axis",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -383,7 +388,7 @@ describe("column and bar depth", () => {
           value: { kind: "value", logBase: 1 },
         },
       },
-      "invalid-axis",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -393,7 +398,7 @@ describe("column and bar depth", () => {
           value: { kind: "value", logBase: 10, min: 0 },
         },
       },
-      "invalid-axis",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -403,7 +408,7 @@ describe("column and bar depth", () => {
           value: { kind: "value", crosses: "max", crossesAt: 1 },
         },
       },
-      "invalid-axis",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -413,7 +418,7 @@ describe("column and bar depth", () => {
           value: { kind: "value" },
         },
       },
-      "invalid-axis",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -423,9 +428,9 @@ describe("column and bar depth", () => {
           value: { kind: "value", majorTickMark: "sideways" as never },
         },
       },
-      "invalid-axis",
+      "invalid-prop",
     );
-    await rejectsWithCode({ ...base, title: "" }, "invalid-parameter");
+    await rejectsWithCode({ ...base, title: "" }, "invalid-prop");
     await rejectsWithCode(
       {
         ...base,
@@ -434,7 +439,7 @@ describe("column and bar depth", () => {
           value: { kind: "value" },
         },
       },
-      "invalid-parameter",
+      "invalid-prop",
     );
   });
 
@@ -444,10 +449,13 @@ describe("column and bar depth", () => {
         <Slide id="missing-depth">
           <Chart
             id="missing-column"
-            x={10}
-            y={10}
-            width={220}
-            height={180}
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 220,
+              height: 180,
+            }}
             displayBlanksAs="zero"
             groups={[
               {
@@ -463,10 +471,13 @@ describe("column and bar depth", () => {
           />
           <Chart
             id="missing-bar"
-            x={250}
-            y={10}
-            width={220}
-            height={180}
+            style={{
+              position: "absolute",
+              left: 250,
+              top: 10,
+              width: 220,
+              height: 180,
+            }}
             displayBlanksAs="gap"
             groups={[
               {
@@ -522,10 +533,7 @@ describe("column and bar depth", () => {
   it("overrides series and point label display, position, and number format through both authoring entries", async () => {
     const props: ChartProps = {
       id: "label-overrides",
-      x: 0,
-      y: 0,
-      width: 360,
-      height: 240,
+      style: { position: "absolute", left: 0, top: 0, width: 360, height: 240 },
       groups: [
         {
           kind: "column",
@@ -664,7 +672,7 @@ describe("column and bar depth", () => {
           },
         ],
       },
-      "invalid-data-labels",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -683,7 +691,7 @@ describe("column and bar depth", () => {
           },
         ],
       },
-      "invalid-data-labels",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -702,7 +710,7 @@ describe("column and bar depth", () => {
           },
         ],
       },
-      "invalid-data-labels",
+      "invalid-prop",
     );
   });
 });

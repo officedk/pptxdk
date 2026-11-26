@@ -51,10 +51,28 @@ describe("motion capability codegen", () => {
       slide({ id: "choreo" }).append(
         step().append(
           motionScope(lead, { mode: "sequence", publishEnd: leadReady }).append(
-            shape({ id: "a", x: 10, y: 10, width: 80, height: 40 }),
+            shape({
+              id: "a",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 80,
+                height: 40,
+              },
+            }),
           ),
           motionScope(afterLeadEnd, { startAt: lead.end }).append(
-            shape({ id: "a-end", x: 10, y: 60, width: 80, height: 40 }),
+            shape({
+              id: "a-end",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 60,
+                width: 80,
+                height: 40,
+              },
+            }),
           ),
         ),
         step({ n: 2 }).append(
@@ -67,13 +85,42 @@ describe("motion capability codegen", () => {
             publishEnd: staggerDone,
             motion: true,
           }).append(
-            shape({ id: "b", x: 100, y: 10, width: 80, height: 40 }),
-            shape({ id: "c", x: 190, y: 10, width: 80, height: 40 }),
+            shape({
+              id: "b",
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 10,
+                width: 80,
+                height: 40,
+              },
+            }),
+            shape({
+              id: "c",
+              style: {
+                position: "absolute",
+                left: 190,
+                top: 10,
+                width: 80,
+                height: 40,
+              },
+            }),
           ),
           motionScope(follower, {
             startAt: stagger.start,
             motion: false,
-          }).append(shape({ id: "d", x: 280, y: 10, width: 80, height: 40 })),
+          }).append(
+            shape({
+              id: "d",
+              style: {
+                position: "absolute",
+                left: 280,
+                top: 10,
+                width: 80,
+                height: 40,
+              },
+            }),
+          ),
         ),
       ),
     );
@@ -142,7 +189,16 @@ describe("motion capability codegen", () => {
     const badStepNumberDeck = deck().append(
       slide({ id: "s1" }).append(
         step({ n: 0 }).append(
-          shape({ id: "a", x: 0, y: 0, width: 20, height: 20 }),
+          shape({
+            id: "a",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            },
+          }),
         ),
       ),
     );
@@ -250,19 +306,18 @@ describe("motion capability codegen", () => {
       slide({ id: "effects" }).append(
         shape({
           id: "s-fade",
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 20,
           enter: fade(),
           emphasis: spin(),
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 40,
+            height: 20,
+          },
         }),
         shape({
           id: "s-wipe-fill",
-          x: 60,
-          y: 10,
-          width: 40,
-          height: 20,
           enter: wipe({ from: "left", duration: 300, delay: 40 }),
           emphasis: fillColor({
             from: "#2563EB",
@@ -270,13 +325,16 @@ describe("motion capability codegen", () => {
             duration: 450,
             easing: { accelerate: 0.25, decelerate: 0.5 },
           }),
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 10,
+            width: 40,
+            height: 20,
+          },
         }),
         shape({
           id: "s-zoom-breathe",
-          x: 110,
-          y: 10,
-          width: 40,
-          height: 20,
           enter: [
             zoom({ duration: 220 }),
             fly({ from: "top", duration: 260 }),
@@ -294,25 +352,38 @@ describe("motion capability codegen", () => {
             }),
             "forever",
           ),
+          style: {
+            position: "absolute",
+            left: 110,
+            top: 10,
+            width: 40,
+            height: 20,
+          },
         }),
         shape({
           id: "s-spin-repeat",
-          x: 160,
-          y: 10,
-          width: 40,
-          height: 20,
           enter: repeat(fade({ duration: 150 }), 2),
           emphasis: repeat(spin({ by: -90, duration: 400 }), 2),
           motion: false,
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 10,
+            width: 40,
+            height: 20,
+          },
         }),
         text("Word by word", {
           id: "t-words",
-          x: 10,
-          y: 60,
-          width: 180,
-          height: 40,
           enter: fade({ by: "word", intervalMs: 60, duration: 200 }),
           motion: true,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 60,
+            width: 180,
+            height: 40,
+          },
         }),
       ),
     );
@@ -374,10 +445,6 @@ describe("motion capability codegen", () => {
       slide({ id: "chart-motion" }).append(
         chart({
           id: "c1",
-          x: 20,
-          y: 20,
-          width: 300,
-          height: 200,
           groups: [
             {
               kind: "column",
@@ -386,6 +453,13 @@ describe("motion capability codegen", () => {
             },
           ],
           enter: fade({ by: "seriesElements", duration: 150 }),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 300,
+            height: 200,
+          },
         }),
       ),
     );
@@ -403,11 +477,14 @@ describe("motion capability codegen", () => {
       slide({ id: "s1" }).append(
         shape({
           id: "bad-enter",
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
           enter: spin() as unknown as ReturnType<typeof fade>,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+          },
         }),
       ),
     );
@@ -423,11 +500,14 @@ describe("motion capability codegen", () => {
       slide({ id: "s1" }).append(
         shape({
           id: "bad-emphasis",
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
           emphasis: fade() as unknown as ReturnType<typeof spin>,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+          },
         }),
       ),
     );
@@ -444,11 +524,14 @@ describe("motion capability codegen", () => {
       slide({ id: "s1" }).append(
         shape({
           id: "bad-arr",
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
           enter: [fade(), wipe({ duration: Number.NaN })],
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+          },
         }),
       ),
     );
@@ -465,11 +548,14 @@ describe("motion capability codegen", () => {
       slide({ id: "s1" }).append(
         shape({
           id: "bad-rep",
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
           emphasis: repeat(spin(), 0),
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+          },
         }),
       ),
     );
@@ -486,11 +572,14 @@ describe("motion capability codegen", () => {
       slide({ id: "s1" }).append(
         shape({
           id: "bad-flag",
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
           motion: "off" as unknown as boolean,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+          },
         }),
       ),
     );
@@ -510,7 +599,16 @@ describe("motion capability codegen", () => {
       type: "title",
       showMasterPlaceholderAnimations: false,
       placeholders: {
-        title: { type: "title", x: 32, y: 24, width: 480, height: 60 },
+        title: {
+          type: "title",
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 24,
+            width: 480,
+            height: 60,
+          },
+        },
       },
       motion: {
         steps: [
@@ -533,7 +631,16 @@ describe("motion capability codegen", () => {
         id: "master-1",
         name: "Motion Master",
         placeholders: {
-          ftr: { type: "ftr", x: 32, y: 490, width: 220, height: 24 },
+          ftr: {
+            type: "ftr",
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 490,
+              width: 220,
+              height: 24,
+            },
+          },
         },
         motion: {
           steps: [
@@ -640,10 +747,6 @@ describe("motion capability codegen", () => {
         step({ n: 1 }).append(
           chart({
             id: "c-series",
-            x: 20,
-            y: 20,
-            width: 280,
-            height: 150,
             groups: [
               {
                 kind: "column",
@@ -655,13 +758,16 @@ describe("motion capability codegen", () => {
               },
             ],
             enter: fade({ by: "series", duration: 180 }),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 280,
+              height: 150,
+            },
           }),
           chart({
             id: "c-cat-el",
-            x: 320,
-            y: 20,
-            width: 280,
-            height: 150,
             groups: [
               {
                 kind: "column",
@@ -677,6 +783,13 @@ describe("motion capability codegen", () => {
               by: "categoryElements",
               duration: 160,
             }),
+            style: {
+              position: "absolute",
+              left: 320,
+              top: 20,
+              width: 280,
+              height: 150,
+            },
           }),
         ),
       ),

@@ -157,11 +157,16 @@ const inheritanceTitleLayout = defineSlideLayout({
   placeholders: {
     title: {
       type: "title",
-      x: 48,
-      y: 36,
-      width: 544,
-      height: 64,
-      style: { fontFamily: jostFont, fontSize: "32pt", color: "#0F172A" },
+      style: {
+        position: "absolute",
+        left: 48,
+        top: 36,
+        width: 544,
+        height: 64,
+        fontFamily: jostFont,
+        fontSize: "32pt",
+        color: "#0F172A",
+      },
     },
   },
 });
@@ -242,8 +247,8 @@ const layoutInheritanceOverrideScenario: CapabilityScenario = {
         ?.fontSizePt,
       32,
     );
-    assert.deepEqual(preview.pages[0]?.diagnostics, []);
-    assert.deepEqual(preview.pages[1]?.diagnostics, []);
+    assert.deepEqual(preview.pages[0]?.errors, []);
+    assert.deepEqual(preview.pages[1]?.errors, []);
   },
 };
 
@@ -278,12 +283,8 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
         `Pure-file roundtrip page ${page.page} without embedded font must omit png`,
       );
       assert.ok(
-        page.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
-        ),
-        `Pure-file roundtrip page ${page.page} must report explicit monochrome outline font file`,
+        page.errors.some((err) => err.code === "preview-missing-font"),
+        `Pure-file roundtrip page ${page.page} must report preview-missing-font`,
       );
     }
 
@@ -310,9 +311,9 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     );
     for (const page of extraFontPaint.pages) {
       assert.deepEqual(
-        page.diagnostics,
+        page.errors,
         [],
-        `Extra font environment observation page ${page.page} expected zero diagnostics`,
+        `Extra font environment observation page ${page.page} expected zero errors`,
       );
       assert.ok(page.png instanceof Uint8Array);
     }
@@ -341,7 +342,7 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     );
     for (const page of embeddedExec.roundtrip.preview.pages) {
       assert.deepEqual(
-        page.diagnostics,
+        page.errors,
         [],
         `Embedded-font pure-file roundtrip page ${page.page} must paint without extra font environment`,
       );
@@ -445,8 +446,8 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
 
     // Visual confirmation: Slide 1 rendered glyphs change when layout changes 32pt -> 20pt,
     // whereas Slide 2 with equal-value explicit 32pt override renders identically.
-    assert.deepEqual(editedPaint.pages[0]?.diagnostics, []);
-    assert.deepEqual(editedPaint.pages[1]?.diagnostics, []);
+    assert.deepEqual(editedPaint.pages[0]?.errors, []);
+    assert.deepEqual(editedPaint.pages[1]?.errors, []);
     assert.notEqual(
       editedPaint.pages[0]?.svg,
       execution.roundtrip.preview.pages[0]?.svg,
@@ -511,11 +512,16 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
       slide({ id: "added-from-idle", layout: idleLayout2 }).append(
         text("Created from Master 2 idle layout", {
           id: "idle-heading",
-          x: 48,
-          y: 48,
-          width: 480,
-          height: 56,
-          style: { fontFamily: jostFont, fontSize: "24pt", color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 480,
+            height: 56,
+            fontFamily: jostFont,
+            fontSize: "24pt",
+            color: "#0F172A",
+          },
         }),
       ),
     );
@@ -539,7 +545,7 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     const painted = paint(rebuiltResolution);
     assert.equal(painted.pages.length, 1);
     assert.deepEqual(
-      painted.pages[0]?.diagnostics,
+      painted.pages[0]?.errors,
       [],
       "Extra font environment observation (explicit Jost* TTF on added slide)",
     );
@@ -607,12 +613,8 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     for (const page of purePaint.pages) {
       assert.equal(page.png, undefined);
       assert.ok(
-        page.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
-        ),
-        "Pure-file WithMaster.pptx paint without embedded font must report explicit monochrome outline font file",
+        page.errors.some((err) => err.code === "preview-missing-font"),
+        "Pure-file WithMaster.pptx paint without embedded font must report preview-missing-font",
       );
     }
 
@@ -625,7 +627,7 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     const editLayout = editMaster.layouts[0]!;
     const editSharedText = editLayout.children[0] as CommonNode;
     const nextX = 80;
-    editSharedText.set({ x: nextX });
+    editSharedText.style({ left: nextX });
 
     // Attach explicit test font family (400/700 normal & italic) to master theme & nodes for extra font environment observation.
     const editTheme = editMaster.theme as Theme | undefined;
@@ -658,7 +660,7 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     assert.equal(editedPaint.pages.length, 2);
     for (const page of editedPaint.pages) {
       assert.deepEqual(
-        page.diagnostics,
+        page.errors,
         [],
         `Extra font environment observation (WithMaster.pptx + Jost* TTF) page ${page.page}`,
       );
@@ -705,14 +707,12 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
       /00FFFF|sz="3500"/u,
     );
 
-    // Pure-file paint reports unembedded font diagnostic; separate editable instance with Jost* TTF paints cleanly.
+    // Pure-file paint reports unembedded font error; separate editable instance with Jost* TTF paints cleanly.
     const plcPurePaint = paint(plcResolution);
     assert.equal(plcPurePaint.pages[0]?.png, undefined);
     assert.ok(
-      plcPurePaint.pages[0]?.diagnostics.some(
-        (diag) =>
-          diag.severity === "error" &&
-          /explicit monochrome outline font file/u.test(diag.message),
+      plcPurePaint.pages[0]?.errors.some(
+        (err) => err.code === "preview-missing-font",
       ),
     );
 
@@ -729,7 +729,7 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     }
     const plcExtraPaint = paint(resolveDocument(plcEditable.document));
     assert.deepEqual(
-      plcExtraPaint.pages[0]?.diagnostics,
+      plcExtraPaint.pages[0]?.errors,
       [],
       "Extra font environment observation (placeholder-layout-color.pptx + Jost* TTF)",
     );
@@ -753,31 +753,40 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
         shape({
           id: "s1-corrupt-target",
           name: "Corrupt Target",
-          x: 32,
-          y: 32,
-          width: 120,
-          height: 60,
-          fill: "#EF4444",
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 32,
+            width: 120,
+            height: 60,
+            background: "#EF4444",
+          },
         }),
         shape({
           id: "s1-healthy-sibling",
           name: "Healthy Sibling",
-          x: 200,
-          y: 32,
-          width: 120,
-          height: 60,
-          fill: "#10B981",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 32,
+            width: 120,
+            height: 60,
+            background: "#10B981",
+          },
         }),
       ),
       slide({ id: "s2", layout: cleanLayout }).append(
         shape({
           id: "s2-healthy",
           name: "Healthy Slide 2 Shape",
-          x: 64,
-          y: 64,
-          width: 160,
-          height: 80,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 64,
+            width: 160,
+            height: 80,
+            background: "#2563EB",
+          },
         }),
       ),
     );
@@ -823,8 +832,8 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
 
     const recoveredPaint = paint(recoveredResolution);
     expect(recoveredPaint.pages).toHaveLength(2);
-    expect(recoveredPaint.pages[0]?.diagnostics).toEqual([]);
-    expect(recoveredPaint.pages[1]?.diagnostics).toEqual([]);
+    expect(recoveredPaint.pages[0]?.errors).toEqual([]);
+    expect(recoveredPaint.pages[1]?.errors).toEqual([]);
     expect(readPngPixelHex(recoveredPaint.pages[0]?.png, 260, 62)).toBe(
       "#10B981",
     );

@@ -71,11 +71,16 @@ export const tableRoundtripScenario: CapabilityScenario = {
           {
             id: "pricing-matrix",
             name: "PricingMatrix",
-            x: 32,
-            y: 32,
-            width: 540,
             columns: [110, "auto", "1fr"],
-            style: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 32,
+              width: 540,
+              fontFamily: jostFont,
+              fontSize: 14,
+              color: "#0F172A",
+            },
           },
           createElement(
             Row,
@@ -83,7 +88,7 @@ export const tableRoundtripScenario: CapabilityScenario = {
               id: "header",
               style: {
                 height: 40,
-                backgroundColor: "#1E293B",
+                background: "#1E293B",
                 color: "#FFFFFF",
               },
             },
@@ -95,9 +100,7 @@ export const tableRoundtripScenario: CapabilityScenario = {
                 style: {
                   fontWeight: "bold",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
-                  borderStyle: "solid",
+                  border: { color: "#0F172A", width: 2, style: "solid" },
                 },
               },
               createElement(P, { style: { align: "center" } }, "Q1 Revenue"),
@@ -107,12 +110,10 @@ export const tableRoundtripScenario: CapabilityScenario = {
               {
                 id: "hdr-page",
                 style: {
-                  backgroundColor: "#334155",
+                  background: "#334155",
                   color: "#E2E8F0",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  border: { color: "#0F172A", width: 2, style: "dashed" },
                 },
               },
               createElement(
@@ -125,7 +126,7 @@ export const tableRoundtripScenario: CapabilityScenario = {
           ),
           createElement(
             Row,
-            { id: "r2", style: { backgroundColor: "#FFFFFF" } },
+            { id: "r2", style: { background: "#FFFFFF" } },
             createElement(
               Cell,
               {
@@ -133,14 +134,12 @@ export const tableRoundtripScenario: CapabilityScenario = {
                 colSpan: 2,
                 rowSpan: 2,
                 style: {
-                  backgroundColor: "#EFF6FF",
+                  background: "#EFF6FF",
                   color: "#1D4ED8",
                   fontWeight: "bold",
                   verticalAlign: "middle",
                   padding: [6, 10],
-                  borderColor: "#2563EB",
-                  borderWidth: 2,
-                  borderStyle: "dotted",
+                  border: { color: "#2563EB", width: 2, style: "dotted" },
                 },
               },
               createElement(P, { style: { align: "center" } }, "Core\nBundle"),
@@ -150,10 +149,9 @@ export const tableRoundtripScenario: CapabilityScenario = {
               {
                 id: "r2-c3",
                 style: {
-                  backgroundColor: "#F1F5F9",
+                  background: "#F1F5F9",
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
               "Auto Track",
@@ -161,17 +159,16 @@ export const tableRoundtripScenario: CapabilityScenario = {
           ),
           createElement(
             Row,
-            { id: "r3", style: { backgroundColor: "#FFFFFF" } },
+            { id: "r3", style: { background: "#FFFFFF" } },
             createElement(
               Cell,
               {
                 id: "r3-c3",
                 style: {
-                  backgroundColor: "#FEF3C7",
+                  background: "#FEF3C7",
                   verticalAlign: "bottom",
                   padding: [6, 10],
-                  borderColor: "#D97706",
-                  borderWidth: 1,
+                  border: { color: "#D97706", width: 1 },
                 },
               },
               createElement(
@@ -196,10 +193,15 @@ export const tableRoundtripScenario: CapabilityScenario = {
           {
             id: "wide-tbl",
             name: "WideTbl",
-            x: 28,
-            y: 44,
             columns: [260],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#065F46" },
+            style: {
+              position: "absolute",
+              left: 28,
+              top: 44,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#065F46",
+            },
           },
           createElement(
             Row,
@@ -210,9 +212,8 @@ export const tableRoundtripScenario: CapabilityScenario = {
                 id: "wide-cell",
                 style: {
                   padding: [10, 12],
-                  backgroundColor: "#ECFDF5",
-                  borderColor: "#10B981",
-                  borderWidth: 2,
+                  background: "#ECFDF5",
+                  border: { color: "#10B981", width: 2 },
                 },
               },
               wrappingCopy,
@@ -224,10 +225,15 @@ export const tableRoundtripScenario: CapabilityScenario = {
           {
             id: "narrow-tbl",
             name: "NarrowTbl",
-            x: 332,
-            y: 44,
             columns: [120],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#991B1B" },
+            style: {
+              position: "absolute",
+              left: 332,
+              top: 44,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#991B1B",
+            },
           },
           createElement(
             Row,
@@ -238,9 +244,8 @@ export const tableRoundtripScenario: CapabilityScenario = {
                 id: "narrow-cell",
                 style: {
                   padding: [10, 12],
-                  backgroundColor: "#FEF2F2",
-                  borderColor: "#EF4444",
-                  borderWidth: 2,
+                  background: "#FEF2F2",
+                  border: { color: "#EF4444", width: 2 },
                 },
               },
               wrappingCopy,
@@ -256,15 +261,20 @@ export const tableRoundtripScenario: CapabilityScenario = {
         table({
           id: "pricing-matrix",
           name: "PricingMatrix",
-          x: 32,
-          y: 32,
-          width: 540,
           columns: [110, "auto", "1fr"],
-          style: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 32,
+            width: 540,
+            fontFamily: jostFont,
+            fontSize: 14,
+            color: "#0F172A",
+          },
         }).append(
           row({
             id: "header",
-            style: { height: 40, backgroundColor: "#1E293B", color: "#FFFFFF" },
+            style: { height: 40, background: "#1E293B", color: "#FFFFFF" },
           }).append(
             cell(paragraph("Q1 Revenue", { style: { align: "center" } }), {
               id: "hdr-span",
@@ -272,9 +282,7 @@ export const tableRoundtripScenario: CapabilityScenario = {
               style: {
                 fontWeight: "bold",
                 padding: [6, 10],
-                borderColor: "#0F172A",
-                borderWidth: 2,
-                borderStyle: "solid",
+                border: { color: "#0F172A", width: 2, style: "solid" },
               },
             }),
             cell(
@@ -284,43 +292,38 @@ export const tableRoundtripScenario: CapabilityScenario = {
               {
                 id: "hdr-page",
                 style: {
-                  backgroundColor: "#334155",
+                  background: "#334155",
                   color: "#E2E8F0",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  border: { color: "#0F172A", width: 2, style: "dashed" },
                 },
               },
             ),
           ),
-          row({ id: "r2", style: { backgroundColor: "#FFFFFF" } }).append(
+          row({ id: "r2", style: { background: "#FFFFFF" } }).append(
             cell(paragraph("Core\nBundle", { style: { align: "center" } }), {
               id: "rect-anchor",
               colSpan: 2,
               rowSpan: 2,
               style: {
-                backgroundColor: "#EFF6FF",
+                background: "#EFF6FF",
                 color: "#1D4ED8",
                 fontWeight: "bold",
                 verticalAlign: "middle",
                 padding: [6, 10],
-                borderColor: "#2563EB",
-                borderWidth: 2,
-                borderStyle: "dotted",
+                border: { color: "#2563EB", width: 2, style: "dotted" },
               },
             }),
             cell("Auto Track", {
               id: "r2-c3",
               style: {
-                backgroundColor: "#F1F5F9",
+                background: "#F1F5F9",
                 padding: [6, 10],
-                borderColor: "#CBD5E1",
-                borderWidth: 1,
+                border: { color: "#CBD5E1", width: 1 },
               },
             }),
           ),
-          row({ id: "r3", style: { backgroundColor: "#FFFFFF" } }).append(
+          row({ id: "r3", style: { background: "#FFFFFF" } }).append(
             cell(
               paragraph(
                 [
@@ -334,11 +337,10 @@ export const tableRoundtripScenario: CapabilityScenario = {
               {
                 id: "r3-c3",
                 style: {
-                  backgroundColor: "#FEF3C7",
+                  background: "#FEF3C7",
                   verticalAlign: "bottom",
                   padding: [6, 10],
-                  borderColor: "#D97706",
-                  borderWidth: 1,
+                  border: { color: "#D97706", width: 1 },
                 },
               },
             ),
@@ -349,19 +351,23 @@ export const tableRoundtripScenario: CapabilityScenario = {
         table({
           id: "wide-tbl",
           name: "WideTbl",
-          x: 28,
-          y: 44,
           columns: [260],
-          style: { fontFamily: jostFont, fontSize: 15, color: "#065F46" },
+          style: {
+            position: "absolute",
+            left: 28,
+            top: 44,
+            fontFamily: jostFont,
+            fontSize: 15,
+            color: "#065F46",
+          },
         }).append(
           row({ id: "wide-row" }).append(
             cell(wrappingCopy, {
               id: "wide-cell",
               style: {
                 padding: [10, 12],
-                backgroundColor: "#ECFDF5",
-                borderColor: "#10B981",
-                borderWidth: 2,
+                background: "#ECFDF5",
+                border: { color: "#10B981", width: 2 },
               },
             }),
           ),
@@ -369,19 +375,23 @@ export const tableRoundtripScenario: CapabilityScenario = {
         table({
           id: "narrow-tbl",
           name: "NarrowTbl",
-          x: 332,
-          y: 44,
           columns: [120],
-          style: { fontFamily: jostFont, fontSize: 15, color: "#991B1B" },
+          style: {
+            position: "absolute",
+            left: 332,
+            top: 44,
+            fontFamily: jostFont,
+            fontSize: 15,
+            color: "#991B1B",
+          },
         }).append(
           row({ id: "narrow-row" }).append(
             cell(wrappingCopy, {
               id: "narrow-cell",
               style: {
                 padding: [10, 12],
-                backgroundColor: "#FEF2F2",
-                borderColor: "#EF4444",
-                borderWidth: 2,
+                background: "#FEF2F2",
+                border: { color: "#EF4444", width: 2 },
               },
             }),
           ),
@@ -404,10 +414,13 @@ const tableHolderLayout = defineSlideLayout({
       type: "tbl",
       explicitType: true,
       idx: 11,
-      x: 40,
-      y: 60,
-      width: 300,
-      height: 140,
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 60,
+        width: 300,
+        height: 140,
+      },
       name: "Grid Slot",
     },
   },
@@ -544,7 +557,7 @@ export const tableMechanismVerifications = {
       for (const preview of [initial, roundtrip]) {
         assert.equal(preview.pages.length, 2);
         for (const page of preview.pages) {
-          assert.deepEqual(page.diagnostics, []);
+          assert.deepEqual(page.errors, []);
           assert.ok(page.png instanceof Uint8Array);
         }
         const p1Svg = preview.pages[0]!.svg!;
@@ -573,7 +586,7 @@ export const tableMechanismVerifications = {
     assertPaint({ initial, roundtrip }) {
       for (const preview of [initial, roundtrip]) {
         assert.equal(preview.pages.length, 1);
-        assert.deepEqual(preview.pages[0]?.diagnostics, []);
+        assert.deepEqual(preview.pages[0]?.errors, []);
         assert.ok(preview.pages[0]?.png instanceof Uint8Array);
       }
     },

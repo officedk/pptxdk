@@ -38,10 +38,13 @@ async function buildSingleChart(config: ChartProps) {
 describe("chart combination and dual-axis topology", () => {
   it("writes independent same-kind axis pairs with their own scale and position", async () => {
     const config: ChartProps = {
-      x: 20,
-      y: 20,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 880,
+        height: 480,
+      },
       axes: {
         primaryCategories: { kind: "category", title: "Primary period" },
         primaryValues: {
@@ -193,10 +196,13 @@ describe("chart combination and dual-axis topology", () => {
         series: [{ name: kind, values: [1, null, 3 + index] }],
       })) as ChartGroup[];
       return buildSingleChart({
-        x: 10,
-        y: 10,
-        width: 880,
-        height: 480,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 880,
+          height: 480,
+        },
         axes: {
           period: { kind: "category", title: "Period" },
           amount: { kind: "value", title: "Amount", min: 0, max: 20 },
@@ -273,10 +279,13 @@ describe("chart combination and dual-axis topology", () => {
   it("projects a shared category axis with raw owner crossings for left and right values", async () => {
     const categories = ["A", "A", "B"];
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         period: {
           kind: "category",
@@ -391,10 +400,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("writes two independent scatter axis pairs with unequal observations", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         bx: { kind: "value", title: "Bottom X", min: 0, max: 10 },
         ly: { kind: "value", title: "Left Y", min: 0, max: 10 },
@@ -516,10 +528,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("shares a vertical value axis between a column group and a scatter group", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         period: { kind: "category" },
         value: { kind: "value", min: 0, max: 10 },
@@ -596,10 +611,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("shares a horizontal value axis between a bar group and a scatter group", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         category: { kind: "category" },
         barValue: { kind: "value", min: 0, max: 10 },
@@ -673,10 +691,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("keeps independent category domains, duplicate labels, and null slots", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         first: { kind: "category", title: "First" },
         firstValue: { kind: "value", position: "left" },
@@ -753,10 +774,13 @@ describe("chart combination and dual-axis topology", () => {
 
     await rejectsWithCode(
       {
-        x: 10,
-        y: 10,
-        width: 400,
-        height: 300,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 400,
+          height: 300,
+        },
         axes: {
           category: { kind: "category" },
           value: { kind: "value" },
@@ -776,7 +800,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-chart-axes",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -793,7 +817,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-chart-axes",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -810,7 +834,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-chart-axes",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -827,7 +851,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-axis",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -844,7 +868,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "unknown-chart-axis",
+      "broken-reference",
     );
     await rejectsWithCode(
       {
@@ -862,7 +886,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-chart-axes",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -888,7 +912,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "chart-category-domain-mismatch",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -911,7 +935,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-chart-axes",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -928,7 +952,7 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-chart-axis-role",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -952,16 +976,19 @@ describe("chart combination and dual-axis topology", () => {
           },
         ],
       },
-      "invalid-chart-missing-values",
+      "invalid-prop",
     );
   });
 
   it("keeps category and independent XY columns separate in one chart", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         period: { kind: "category" },
         categoryValue: { kind: "value", min: 0, max: 10 },
@@ -1044,10 +1071,13 @@ describe("chart combination and dual-axis topology", () => {
   it("produces the same dual-axis chart from the React and command entries", async () => {
     const config: ChartProps = {
       id: "dual-entry-combo",
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", title: "Period" },
         amount: { kind: "value", min: 0, max: 10 },
@@ -1087,10 +1117,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("reads actual PPTX axis mutations as validator input", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         firstCategory: { kind: "category" },
         firstValue: { kind: "value", min: 0, max: 10 },
@@ -1189,10 +1222,13 @@ describe("chart combination and dual-axis topology", () => {
     );
 
     const shared = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         value: { kind: "value" },
@@ -1232,10 +1268,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("writes axis style, position, visibility, scale, ticks, crossing, and gridlines per axis", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         firstCategory: {
           kind: "category",
@@ -1450,10 +1489,13 @@ describe("chart combination and dual-axis topology", () => {
       },
     ];
     const config = (displayBlanksAs: "gap" | "zero" | "span"): ChartProps => ({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         value: { kind: "value" },
@@ -1473,7 +1515,7 @@ describe("chart combination and dual-axis topology", () => {
     }
     await assert.rejects(buildSingleChart(config("span")), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "invalid-chart-missing-values");
+      assert.equal(error.diagnostics[0]?.code, "invalid-prop");
       return true;
     });
   });
@@ -1498,10 +1540,13 @@ describe("chart combination and dual-axis topology", () => {
       },
     ];
     const seriesMotion = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         value: { kind: "value" },
@@ -1520,10 +1565,13 @@ describe("chart combination and dual-axis topology", () => {
     assert.match(seriesSlide, /<a:bldChart bld="series">/u);
 
     const categoryMotion = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         value: { kind: "value" },
@@ -1581,10 +1629,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("writes same-kind bar dual axes with vertical categories and horizontal values", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 880,
-      height: 480,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 880,
+        height: 480,
+      },
       axes: {
         primaryCategory: {
           kind: "category",
@@ -1688,10 +1739,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("maps a single value-axis position to its own crossing control", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         value: { kind: "value", position: "right", min: 0, max: 10 },
@@ -1727,10 +1781,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("preserves explicit crossing controls while deriving their physical sides", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", crosses: "max" },
         value: { kind: "value", crossesAt: 1, min: 1, max: 100 },
@@ -1777,10 +1834,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("reads a crossing and axis-position mismatch as a validator error", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         value: { kind: "value", position: "right", min: 0, max: 10 },
@@ -1810,10 +1870,13 @@ describe("chart combination and dual-axis topology", () => {
   it("diagnoses an explicit max crossing that conflicts with a reversed position", async () => {
     await assert.rejects(
       buildSingleChart({
-        x: 10,
-        y: 10,
-        width: 640,
-        height: 360,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 640,
+          height: 360,
+        },
         axes: {
           category: { kind: "category", position: "top" },
           value: {
@@ -1836,7 +1899,7 @@ describe("chart combination and dual-axis topology", () => {
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );
@@ -1844,10 +1907,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("maps an explicit left side to an endpoint crossing instead of autoZero", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         x: { kind: "value", min: -10, max: 10 },
         y: { kind: "value", position: "left", min: 1, max: 3 },
@@ -1884,10 +1950,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("keeps autoZero for undeclared primary defaults", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         x: { kind: "value", min: -10, max: 10 },
         y: { kind: "value", min: 1, max: 3 },
@@ -1911,10 +1980,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("does not treat an unknown autoZero as an edge in the reader", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         value: { kind: "value", min: -10, max: 10 },
@@ -1943,10 +2015,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("reads a reversed endpoint crossing against the physical side", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", position: "bottom" },
         value: {
@@ -2008,10 +2083,13 @@ describe("chart combination and dual-axis topology", () => {
   it("projects a shared category axis for line-line groups", async () => {
     const categories = ["A", "A", "B"];
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category" },
         low: { kind: "value", position: "left", min: 0, max: 10 },
@@ -2086,10 +2164,13 @@ describe("chart combination and dual-axis topology", () => {
     const categories = ["A", "A", "B"];
     const buildOrder = async (order: readonly ("left" | "right")[]) =>
       buildSingleChart({
-        x: 10,
-        y: 10,
-        width: 640,
-        height: 360,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 640,
+          height: 360,
+        },
         axes: {
           category: { kind: "category" },
           left: { kind: "value", position: "left", min: 0, max: 10 },
@@ -2136,10 +2217,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("moves an author category crossesAt to the raw value-axis owner", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", crossesAt: 2 },
         value: { kind: "value", min: 0, max: 10 },
@@ -2174,10 +2258,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("rejects a known interior crossesAt that contradicts an explicit side", async () => {
     const config: ChartProps = {
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", position: "bottom" },
         value: { kind: "value", min: 0, max: 10, crossesAt: 5 },
@@ -2194,7 +2281,7 @@ describe("chart combination and dual-axis topology", () => {
     const rejects = async (promise: Promise<unknown>) => {
       await assert.rejects(promise, (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       });
     };
@@ -2226,10 +2313,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("rejects a known interior autoZero that contradicts an explicit side", async () => {
     const config: ChartProps = {
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", position: "top" },
         value: { kind: "value", min: -10, max: 10, crosses: "autoZero" },
@@ -2246,7 +2336,7 @@ describe("chart combination and dual-axis topology", () => {
     const rejects = async (promise: Promise<unknown>) => {
       await assert.rejects(promise, (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       });
     };
@@ -2278,10 +2368,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("keeps a known endpoint crossing on an explicit side", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", position: "bottom" },
         value: { kind: "value", min: 0, max: 10, crosses: "min" },
@@ -2306,10 +2399,13 @@ describe("chart combination and dual-axis topology", () => {
 
   it("reads crossing sides from the actual crossAxis partner", async () => {
     const result = await buildSingleChart({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         firstCategory: { kind: "category", position: "bottom" },
         firstValue: { kind: "value", position: "left", min: 0, max: 10 },
@@ -2378,10 +2474,13 @@ describe("chart combination and dual-axis topology", () => {
         readonly reversed?: boolean;
       },
     ): ChartProps => ({
-      x: 10,
-      y: 10,
-      width: 640,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 640,
+        height: 360,
+      },
       axes: {
         category: { kind: "category", position },
         value,
@@ -2404,7 +2503,7 @@ describe("chart combination and dual-axis topology", () => {
     const rejects = async (promise: Promise<unknown>) => {
       await assert.rejects(promise, (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-axes");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       });
     };

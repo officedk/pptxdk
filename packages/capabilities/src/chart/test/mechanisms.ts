@@ -37,13 +37,17 @@ const comboCategories = ["Q1", "Q1", "Q3"] as const;
 
 const comboProps = {
   id: "combo-chart",
-  x: 20,
-  y: 20,
-  width: 600,
-  height: 320,
   title: "Revenue & Share",
   legend: "bottom" as const,
-  style: { fontFamily: jostFont, fontSize: 11 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 20,
+    width: 600,
+    height: 320,
+    fontFamily: jostFont,
+    fontSize: 11,
+  },
   axes: {
     period: { kind: "category" as const, title: "Period" },
     amount: {
@@ -117,12 +121,16 @@ export const chartComboRoundtripScenario: CapabilityScenario = {
 
 const barProps = {
   id: "bar-dup",
-  x: 20,
-  y: 20,
-  width: 600,
-  height: 320,
   legend: "bottom" as const,
-  style: { fontFamily: jostFont, fontSize: 11 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 20,
+    width: 600,
+    height: 320,
+    fontFamily: jostFont,
+    fontSize: 11,
+  },
   groups: [
     {
       kind: "bar" as const,
@@ -137,12 +145,16 @@ const barProps = {
 
 const pieProps = {
   id: "pie-dup",
-  x: 20,
-  y: 20,
-  width: 600,
-  height: 320,
   legend: "right" as const,
-  style: { fontFamily: jostFont, fontSize: 11 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 20,
+    width: 600,
+    height: 320,
+    fontFamily: jostFont,
+    fontSize: 11,
+  },
   groups: [
     {
       kind: "pie" as const,
@@ -159,11 +171,15 @@ const pieProps = {
 
 const scatterProps = {
   id: "scatter-nulls",
-  x: 20,
-  y: 20,
-  width: 600,
-  height: 320,
-  style: { fontFamily: jostFont, fontSize: 11 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 20,
+    width: 600,
+    height: 320,
+    fontFamily: jostFont,
+    fontSize: 11,
+  },
   groups: [
     {
       kind: "scatter" as const,
@@ -220,12 +236,16 @@ export const chartBarPieScatterRoundtripScenario: CapabilityScenario = {
 
 const sharedDoughnutProps = {
   id: "doughnut-shared",
-  x: 20,
-  y: 20,
-  width: 600,
-  height: 320,
   legend: "right" as const,
-  style: { fontFamily: jostFont, fontSize: 11 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 20,
+    width: 600,
+    height: 320,
+    fontFamily: jostFont,
+    fontSize: 11,
+  },
   groups: [
     {
       kind: "doughnut" as const,
@@ -244,12 +264,16 @@ const sharedDoughnutProps = {
 
 const independentDoughnutProps = {
   id: "doughnut-independent",
-  x: 20,
-  y: 20,
-  width: 600,
-  height: 320,
   legend: "right" as const,
-  style: { fontFamily: jostFont, fontSize: 11 },
+  style: {
+    position: "absolute" as const,
+    left: 20,
+    top: 20,
+    width: 600,
+    height: 320,
+    fontFamily: jostFont,
+    fontSize: 11,
+  },
   groups: [
     {
       kind: "doughnut" as const,
@@ -379,10 +403,13 @@ const chartHolderLayout = defineSlideLayout({
       type: "chart",
       explicitType: true,
       idx: 12,
-      x: 50,
-      y: 40,
-      width: 320,
-      height: 200,
+      style: {
+        position: "absolute" as const,
+        left: 50,
+        top: 40,
+        width: 320,
+        height: 200,
+      },
       name: "Chart Slot",
     },
   },
@@ -455,10 +482,6 @@ export const chartPlaceholderRoundtripScenario: CapabilityScenario = {
 
 const presentationComboProps = {
   id: "pres-combo",
-  x: 16,
-  y: 16,
-  width: 608,
-  height: 328,
   title: {
     text: "Presentation Combo",
     style: {
@@ -470,7 +493,16 @@ const presentationComboProps = {
   },
   legend: "topRight" as const,
   displayBlanksAs: "gap" as const,
-  style: { fontFamily: jostFont, fontSize: 11, color: "#0F172A" },
+  style: {
+    position: "absolute" as const,
+    left: 16,
+    top: 16,
+    width: 608,
+    height: 328,
+    fontFamily: jostFont,
+    fontSize: 11,
+    color: "#0F172A",
+  },
   axes: {
     cat: {
       kind: "category" as const,
@@ -611,12 +643,16 @@ const presentationComboProps = {
 
 const presentationScatterProps = {
   id: "pres-scatter",
-  x: 16,
-  y: 16,
-  width: 300,
-  height: 300,
   plotArea: { left: 48, top: 36, width: 220, height: 220 },
-  style: { fontFamily: jostFont, fontSize: 10 },
+  style: {
+    position: "absolute" as const,
+    left: 16,
+    top: 16,
+    width: 300,
+    height: 300,
+    fontFamily: jostFont,
+    fontSize: 10,
+  },
   axes: {
     x: { kind: "value" as const, min: 0, max: 10, crossesAt: 5 },
     y: {
@@ -675,11 +711,15 @@ const presentationScatterProps = {
 
 const presentationPieProps = {
   id: "pres-pie",
-  x: 324,
-  y: 16,
-  width: 300,
-  height: 300,
-  style: { fontFamily: jostFont, fontSize: 10 },
+  style: {
+    position: "absolute" as const,
+    left: 324,
+    top: 16,
+    width: 300,
+    height: 300,
+    fontFamily: jostFont,
+    fontSize: 10,
+  },
   groups: [
     {
       kind: "pie" as const,
@@ -794,7 +834,7 @@ export const chartMechanismVerifications: Pick<
     },
     assertPaint({ initial, roundtrip }) {
       assert.equal(initial.pages.length, 1);
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
     },
@@ -805,7 +845,7 @@ export const chartMechanismVerifications: Pick<
       assertComboNative(validation, stage);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
     },
@@ -816,7 +856,7 @@ export const chartMechanismVerifications: Pick<
       assertComboNative(validation, stage);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
     },
@@ -827,7 +867,7 @@ export const chartMechanismVerifications: Pick<
       assertComboNative(validation, stage);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
     },
@@ -845,7 +885,7 @@ export const chartMechanismVerifications: Pick<
       assert.deepEqual(ch.embeddedWorkbook?.series, ch.series);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 3);
     },
@@ -867,7 +907,7 @@ export const chartMechanismVerifications: Pick<
       assert.deepEqual(ch.embeddedWorkbook?.series, ch.series);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[1]?.errors, []);
       assert.ok(initial.pages[1]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 3);
     },
@@ -884,7 +924,7 @@ export const chartMechanismVerifications: Pick<
       assert.deepEqual(ch.embeddedWorkbook?.series, ch.series);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[2]?.diagnostics, []);
+      assert.deepEqual(initial.pages[2]?.errors, []);
       assert.ok(initial.pages[2]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 3);
     },
@@ -947,8 +987,8 @@ export const chartMechanismVerifications: Pick<
       );
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
-      assert.deepEqual(initial.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
+      assert.deepEqual(initial.pages[1]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.ok(initial.pages[1]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 2);
@@ -1009,10 +1049,10 @@ export const chartMechanismVerifications: Pick<
       assert.ok(chart3Xml.includes("<c:separator> | </c:separator>"));
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
-      assert.deepEqual(initial.pages[1]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
+      assert.deepEqual(initial.pages[1]?.errors, []);
+      assert.deepEqual(roundtrip.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[1]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.ok(initial.pages[1]?.png instanceof Uint8Array);
       assert.ok(roundtrip.pages[1]?.svg?.includes("#1E293B"));
@@ -1044,9 +1084,9 @@ export const chartMechanismVerifications: Pick<
       assert.equal(scatter.series[0]?.trendlines?.[3]?.period, 2);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[1]?.errors, []);
       assert.ok(initial.pages[0]?.svg?.includes("#EF4444"));
       assert.ok(roundtrip.pages[0]?.svg?.includes("#EF4444"));
       assert.ok(roundtrip.pages[1]?.svg?.includes("#EC4899"));
@@ -1078,9 +1118,9 @@ export const chartMechanismVerifications: Pick<
       );
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[1]?.errors, []);
       assert.ok(initial.pages[0]?.svg?.includes("#111827"));
       assert.ok(roundtrip.pages[0]?.svg?.includes("#111827"));
       assert.ok(roundtrip.pages[1]?.png instanceof Uint8Array);
@@ -1101,9 +1141,9 @@ export const chartMechanismVerifications: Pick<
       assert.equal(pie.series[0]?.pointExplosions?.[0], 18);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[1]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[1]?.errors, []);
       assert.ok(initial.pages[0]?.svg?.includes("#F59E0B"));
       assert.ok(roundtrip.pages[0]?.svg?.includes("#F59E0B"));
       assert.ok(roundtrip.pages[0]?.svg?.includes("#DC2626"));

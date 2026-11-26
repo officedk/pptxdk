@@ -1069,7 +1069,6 @@ export const footerPlaceholderCapability = {
             path: `footerPlaceholders.${item.slot}`,
           })),
         );
-        const warnings = model.items.flatMap((item) => item.text.warnings);
         let footer: ResolvedFooter | undefined;
         if (input.type === "slide" && model.items.length > 0) {
           const slots: {
@@ -1094,7 +1093,6 @@ export const footerPlaceholderCapability = {
           ...(footer === undefined ? {} : { footer }),
           ...(claims.length === 0 ? {} : { resourceClaims: claims }),
           ...(fontUsages.length === 0 ? {} : { fontUsages }),
-          ...(warnings.length === 0 ? {} : { warnings }),
           emit: (emitContext: SlideEmitContext) =>
             footerPlaceholderMechanism.emit(model, emitContext),
           ...(model.items.length === 0

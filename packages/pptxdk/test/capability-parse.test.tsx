@@ -319,7 +319,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
       assert.deepEqual(textObs.box, { x: 50, y: 60, width: 500, height: 120 });
     });
 
-    it("aligns baseline when font measurement is available and reports baseline-measurement-unavailable when font is missing", async () => {
+    it("aligns baseline when font measurement is available and reports font-unavailable when font is missing", async () => {
       // 1. Successful baseline alignment when font resource is available
       const goodResult = await build(
         <Deck width={960} height={540}>
@@ -344,7 +344,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
       const validation = await validatePptx(goodResult.pptx);
       assert.deepEqual(validation.errors, []);
 
-      // 2. Fails with baseline-measurement-unavailable when font resource is unavailable for baseline measurement
+      // 2. Fails with font-unavailable when font resource is unavailable for baseline measurement
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
@@ -366,9 +366,10 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-structure",
+            (d) =>
+              d.code === "font-unavailable" && d.reason === "missing-resource",
           );
-          assert(diag !== undefined, "Expected invalid-structure diagnostic");
+          assert(diag !== undefined, "Expected font-unavailable diagnostic");
           return true;
         },
       );

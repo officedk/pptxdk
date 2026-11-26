@@ -317,9 +317,6 @@ export const notesCapability: SlideCapabilityModule & {
             ...usage,
             path: contribution.path,
           })),
-          ...(resolvedBody.warnings.length === 0
-            ? {}
-            : { warnings: resolvedBody.warnings }),
           emit(emitContext: SlideEmitContext): SlideEmitOutput {
             return speakerNotesMechanism.emit(
               { resolvedBody, entryTheme: entry.theme },

@@ -42,10 +42,6 @@ export type LayoutNodeSpec = {
   readonly propagatesBaseline?: boolean;
   readonly preservesIntrinsicSize?: boolean;
   readonly contentMinimumsEnforced?: boolean;
-  readonly contractWidth?: LayoutLength;
-  readonly contractHeight?: LayoutLength;
-  readonly contractX?: number;
-  readonly contractY?: number;
   readonly padding?: LayoutEdges;
   readonly measure?: LayoutNodeMeasure;
 };
@@ -56,8 +52,6 @@ export type LayoutSolverNode = {
   readonly isRoot: boolean;
   readonly isContainer: boolean;
   readonly contentMinimumsEnforced?: boolean;
-  readonly contractWidth?: LayoutLength;
-  readonly contractHeight?: LayoutLength;
   readonly padding?: LayoutEdges;
   readonly children: readonly LayoutSolverNode[];
 };
@@ -144,9 +138,7 @@ export type CustomContainerMode = {
     parentStyle: LayoutStyle,
     path: string,
   ): void;
-  createSolver(
-    warnOnce: (path: string, code: string, message: string) => void,
-  ): CustomContainerSolver;
+  createSolver(): CustomContainerSolver;
 };
 
 export type LayoutSolver = {

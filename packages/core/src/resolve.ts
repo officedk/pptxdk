@@ -2846,19 +2846,36 @@ function resolveSlideDeclaration(
     children: node.children.map(capabilityChild),
   };
 
+  const slideStyle = node.props["style"];
+  const hasSlideStyleBackground =
+    typeof slideStyle === "object" &&
+    slideStyle !== null &&
+    !Array.isArray(slideStyle) &&
+    Object.hasOwn(slideStyle, "background") &&
+    (slideStyle as Readonly<Record<string, unknown>>)["background"] !==
+      undefined;
+  if (
+    hasSlideStyleBackground &&
+    ![...modules.slideModules.values()].some(
+      (module) => module.consumesOwnerBackgroundStyle === true,
+    )
+  ) {
+    slide.diagnostics.push(
+      diagnostic(
+        path,
+        "missing-capability",
+        "No capability module registered for Slide.style.background",
+        { capability: "slide-background", field: "style.background" },
+      ),
+    );
+  }
+
   for (const module of modules.slideModules.values()) {
     const slideProps =
       module.slideProps ??
       (module.slideProp === undefined ? [] : [module.slideProp]);
-    const slideStyle = node.props["style"];
     const hasStyleBackground =
-      module.declaration === "slide-background" &&
-      typeof slideStyle === "object" &&
-      slideStyle !== null &&
-      !Array.isArray(slideStyle) &&
-      Object.hasOwn(slideStyle, "background") &&
-      (slideStyle as Readonly<Record<string, unknown>>)["background"] !==
-        undefined;
+      module.consumesOwnerBackgroundStyle === true && hasSlideStyleBackground;
     const hasSlideProps =
       slideProps.some((property) => Object.hasOwn(node.props, property)) ||
       hasStyleBackground;
@@ -3497,7 +3514,7 @@ function resolveDocument(
     [...modules.slideModules.values()].find(
       (module) =>
         module.slot === "background" &&
-        module.declaration === "slide-background",
+        module.consumesOwnerBackgroundStyle === true,
     ) ??
     [...modules.slideModules.values()].find(
       (module) => module.slot === "background",

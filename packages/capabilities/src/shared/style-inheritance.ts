@@ -289,10 +289,6 @@ export function resolvePlaceholderGeometry(
   const hasLocalStyleKey = (key: string) =>
     style !== undefined && hasLocalDeclaration(style, key);
   const hasLocalBoxOverride =
-    hasLocalDeclaration(props, "x") ||
-    hasLocalDeclaration(props, "y") ||
-    hasLocalDeclaration(props, "width") ||
-    hasLocalDeclaration(props, "height") ||
     hasLocalStyleKey("left") ||
     hasLocalStyleKey("top") ||
     hasLocalStyleKey("right") ||

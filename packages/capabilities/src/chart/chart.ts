@@ -37,6 +37,7 @@ import { resolvePlaceholderGeometry } from "../shared/style-inheritance.ts";
 import {
   writeChartTextProperties,
   writeChartTitle,
+  type MissingGlyphIssue,
   type TextResourceClaim,
 } from "../shared/text-service.ts";
 import type { TextStyle } from "../shared/text-service.ts";
@@ -898,7 +899,7 @@ type ResolvedChartModel = {
   readonly name: string;
   readonly textStyles: ChartTextStyleXml;
   readonly fontUses: readonly FontEmbeddingUse[];
-  readonly missingGlyphErrors: readonly string[];
+  readonly missingGlyphErrors: readonly MissingGlyphIssue[];
   readonly placeholder?: NativePlaceholderRef;
 };
 
@@ -911,10 +912,11 @@ function emitChartModel(
     (embedFonts === "full" || embedFonts === "subset") &&
     model.missingGlyphErrors.length > 0
   ) {
-    throw new CapabilityError(
-      "font-missing-glyph",
-      model.missingGlyphErrors[0]!,
-    );
+    const issue = model.missingGlyphErrors[0]!;
+    throw new CapabilityError("font-missing-glyph", issue.message, undefined, {
+      font: issue.font,
+      characters: issue.characters,
+    });
   }
   const workbook = chartWorkbook(model.parsed);
   const relationshipId = emitContext.registerPackagePart({
@@ -1388,7 +1390,6 @@ export const chartCapability = {
           resourceClaims,
           fontUses,
           fontUsages,
-          warnings,
           missingGlyphErrors,
         } = chartResourceClaims(parsed, resolveContext.theme);
         validateChartColors(parsed, resolveContext.theme);
@@ -1421,7 +1422,6 @@ export const chartCapability = {
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims,
           ...(fontUsages.length === 0 ? {} : { fontUsages }),
-          ...(warnings.length === 0 ? {} : { warnings }),
           emit(emitContext: EmitContext): EmitOutput {
             return primaryMechanism.emit(resolvedModel, emitContext);
           },
@@ -1815,11 +1815,7 @@ function chartResourceClaims(
   readonly resourceClaims: readonly TextResourceClaim[];
   readonly fontUses: readonly FontEmbeddingUse[];
   readonly fontUsages: readonly CapabilityFontUsageClaim[];
-  readonly warnings: readonly {
-    readonly code: string;
-    readonly message: string;
-  }[];
-  readonly missingGlyphErrors: readonly string[];
+  readonly missingGlyphErrors: readonly MissingGlyphIssue[];
 } {
   const categoryLabels = new Map<string, readonly string[]>();
   for (const group of parsed.groups) {
@@ -1885,20 +1881,7 @@ function chartResourceClaims(
     path: "Chart.style",
   }));
   const fontUsages: CapabilityFontUsageClaim[] = [...chart.fontUsages];
-  const warnings: { readonly code: string; readonly message: string }[] = [];
-  const missingGlyphErrors: string[] = [...chart.missingGlyphErrors];
-  const warningKeys = new Set<string>();
-  const addWarnings = (
-    items: readonly { readonly code: string; readonly message: string }[],
-  ) => {
-    for (const item of items) {
-      const key = `${item.code}\u0000${item.message}`;
-      if (warningKeys.has(key)) continue;
-      warningKeys.add(key);
-      warnings.push(item);
-    }
-  };
-  addWarnings(chart.warnings);
+  const missingGlyphErrors: MissingGlyphIssue[] = [...chart.missingGlyphErrors];
   const textStyles: {
     chart: string;
     title?: string;
@@ -1921,7 +1904,6 @@ function chartResourceClaims(
       ...output.fontUses.map((use) => ({ ...use, path: "Chart.title" })),
     );
     fontUsages.push(...output.fontUsages);
-    addWarnings(output.warnings);
     missingGlyphErrors.push(...output.missingGlyphErrors);
   }
   for (const { name, spec } of parsed.axes) {
@@ -1944,7 +1926,6 @@ function chartResourceClaims(
         })),
       );
       fontUsages.push(...output.fontUsages);
-      addWarnings(output.warnings);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
     const axisTitle = titleParts(spec.title);
@@ -1968,7 +1949,6 @@ function chartResourceClaims(
         })),
       );
       fontUsages.push(...output.fontUsages);
-      addWarnings(output.warnings);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
   }
@@ -1995,7 +1975,6 @@ function chartResourceClaims(
         })),
       );
       fontUsages.push(...output.fontUsages);
-      addWarnings(output.warnings);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
     const groupLabelStyle =
@@ -2037,23 +2016,15 @@ function chartResourceClaims(
           })),
         );
         fontUsages.push(...output.fontUsages);
-        addWarnings(output.warnings);
         missingGlyphErrors.push(...output.missingGlyphErrors);
       }
     }
   }
-  const uniqueWarnings = new Map(
-    warnings.map((warning) => [
-      `${warning.code}\u0000${warning.message}`,
-      warning,
-    ]),
-  );
   return {
     textStyles,
     resourceClaims,
     fontUses,
     fontUsages,
-    warnings: [...uniqueWarnings.values()],
     missingGlyphErrors,
   };
 }

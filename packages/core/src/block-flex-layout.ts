@@ -432,10 +432,6 @@ type BlockFlexNode = {
   readonly isContainer: boolean;
   readonly propagatesBaseline: boolean;
   readonly contentMinimumsEnforced?: boolean | undefined;
-  readonly contractWidth?: LayoutLength | undefined;
-  readonly contractHeight?: LayoutLength | undefined;
-  readonly contractX?: number | undefined;
-  readonly contractY?: number | undefined;
   readonly measure?: LayoutNodeMeasure | undefined;
   readonly customHandler?: CustomContainerSolver | undefined;
   parent?: BlockFlexNode;
@@ -626,7 +622,7 @@ export function createBlockFlexLayoutSolver(options: {
     if (!node.isContainer) {
       const padding = expandedSpacing(node.style, "padding");
       const computedWidth = node.yoga.getComputedWidth();
-      const rawWidth = node.style.width ?? node.contractWidth;
+      const rawWidth = node.style.width;
       const measuredWidth =
         typeof rawWidth === "string" && rawWidth.endsWith("%")
           ? undefined
@@ -711,9 +707,7 @@ export function createBlockFlexLayoutSolver(options: {
     axis: "width" | "height",
   ): number => {
     const content = minContent(node, axis) ?? 0;
-    const rawDimension =
-      node.style[axis] ??
-      (axis === "width" ? node.contractWidth : node.contractHeight);
+    const rawDimension = node.style[axis];
     let size = parseLayoutLength(rawDimension, axis, node.path) ?? content;
     if (node.contentMinimumsEnforced) {
       size = Math.max(size, content);
@@ -749,9 +743,7 @@ export function createBlockFlexLayoutSolver(options: {
       axis === "width"
         ? styleLength(node.style.maxWidth)
         : styleLength(node.style.maxHeight);
-    const rawDimension =
-      node.style[axis] ??
-      (axis === "width" ? node.contractWidth : node.contractHeight);
+    const rawDimension = node.style[axis];
     const declared = parseLayoutLength(rawDimension, axis, node.path);
     return Math.min(
       content,
@@ -857,7 +849,7 @@ export function createBlockFlexLayoutSolver(options: {
       childAlign === "flex-start" ||
       ((childAlign === undefined || childAlign === "auto") &&
         (parentAlign === "start" || parentAlign === "flex-start"));
-    const childHeight = child.contractHeight ?? child.style.height;
+    const childHeight = child.style.height;
     const stretchedFixedHeight =
       (childAlign === undefined ||
         childAlign === "auto" ||
@@ -884,7 +876,7 @@ export function createBlockFlexLayoutSolver(options: {
         "Baseline alignment requires a text-bearing capability with baseline support",
       );
     }
-    const rawWidth = node.contractWidth ?? node.style.width;
+    const rawWidth = node.style.width;
     const availableWidth = parseLayoutLength(rawWidth, "width", node.path);
     const padding = expandedSpacing(node.style, "padding");
     const measurement = node.measure(
@@ -1245,11 +1237,8 @@ export function createBlockFlexLayoutSolver(options: {
     const box: Rect = {
       x: origin.x + node.yoga.getComputedLeft(),
       y: origin.y + node.yoga.getComputedTop(),
-      width: preserveDouble(rawWidth, node.contractWidth ?? node.style.width),
-      height: preserveDouble(
-        rawHeight,
-        node.contractHeight ?? node.style.height,
-      ),
+      width: preserveDouble(rawWidth, node.style.width),
+      height: preserveDouble(rawHeight, node.style.height),
     };
     const gridArea: Rect | undefined =
       node.relativeGridArea === undefined
@@ -1346,8 +1335,8 @@ export function createBlockFlexLayoutSolver(options: {
         yoga.setPadding(Edge.Bottom, spec.padding.bottom);
         yoga.setPadding(Edge.Left, spec.padding.left);
       }
-      const width = spec.contractWidth ?? spec.style.width;
-      const height = spec.contractHeight ?? spec.style.height;
+      const width = spec.style.width;
+      const height = spec.style.height;
       if (width !== undefined) setLength(yoga, "width", width);
       if (height !== undefined) setLength(yoga, "height", height);
       if (
@@ -1364,24 +1353,6 @@ export function createBlockFlexLayoutSolver(options: {
       ) {
         yoga.setAlignSelf(Align.FlexStart);
       }
-      if (spec.style.position === "absolute") {
-        if (
-          spec.style.left === undefined &&
-          spec.style.inset === undefined &&
-          spec.style.right === undefined &&
-          spec.contractX !== undefined
-        ) {
-          yoga.setPosition(Edge.Left, spec.contractX);
-        }
-        if (
-          spec.style.top === undefined &&
-          spec.style.inset === undefined &&
-          spec.style.bottom === undefined &&
-          spec.contractY !== undefined
-        ) {
-          yoga.setPosition(Edge.Top, spec.contractY);
-        }
-      }
       const childViews: LayoutSolverNode[] = [];
       const view: LayoutSolverNode = {
         path: spec.path,
@@ -1391,12 +1362,6 @@ export function createBlockFlexLayoutSolver(options: {
         ...(spec.contentMinimumsEnforced
           ? { contentMinimumsEnforced: true }
           : {}),
-        ...(spec.contractWidth === undefined
-          ? {}
-          : { contractWidth: spec.contractWidth }),
-        ...(spec.contractHeight === undefined
-          ? {}
-          : { contractHeight: spec.contractHeight }),
         ...(spec.padding === undefined ? {} : { padding: spec.padding }),
         children: childViews,
       };
@@ -1411,14 +1376,6 @@ export function createBlockFlexLayoutSolver(options: {
         ...(spec.contentMinimumsEnforced
           ? { contentMinimumsEnforced: true }
           : {}),
-        ...(spec.contractWidth === undefined
-          ? {}
-          : { contractWidth: spec.contractWidth }),
-        ...(spec.contractHeight === undefined
-          ? {}
-          : { contractHeight: spec.contractHeight }),
-        ...(spec.contractX === undefined ? {} : { contractX: spec.contractX }),
-        ...(spec.contractY === undefined ? {} : { contractY: spec.contractY }),
         ...(spec.measure === undefined ? {} : { measure: spec.measure }),
         ...(customHandler === undefined ? {} : { customHandler }),
         parent: parentInternal,

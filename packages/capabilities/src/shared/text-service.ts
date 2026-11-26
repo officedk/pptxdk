@@ -75,6 +75,16 @@ export type TextResourceClaim = {
   readonly characters: string;
 };
 
+export type MissingGlyphIssue = {
+  readonly message: string;
+  readonly font: {
+    readonly family: string;
+    readonly weight: number;
+    readonly style: "normal" | "italic";
+  };
+  readonly characters: readonly string[];
+};
+
 /** Resolve-stage text facts cached inside capability closures for independent emit and paint. */
 export type ResolvedTextBody = {
   readonly paragraphs: readonly Paragraph[];
@@ -90,11 +100,8 @@ export type ResolvedTextBody = {
   readonly fontUses: readonly FontEmbeddingUse[];
   readonly measurement?: { readonly width: number; readonly height: number };
   readonly measuredLayout?: MeasuredTextLayout;
-  readonly warnings: readonly {
-    readonly code: string;
-    readonly message: string;
-  }[];
-  readonly missingGlyphErrors: readonly string[];
+  readonly measurementError?: CapabilityError;
+  readonly missingGlyphErrors: readonly MissingGlyphIssue[];
   readonly textMetrics?: TextMetrics;
   readonly fontUsages: readonly CapabilityFontUsageClaim[];
   readonly unmeasuredIssues: {
@@ -997,7 +1004,9 @@ function runPropertiesXml(
     const shadowXml =
       style.textShadow === undefined
         ? ""
-        : textShadowXml(theme, style.textShadow);
+        : style.textShadow === "none"
+          ? "<a:effectLst/>"
+          : textShadowXml(theme, style.textShadow);
     const fontXml =
       style.fontFamily === undefined && style.themeFont === undefined
         ? ""
@@ -1070,8 +1079,7 @@ function textResourceClaims(runs: readonly Run[]): {
   readonly resourceClaims: TextResourceClaim[];
   readonly fontUses: FontEmbeddingUse[];
   readonly fontUsages: CapabilityFontUsageClaim[];
-  readonly warnings: { readonly code: string; readonly message: string }[];
-  readonly missingGlyphErrors: string[];
+  readonly missingGlyphErrors: MissingGlyphIssue[];
   readonly unmeasuredIssues: {
     readonly missingResourceFonts: readonly UnmeasuredFontIssue[];
     readonly missingGlyphFonts: readonly UnmeasuredFontIssue[];
@@ -1110,8 +1118,7 @@ function textResourceClaims(runs: readonly Run[]): {
   const resourceClaims: TextResourceClaim[] = [];
   const fontUses: FontEmbeddingUse[] = [];
   const fontUsages: CapabilityFontUsageClaim[] = [];
-  const warnings: { code: string; message: string }[] = [];
-  const missingGlyphErrors: string[] = [];
+  const missingGlyphErrors: MissingGlyphIssue[] = [];
   const missingResourceMap = new Map<string, UnmeasuredFontIssue>();
   const missingGlyphSets = new Map<string, Set<string>>();
   const missingGlyphFonts = new Map<
@@ -1201,7 +1208,15 @@ function textResourceClaims(runs: readonly Run[]): {
           const shown = missing.slice(0, 10).join(" ");
           const extra = missing.length - 10;
           const message = `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`;
-          missingGlyphErrors.push(message);
+          missingGlyphErrors.push({
+            message,
+            font: {
+              family: font.family,
+              weight: font.weight,
+              style: font.style,
+            },
+            characters: missing,
+          });
         }
       }
     }
@@ -1220,7 +1235,6 @@ function textResourceClaims(runs: readonly Run[]): {
     resourceClaims,
     fontUses,
     fontUsages,
-    warnings,
     missingGlyphErrors,
     unmeasuredIssues,
   };
@@ -1979,6 +1993,11 @@ function paragraphLineHeight(paragraph: Paragraph): number {
       throw new CapabilityError(
         "font-metrics-invalid",
         "Font line metrics must produce a finite positive value",
+        undefined,
+        {
+          font: fontDetailsFromRunStyle(style),
+          reason: "font-metrics-invalid",
+        },
       );
     }
     maximum = Math.max(maximum, lineHeight);
@@ -2131,20 +2150,15 @@ function assertParagraphsHaveVisibleGlyphs(
       const face = measureRunFace(run.style);
       const missing = missingCharacters(face, textToCheck);
       if (missing.length > 0) {
-        const fontInfo = normalizedFonts(run.style)[0];
-        const family = fontInfo?.family ?? "Font";
+        const font = fontDetailsFromRunStyle(run.style);
         const shown = missing.slice(0, 10).join(" ");
         const extra = missing.length - 10;
         throw new CapabilityError(
           "font-missing-glyph",
-          `${family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+          `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
           undefined,
           {
-            font: {
-              family,
-              weight: fontInfo?.weight ?? 400,
-              style: fontInfo?.style ?? "normal",
-            },
+            font,
             characters: missing,
           },
         );
@@ -2158,20 +2172,15 @@ function assertParagraphsHaveVisibleGlyphs(
       const face = measureRunFace(markerStyle);
       const missing = missingCharacters(face, markerText);
       if (missing.length > 0) {
-        const fontInfo = normalizedFonts(markerStyle)[0];
-        const family = fontInfo?.family ?? "Font";
+        const font = fontDetailsFromRunStyle(markerStyle);
         const shown = missing.slice(0, 10).join(" ");
         const extra = missing.length - 10;
         throw new CapabilityError(
           "font-missing-glyph",
-          `${family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+          `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
           undefined,
           {
-            font: {
-              family,
-              weight: fontInfo?.weight ?? 400,
-              style: fontInfo?.style ?? "normal",
-            },
+            font,
             characters: missing,
           },
         );
@@ -3561,11 +3570,11 @@ export function resolveTextBody(
     resourceClaims,
     fontUses,
     fontUsages,
-    warnings,
     missingGlyphErrors,
     unmeasuredIssues,
   } = textResourceClaims([...runs, ...listRuns]);
   let measured: ReturnType<typeof measureParagraphs> | undefined;
+  let measurementError: CapabilityError | undefined;
   if (layout !== undefined) {
     try {
       measured = measureParagraphs(
@@ -3574,12 +3583,25 @@ export function resolveTextBody(
       );
     } catch (error) {
       if (layout.contentSized === true) throw error;
+      if (error instanceof CapabilityError) {
+        measurementError = error;
+      }
     }
   }
   if (layout?.contentSized === true && measured === undefined) {
+    const missingFont =
+      unmeasuredIssues.missingResourceFonts[0] ??
+      unmeasuredIssues.referencedFonts[0];
     throw new CapabilityError(
       "font-measurement-unavailable",
       "Content-sized text is missing complete font measurement basis",
+      undefined,
+      missingFont === undefined
+        ? undefined
+        : {
+            font: missingFont,
+            reason: "missing-resource",
+          },
     );
   }
   const outputParagraphs =
@@ -3634,7 +3656,7 @@ export function resolveTextBody(
           measurement: { width: measured.width, height: measured.height },
           measuredLayout: measured,
         }),
-    warnings,
+    ...(measurementError === undefined ? {} : { measurementError }),
     missingGlyphErrors,
     unmeasuredIssues,
     ...(textMetrics === undefined ? {} : { textMetrics }),
@@ -3658,22 +3680,11 @@ export function emitTextBody(
     (embedFonts === "full" || embedFonts === "subset") &&
     resolved.missingGlyphErrors.length > 0
   ) {
-    const missingFont = resolved.unmeasuredIssues.missingGlyphFonts[0];
-    throw new CapabilityError(
-      "font-missing-glyph",
-      resolved.missingGlyphErrors[0]!,
-      undefined,
-      missingFont === undefined
-        ? undefined
-        : {
-            font: {
-              family: missingFont.family,
-              weight: missingFont.weight,
-              style: missingFont.style,
-            },
-            characters: missingFont.missingGlyphs,
-          },
-    );
+    const issue = resolved.missingGlyphErrors[0]!;
+    throw new CapabilityError("font-missing-glyph", issue.message, undefined, {
+      font: issue.font,
+      characters: issue.characters,
+    });
   }
   const emittedParagraphs =
     createFieldId !== undefined
@@ -3743,11 +3754,7 @@ type ChartTextResult = {
   readonly resourceClaims: readonly TextResourceClaim[];
   readonly fontUses: readonly FontEmbeddingUse[];
   readonly fontUsages: readonly CapabilityFontUsageClaim[];
-  readonly warnings: readonly {
-    readonly code: string;
-    readonly message: string;
-  }[];
-  readonly missingGlyphErrors: readonly string[];
+  readonly missingGlyphErrors: readonly MissingGlyphIssue[];
 };
 
 /** Generates shared font styles for native chart text and registers font claims based on actual categories, series, and label text. */
@@ -3774,7 +3781,7 @@ export function writeChartTextProperties(
   validateRunStyle(runStyle);
   const runs = texts.map((text) => ({ text, style: runStyle }));
   for (const text of texts) escapedXml(text);
-  const { resourceClaims, fontUses, fontUsages, warnings, missingGlyphErrors } =
+  const { resourceClaims, fontUses, fontUsages, missingGlyphErrors } =
     textResourceClaims(runs);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
@@ -3797,7 +3804,6 @@ export function writeChartTextProperties(
     resourceClaims,
     fontUses,
     fontUsages,
-    warnings,
     missingGlyphErrors,
   };
 }
@@ -3825,7 +3831,7 @@ export function writeChartTitle(
   };
   validateRunStyle(runStyle);
   const escapedText = escapedXml(text);
-  const { resourceClaims, fontUses, fontUsages, warnings, missingGlyphErrors } =
+  const { resourceClaims, fontUses, fontUsages, missingGlyphErrors } =
     textResourceClaims([{ text, style: runStyle }]);
   const runProperties = runPropertiesXml(runStyle, "a:rPr", theme);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
@@ -3849,7 +3855,6 @@ export function writeChartTitle(
     resourceClaims,
     fontUses,
     fontUsages,
-    warnings,
     missingGlyphErrors,
   };
 }

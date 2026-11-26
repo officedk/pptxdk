@@ -313,7 +313,6 @@ export const groupCapability = {
       restrictsMemberContinuity: true,
       observesLayout: false,
       propagatesBaseline: false,
-      checksCanvasOverflow: false,
     };
 
     const native: BoundObjectNativeCollaboration = {

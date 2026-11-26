@@ -249,6 +249,7 @@ export const previewErrorSchema = z.discriminatedUnion("code", [
   z.strictObject({
     code: z.literal("preview-missing-font"),
     path: z.string(),
+    field: z.string().optional(),
     message: z.string(),
     font: z.strictObject({
       family: z.string(),
@@ -259,6 +260,7 @@ export const previewErrorSchema = z.discriminatedUnion("code", [
   z.strictObject({
     code: z.literal("preview-unsupported-font"),
     path: z.string(),
+    field: z.string().optional(),
     message: z.string(),
     font: z.strictObject({
       family: z.string(),
@@ -270,6 +272,7 @@ export const previewErrorSchema = z.discriminatedUnion("code", [
   z.strictObject({
     code: z.literal("preview-missing-glyph"),
     path: z.string(),
+    field: z.string().optional(),
     message: z.string(),
     font: z.strictObject({
       family: z.string(),
@@ -281,12 +284,14 @@ export const previewErrorSchema = z.discriminatedUnion("code", [
   z.strictObject({
     code: z.literal("preview-corrupt-image"),
     path: z.string(),
+    field: z.string().optional(),
     message: z.string(),
     format: z.enum(["png", "jpeg", "gif"]).optional(),
   }),
   z.strictObject({
     code: z.literal("preview-unsupported-capability"),
     path: z.string(),
+    field: z.string().optional(),
     message: z.string(),
     capability: z.string(),
   }),

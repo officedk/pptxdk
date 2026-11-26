@@ -60,7 +60,6 @@ function readOptionalString(
 
 function readFontDescriptor(
   details: Readonly<Record<string, unknown>> | undefined,
-  message: string,
 ): {
   readonly family: string;
   readonly weight?: number;
@@ -73,13 +72,7 @@ function readFontDescriptor(
   const family =
     typeof rawFont?.["family"] === "string" && rawFont["family"] !== ""
       ? rawFont["family"]
-      : (/^(.+?) is missing glyphs for characters/u
-          .exec(message)?.[1]
-          ?.trim() ??
-        /for ([^:\n]+?)(?: \d{3} (?:normal|italic)| is | does |;|$)/u
-          .exec(message)?.[1]
-          ?.trim() ??
-        "unknown");
+      : "unknown";
   const weight =
     typeof rawFont?.["weight"] === "number" &&
     Number.isFinite(rawFont["weight"])
@@ -340,7 +333,7 @@ export function toBuildDiagnostic(
       code: "font-unavailable",
       path,
       message,
-      font: readFontDescriptor(details, message),
+      font: readFontDescriptor(details),
       reason,
       ...(field === undefined ? {} : { field }),
     };
@@ -348,22 +341,11 @@ export function toBuildDiagnostic(
 
   // 4. font-missing-glyph
   if (code === "font-missing-glyph") {
-    const descriptor = readFontDescriptor(details, message);
+    const descriptor = readFontDescriptor(details);
     const rawChars = details?.["characters"];
     const characters = Array.isArray(rawChars)
       ? rawChars.filter((item): item is string => typeof item === "string")
-      : (() => {
-          const singleMatch = /emitted character (\S+)/u.exec(message);
-          if (singleMatch?.[1] !== undefined) return [singleMatch[1]];
-          const multiMatch =
-            /missing glyphs for characters (.+?)(?:, and \d+ more characters)?$/u.exec(
-              message,
-            );
-          if (multiMatch?.[1] !== undefined) {
-            return multiMatch[1].split(" ").filter((s) => s !== "");
-          }
-          return [];
-        })();
+      : [];
     return {
       code: "font-missing-glyph",
       path,

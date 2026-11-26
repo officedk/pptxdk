@@ -209,33 +209,55 @@ describe("Native content placeholders fixtures", () => {
     expect(reimported.report.diagnostics).toEqual([]);
   });
 
-  it("reports unconsumed-xml when an unpopulated placeholder spPr carries unsupported fills or effects", () => {
+  it("imports supported spPr fills and shadows on unpopulated placeholders and reports unsupported-mechanism for unsupported fills or effects", () => {
     const bytes = readFixture("ph-unpopulated-placeholders.pptx");
-    const entries = unzipSync(bytes);
-    const slide4Xml = strFromU8(entries["ppt/slides/slide4.xml"]!);
-    entries["ppt/slides/slide4.xml"] = strToU8(
+    const supportedEntries = unzipSync(bytes);
+    const slide4Xml = strFromU8(supportedEntries["ppt/slides/slide4.xml"]!);
+    supportedEntries["ppt/slides/slide4.xml"] = strToU8(
       slide4Xml.replace(
         "<p:spPr/>",
-        '<p:spPr><a:solidFill><a:srgbClr val="DC2626"/></a:solidFill><a:effectLst><a:outerShdw blurRad="50800"/></a:effectLst></p:spPr>',
+        '<p:spPr><a:solidFill><a:srgbClr val="DC2626"/></a:solidFill><a:effectLst><a:outerShdw blurRad="50800"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></p:spPr>',
       ),
     );
-    const mutated = zipSync(entries);
-    const imported = importDocument(mutated);
-    const slide4Unconsumed = imported.report.diagnostics.filter(
+    const importedSupported = importDocument(zipSync(supportedEntries));
+    expect(
+      importedSupported.report.diagnostics.filter(
+        (d) => d.location.part === "ppt/slides/slide4.xml",
+      ),
+    ).toEqual([]);
+    const slides = importedSupported.document.children.filter(
+      (c): c is SlideContainer => c instanceof SlideContainer,
+    );
+    const slide4Ph = slides[3]?.children.find(
+      (c): c is CommonNode =>
+        c instanceof CommonNode && c.kind === "placeholder",
+    );
+    expect(slide4Ph?.props["style"]).toMatchObject({
+      background: "#DC2626",
+      boxShadow: { color: "#000000" },
+    });
+
+    const unsupportedEntries = unzipSync(bytes);
+    unsupportedEntries["ppt/slides/slide4.xml"] = strToU8(
+      slide4Xml.replace(
+        "<p:spPr/>",
+        '<p:spPr><a:pattFill prst="pct5"/><a:effectLst><a:glow rad="50800"/></a:effectLst></p:spPr>',
+      ),
+    );
+    const importedUnsupported = importDocument(zipSync(unsupportedEntries));
+    const slide4Unsupported = importedUnsupported.report.diagnostics.filter(
       (
         d,
       ): d is Extract<
-        (typeof imported.report.diagnostics)[number],
-        { readonly code: "unconsumed-xml" }
+        (typeof importedUnsupported.report.diagnostics)[number],
+        { readonly code: "unsupported-mechanism" }
       > =>
-        d.code === "unconsumed-xml" &&
+        d.code === "unsupported-mechanism" &&
         d.location.part === "ppt/slides/slide4.xml",
     );
-    expect(slide4Unconsumed.some((d) => d.localName === "solidFill")).toBe(
+    expect(slide4Unsupported.some((d) => d.localName === "pattFill")).toBe(
       true,
     );
-    expect(slide4Unconsumed.some((d) => d.localName === "effectLst")).toBe(
-      true,
-    );
+    expect(slide4Unsupported.some((d) => d.localName === "glow")).toBe(true);
   });
 });

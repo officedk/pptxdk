@@ -50,11 +50,11 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
   id: "layout-grid-semantics",
   capability: "layout:grid",
   description:
-    "Dual-author Grid layout scenario covering px/auto/fr columns & rows, explicit placement & spans, percentage sizing inside grid areas, width-constrained Text wrapping driving auto row height, nested Grid <-> Flex Box combinations, scoped ThemeScope, and grid-overflow / grid-item-overflow warnings.",
+    "Dual-author Grid layout scenario covering px/auto/fr columns & rows, explicit placement & spans, percentage sizing inside grid areas, width-constrained Text wrapping driving auto row height, nested Grid <-> Flex Box combinations, scoped ThemeScope, and out-of-bounds grid track and item geometry.",
   visualCheckpoints: [
     "Page 1 (grid-tracks-span-wrap): light #F8FAFC canvas; top full-span blue banner ('Grid Layout Dashboard' + pale blue badge) spans all 3 columns; row 2 has a 120px white left card ('Fixed 120px'), an auto-width blue card ('AutoColTrack'), and a wider emerald 1fr card whose wrapped 2-line text expands row 2 height so all three row-2 cards share the same height; row 3 has a 2-column spanning bottom-left white card and a centered purple 60%x50% Shape in column 3.",
     "Page 2 (grid-nested-flex-and-theme): white canvas; top Flex header ('Nested Flex <-> Grid & Scoped Theme'); left half holds an amber-themed nested Grid ('Scoped Theme Grid', orange Shape, and white Flex card '网格嵌套 Flex') overridden via local theme; right half holds a slate-themed Flex column containing an auto-rows Grid whose top row is fixed 36px and bottom row grows with wrapped text while retaining outer theme colors.",
-    "Page 3 (grid-overflow-warnings): pale rose #FEF2F2 canvas; top red-bordered 280x110 Grid lets its 180px+150px fixed columns visibly extend past the right container border while emitting grid-overflow warnings for both axes; bottom dark-red-bordered Grid contains a 200x110 coral Shape intentionally overflowing its 160x80 cell (overlapping the left edge of the green Shape in column 2 and emitting grid-item-overflow).",
+    "Page 3 (grid-overflow-warnings): pale rose #FEF2F2 canvas; top red-bordered 280x110 Grid lets its 180px+150px fixed columns visibly extend past the right container border; bottom dark-red-bordered Grid contains a 200x110 coral Shape intentionally overflowing its 160x80 cell (overlapping the left edge of the green Shape in column 2).",
   ],
   nativeCheckpoints: [
     "Open exported PPTX in PowerPoint/WPS and verify identical EMU geometry across JSX and /document builds, including retained coordinates for grid-overflow and grid-item-overflow items.",

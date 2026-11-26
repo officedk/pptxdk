@@ -286,11 +286,16 @@ function readOuterShadow(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
-): Shadow | undefined {
+  allowShadowNone = false,
+): Shadow | "none" | undefined {
   const effectLst = rPrCursor.child(A_NS, "effectLst");
   if (effectLst === undefined) return undefined;
   const outerShdw = effectLst.child(A_NS, "outerShdw");
-  if (outerShdw === undefined) return undefined;
+  if (outerShdw === undefined) {
+    return allowShadowNone && effectLst.element.children.length === 0
+      ? "none"
+      : undefined;
+  }
 
   const raw = outerShdw.attrsObject([
     "blurRad",
@@ -349,6 +354,7 @@ function readRunProperties(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
+  allowShadowNone = false,
 ): { readonly style: ParsedRunStyle; readonly sizePt?: number } {
   const raw = rPrCursor.attrsObject([
     "lang",
@@ -430,7 +436,13 @@ function readRunProperties(
     color = readColorElement(solidFill, part, slideIndex, diagnostics);
   }
 
-  const textShadow = readOuterShadow(rPrCursor, part, slideIndex, diagnostics);
+  const textShadow = readOuterShadow(
+    rPrCursor,
+    part,
+    slideIndex,
+    diagnostics,
+    allowShadowNone,
+  );
 
   let fontFamily: NonNullable<TextStyle["fontFamily"]> | undefined;
   const latin = rPrCursor.child(A_NS, "latin");
@@ -564,6 +576,7 @@ function readParagraph(
   part: string,
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
+  allowShadowNone = false,
 ): ImportedParagraph {
   const pPr = pCursor.child(A_NS, "pPr");
 
@@ -685,6 +698,7 @@ function readParagraph(
         part,
         slideIndex,
         diagnostics,
+        allowShadowNone,
       );
       defParaSizePt = parsedDef.sizePt;
     }
@@ -699,7 +713,13 @@ function readParagraph(
       const parsedRPr =
         rPr === undefined
           ? { style: {} }
-          : readRunProperties(rPr, part, slideIndex, diagnostics);
+          : readRunProperties(
+              rPr,
+              part,
+              slideIndex,
+              diagnostics,
+              allowShadowNone,
+            );
       const t = child.child(A_NS, "t");
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
@@ -719,7 +739,13 @@ function readParagraph(
       const parsedRPr =
         rPr === undefined
           ? { style: {} }
-          : readRunProperties(rPr, part, slideIndex, diagnostics);
+          : readRunProperties(
+              rPr,
+              part,
+              slideIndex,
+              diagnostics,
+              allowShadowNone,
+            );
       runs.push({
         kind: "text",
         text: "\n",
@@ -744,6 +770,7 @@ function readParagraph(
                 part,
                 slideIndex,
                 diagnostics,
+                allowShadowNone,
               );
         runs.push({
           kind: "slide-number",
@@ -756,7 +783,13 @@ function readParagraph(
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "endParaRPr") {
-      const parsedEnd = readRunProperties(child, part, slideIndex, diagnostics);
+      const parsedEnd = readRunProperties(
+        child,
+        part,
+        slideIndex,
+        diagnostics,
+        allowShadowNone,
+      );
       endParaSizePt = parsedEnd.sizePt;
       continue;
     }
@@ -874,6 +907,7 @@ export function readRichTextBody(
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
   _clrMap?: Readonly<Record<string, NativeColorSlot>>,
+  options?: { readonly allowShadowNone?: boolean },
 ): ImportedRichTextBody {
   let paddingTop: number | undefined;
   let paddingRight: number | undefined;
@@ -929,7 +963,15 @@ export function readRichTextBody(
 
   const importedParagraphs = txBody
     .children(A_NS, "p")
-    .map((pCursor) => readParagraph(pCursor, part, slideIndex, diagnostics));
+    .map((pCursor) =>
+      readParagraph(
+        pCursor,
+        part,
+        slideIndex,
+        diagnostics,
+        options?.allowShadowNone === true,
+      ),
+    );
 
   const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
     ...(paddingTop === undefined ? {} : { paddingTop }),
@@ -1317,19 +1359,25 @@ export function readTextPlaceholderSp(
       }
     | undefined;
   let rotate: number | undefined;
-  let flipH: true | undefined;
-  let flipV: true | undefined;
+  let flipH: boolean | undefined;
+  let flipV: boolean | undefined;
   let fallbackUnits = { w: 0, h: 0 };
   const xfrm = spPr.child(A_NS, "xfrm");
   if (xfrm !== undefined) {
+    const hasExplicitFlipH = xfrm.element.hasAttribute("flipH");
+    const hasExplicitFlipV = xfrm.element.hasAttribute("flipV");
     const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
     const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
     if (parsedXfrm.success) {
       if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
         rotate = parsedXfrm.data.rot / 60_000;
       }
-      if (parsedXfrm.data.flipH === true) flipH = true;
-      if (parsedXfrm.data.flipV === true) flipV = true;
+      if (hasExplicitFlipH && parsedXfrm.data.flipH !== undefined) {
+        flipH = parsedXfrm.data.flipH;
+      }
+      if (hasExplicitFlipV && parsedXfrm.data.flipV !== undefined) {
+        flipV = parsedXfrm.data.flipV;
+      }
     }
     const off = xfrm.child(A_NS, "off");
     const ext = xfrm.child(A_NS, "ext");
@@ -1406,6 +1454,7 @@ export function readTextPlaceholderSp(
     effectiveFallbackUnits,
     location,
     diagnostics,
+    { preservePlaceholderClears: true },
   );
   const visualStyle = textBoxVisualStyle(
     appearance.style,
@@ -1420,7 +1469,9 @@ export function readTextPlaceholderSp(
   const imported =
     txBody === undefined
       ? undefined
-      : readRichTextBody(txBody, part, slideIndex, diagnostics);
+      : readRichTextBody(txBody, part, slideIndex, diagnostics, undefined, {
+          allowShadowNone: true,
+        });
 
   const { boxStyle, singleText, paragraphsToPopulate } =
     flattenImportedTextBody(imported, visualStyle);

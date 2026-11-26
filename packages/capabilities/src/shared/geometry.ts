@@ -75,11 +75,6 @@ export type ResolvedGeometry =
       }[];
     };
 
-export type GeometryWarning = {
-  readonly code: string;
-  readonly message: string;
-};
-
 export type EvaluatedGeometryPath = {
   readonly d: string;
   readonly commands: readonly PathCommand[];
@@ -691,10 +686,8 @@ export function resolveGeometry(options: {
 }): {
   readonly geometry: ResolvedGeometry;
   readonly name: PresetGeometryName | "custom";
-  readonly warnings: readonly GeometryWarning[];
 } {
   const { geometry: value, borderRadius: radius, box } = options;
-  const warnings: GeometryWarning[] = [];
 
   if (isRecord(value) && value["type"] === "custom") {
     if (radius !== undefined && radius > 0) {
@@ -751,7 +744,6 @@ export function resolveGeometry(options: {
         paths: resolvedPaths,
       },
       name: "custom",
-      warnings,
     };
   }
 
@@ -816,7 +808,6 @@ export function resolveGeometry(options: {
       adjust,
     },
     name,
-    warnings,
   };
 }
 

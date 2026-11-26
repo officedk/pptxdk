@@ -159,7 +159,6 @@ export type ResolvedShadow = {
   readonly angle: number;
 };
 
-export type VisualWarning = { readonly code: string; readonly message: string };
 export type ShapeBox = {
   readonly x: number;
   readonly y: number;
@@ -185,7 +184,6 @@ export type ResolvedVisualModel = {
   readonly flipV: boolean;
   readonly hasVisibleStyle: boolean;
   readonly layoutOnlyWhenInvisible: boolean;
-  readonly warnings: readonly VisualWarning[];
 };
 
 export { arrowTypeSchema, arrowTypes };
@@ -241,7 +239,6 @@ export type ShapePropertiesOptions = {
 export type ShapePropertiesResult = {
   readonly xml: string;
   readonly opacity?: number;
-  readonly warnings: readonly VisualWarning[];
   readonly hasVisibleStyle: boolean;
   readonly geometryName: PresetGeometryName | "custom";
   readonly geometry: ResolvedGeometry;
@@ -711,7 +708,6 @@ export function resolveVisualModel(
   options: ShapePropertiesOptions,
 ): ResolvedVisualModel {
   const { theme, style, box } = options;
-  const warnings: VisualWarning[] = [];
 
   for (const [name, value] of [
     ["flipH", style["flipH"]],
@@ -781,7 +777,6 @@ export function resolveVisualModel(
       layoutOnlyWhenInvisible && !hasVisibleStyle ? undefined : radius,
     box,
   });
-  warnings.push(...resolvedGeometry.warnings);
   const rotation = rotationUnits(style);
 
   return {
@@ -800,7 +795,6 @@ export function resolveVisualModel(
     flipV,
     hasVisibleStyle,
     layoutOnlyWhenInvisible,
-    warnings,
   };
 }
 
@@ -900,7 +894,6 @@ export function emitVisualModel(
   return {
     xml: `<p:spPr>${transform}${geometryXmlText}${visualFill}${line}${effects}</p:spPr>`,
     ...(model.opacity === undefined ? {} : { opacity: model.opacity }),
-    warnings: model.warnings,
     hasVisibleStyle: model.hasVisibleStyle,
     geometryName: model.geometryName,
     geometry: model.geometry,
@@ -1608,10 +1601,12 @@ export function readSpPrAppearance(
   fallbackUnits: { readonly w: number; readonly h: number },
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
+  options?: { readonly preservePlaceholderClears?: boolean },
 ): ImportedSpPrAppearance {
   let geometry: Geometry | undefined;
   let background: CoreVisualStyle["background"];
   let hasNoFill = false;
+  let hasEmptyEffectLst = false;
   let border: ImportedLineBorder = {};
   let effects: ReturnType<typeof readEffectList> = {};
 
@@ -1663,6 +1658,7 @@ export function readSpPrAppearance(
         border = readLineBorder(child, location, diagnostics);
         break;
       case "effectLst":
+        hasEmptyEffectLst = child.element.children.length === 0;
         effects = readEffectList(child, location, diagnostics);
         break;
       case "extLst":
@@ -1703,15 +1699,22 @@ export function readSpPrAppearance(
       : border.noFill === true
         ? "none"
         : undefined;
+  const resolvedBoxShadow: ShapeVisualStyle["boxShadow"] =
+    effects.boxShadow ??
+    (options?.preservePlaceholderClears === true &&
+    hasEmptyEffectLst &&
+    effects.softEdge === undefined
+      ? "none"
+      : undefined);
 
   const style: ShapeVisualStyle = {
     ...(resolvedBackground === undefined
       ? {}
       : { background: resolvedBackground }),
     ...(resolvedBorder === undefined ? {} : { border: resolvedBorder }),
-    ...(effects.boxShadow === undefined
+    ...(resolvedBoxShadow === undefined
       ? {}
-      : { boxShadow: effects.boxShadow }),
+      : { boxShadow: resolvedBoxShadow }),
     ...(effects.softEdge === undefined ? {} : { softEdge: effects.softEdge }),
   };
 
@@ -1969,7 +1972,21 @@ export function paintImageFillSvg(
     return `<pattern id="${id}" patternUnits="userSpaceOnUse" x="${bx}" y="${by}" width="${bw}" height="${bh}"><rect x="0" y="0" width="${bw}" height="${bh}" fill="#F1F5F9" fill-opacity="${imgOpacity}"/></pattern>`;
   }
 
-  const pngBytes = decodeImageToPngBytes(fill.source);
+  let pngBytes: Uint8Array;
+  try {
+    pngBytes = decodeImageToPngBytes(fill.source);
+  } catch (error) {
+    if (
+      error instanceof CapabilityError &&
+      error.details?.["field"] === undefined
+    ) {
+      throw new CapabilityError(error.code, error.message, error.path, {
+        ...error.details,
+        field: "style.background",
+      });
+    }
+    throw error;
+  }
   const base64 = Buffer.from(pngBytes).toString("base64");
   let drawX = 0;
   let drawY = 0;

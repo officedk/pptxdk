@@ -7,19 +7,25 @@ function headings(ink: string, secondary: string) {
     chapter: {
       type: "body" as const,
       idx: 1,
-      x: 64,
-      y: 30,
-      width: 700,
-      height: 26,
-      style: { fontSize: 14, color: secondary, letterSpacing: 1 },
+      style: {
+        position: "absolute" as const,
+        left: 64,
+        top: 30,
+        width: 700,
+        height: 26,
+        fontSize: 14,
+        color: secondary,
+        letterSpacing: 1,
+      },
     },
     title: {
       type: "title" as const,
-      x: 64,
-      y: 70,
-      width: 1110,
-      height: 70,
       style: {
+        position: "absolute" as const,
+        left: 64,
+        top: 70,
+        width: 1110,
+        height: 70,
         fontFamily: "display",
         fontSize: 43,
         color: ink,
@@ -30,11 +36,16 @@ function headings(ink: string, secondary: string) {
     source: {
       type: "body" as const,
       idx: 2,
-      x: 64,
-      y: 676,
-      width: 1060,
-      height: 22,
-      style: { fontSize: 11, color: secondary, textWrap: "nowrap" as const },
+      style: {
+        position: "absolute" as const,
+        left: 64,
+        top: 676,
+        width: 1060,
+        height: 22,
+        fontSize: 11,
+        color: secondary,
+        textWrap: "nowrap" as const,
+      },
     },
   };
 }
@@ -49,11 +60,12 @@ export const coverLayout = defineSlideLayout({
   placeholders: {
     title: {
       type: "ctrTitle",
-      x: 68,
-      y: 154,
-      width: 650,
-      height: 206,
       style: {
+        position: "absolute",
+        left: 68,
+        top: 154,
+        width: 650,
+        height: 206,
         fontFamily: "display",
         fontSize: 76,
         lineHeight: 98,
@@ -63,22 +75,27 @@ export const coverLayout = defineSlideLayout({
     subtitle: {
       type: "subTitle",
       idx: 1,
-      x: 72,
-      y: 390,
-      width: 540,
-      height: 48,
-      style: { fontSize: 27, color: colors.sun },
+      style: {
+        position: "absolute",
+        left: 72,
+        top: 390,
+        width: 540,
+        height: 48,
+        fontSize: 27,
+        color: colors.sun,
+      },
     },
   },
 });
 
 export const pageNumber = {
   idx: 4,
-  x: 1130,
-  y: 52,
-  width: 66,
-  height: 34,
   style: {
+    position: "absolute" as const,
+    left: 1130,
+    top: 52,
+    width: 66,
+    height: 34,
     fontFamily: "display",
     fontSize: 22,
     color: colors.muted,
@@ -95,7 +112,17 @@ export const contentLayout = defineSlideLayout({
   footerPlaceholders: { slideNumber: pageNumber },
   placeholders: {
     ...headings(colors.ink, colors.muted),
-    content: { type: "obj", idx: 3, x: 64, y: 150, width: 1152, height: 510 },
+    content: {
+      type: "obj",
+      idx: 3,
+      style: {
+        position: "absolute",
+        left: 64,
+        top: 150,
+        width: 1152,
+        height: 510,
+      },
+    },
   },
 });
 

@@ -43,24 +43,27 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
+      resolution,
       ...emit(resolution),
       ...paint(resolution),
     };
   };
 }
 
-describe("Group static preview, screenGeometry, and member failure propagation", () => {
-  it("renders nested rotated Group trees with flipped members, Box children, screenGeometry, and post-preview isolation", async () => {
+describe("Group static preview, bounds, and member failure propagation", () => {
+  it("renders nested rotated Group trees with flipped members, Box children, bounds, and post-preview isolation", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const mutableShape = shape({
       id: "inner-leaf",
-      x: 110,
-      y: 70,
-      width: 60,
-      height: 20,
-      fill: "#1D4ED8",
-      flipH: true,
+      style: {
+        position: "absolute",
+        left: 110,
+        top: 70,
+        width: 60,
+        height: 20,
+        background: "#1D4ED8",
+        flipH: true,
+      },
     });
     const doc = deck({
       width: 400,
@@ -75,11 +78,14 @@ describe("Group static preview, screenGeometry, and member failure propagation",
         }).append(
           shape({
             id: "base-rect",
-            x: 70,
-            y: 40,
-            width: 80,
-            height: 40,
-            fill: "groupAccent",
+            style: {
+              position: "absolute",
+              left: 70,
+              top: 40,
+              width: 80,
+              height: 40,
+              background: "groupAccent",
+            },
           }),
           box({
             id: "group-box",
@@ -90,14 +96,12 @@ describe("Group static preview, screenGeometry, and member failure propagation",
               width: 60,
               height: 40,
               padding: 4,
-              backgroundColor: "#E2E8F0",
+              background: "#E2E8F0",
             },
           }).append(
             shape({
               id: "box-child",
-              width: 30,
-              height: 20,
-              fill: "#F59E0B",
+              style: { width: 30, height: 20, background: "#F59E0B" },
             }),
           ),
           group({
@@ -110,7 +114,7 @@ describe("Group static preview, screenGeometry, and member failure propagation",
 
     const first = await previewDoc(doc);
     const page = first.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     expect(page.svg).toContain('transform="rotate(90 ');
@@ -122,26 +126,26 @@ describe("Group static preview, screenGeometry, and member failure propagation",
     // Outer bounds: x=[70..210] (width 140), y=[40..90] (height 50), center=(140, 65).
     // Rotated 90deg -> width=50, height=140, x=115, y=-5.
     assert.deepEqual(outerNode.box, { x: 70, y: 40, width: 140, height: 50 });
-    expect(outerNode.screenBox?.x).toBeCloseTo(115);
-    expect(outerNode.screenBox?.y).toBeCloseTo(-5);
-    expect(outerNode.screenBox?.width).toBeCloseTo(50);
-    expect(outerNode.screenBox?.height).toBeCloseTo(140);
+    expect(outerNode.bounds?.x).toBeCloseTo(115);
+    expect(outerNode.bounds?.y).toBeCloseTo(-5);
+    expect(outerNode.bounds?.width).toBeCloseTo(50);
+    expect(outerNode.bounds?.height).toBeCloseTo(140);
     assert.equal(outerNode.corners?.length, 4);
 
     // Inner group is rotated -90 around (140, 80), then +90 around (140, 65) => net 0deg rotation!
     // Center (140, 80) rotated +90deg around (140, 65) goes to (125, 65).
-    // Since net rotation on inner-leaf is 0deg, its screenBox has width=60, height=20 centered at (125, 65).
+    // Since net rotation on inner-leaf is 0deg, its bounds has width=60, height=20 centered at (125, 65).
     const innerLeafNode = page.nodes.find((n) => n.authorId === "inner-leaf")!;
-    expect(innerLeafNode.screenBox?.x).toBeCloseTo(95);
-    expect(innerLeafNode.screenBox?.y).toBeCloseTo(55);
-    expect(innerLeafNode.screenBox?.width).toBeCloseTo(60);
-    expect(innerLeafNode.screenBox?.height).toBeCloseTo(20);
+    expect(innerLeafNode.bounds?.x).toBeCloseTo(95);
+    expect(innerLeafNode.bounds?.y).toBeCloseTo(55);
+    expect(innerLeafNode.bounds?.width).toBeCloseTo(60);
+    expect(innerLeafNode.bounds?.height).toBeCloseTo(20);
 
     // Mutate after preview: prior outputs remain unchanged.
     const firstSvg = page.svg;
     const firstPng = page.png.slice();
     const firstPptx = first.pptx.slice();
-    mutableShape.set({ fill: "#DC2626" });
+    mutableShape.style({ background: "#DC2626" });
     const second = await previewDoc(doc);
     assert.equal(first.pages[0]?.svg, firstSvg);
     assert.deepEqual(first.pages[0]?.png, firstPng);
@@ -162,24 +166,27 @@ describe("Group static preview, screenGeometry, and member failure propagation",
             { id: "jg", style: { rotate: 90 } },
             createElement(Shape, {
               id: "js",
-              x: 40,
-              y: 30,
-              width: 80,
-              height: 40,
-              fill: "#2563EB",
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 30,
+                width: 80,
+                height: 40,
+                background: "#2563EB",
+              },
             }),
           ),
         ),
       ),
     );
     const jsxResult = await previewDoc(jsxDoc);
-    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(jsxResult.pages[0]?.errors, []);
     assert.ok(jsxResult.pages[0]?.png !== undefined);
     const jsxGroupNode = jsxResult.pages[0]?.nodes.find(
       (n) => n.authorId === "jg",
     );
-    expect(jsxGroupNode?.screenBox?.width).toBeCloseTo(40);
-    expect(jsxGroupNode?.screenBox?.height).toBeCloseTo(80);
+    expect(jsxGroupNode?.bounds?.width).toBeCloseTo(40);
+    expect(jsxGroupNode?.bounds?.height).toBeCloseTo(80);
   });
 
   it("propagates member preview failures out of Group without omitting failed members or breaking sibling pages", async () => {
@@ -197,19 +204,25 @@ describe("Group static preview, screenGeometry, and member failure propagation",
           group({ id: "g", style: { rotate: 15 } }).append(
             shape({
               id: "ok-member",
-              x: 20,
-              y: 20,
-              width: 50,
-              height: 30,
-              fill: "#10B981",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 50,
+                height: 30,
+                background: "#10B981",
+              },
             }),
             image({
               id: "bad-member",
               src: corruptPng,
-              x: 80,
-              y: 20,
-              width: 50,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 80,
+                top: 20,
+                width: 50,
+                height: 30,
+              },
             }),
           ),
         ),
@@ -217,11 +230,14 @@ describe("Group static preview, screenGeometry, and member failure propagation",
           group({ id: "ok-group" }).append(
             shape({
               id: "ok-shape",
-              x: 20,
-              y: 20,
-              width: 60,
-              height: 40,
-              fill: "#2563EB",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 60,
+                height: 40,
+                background: "#2563EB",
+              },
             }),
           ),
         ),
@@ -233,21 +249,21 @@ describe("Group static preview, screenGeometry, and member failure propagation",
     assert.equal(badPage.png, undefined);
     assert.equal(badPage.svg, undefined);
     assert.ok(
-      badPage.diagnostics.some(
+      badPage.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-corrupt-image" &&
           /group\[g\]\/image\[bad-member\]/u.test(d.path) &&
           /decode/i.test(d.message),
       ),
     );
-    // Nodes and transformed screenBoxes are still reported for locator inspection.
+    // Nodes and transformed bounds are still reported for locator inspection.
     assert.ok(
-      badPage.nodes.find((n) => n.authorId === "bad-member")?.screenBox !==
+      badPage.nodes.find((n) => n.authorId === "bad-member")?.bounds !==
         undefined,
     );
 
     const goodPage = result.pages[1]!;
-    assert.deepEqual(goodPage.diagnostics, []);
+    assert.deepEqual(goodPage.errors, []);
     assert.ok(goodPage.png !== undefined);
 
     // Non-finite rotation on Group fails formal build validation.
@@ -257,7 +273,16 @@ describe("Group static preview, screenGeometry, and member failure propagation",
           deck({ width: 320, height: 180 }).append(
             slide({ id: "bad-rot" }).append(
               group({ id: "g", style: { rotate: Number.NaN } }).append(
-                shape({ id: "s", x: 10, y: 10, width: 20, height: 20 }),
+                shape({
+                  id: "s",
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 20,
+                    height: 20,
+                  },
+                }),
               ),
             ),
           ),
@@ -285,11 +310,14 @@ describe("Group static preview, screenGeometry, and member failure propagation",
         }).append(
           shape({
             id: "anchor",
-            x: 100,
-            y: 50,
-            width: 40,
-            height: 40,
-            fill: "#E2E8F0",
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 50,
+              width: 40,
+              height: 40,
+              background: "#E2E8F0",
+            },
           }),
           group({
             id: "lvl2",
@@ -302,13 +330,16 @@ describe("Group static preview, screenGeometry, and member failure propagation",
               shape({
                 id: "deep-rich-shape",
                 geometry: "roundRect",
-                x: 160,
-                y: 90,
-                width: 120,
-                height: 60,
-                fill: "cardFill",
-                flipH: true,
-                style: { opacity: 0.7 },
+                style: {
+                  position: "absolute",
+                  left: 160,
+                  top: 90,
+                  width: 120,
+                  height: 60,
+                  background: "cardFill",
+                  flipH: true,
+                  opacity: 0.7,
+                },
               }).append(
                 paragraph([span("Deep")]).style({
                   fontFamily: jostFont,
@@ -324,15 +355,18 @@ describe("Group static preview, screenGeometry, and member failure propagation",
       slide({ id: "deep-glyph-fail" }).append(
         group({ id: "outer-fail" }).append(
           group({ id: "inner-fail", style: { rotate: 15 } }).append(
-            shape({
+            shape("汉", {
               id: "bad-shape-text",
-              x: 40,
-              y: 40,
-              width: 100,
-              height: 40,
-              fill: "#111827",
-              text: "汉",
-              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 40,
+                width: 100,
+                height: 40,
+                background: "#111827",
+                fontFamily: jostFont,
+                color: "#FFFFFF",
+              },
             }),
           ),
         ),
@@ -343,7 +377,7 @@ describe("Group static preview, screenGeometry, and member failure propagation",
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
     const p1 = result.pages[0]!;
-    assert.deepEqual(p1.diagnostics, []);
+    assert.deepEqual(p1.errors, []);
     assert.ok(p1.png !== undefined);
     assert.ok(p1.svg !== undefined);
     expect(p1.svg).toContain("scale(-1 1)");
@@ -354,17 +388,14 @@ describe("Group static preview, screenGeometry, and member failure propagation",
     // lvl3 box: [160..280, 90..150] (cx=220, cy=120).
     // Net rotation of deep-rich-shape: 45 - 90 + 90 = +45deg, around center:
     // (220, 120) rotated -90 around (220, 120) -> (220, 120); rotated +90 around (190, 100) -> (170, 130).
-    // So deep-rich-shape screenBox is centered at (170, 130) with rotated 45deg bounding box side = (120 + 60) / sqrt(2).
+    // So deep-rich-shape bounds is centered at (170, 130) with rotated 45deg bounding box side = (120 + 60) / sqrt(2).
     const deepNode = p1.nodes.find((n) => n.authorId === "deep-rich-shape")!;
     assert.equal(deepNode.corners?.length, 4);
     const expectedSpan = (120 + 60) / Math.SQRT2;
-    expect(deepNode.screenBox?.width).toBeCloseTo(expectedSpan, 3);
-    expect(deepNode.screenBox?.height).toBeCloseTo(expectedSpan, 3);
-    expect(deepNode.screenBox!.x + deepNode.screenBox!.width / 2).toBeCloseTo(
-      170,
-      3,
-    );
-    expect(deepNode.screenBox!.y + deepNode.screenBox!.height / 2).toBeCloseTo(
+    expect(deepNode.bounds?.width).toBeCloseTo(expectedSpan, 3);
+    expect(deepNode.bounds?.height).toBeCloseTo(expectedSpan, 3);
+    expect(deepNode.bounds!.x + deepNode.bounds!.width / 2).toBeCloseTo(170, 3);
+    expect(deepNode.bounds!.y + deepNode.bounds!.height / 2).toBeCloseTo(
       130,
       3,
     );
@@ -373,9 +404,9 @@ describe("Group static preview, screenGeometry, and member failure propagation",
     assert.equal(p2.png, undefined);
     assert.equal(p2.svg, undefined);
     assert.ok(
-      p2.diagnostics.some(
+      p2.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-missing-glyph" &&
           /group\[outer-fail\]\/group\[inner-fail\]\/shape\[bad-shape-text\]/u.test(
             d.path,
           ) &&

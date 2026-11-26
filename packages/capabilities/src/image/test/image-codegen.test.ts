@@ -47,39 +47,48 @@ describe("image capability codegen", () => {
             name: "Hero Image",
             alt: "Blue square",
             src: pngBytes,
-            x: 40,
-            y: 50,
-            width: 240,
-            height: 160,
             fit: "cover",
             crop: { left: 0.1, top: 0.2 },
             geometry: preset("roundRect", { adj: 20000 }),
-            flipH: true,
             link: { url: "https://example.com" },
             style: {
+              position: "absolute",
+              left: 40,
+              top: 50,
+              width: 240,
+              height: 160,
+              flipH: true,
               rotate: 15,
               opacity: 0.85,
-              borderColor: "#0F172A",
-              borderWidth: 2,
-              borderStyle: "dashed",
+              border: {
+                color: "#0F172A",
+                width: 2,
+                style: "dashed",
+              },
             },
           }),
           image({
             id: "hero-path-dup",
             src: pngPath,
-            x: 320,
-            y: 50,
-            width: 120,
-            height: 120,
+            style: {
+              position: "absolute",
+              left: 320,
+              top: 50,
+              width: 120,
+              height: 120,
+            },
           }),
           image({
             id: "badge-url",
             src: pathToFileURL(gifPath),
-            x: 480,
-            y: 50,
-            width: 40,
-            height: 40,
-            flipV: true,
+            style: {
+              position: "absolute",
+              left: 480,
+              top: 50,
+              width: 40,
+              height: 40,
+              flipV: true,
+            },
           }),
         ),
       );
@@ -111,15 +120,15 @@ describe("image capability codegen", () => {
         );
         assert.match(source, /rotate:\s*15/u);
         assert.match(source, /opacity:\s*0\.85/u);
-        assert.match(source, /borderStyle:\s*"dashed"/u);
+        assert.match(source, /style:\s*"dashed"/u);
+        assert.match(source, /flipH:\s*true/u);
+        assert.match(source, /flipV:\s*true/u);
         assert.match(source, /url:\s*"https:\/\/example\.com"/u);
         if (target === "vanilla") {
           assert.match(
             source,
             /crop:\s*\{\s*left:\s*0\.1,\s*top:\s*0\.2\s*\}/u,
           );
-          assert.match(source, /flipH:\s*true/u);
-          assert.match(source, /flipV:\s*true/u);
           assert.match(source, /\bimage\(/u);
         } else {
           assert.match(
@@ -127,8 +136,6 @@ describe("image capability codegen", () => {
             /crop=\{\{\s*left:\s*0\.1,\s*top:\s*0\.2\s*\}\}/u,
           );
           assert.match(source, /<Image\b/u);
-          assert.match(source, /\bflipH\b/u);
-          assert.match(source, /\bflipV\b/u);
         }
       }
     } finally {
@@ -144,10 +151,13 @@ describe("image capability codegen", () => {
         image({
           id: "remote-banner",
           src: { externalUrl: "https://assets.example.com/banner.png" },
-          x: 40,
-          y: 40,
-          width: 400,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 400,
+            height: 200,
+          },
         }),
       ),
     );
@@ -165,10 +175,13 @@ describe("image capability codegen", () => {
         image({
           id: "missing-pic",
           src: "/nonexistent/pptxdk-missing-image-file.png",
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 100,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+          },
         }),
       ),
     );
@@ -186,10 +199,13 @@ describe("image capability codegen", () => {
         image({
           id: "corrupt-pic",
           src: new Uint8Array([1, 2, 3, 4]),
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 100,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+          },
         }),
       ),
     );
@@ -207,10 +223,13 @@ describe("image capability codegen", () => {
         image({
           id: "http-url-pic",
           src: new URL("https://example.com/not-local.png"),
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 100,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+          },
         }),
       ),
     );
@@ -228,10 +247,13 @@ describe("image capability codegen", () => {
         image({
           id: "empty-ext",
           src: { externalUrl: "" },
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 100,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+          },
         }),
       ),
     );
@@ -245,7 +267,7 @@ describe("image capability codegen", () => {
     );
   });
 
-  it("extracts style.backgroundImage image assets via valueSerializers and fails with @style.backgroundImage on bad sources", () => {
+  it("extracts style.background image assets via valueSerializers and fails with @style.background on bad sources", () => {
     const pngBytes = createSamplePngBytes();
     const generate = createCodegen(documentCapabilities);
 
@@ -253,21 +275,25 @@ describe("image capability codegen", () => {
       slide({ id: "s1" }).append(
         text("Card", {
           id: "card-with-bg-img",
-          x: 40,
-          y: 40,
-          width: 300,
-          height: 120,
           style: {
-            backgroundImage: { image: pngBytes },
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 300,
+            height: 120,
+            background: { image: pngBytes },
           },
         }),
         image({
           id: "shared-with-bg",
           src: pngBytes,
-          x: 400,
-          y: 40,
-          width: 120,
-          height: 120,
+          style: {
+            position: "absolute",
+            left: 400,
+            top: 40,
+            width: 120,
+            height: 120,
+          },
         }),
       ),
     );
@@ -279,19 +305,20 @@ describe("image capability codegen", () => {
       );
       assert.equal(assetKeys.length, 1, `${target} shared asset dedup`);
       const source = res.files[res.entry] as string;
-      assert.match(source, /backgroundImage:\s*\{\s*image:\s*imageAsset\s*\}/u);
+      assert.match(source, /background:\s*\{\s*image:\s*imageAsset\s*\}/u);
     }
 
     const badBgImgDoc = deck({ width: 960, height: 540 }).append(
       slide({ id: "s-bad-bgimg" }).append(
         text("Bad", {
           id: "bad-card",
-          x: 40,
-          y: 40,
-          width: 200,
-          height: 80,
           style: {
-            backgroundImage: { image: "/missing/style-bg-img.png" },
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 200,
+            height: 80,
+            background: { image: "/missing/style-bg-img.png" },
           },
         }),
       ),
@@ -302,7 +329,7 @@ describe("image capability codegen", () => {
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "unexpressible-value" &&
         error.diagnostics[0]?.path ===
-          "deck/slide[s-bad-bgimg]/text[bad-card]@style.backgroundImage",
+          "deck/slide[s-bad-bgimg]/text[bad-card]@style.background",
     );
   });
 });

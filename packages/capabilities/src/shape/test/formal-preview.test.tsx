@@ -88,7 +88,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
+      resolution,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -127,15 +127,14 @@ describe("Slice 2: Shape static preview", () => {
     };
     const mutableShape = shape({
       id: "hero-rect",
-      x: 20,
-      y: 20,
-      width: 100,
-      height: 50,
-      fill: "#FF0000",
       style: {
-        borderColor: "#000000",
-        borderWidth: 2,
-        borderStyle: "solid",
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 100,
+        height: 50,
+        background: "#FF0000",
+        border: { color: "#000000", width: 2, style: "solid" },
         rotate: 90,
         zIndex: 2,
       },
@@ -146,25 +145,29 @@ describe("Slice 2: Shape static preview", () => {
         shape({
           id: "underlay",
           geometry: preset("ellipse"),
-          x: 20,
-          y: 20,
-          width: 100,
-          height: 50,
-          style: { backgroundColor: "#0000FF", zIndex: 1 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 100,
+            height: 50,
+            background: "#0000FF",
+            zIndex: 1,
+          },
         }),
         shape({
           id: "custom-path",
           geometry: custom,
-          x: 160,
-          y: 20,
-          width: 100,
-          height: 50,
-          fill: "accent1",
-          flipH: true,
-          flipV: true,
           style: {
-            borderColor: "#112233",
-            borderWidth: 2,
+            position: "absolute",
+            left: 160,
+            top: 20,
+            width: 100,
+            height: 50,
+            background: "accent1",
+            flipH: true,
+            flipV: true,
+            border: { color: "#112233", width: 2 },
             opacity: 0.5,
           },
         }),
@@ -173,7 +176,7 @@ describe("Slice 2: Shape static preview", () => {
 
     const first = await previewDoc(doc);
     const page = first.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     // zIndex 1 underlay must appear before zIndex 2 hero-rect in SVG paint order.
@@ -187,15 +190,15 @@ describe("Slice 2: Shape static preview", () => {
     expect(page.svg).toContain('stroke-width="2"');
 
     const heroNode = page.nodes.find((node) => node.authorId === "hero-rect")!;
-    expect(heroNode.screenBox?.x).toBeCloseTo(45);
-    expect(heroNode.screenBox?.y).toBeCloseTo(-5);
-    expect(heroNode.screenBox?.width).toBeCloseTo(50);
-    expect(heroNode.screenBox?.height).toBeCloseTo(100);
+    expect(heroNode.bounds?.x).toBeCloseTo(45);
+    expect(heroNode.bounds?.y).toBeCloseTo(-5);
+    expect(heroNode.bounds?.width).toBeCloseTo(50);
+    expect(heroNode.bounds?.height).toBeCloseTo(100);
 
     // Mutate after preview and rebuild: first result stays untouched.
     const firstSvg = page.svg;
     const firstPng = page.png.slice();
-    mutableShape.set({ fill: "#00AA00" });
+    mutableShape.style({ background: "#00AA00" });
     const second = await previewDoc(doc);
     assert.equal(first.pages[0]?.svg, firstSvg);
     assert.deepEqual(first.pages[0]?.png, firstPng);
@@ -203,65 +206,83 @@ describe("Slice 2: Shape static preview", () => {
     expect(second.pages[0]?.svg).toContain('fill="#00AA00"');
   });
 
-  it("renders standard preset geometries (including adjust, shaded subpaths, local path w/h, and connectors) with zero diagnostics", async () => {
+  it("renders standard preset geometries (including adjust, shaded subpaths, local path w/h, and connectors) with zero errors", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const doc = deck({ width: 480, height: 240 }).append(
       slide({ id: "presets" }).append(
         shape({
           id: "star",
           geometry: "star5",
-          x: 20,
-          y: 20,
-          width: 80,
-          height: 80,
-          fill: "#F59E0B",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 80,
+            height: 80,
+            background: "#F59E0B",
+          },
         }),
         shape({
           id: "arc",
           geometry: blockArc({ startAngle: 0, endAngle: 180, thickness: 0.3 }),
-          x: 120,
-          y: 20,
-          width: 80,
-          height: 80,
-          fill: "#10B981",
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 20,
+            width: 80,
+            height: 80,
+            background: "#10B981",
+          },
         }),
         shape({
           id: "bevel-box",
           geometry: preset("bevel", { adj: 20000 }),
-          x: 220,
-          y: 20,
-          width: 100,
-          height: 60,
-          fill: "#3B82F6",
-          style: { borderColor: "#1E3A8A", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 20,
+            width: 100,
+            height: 60,
+            background: "#3B82F6",
+            border: { color: "#1E3A8A", width: 2 },
+          },
         }),
         shape({
           id: "cloud-shape",
           geometry: "cloud",
-          x: 340,
-          y: 20,
-          width: 110,
-          height: 70,
-          fill: "#E0F2FE",
-          style: { borderColor: "#0284C7", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 340,
+            top: 20,
+            width: 110,
+            height: 70,
+            background: "#E0F2FE",
+            border: { color: "#0284C7", width: 2 },
+          },
         }),
         shape({
           id: "donut-ring",
           geometry: "donut",
-          x: 20,
-          y: 120,
-          width: 80,
-          height: 80,
-          fill: "#EC4899",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 120,
+            width: 80,
+            height: 80,
+            background: "#EC4899",
+          },
         }),
         shape({
           id: "connector",
           geometry: preset("bentConnector3", { adj1: 30000 }),
-          x: 130,
-          y: 130,
-          width: 120,
-          height: 60,
-          style: { borderColor: "#0F172A", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 130,
+            top: 130,
+            width: 120,
+            height: 60,
+            border: { color: "#0F172A", width: 2 },
+          },
         }),
       ),
     );
@@ -269,7 +290,7 @@ describe("Slice 2: Shape static preview", () => {
     const validation = await validatePptx(result.pptx);
     assert.deepEqual(validation.errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     // Bevel produces shaded fill variants alongside the base #3B82F6 face.
@@ -279,7 +300,7 @@ describe("Slice 2: Shape static preview", () => {
     );
   });
 
-  it("renders gradients, image fills, borderRadius, dashed/dotted borders, open-path arrows, boxShadow, and softEdge with zero diagnostics", async () => {
+  it("renders gradients, image fills, borderRadius, dashed/dotted borders, open-path arrows, boxShadow, and softEdge with zero errors", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const { PNG } = await import("pngjs");
     const { arrowTypes } = await import("@pptxdk/capabilities");
@@ -295,52 +316,54 @@ describe("Slice 2: Shape static preview", () => {
       slide({ id: "visuals", background: "#FFFFFF" }).append(
         shape({
           id: "grad-shape",
-          x: 10,
-          y: 10,
-          width: 90,
-          height: 40,
           style: {
-            backgroundImage: linearGradient(90, "#111111", "#888888"),
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 90,
+            height: 40,
+            background: linearGradient(90, "#111111", "#888888"),
             borderRadius: 8,
-            borderColor: "#0F172A",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            border: { color: "#0F172A", width: 2, style: "dashed" },
           },
         }),
         shape({
           id: "img-shape",
           geometry: "ellipse",
-          x: 120,
-          y: 10,
-          width: 80,
-          height: 40,
           style: {
-            backgroundImage: { image: pngBytes },
-            borderColor: "#064E3B",
-            borderWidth: 2,
-            borderStyle: "dotted",
+            position: "absolute",
+            left: 120,
+            top: 10,
+            width: 80,
+            height: 40,
+            background: { image: pngBytes },
+            border: { color: "#064E3B", width: 2, style: "dotted" },
           },
         }),
         shape({
           id: "shadow-shape",
-          x: 220,
-          y: 15,
-          width: 70,
-          height: 35,
-          fill: "#112233",
           style: {
+            position: "absolute",
+            left: 220,
+            top: 15,
+            width: 70,
+            height: 35,
+            background: "#112233",
             rotate: 45,
             boxShadow: { blur: 4, distance: 6, angle: 90 },
           },
         }),
         shape({
           id: "soft-shape",
-          x: 320,
-          y: 10,
-          width: 80,
-          height: 40,
-          fill: "#1D4ED8",
-          style: { softEdge: 6 },
+          style: {
+            position: "absolute",
+            left: 320,
+            top: 10,
+            width: 80,
+            height: 40,
+            background: "#1D4ED8",
+            softEdge: 6,
+          },
         }),
         ...arrowTypes.map((arrowType, idx) =>
           shape({
@@ -352,15 +375,18 @@ describe("Slice 2: Shape static preview", () => {
                     viewBox: [100, 18],
                     fill: false,
                   }),
-            x: 15 + idx * 75,
-            y: 100,
-            width: 60,
-            height: 16,
             style: {
-              borderColor: "#0F172A",
-              borderWidth: 2.5,
-              startArrow: arrowType,
-              endArrow: arrowType,
+              position: "absolute",
+              left: 15 + idx * 75,
+              top: 100,
+              width: 60,
+              height: 16,
+              border: {
+                color: "#0F172A",
+                width: 2.5,
+                startArrow: arrowType,
+                endArrow: arrowType,
+              },
             },
           }),
         ),
@@ -369,7 +395,7 @@ describe("Slice 2: Shape static preview", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     expect(page.svg).toContain("<linearGradient");
     expect(page.svg).toContain("<pattern");
@@ -382,16 +408,17 @@ describe("Slice 2: Shape static preview", () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const doc = deck({ width: 520, height: 280 }).append(
       slide({ id: "shape-text", background: "#FFFFFF" }).append(
-        shape({
+        shape("IIII", {
           id: "opacity-shape-text",
-          x: 20,
-          y: 20,
-          width: 180,
-          height: 80,
-          fill: "#000000",
-          style: { opacity: 0.5, padding: 8 },
-          text: "IIII",
-          textStyle: {
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 180,
+            height: 80,
+            background: "#000000",
+            opacity: 0.5,
+            padding: 8,
             fontFamily: jostFont,
             fontSize: 36,
             color: "#FFFFFF",
@@ -402,14 +429,18 @@ describe("Slice 2: Shape static preview", () => {
         shape({
           id: "flipped-arrow-text",
           geometry: "rightArrow",
-          x: 220,
-          y: 20,
-          width: 240,
-          height: 90,
-          fill: "#1D4ED8",
-          flipH: true,
-          flipV: true,
-          style: { rotate: 15, borderColor: "#0F172A", borderWidth: 2 },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 20,
+            width: 240,
+            height: 90,
+            background: "#1D4ED8",
+            flipH: true,
+            flipV: true,
+            rotate: 15,
+            border: { color: "#0F172A", width: 2 },
+          },
         }).append(
           paragraph([
             span("Page ").style({ fontWeight: 700, color: "#FFFFFF" }),
@@ -419,16 +450,15 @@ describe("Slice 2: Shape static preview", () => {
         shape({
           id: "diamond-wrapped",
           geometry: "diamond",
-          x: 20,
-          y: 130,
-          width: 180,
-          height: 120,
           style: {
-            backgroundImage: linearGradient(90, "#0F766E", "#14B8A6"),
+            position: "absolute",
+            left: 20,
+            top: 130,
+            width: 180,
+            height: 120,
+            background: linearGradient(90, "#0F766E", "#14B8A6"),
             boxShadow: { blur: 4, distance: 4, angle: 90 },
-            borderColor: "#115E59",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            border: { color: "#115E59", width: 2, style: "dashed" },
             padding: 4,
           },
         }).append(
@@ -446,7 +476,7 @@ describe("Slice 2: Shape static preview", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
 
@@ -481,7 +511,7 @@ describe("Slice 2: Shape static preview", () => {
       page.nodes.find((n) => n.authorId === "flipped-arrow-text")?.text,
     ).toBe("Page 1");
 
-    // JSX equivalent with Shape + P/Span/SlideNumber also renders cleanly with zero diagnostics.
+    // JSX equivalent with Shape + P/Span/SlideNumber also renders cleanly with zero errors.
     const jsxDoc = await expandDocument(
       createElement(
         Deck,
@@ -494,12 +524,16 @@ describe("Slice 2: Shape static preview", () => {
             {
               id: "jsx-rich",
               geometry: "roundRect",
-              x: 30,
-              y: 30,
-              width: 240,
-              height: 100,
-              fill: "#1E293B",
-              style: { padding: 12, verticalAlign: "bottom" },
+              style: {
+                position: "absolute",
+                left: 30,
+                top: 30,
+                width: 240,
+                height: 100,
+                background: "#1E293B",
+                padding: 12,
+                verticalAlign: "bottom",
+              },
             },
             createElement(
               P,
@@ -514,11 +548,11 @@ describe("Slice 2: Shape static preview", () => {
       ),
     );
     const jsxResult = await previewDoc(jsxDoc);
-    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(jsxResult.pages[0]?.errors, []);
     assert.ok(jsxResult.pages[0]?.png !== undefined);
   });
 
-  it("rejects only underlying font resource errors on shape inline text with located diagnostics", async () => {
+  it("rejects only underlying font resource errors on shape inline text with located errors", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const colrFont = font(
       "ColrJost",
@@ -529,32 +563,40 @@ describe("Slice 2: Shape static preview", () => {
     const cases: readonly {
       label: string;
       node: ReturnType<typeof shape>;
+      expectedCode: "preview-missing-glyph" | "preview-unsupported-font";
       expected: RegExp;
     }[] = [
       {
         label: "missing-glyph-inline",
-        node: shape({
+        node: shape("汉", {
           id: "bad",
-          x: 10,
-          y: 10,
-          width: 120,
-          height: 40,
-          fill: "#112233",
-          text: "汉",
-          textStyle: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 120,
+            height: 40,
+            background: "#112233",
+            fontFamily: jostFont,
+          },
         }),
+        expectedCode: "preview-missing-glyph",
         expected: /glyph/i,
       },
       {
         label: "color-font-children",
         node: shape({
           id: "bad",
-          x: 10,
-          y: 10,
-          width: 120,
-          height: 40,
-          fill: "#112233",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 120,
+            height: 40,
+            background: "#112233",
+          },
         }).append(paragraph("Color").style({ fontFamily: colrFont })),
+        expectedCode: "preview-unsupported-font",
         expected: /monochrome/i,
       },
     ];
@@ -564,15 +606,18 @@ describe("Slice 2: Shape static preview", () => {
         deck({ width: 200, height: 120 }).append(
           slide({ id: "s1" }).append(item.node),
           slide({ id: "s2" }).append(
-            shape({
+            shape("OK", {
               id: "ok-sibling",
-              x: 10,
-              y: 10,
-              width: 80,
-              height: 40,
-              fill: "#16A34A",
-              text: "OK",
-              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 80,
+                height: 40,
+                background: "#16A34A",
+                fontFamily: jostFont,
+                color: "#FFFFFF",
+              },
             }),
           ),
         ),
@@ -582,21 +627,21 @@ describe("Slice 2: Shape static preview", () => {
       assert.equal(result.pages[0]?.png, undefined, item.label);
       assert.equal(result.pages[0]?.svg, undefined, item.label);
       assert.equal(
-        result.pages[0]?.diagnostics[0]?.severity,
-        "error",
+        result.pages[0]?.errors[0]?.code,
+        item.expectedCode,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.path ?? "",
+        result.pages[0]?.errors[0]?.path ?? "",
         /shape\[bad\]/,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.message ?? "",
+        result.pages[0]?.errors[0]?.message ?? "",
         item.expected,
         item.label,
       );
-      assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+      assert.deepEqual(result.pages[1]?.errors, [], item.label);
       assert.ok(result.pages[1]?.png !== undefined, item.label);
     }
 
@@ -610,7 +655,16 @@ describe("Slice 2: Shape static preview", () => {
           { id: "jsx-text" },
           createElement(
             Shape,
-            { id: "bad-jsx", x: 10, y: 10, width: 120, height: 40 },
+            {
+              id: "bad-jsx",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 120,
+                height: 40,
+              },
+            },
             createElement(P, { style: { fontFamily: jostFont } }, "汉"),
           ),
         ),
@@ -618,66 +672,70 @@ describe("Slice 2: Shape static preview", () => {
     );
     const jsxResult = await previewDoc(jsxMissingGlyph);
     assert.equal(jsxResult.pages[0]?.png, undefined);
-    assert.match(
-      jsxResult.pages[0]?.diagnostics[0]?.path ?? "",
-      /shape\[bad-jsx\]/,
-    );
+    assert.equal(jsxResult.pages[0]?.errors[0]?.code, "preview-missing-glyph");
+    assert.match(jsxResult.pages[0]?.errors[0]?.path ?? "", /shape\[bad-jsx\]/);
   });
 
-  it("measures non-rectangular shape inline text against the inscribed textRect so diamond overflow emits overset", async () => {
+  it("measures non-rectangular shape inline text against the inscribed textRect via locator.textMetrics", async () => {
     const resolveWith = createResolver(documentCapabilities);
     const label = "One two three four";
     const doc = deck({ width: 400, height: 200 }).append(
       slide({ id: "diamond-overset", background: "#FFFFFF" }).append(
-        shape({
+        shape(label, {
           id: "rect-box",
           geometry: preset("rect"),
-          x: 20,
-          y: 20,
-          width: 160,
-          height: 52,
-          fill: "#E2E8F0",
-          text: label,
-          textStyle: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 160,
+            height: 52,
+            background: "#E2E8F0",
+            fontFamily: jostFont,
+            fontSize: 14,
+            color: "#0F172A",
+          },
         }),
-        shape({
+        shape(label, {
           id: "diamond-box",
           geometry: preset("diamond"),
-          x: 210,
-          y: 20,
-          width: 160,
-          height: 52,
-          fill: "#FEF3C7",
-          text: label,
-          textStyle: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 210,
+            top: 20,
+            width: 160,
+            height: 52,
+            background: "#FEF3C7",
+            fontFamily: jostFont,
+            fontSize: 14,
+            color: "#0F172A",
+          },
         }),
       ),
     );
 
     const resolution = resolveWith(doc);
-    assert.equal(
-      resolution.report.diagnostics.some(
-        (diag) =>
-          diag.code === "overset" &&
-          diag.path === "deck/slide[diamond-overset]/shape[rect-box]",
-      ),
-      false,
-    );
-    assert.ok(
-      resolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" &&
-          diag.code === "overset" &&
-          diag.path === "deck/slide[diamond-overset]/shape[diamond-box]",
-      ),
-    );
+    const slideLoc = resolution.slide("diamond-overset");
+    const rectMetrics = slideLoc.get("rect-box").textMetrics;
+    assert.equal(rectMetrics?.status, "measured");
+    if (rectMetrics?.status === "measured") {
+      assert.equal(rectMetrics.fits, true);
+    }
+    const diamondMetrics = slideLoc.get("diamond-box").textMetrics;
+    assert.equal(diamondMetrics?.status, "measured");
+    if (diamondMetrics?.status === "measured") {
+      assert.equal(diamondMetrics.fits, false);
+      if (rectMetrics?.status === "measured") {
+        assert.ok(diamondMetrics.available.width < rectMetrics.available.width);
+      }
+    }
 
     const { pptx } = emit(resolution);
     assert.deepEqual((await validatePptx(pptx)).errors, []);
 
     const preview = paint(resolution);
     const page = preview.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.svg !== undefined && page.svg.length > 0);
     assert.ok(page.png !== undefined);
     const decoded = PNG.sync.read(Buffer.from(page.png));

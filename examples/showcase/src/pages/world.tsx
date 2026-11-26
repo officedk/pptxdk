@@ -31,22 +31,41 @@ const regions: readonly RegionStory[] = [
 export function WorldPage() {
   return (
     <Slide id="world" background={colors.paper}>
-      <Shape x={64} y={48} width={42} height={5} fill={colors.accent} />
+      <Shape
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 48,
+          width: 42,
+          height: 5,
+          background: colors.accent,
+        }}
+      />
       <Text
-        x={64}
-        y={76}
-        width={760}
-        height={68}
-        style={{ fontSize: 50, lineHeight: 54, fontWeight: 700 }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 76,
+          width: 760,
+          height: 68,
+          fontSize: 50,
+          lineHeight: 54,
+          fontWeight: 700,
+        }}
       >
         Around the world.
       </Text>
       <Text
-        x={950}
-        y={88}
-        width={250}
-        height={28}
-        style={{ fontSize: 15, align: "right", color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 950,
+          top: 88,
+          width: 250,
+          height: 28,
+          fontSize: 15,
+          align: "right",
+          color: colors.muted,
+        }}
       >
         10 / SIX REGIONS
       </Text>

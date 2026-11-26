@@ -40,13 +40,13 @@ function DateCell({
   return (
     <Shape
       id={`date-${day}`}
-      x={80 + ((day - 1) % 7) * 88}
-      y={248 + Math.floor((day - 1) / 7) * 72}
-      width={76}
-      height={58}
-      fill={colors.surface}
-      text={String(day).padStart(2, "0")}
-      textStyle={{
+      style={{
+        position: "absolute",
+        left: 80 + ((day - 1) % 7) * 88,
+        top: 248 + Math.floor((day - 1) / 7) * 72,
+        width: 76,
+        height: 58,
+        background: colors.surface,
         fontSize: 21,
         fontFamily: "medium",
         fontWeight: 500,
@@ -63,7 +63,9 @@ function DateCell({
             }),
           }
         : {})}
-    />
+    >
+      {String(day).padStart(2, "0")}
+    </Shape>
   );
 }
 
@@ -87,13 +89,23 @@ function CalendarEvent({
           id={`event-${event.day}`}
           enter={floatUp({ duration: motion.reveal })}
         >
-          <Shape x={790} y={y} width={5} height={88} fill={colors.accent} />
-          <Text
-            x={820}
-            y={y - 4}
-            width={330}
-            height={38}
+          <Shape
             style={{
+              position: "absolute",
+              left: 790,
+              top: y,
+              width: 5,
+              height: 88,
+              background: colors.accent,
+            }}
+          />
+          <Text
+            style={{
+              position: "absolute",
+              left: 820,
+              top: y - 4,
+              width: 330,
+              height: 38,
               fontSize: 28,
               lineHeight: 32,
               fontWeight: 700,
@@ -103,11 +115,16 @@ function CalendarEvent({
             {String(event.day).padStart(2, "0")} / {event.title}
           </Text>
           <Text
-            x={820}
-            y={y + 44}
-            width={350}
-            height={54}
-            style={{ fontSize: 17, lineHeight: 23, color: colors.muted }}
+            style={{
+              position: "absolute",
+              left: 820,
+              top: y + 44,
+              width: 350,
+              height: 54,
+              fontSize: 17,
+              lineHeight: 23,
+              color: colors.muted,
+            }}
           >
             {event.body}
           </Text>
@@ -120,22 +137,37 @@ function CalendarEvent({
 export function CalendarPage() {
   return (
     <Slide id="calendar" background={colors.paper}>
-      <Shape x={80} y={58} width={42} height={5} fill={colors.accent} />
+      <Shape
+        style={{
+          position: "absolute",
+          left: 80,
+          top: 58,
+          width: 42,
+          height: 5,
+          background: colors.accent,
+        }}
+      />
       <Text
-        x={80}
-        y={90}
-        width={550}
-        height={76}
-        style={{ fontSize: 58, lineHeight: 62, fontWeight: 700 }}
+        style={{
+          position: "absolute",
+          left: 80,
+          top: 90,
+          width: 550,
+          height: 76,
+          fontSize: 58,
+          lineHeight: 62,
+          fontWeight: 700,
+        }}
       >
         October
       </Text>
       <Text
-        x={790}
-        y={94}
-        width={400}
-        height={46}
         style={{
+          position: "absolute",
+          left: 790,
+          top: 94,
+          width: 400,
+          height: 46,
           fontSize: 34,
           lineHeight: 38,
           fontFamily: "medium",
@@ -146,22 +178,28 @@ export function CalendarPage() {
         Plans, in sequence.
       </Text>
       <Text
-        x={790}
-        y={150}
-        width={370}
-        height={54}
-        style={{ fontSize: 17, lineHeight: 23, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 790,
+          top: 150,
+          width: 370,
+          height: 54,
+          fontSize: 17,
+          lineHeight: 23,
+          color: colors.muted,
+        }}
       >
         Lorem ipsum dolor sit amet, consectetur adipiscing elit.
       </Text>
       {["M", "T", "W", "T", "F", "S", "S"].map((label, index) => (
         <Text
           key={`${label}-${index}`}
-          x={80 + index * 88}
-          y={204}
-          width={76}
-          height={30}
           style={{
+            position: "absolute",
+            left: 80 + index * 88,
+            top: 204,
+            width: 76,
+            height: 30,
             fontSize: 15,
             fontWeight: 700,
             align: "center",
@@ -180,11 +218,12 @@ export function CalendarPage() {
         <CalendarEvent key={event.day} event={event} index={index} />
       ))}
       <Text
-        x={790}
-        y={634}
-        width={240}
-        height={26}
         style={{
+          position: "absolute",
+          left: 790,
+          top: 634,
+          width: 240,
+          height: 26,
           fontSize: 14,
           fontFamily: "medium",
           fontWeight: 500,

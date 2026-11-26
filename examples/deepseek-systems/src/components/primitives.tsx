@@ -64,7 +64,18 @@ export function Rule({
   readonly height?: number;
   readonly color?: string;
 }) {
-  return <Shape x={x} y={y} width={width} height={height} fill={color} />;
+  return (
+    <Shape
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width,
+        height,
+        background: color,
+      }}
+    />
+  );
 }
 
 /** Keeps a separately editable fill and label on one entrance moment in its parent's stagger. */
@@ -74,7 +85,7 @@ export function EnteredShapeText({
   y,
   width,
   height,
-  fill,
+  background,
   shapeStyle,
   text,
   textStyle,
@@ -85,7 +96,9 @@ export function EnteredShapeText({
   readonly y: number;
   readonly width: number;
   readonly height: number;
-  readonly fill: NonNullable<ShapeProps["fill"]>;
+  readonly background: NonNullable<
+    NonNullable<ShapeProps["style"]>["background"]
+  >;
   readonly shapeStyle?: NonNullable<ShapeProps["style"]>;
   readonly text: string;
   readonly textStyle: TextStyle;
@@ -97,21 +110,27 @@ export function EnteredShapeText({
     <MotionScope scope={scope}>
       <Shape
         id={`${id}-background`}
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={fill}
-        {...(shapeStyle === undefined ? {} : { style: shapeStyle })}
+        style={{
+          position: "absolute",
+          left: x,
+          top: y,
+          width,
+          height,
+          background,
+          ...shapeStyle,
+        }}
         enter={enter}
       />
       <Text
         id={id}
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        style={textStyle}
+        style={{
+          position: "absolute",
+          left: x,
+          top: y,
+          width,
+          height,
+          ...textStyle,
+        }}
         enter={enter}
       >
         {text}
@@ -131,7 +150,7 @@ export function PanelCard({
   rightBadge,
   tone = "compute",
   accentSide = "top",
-  fill = colors.surface,
+  background = colors.surface,
   borderColor = colors.line,
   id,
   children,
@@ -145,7 +164,7 @@ export function PanelCard({
   readonly rightBadge?: string;
   readonly tone?: SemanticTone;
   readonly accentSide?: "top" | "left" | "none";
-  readonly fill?: string;
+  readonly background?: string;
   readonly borderColor?: string;
   readonly id?: string;
   readonly children?: ReactNode;
@@ -155,25 +174,47 @@ export function PanelCard({
     <>
       <Shape
         {...(id === undefined ? {} : { id })}
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={fill}
-        style={{ borderColor, borderWidth: 1 }}
+        style={{
+          position: "absolute",
+          left: x,
+          top: y,
+          width,
+          height,
+          background,
+          border: { color: borderColor, width: 1 },
+        }}
       />
       {accentSide === "top" && (
-        <Shape x={x} y={y} width={width} height={3} fill={palette.accent} />
+        <Shape
+          style={{
+            position: "absolute",
+            left: x,
+            top: y,
+            width,
+            height: 3,
+            background: palette.accent,
+          }}
+        />
       )}
       {accentSide === "left" && (
-        <Shape x={x} y={y} width={4} height={height} fill={palette.accent} />
+        <Shape
+          style={{
+            position: "absolute",
+            left: x,
+            top: y,
+            width: 4,
+            height,
+            background: palette.accent,
+          }}
+        />
       )}
       {title !== undefined && (
         <Text
-          x={x + 18}
-          y={y + 12}
-          width={rightBadge ? width - 154 : width - 36}
           style={{
+            position: "absolute",
+            left: x + 18,
+            top: y + 12,
+            width: rightBadge ? width - 154 : width - 36,
             padding: 0,
             fontSize: 14.5,
             color: colors.steel,
@@ -185,27 +226,30 @@ export function PanelCard({
       )}
       {rightBadge !== undefined && (
         <Shape
-          x={x + width - 136}
-          y={y + 11}
-          width={120}
-          height={22}
-          fill={palette.soft}
-          style={{ padding: [0, 4] }}
-          text={rightBadge}
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: x + width - 136,
+            top: y + 11,
+            width: 120,
+            height: 22,
+            padding: [0, 4],
+            background: palette.soft,
             fontSize: 10.5,
             color: palette.text,
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          {rightBadge}
+        </Shape>
       )}
       {subtitle !== undefined && (
         <Text
-          x={x + 18}
-          y={y + 36}
-          width={width - 32}
           style={{
+            position: "absolute",
+            left: x + 18,
+            top: y + 36,
+            width: width - 32,
             padding: 0,
             fontSize: 11,
             color: colors.muted,
@@ -257,22 +301,35 @@ export function MetricCard({
     <>
       <Shape
         {...(id === undefined ? {} : { id })}
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={dark ? colors.obsidianCard : colors.surface}
         style={{
-          borderColor: dark ? colors.darkLine : colors.line,
-          borderWidth: 1,
+          position: "absolute",
+          left: x,
+          top: y,
+          width,
+          height,
+          background: dark ? colors.obsidianCard : colors.surface,
+          border: {
+            color: dark ? colors.darkLine : colors.line,
+            width: 1,
+          },
         }}
       />
-      <Shape x={x} y={y} width={4} height={height} fill={palette.accent} />
-      <Text
-        x={x + 14}
-        y={y + 10}
-        width={width - 20}
+      <Shape
         style={{
+          position: "absolute",
+          left: x,
+          top: y,
+          width: 4,
+          height,
+          background: palette.accent,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: x + 14,
+          top: y + 10,
+          width: width - 20,
           padding: 0,
           fontSize: 11.5,
           color: dark ? colors.darkMuted : colors.muted,
@@ -282,10 +339,11 @@ export function MetricCard({
         {label}
       </Text>
       <Text
-        x={x + 14}
-        y={y + 28}
-        width={width - 20}
         style={{
+          position: "absolute",
+          left: x + 14,
+          top: y + 28,
+          width: width - 20,
           padding: 0,
           fontFamily: "metric",
           fontSize: 21,
@@ -297,10 +355,11 @@ export function MetricCard({
         {value}
       </Text>
       <Text
-        x={x + 14}
-        y={y + height - 24}
-        width={width - 20}
         style={{
+          position: "absolute",
+          left: x + 14,
+          top: y + height - 24,
+          width: width - 20,
           padding: 0,
           fontSize: 10.5,
           lineHeight: 14,
@@ -337,28 +396,27 @@ export function SemanticTag({
   const palette = tonePalette[tone];
   return (
     <Shape
-      x={x}
-      y={y}
-      width={width}
-      height={height}
-      fill={solid ? palette.accent : palette.soft}
       {...(rounded ? { geometry: preset("roundRect") } : {})}
-      style={
-        solid
-          ? { padding: [0, 4] }
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width,
+        height,
+        padding: [0, 4],
+        background: solid ? palette.accent : palette.soft,
+        ...(solid
+          ? {}
           : {
-              padding: [0, 4],
-              borderColor: palette.accent,
-              borderWidth: 1,
-            }
-      }
-      text={text}
-      textStyle={{
+              border: { color: palette.accent, width: 1 },
+            }),
         fontSize: 11,
         color: solid ? colors.surface : palette.text,
         align: "center",
         verticalAlign: "middle",
       }}
-    />
+    >
+      {text}
+    </Shape>
   );
 }

@@ -125,7 +125,16 @@ describe("Text & font local Zod schemas", () => {
           { id: "s1" },
           createElement(
             Text,
-            { id: "bad", x: 10, y: 10, width: 200, height: 40 },
+            {
+              id: "bad",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 200,
+                height: 40,
+              },
+            },
             createElement(
               P,
               null,
@@ -156,7 +165,16 @@ describe("Text & font local Zod schemas", () => {
           { id: "s1" },
           createElement(
             Text,
-            { id: "bad-num", x: 10, y: 10, width: 200, height: 40 },
+            {
+              id: "bad-num",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 200,
+                height: 40,
+              },
+            },
             createElement(SlideNumber, null, "child"),
           ),
         ),

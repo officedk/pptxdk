@@ -23,10 +23,13 @@ describe("notes capability codegen", () => {
         slide({ id: "s1" }).append(
           text("Canvas title", {
             id: "canvas-title",
-            x: 48,
-            y: 40,
-            width: 400,
-            height: 48,
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 40,
+              width: 400,
+              height: 48,
+            },
           }),
           notes(
             [

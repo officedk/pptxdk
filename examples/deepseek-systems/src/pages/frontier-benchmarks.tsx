@@ -63,15 +63,6 @@ export function FrontierBenchmarksPage() {
       >
         <Chart
           id="frontier-benchmark-chart"
-          x={64}
-          y={170}
-          width={752}
-          height={416}
-          style={{
-            fontFamily: "body",
-            fontSize: 10.5,
-            color: colors.ink,
-          }}
           legend="top"
           axes={{
             category: {
@@ -122,14 +113,25 @@ export function FrontierBenchmarksPage() {
               dataLabels: false,
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 64,
+            top: 170,
+            width: 752,
+            height: 416,
+            fontFamily: "body",
+            fontSize: 10.5,
+            color: colors.ink,
+          }}
         />
         <Rule x={66} y={596} width={748} />
         <Text
-          x={66}
-          y={606}
-          width={748}
-          height={42}
           style={{
+            position: "absolute",
+            left: 66,
+            top: 606,
+            width: 748,
+            height: 42,
             fontSize: 11,
             lineHeight: 16,
             color: colors.muted,
@@ -179,12 +181,15 @@ export function FrontierBenchmarksPage() {
           return (
             <Shape
               key={item.domain}
-              x={866}
-              y={boxY}
-              width={348}
-              height={106}
-              fill={colors.paper}
-              style={{ borderColor: colors.line, borderWidth: 1 }}
+              style={{
+                position: "absolute",
+                left: 866,
+                top: boxY,
+                width: 348,
+                height: 106,
+                background: colors.paper,
+                border: { color: colors.line, width: 1 },
+              }}
             />
           );
         })}
@@ -199,11 +204,14 @@ export function FrontierBenchmarksPage() {
           return (
             <Shape
               key={`bar-${idx}`}
-              x={866}
-              y={boxY}
-              width={4}
-              height={106}
-              fill={accent}
+              style={{
+                position: "absolute",
+                left: 866,
+                top: boxY,
+                width: 4,
+                height: 106,
+                background: accent,
+              }}
             />
           );
         })}
@@ -212,11 +220,12 @@ export function FrontierBenchmarksPage() {
           return (
             <Text
               key={`dom-${idx}`}
-              x={882}
-              y={boxY + 10}
-              width={318}
-              height={20}
               style={{
+                position: "absolute",
+                left: 882,
+                top: boxY + 10,
+                width: 318,
+                height: 20,
                 fontSize: 12.5,
                 color: colors.steel,
                 textWrap: "nowrap",
@@ -237,11 +246,12 @@ export function FrontierBenchmarksPage() {
           return (
             <Text
               key={`met-${idx}`}
-              x={882}
-              y={boxY + 34}
-              width={318}
-              height={20}
               style={{
+                position: "absolute",
+                left: 882,
+                top: boxY + 34,
+                width: 318,
+                height: 20,
                 fontSize: 11.5,
                 color: textColor,
                 textWrap: "nowrap",
@@ -256,11 +266,12 @@ export function FrontierBenchmarksPage() {
           return (
             <Text
               key={`note-${idx}`}
-              x={882}
-              y={boxY + 58}
-              width={318}
-              height={40}
               style={{
+                position: "absolute",
+                left: 882,
+                top: boxY + 58,
+                width: 318,
+                height: 40,
                 fontSize: 10.5,
                 lineHeight: 15,
                 color: colors.muted,

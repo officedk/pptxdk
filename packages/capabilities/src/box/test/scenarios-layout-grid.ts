@@ -101,7 +101,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               justifyContent: "space-between",
               alignItems: "center",
               padding: [8, 12],
-              backgroundColor: "accent",
+              background: "accent",
             },
           },
           createElement(
@@ -121,9 +121,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
           ),
           createElement(Shape, {
             id: "grid-header-badge",
-            width: 72,
-            height: 20,
-            fill: "#DBEAFE",
+            style: { width: 72, height: 20, background: "#DBEAFE" },
           }),
         ),
         createElement(
@@ -134,9 +132,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridColumn: 1,
               gridRow: 2,
               padding: 8,
-              backgroundColor: "surface",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              background: "surface",
+              border: { color: "#CBD5E1", width: 1 },
             },
           },
           createElement(
@@ -160,9 +157,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridColumn: 2,
               gridRow: 2,
               padding: 8,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#3B82F6",
-              borderWidth: 1,
+              background: "#EFF6FF",
+              border: { color: "#3B82F6", width: 1 },
             },
           },
           createElement(
@@ -186,9 +182,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridColumn: 3,
               gridRow: 2,
               padding: 8,
-              backgroundColor: "#ECFDF5",
-              borderColor: "#10B981",
-              borderWidth: 1,
+              background: "#ECFDF5",
+              border: { color: "#10B981", width: 1 },
             },
           },
           createElement(
@@ -213,9 +208,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridColumn: "1 / span 2",
               gridRow: 3,
               padding: 10,
-              backgroundColor: "surface",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "surface",
+              border: { color: "#94A3B8", width: 1 },
             },
           },
           createElement(
@@ -233,7 +227,6 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
         ),
         createElement(Shape, {
           id: "percent-cell-shape",
-          fill: "#7C3AED",
           style: {
             gridColumn: 3,
             gridRow: 3,
@@ -241,6 +234,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             height: "50%",
             justifySelf: "center",
             alignSelf: "center",
+            background: "#7C3AED",
           },
         }),
       ),
@@ -266,9 +260,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               justifyContent: "space-between",
               alignItems: "center",
               padding: [8, 12],
-              backgroundColor: "cardBg",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              background: "cardBg",
+              border: { color: "#CBD5E1", width: 1 },
             },
           },
           createElement(
@@ -288,9 +281,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
           ),
           createElement(Shape, {
             id: "outer-theme-dot",
-            width: 22,
-            height: 22,
-            fill: "badge",
+            style: { width: 22, height: 22, background: "badge" },
           }),
         ),
         createElement(
@@ -322,9 +313,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 gridTemplateRows: "auto 1fr",
                 gap: 8,
                 padding: 10,
-                backgroundColor: "cardBg",
-                borderColor: "badge",
-                borderWidth: 2,
+                background: "cardBg",
+                border: { color: "badge", width: 2 },
               },
             },
             createElement(
@@ -343,8 +333,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             ),
             createElement(Shape, {
               id: "nested-shape-a",
-              fill: "badge",
-              style: { height: "100%" },
+              style: { height: "100%", background: "badge" },
             }),
             createElement(
               Box,
@@ -355,9 +344,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                   flexDirection: "column",
                   justifyContent: "center",
                   alignItems: "center",
-                  backgroundColor: "#FFFFFF",
-                  borderColor: "badge",
-                  borderWidth: 1,
+                  background: "#FFFFFF",
+                  border: { color: "badge", width: 1 },
                   padding: 6,
                 },
               },
@@ -385,9 +373,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 flexDirection: "column",
                 gap: 8,
                 padding: 10,
-                backgroundColor: "cardBg",
-                borderColor: "#94A3B8",
-                borderWidth: 1,
+                background: "cardBg",
+                border: { color: "#94A3B8", width: 1 },
               },
             },
             createElement(
@@ -416,13 +403,11 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               },
               createElement(Shape, {
                 id: "auto-r1-c1",
-                fill: "badge",
-                style: { height: "100%" },
+                style: { height: "100%", background: "badge" },
               }),
               createElement(Shape, {
                 id: "auto-r1-c2",
-                fill: "#38BDF8",
-                style: { height: "100%" },
+                style: { height: "100%", background: "#38BDF8" },
               }),
               createElement(
                 Box,
@@ -430,9 +415,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                   id: "auto-r2-c1",
                   style: {
                     padding: 6,
-                    backgroundColor: "#FFFFFF",
-                    borderColor: "#CBD5E1",
-                    borderWidth: 1,
+                    background: "#FFFFFF",
+                    border: { color: "#CBD5E1", width: 1 },
                   },
                 },
                 createElement(
@@ -450,8 +434,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               ),
               createElement(Shape, {
                 id: "auto-r2-c2",
-                fill: "#0284C7",
-                style: { height: "100%" },
+                style: { height: "100%", background: "#0284C7" },
               }),
             ),
           ),
@@ -481,20 +464,17 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridTemplateRows: "70px 60px",
               gap: 10,
               padding: 10,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#EF4444",
-              borderWidth: 2,
+              background: "#FFFFFF",
+              border: { color: "#EF4444", width: 2 },
             },
           },
           createElement(Shape, {
             id: "ov-c1",
-            fill: "#F87171",
-            style: { height: "100%" },
+            style: { height: "100%", background: "#F87171" },
           }),
           createElement(Shape, {
             id: "ov-c2",
-            fill: "#FB923C",
-            style: { height: "100%" },
+            style: { height: "100%", background: "#FB923C" },
           }),
         ),
         createElement(
@@ -509,21 +489,17 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridTemplateRows: "80px",
               padding: 12,
               gap: 12,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#DC2626",
-              borderWidth: 2,
+              background: "#FFFFFF",
+              border: { color: "#DC2626", width: 2 },
             },
           },
           createElement(Shape, {
             id: "tall-item",
-            fill: "#FCA5A5",
-            width: 200,
-            height: 110,
+            style: { width: 200, height: 110, background: "#FCA5A5" },
           }),
           createElement(Shape, {
             id: "normal-item",
-            fill: "#34D399",
-            height: 60,
+            style: { height: 60, background: "#34D399" },
           }),
         ),
       ),
@@ -565,7 +541,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             justifyContent: "space-between",
             alignItems: "center",
             padding: [8, 12],
-            backgroundColor: "accent",
+            background: "accent",
           },
         }).append(
           text("Grid Layout Dashboard", {
@@ -581,9 +557,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
           }),
           shape({
             id: "grid-header-badge",
-            width: 72,
-            height: 20,
-            fill: "#DBEAFE",
+            style: { width: 72, height: 20, background: "#DBEAFE" },
           }),
         ),
         box({
@@ -592,9 +566,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridColumn: 1,
             gridRow: 2,
             padding: 8,
-            backgroundColor: "surface",
-            borderColor: "#CBD5E1",
-            borderWidth: 1,
+            background: "surface",
+            border: { color: "#CBD5E1", width: 1 },
           },
         }).append(
           text("Fixed 120px", {
@@ -612,9 +585,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridColumn: 2,
             gridRow: 2,
             padding: 8,
-            backgroundColor: "#EFF6FF",
-            borderColor: "#3B82F6",
-            borderWidth: 1,
+            background: "#EFF6FF",
+            border: { color: "#3B82F6", width: 1 },
           },
         }).append(
           text("AutoColTrack", {
@@ -632,9 +604,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridColumn: 3,
             gridRow: 2,
             padding: 8,
-            backgroundColor: "#ECFDF5",
-            borderColor: "#10B981",
-            borderWidth: 1,
+            background: "#ECFDF5",
+            border: { color: "#10B981", width: 1 },
           },
         }).append(
           text(
@@ -656,9 +627,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridColumn: "1 / span 2",
             gridRow: 3,
             padding: 10,
-            backgroundColor: "surface",
-            borderColor: "#94A3B8",
-            borderWidth: 1,
+            background: "surface",
+            border: { color: "#94A3B8", width: 1 },
           },
         }).append(
           text("Spans columns 1-2 (120px + gap + auto)", {
@@ -672,7 +642,6 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
         ),
         shape({
           id: "percent-cell-shape",
-          fill: "#7C3AED",
           style: {
             gridColumn: 3,
             gridRow: 3,
@@ -680,6 +649,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             height: "50%",
             justifySelf: "center",
             alignSelf: "center",
+            background: "#7C3AED",
           },
         }),
       ),
@@ -701,9 +671,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             justifyContent: "space-between",
             alignItems: "center",
             padding: [8, 12],
-            backgroundColor: "cardBg",
-            borderColor: "#CBD5E1",
-            borderWidth: 1,
+            background: "cardBg",
+            border: { color: "#CBD5E1", width: 1 },
           },
         }).append(
           text("Nested Flex <-> Grid & Scoped Theme", {
@@ -719,9 +688,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
           }),
           shape({
             id: "outer-theme-dot",
-            width: 22,
-            height: 22,
-            fill: "badge",
+            style: { width: 22, height: 22, background: "badge" },
           }),
         ),
         box({
@@ -749,9 +716,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridTemplateRows: "auto 1fr",
               gap: 8,
               padding: 10,
-              backgroundColor: "cardBg",
-              borderColor: "badge",
-              borderWidth: 2,
+              background: "cardBg",
+              border: { color: "badge", width: 2 },
             },
           }).append(
             text("Scoped Theme Grid", {
@@ -766,8 +732,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             }),
             shape({
               id: "nested-shape-a",
-              fill: "badge",
-              style: { height: "100%" },
+              style: { height: "100%", background: "badge" },
             }),
             box({
               id: "nested-flex-b",
@@ -776,9 +741,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 flexDirection: "column",
                 justifyContent: "center",
                 alignItems: "center",
-                backgroundColor: "#FFFFFF",
-                borderColor: "badge",
-                borderWidth: 1,
+                background: "#FFFFFF",
+                border: { color: "badge", width: 1 },
                 padding: 6,
               },
             }).append(
@@ -800,9 +764,8 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               flexDirection: "column",
               gap: 8,
               padding: 10,
-              backgroundColor: "cardBg",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "cardBg",
+              border: { color: "#94A3B8", width: 1 },
             },
           }).append(
             text("Outer Theme Preserved", {
@@ -825,21 +788,18 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             }).append(
               shape({
                 id: "auto-r1-c1",
-                fill: "badge",
-                style: { height: "100%" },
+                style: { height: "100%", background: "badge" },
               }),
               shape({
                 id: "auto-r1-c2",
-                fill: "#38BDF8",
-                style: { height: "100%" },
+                style: { height: "100%", background: "#38BDF8" },
               }),
               box({
                 id: "auto-r2-c1",
                 style: {
                   padding: 6,
-                  backgroundColor: "#FFFFFF",
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  background: "#FFFFFF",
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               }).append(
                 text("Auto row wraps nicely here", {
@@ -853,8 +813,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               ),
               shape({
                 id: "auto-r2-c2",
-                fill: "#0284C7",
-                style: { height: "100%" },
+                style: { height: "100%", background: "#0284C7" },
               }),
             ),
           ),
@@ -880,20 +839,17 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridTemplateRows: "70px 60px",
             gap: 10,
             padding: 10,
-            backgroundColor: "#FFFFFF",
-            borderColor: "#EF4444",
-            borderWidth: 2,
+            background: "#FFFFFF",
+            border: { color: "#EF4444", width: 2 },
           },
         }).append(
           shape({
             id: "ov-c1",
-            fill: "#F87171",
-            style: { height: "100%" },
+            style: { height: "100%", background: "#F87171" },
           }),
           shape({
             id: "ov-c2",
-            fill: "#FB923C",
-            style: { height: "100%" },
+            style: { height: "100%", background: "#FB923C" },
           }),
         ),
         box({
@@ -906,21 +862,17 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridTemplateRows: "80px",
             padding: 12,
             gap: 12,
-            backgroundColor: "#FFFFFF",
-            borderColor: "#DC2626",
-            borderWidth: 2,
+            background: "#FFFFFF",
+            border: { color: "#DC2626", width: 2 },
           },
         }).append(
           shape({
             id: "tall-item",
-            fill: "#FCA5A5",
-            width: 200,
-            height: 110,
+            style: { width: 200, height: 110, background: "#FCA5A5" },
           }),
           shape({
             id: "normal-item",
-            fill: "#34D399",
-            height: 60,
+            style: { height: 60, background: "#34D399" },
           }),
         ),
       ),
@@ -932,20 +884,27 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
 
     // Page 1: px/auto/fr columns & rows, span placement, text wrapping driving auto row height, and percentage sizing.
     const page1 = preview.pages[0]!;
-    assert.deepEqual(page1.diagnostics, [], author);
+    assert.deepEqual(page1.errors, [], author);
     assert.ok(page1.png !== undefined, author);
 
-    const s1 = resolution.query.getSlide("grid-tracks-span-wrap");
-    const headerBox = s1.get("grid-header").observe().box!;
-    const sidebarBox = s1.get("sidebar-fixed").observe().box!;
-    const autoColBox = s1.get("auto-col-card").observe().box!;
-    const wrapCardBox = s1.get("wrap-fr-card").observe().box!;
-    const wrapTextBox = s1
-      .get("wrap-fr-card")
-      .get("wrap-fr-text")
-      .observe().box!;
-    const spanPanelBox = s1.get("span-panel").observe().box!;
-    const percentShapeBox = s1.get("percent-cell-shape").observe().box!;
+    const s1 = resolution.slide("grid-tracks-span-wrap");
+    const headerBox = s1.get("grid-header").box!;
+    const sidebarBox = s1.get("sidebar-fixed").box!;
+    const autoColBox = s1.get("auto-col-card").box!;
+    const wrapCardBox = s1.get("wrap-fr-card").box!;
+    const wrapTextBox = s1.get("wrap-fr-card").get("wrap-fr-text").box!;
+    const spanPanelBox = s1.get("span-panel").box!;
+    const percentShape = s1.get("percent-cell-shape");
+    const percentShapeBox = percentShape.box!;
+    assert.ok(percentShape.gridArea !== undefined, author);
+    assert.ok(
+      Math.abs(percentShape.gridArea.width - wrapCardBox.width) < 0.5,
+      author,
+    );
+    assert.ok(
+      Math.abs(percentShape.gridArea.height - spanPanelBox.height) < 0.5,
+      author,
+    );
 
     // Total inner width = 640 - 40 = 600; spanning all 3 columns fills 600px.
     assert.equal(headerBox.width, 600, author);
@@ -981,15 +940,12 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
 
     // Page 2: Nested Grid <-> Flex Box, gridAutoRows cycling, and scoped ThemeScope isolation.
     const page2 = preview.pages[1]!;
-    assert.deepEqual(page2.diagnostics, [], author);
+    assert.deepEqual(page2.errors, [], author);
     assert.ok(page2.png !== undefined, author);
 
-    const s2 = resolution.query.getSlide("grid-nested-flex-and-theme");
-    const nestedGridBox = s2
-      .get("outer-grid")
-      .get("nested-grid")
-      .observe().box!;
-    const rightFlexBox = s2.get("outer-grid").get("right-flex").observe().box!;
+    const s2 = resolution.slide("grid-nested-flex-and-theme");
+    const nestedGridBox = s2.get("outer-grid").get("nested-grid").box!;
+    const rightFlexBox = s2.get("outer-grid").get("right-flex").box!;
     assert.ok(Math.abs(nestedGridBox.width - rightFlexBox.width) < 0.5, author);
     assert.equal(nestedGridBox.height, rightFlexBox.height, author);
 
@@ -997,14 +953,12 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
       .get("outer-grid")
       .get("right-flex")
       .get("auto-rows-grid")
-      .get("auto-r1-c1")
-      .observe().box!;
+      .get("auto-r1-c1").box!;
     const autoR2C1 = s2
       .get("outer-grid")
       .get("right-flex")
       .get("auto-rows-grid")
-      .get("auto-r2-c1")
-      .observe().box!;
+      .get("auto-r2-c1").box!;
     assert.equal(autoR1C1.height, 36, author);
     assert.ok(autoR2C1.height > 20, author);
     assert.ok(autoR2C1.y >= autoR1C1.y + 36 + 8 - 0.5, author);
@@ -1013,44 +967,53 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
     assert.ok(page2.svg?.includes('fill="#D97706"'), author);
     assert.ok(page2.svg?.includes('fill="#0EA5E9"'), author);
 
-    // Page 3: grid-overflow and grid-item-overflow warnings with retained PNG & PPTX.
+    // Page 3: Deterministic resolved box, bounds, and gridArea for overflowing tracks and items with retained PNG & PPTX.
     const page3 = preview.pages[2]!;
-    assert.deepEqual(page3.diagnostics, [], author);
+    assert.deepEqual(page3.errors, [], author);
     assert.ok(page3.png !== undefined, author);
 
-    const s3 = resolution.query.getSlide("grid-overflow-warnings");
-    const ovC1 = s3.get("container-overflow-grid").get("ov-c1").observe().box!;
-    const ovC2 = s3.get("container-overflow-grid").get("ov-c2").observe().box!;
+    const s3 = resolution.slide("grid-overflow-warnings");
+    const containerGrid = s3.get("container-overflow-grid");
+    const ovC1Locator = containerGrid.get("ov-c1");
+    const ovC2Locator = containerGrid.get("ov-c2");
+    const ovC1 = ovC1Locator.box!;
+    const ovC2 = ovC2Locator.box!;
     assert.equal(ovC1.width, 180, author);
     assert.equal(ovC1.height, 70, author);
     assert.equal(ovC2.width, 150, author);
+    assert.deepEqual(
+      ovC1Locator.gridArea,
+      { x: 30, y: 30, width: 180, height: 70 },
+      author,
+    );
+    assert.deepEqual(
+      ovC2Locator.gridArea,
+      { x: 220, y: 30, width: 150, height: 70 },
+      author,
+    );
+    assert.ok(
+      ovC2.x + ovC2.width > containerGrid.box!.x + containerGrid.box!.width,
+      author,
+    );
 
-    const tallItem = s3
-      .get("item-overflow-grid")
-      .get("tall-item")
-      .observe().box!;
+    const tallItemLocator = s3.get("item-overflow-grid").get("tall-item");
+    const tallItem = tallItemLocator.box!;
     assert.deepEqual(
       { width: tallItem.width, height: tallItem.height },
       { width: 200, height: 110 },
       author,
     );
-
-    assert.ok(
-      resolution.report.diagnostics.some(
-        (d) =>
-          d.severity === "warning" &&
-          d.code === "grid-overflow" &&
-          d.path.includes("box[container-overflow-grid]"),
-      ),
+    assert.deepEqual(
+      tallItemLocator.bounds,
+      { x: tallItem.x, y: tallItem.y, width: 200, height: 110 },
       author,
     );
-    assert.ok(
-      resolution.report.diagnostics.some(
-        (d) =>
-          d.severity === "warning" &&
-          d.code === "grid-item-overflow" &&
-          d.path.includes("shape[tall-item]"),
-      ),
+    assert.deepEqual(
+      {
+        width: tallItemLocator.gridArea?.width,
+        height: tallItemLocator.gridArea?.height,
+      },
+      { width: 160, height: 80 },
       author,
     );
     const nativeTallItem = validation.slides[2]?.objects.find(
@@ -1063,7 +1026,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
 export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   {
     id: "grid-template-columns-on-block-container",
-    expectedCode: "invalid-layout-context",
+    expectedCode: "invalid-structure",
     expectedPathSubstring: "box[bad-grid-prop]",
     jsx() {
       return createElement(
@@ -1092,7 +1055,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "grid-auto-rows-unsupported-track",
-    expectedCode: "invalid-grid-tracks",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "box[bad-auto-rows]",
     jsx() {
       return createElement(
@@ -1121,7 +1084,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "grid-invalid-placement-zero",
-    expectedCode: "invalid-grid-placement",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "shape[bad-col]",
     jsx() {
       return createElement(
@@ -1138,9 +1101,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
             },
             createElement(Shape, {
               id: "bad-col",
-              width: 40,
-              height: 40,
-              style: { gridColumn: 0 },
+              style: { width: 40, height: 40, gridColumn: 0 },
             }),
           ),
         ),
@@ -1155,9 +1116,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
           }).append(
             shape({
               id: "bad-col",
-              width: 40,
-              height: 40,
-              style: { gridColumn: 0 },
+              style: { width: 40, height: 40, gridColumn: 0 },
             }),
           ),
         ),
@@ -1166,7 +1125,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "grid-container-baseline-unsupported",
-    expectedCode: "unsupported-grid-alignment",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "box[grid-baseline]",
     jsx() {
       return createElement(
@@ -1195,7 +1154,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "grid-item-baseline-unsupported",
-    expectedCode: "unsupported-grid-alignment",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "shape[item-baseline]",
     jsx() {
       return createElement(
@@ -1212,9 +1171,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
             },
             createElement(Shape, {
               id: "item-baseline",
-              width: 40,
-              height: 20,
-              style: { alignSelf: "baseline" },
+              style: { width: 40, height: 20, alignSelf: "baseline" },
             }),
           ),
         ),
@@ -1229,9 +1186,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
           }).append(
             shape({
               id: "item-baseline",
-              width: 40,
-              height: 20,
-              style: { alignSelf: "baseline" },
+              style: { width: 40, height: 20, alignSelf: "baseline" },
             }),
           ),
         ),
@@ -1240,7 +1195,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "grid-absolute-item-placement-unsupported",
-    expectedCode: "unsupported-grid-positioning",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "shape[abs-placed]",
     jsx() {
       return createElement(
@@ -1257,9 +1212,12 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
             },
             createElement(Shape, {
               id: "abs-placed",
-              width: 40,
-              height: 20,
-              style: { position: "absolute", gridColumn: 1 },
+              style: {
+                width: 40,
+                height: 20,
+                position: "absolute",
+                gridColumn: 1,
+              },
             }),
           ),
         ),
@@ -1274,9 +1232,12 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
           }).append(
             shape({
               id: "abs-placed",
-              width: 40,
-              height: 20,
-              style: { position: "absolute", gridColumn: 1 },
+              style: {
+                width: 40,
+                height: 20,
+                position: "absolute",
+                gridColumn: 1,
+              },
             }),
           ),
         ),
@@ -1285,7 +1246,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "grid-invalid-justify-items",
-    expectedCode: "unsupported-layout-value",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "box[bad-justify]",
     jsx() {
       return createElement(
@@ -1320,7 +1281,7 @@ export const layoutGridRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "grid-mismatched-track-parentheses",
-    expectedCode: "invalid-grid-tracks",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "box[bad-parens]",
     jsx() {
       return createElement(

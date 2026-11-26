@@ -100,11 +100,12 @@ describe("Embedded font resource roundtrip & isolation", () => {
               Text,
               {
                 id: "headline",
-                x: 32,
-                y: 28,
-                width: 360,
-                height: 80,
                 style: {
+                  position: "absolute",
+                  left: 32,
+                  top: 28,
+                  width: 360,
+                  height: 80,
                   fontFamily: "minor",
                   fontSize: "24pt",
                   color: "#0F172A",
@@ -136,7 +137,7 @@ describe("Embedded font resource roundtrip & isolation", () => {
       const importedResolution = resolveDocument(imported.document);
       const painted = paint(importedResolution);
       assert.equal(painted.pages.length, 1);
-      assert.deepEqual(painted.pages[0]?.diagnostics, []);
+      assert.deepEqual(painted.pages[0]?.errors, []);
       assert.ok(painted.pages[0]?.png instanceof Uint8Array);
       const decoded = PNG.sync.read(Buffer.from(painted.pages[0].png));
       assert.equal(decoded.width, 640);
@@ -155,18 +156,18 @@ describe("Embedded font resource roundtrip & isolation", () => {
     }
   });
 
-  it("attaches imported embedded fonts to Shape.textStyle so paint() renders shape text after inputBytes.fill(0)", async () => {
+  it("attaches imported embedded fonts to Shape.style so paint() renders shape text after inputBytes.fill(0)", async () => {
     const doc = deck({ width: 480, height: 270 }).append(
       slide({ id: "shape-font" }).append(
-        shape({
+        shape("Shape Embedded Font", {
           id: "badge",
-          x: 40,
-          y: 40,
-          width: 240,
-          height: 80,
-          fill: "#2563EB",
-          text: "Shape Embedded Font",
-          textStyle: {
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 240,
+            height: 80,
+            background: "#2563EB",
             fontFamily: jostFont,
             fontSize: 16,
             color: "#FFFFFF",
@@ -181,7 +182,7 @@ describe("Embedded font resource roundtrip & isolation", () => {
     assert.deepEqual(imported.report.diagnostics, []);
 
     const painted = paint(resolveDocument(imported.document));
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png instanceof Uint8Array);
   });
 
@@ -197,11 +198,15 @@ describe("Embedded font resource roundtrip & isolation", () => {
             Text,
             {
               id: "t1",
-              x: 20,
-              y: 20,
-              width: 240,
-              height: 60,
-              style: { fontFamily: jostFont, fontSize: "18pt" },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 240,
+                height: 60,
+                fontFamily: jostFont,
+                fontSize: "18pt",
+              },
             },
             "Keep Editable",
           ),
@@ -276,11 +281,15 @@ describe("Embedded font resource roundtrip & isolation", () => {
             Text,
             {
               id: "t1",
-              x: 20,
-              y: 20,
-              width: 240,
-              height: 60,
-              style: { fontFamily: "MissingPreviewFamily", fontSize: "20pt" },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 240,
+                height: 60,
+                fontFamily: "MissingPreviewFamily",
+                fontSize: "20pt",
+              },
             },
             "Still Native",
           ),
@@ -294,8 +303,9 @@ describe("Embedded font resource roundtrip & isolation", () => {
 
     const resolution = resolveDocument(imported.document);
     const painted = paint(resolution);
+    assert.equal(painted.pages[0]?.svg, undefined);
     assert.equal(painted.pages[0]?.png, undefined);
-    assert.ok((painted.pages[0]?.diagnostics.length ?? 0) > 0);
+    assert.equal(painted.pages[0]?.errors[0]?.code, "preview-missing-font");
 
     const reemitted = emit(resolution);
     const validation = await validatePptx(reemitted.pptx);
@@ -328,11 +338,15 @@ describe("Embedded font resource roundtrip & isolation", () => {
             Text,
             {
               id: "c1",
-              x: 20,
-              y: 20,
-              width: 240,
-              height: 60,
-              style: { fontFamily: colrFont, fontSize: "16pt" },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 240,
+                height: 60,
+                fontFamily: colrFont,
+                fontSize: "16pt",
+              },
             },
             "Color Font Text",
           ),
@@ -344,8 +358,10 @@ describe("Embedded font resource roundtrip & isolation", () => {
     assert.deepEqual(colrImported.report.diagnostics, []);
     const colrRes = resolveDocument(colrImported.document);
     const colrPaint = paint(colrRes);
+    assert.equal(colrPaint.pages[0]?.svg, undefined);
     assert.equal(colrPaint.pages[0]?.png, undefined);
-    assert.ok((colrPaint.pages[0]?.diagnostics.length ?? 0) > 0);
+    // Unembedded color font roundtrip lacks embedded outline bytes, so preview reports preview-missing-font.
+    assert.equal(colrPaint.pages[0]?.errors[0]?.code, "preview-missing-font");
     const colrValidation = await validatePptx(emit(colrRes).pptx);
     assert.deepEqual(colrValidation.errors, []);
     assert.equal(

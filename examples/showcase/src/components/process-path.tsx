@@ -33,35 +33,41 @@ export function ProcessPath({
             <Group enter={floatUp({ duration: motion.reveal })}>
               {index > 0 && (
                 <Shape
-                  x={center - columnWidth + 48}
-                  y={y + 47}
-                  width={columnWidth - 96}
-                  height={3}
-                  fill={colors.accentSoft}
+                  style={{
+                    position: "absolute",
+                    left: center - columnWidth + 48,
+                    top: y + 47,
+                    width: columnWidth - 96,
+                    height: 3,
+                    background: colors.accentSoft,
+                  }}
                 />
               )}
               <Shape
-                x={center - 48}
-                y={y}
-                width={96}
-                height={96}
                 geometry={preset("ellipse")}
-                fill={colors.accent}
-                text={String(index + 1).padStart(2, "0")}
-                textStyle={{
+                style={{
+                  position: "absolute",
+                  left: center - 48,
+                  top: y,
+                  width: 96,
+                  height: 96,
+                  background: colors.accent,
                   fontSize: 26,
                   fontWeight: 700,
                   color: colors.surface,
                   align: "center",
                   verticalAlign: "middle",
                 }}
-              />
+              >
+                {String(index + 1).padStart(2, "0")}
+              </Shape>
               <Text
-                x={x + index * columnWidth + 18}
-                y={y + 132}
-                width={columnWidth - 36}
-                height={42}
                 style={{
+                  position: "absolute",
+                  left: x + index * columnWidth + 18,
+                  top: y + 132,
+                  width: columnWidth - 36,
+                  height: 42,
                   fontSize: 27,
                   fontWeight: 700,
                   align: "center",
@@ -71,11 +77,12 @@ export function ProcessPath({
                 {node.title}
               </Text>
               <Text
-                x={x + index * columnWidth + 24}
-                y={y + 190}
-                width={columnWidth - 48}
-                height={88}
                 style={{
+                  position: "absolute",
+                  left: x + index * columnWidth + 24,
+                  top: y + 190,
+                  width: columnWidth - 48,
+                  height: 88,
                   fontSize: 18,
                   lineHeight: 26,
                   align: "center",

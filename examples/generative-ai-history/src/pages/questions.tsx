@@ -38,11 +38,15 @@ export function QuestionsPage() {
       }}
     >
       <Text
-        x={64}
-        y={158}
-        width={1148}
-        height={38}
-        style={{ fontSize: 18, color: colors.muted }}
+        style={{
+          position: "absolute",
+          left: 64,
+          top: 158,
+          width: 1148,
+          height: 38,
+          fontSize: 18,
+          color: colors.muted,
+        }}
       >
         生成能力继续扩展时，三个问题会与技术进步并行。
       </Text>
@@ -51,11 +55,12 @@ export function QuestionsPage() {
         return (
           <Fragment key={index}>
             <Text
-              x={64}
-              y={y}
-              width={76}
-              height={58}
               style={{
+                position: "absolute",
+                left: 64,
+                top: y,
+                width: 76,
+                height: 58,
                 fontFamily: "display",
                 fontSize: 43,
                 color: index === 2 ? colors.sun : colors.cobalt,
@@ -64,29 +69,43 @@ export function QuestionsPage() {
               {question.number}
             </Text>
             <Text
-              x={164}
-              y={y + 2}
-              width={134}
-              height={42}
-              style={{ fontFamily: "display", fontSize: 29, color: colors.ink }}
+              style={{
+                position: "absolute",
+                left: 164,
+                top: y + 2,
+                width: 134,
+                height: 42,
+                fontFamily: "display",
+                fontSize: 29,
+                color: colors.ink,
+              }}
             >
               {question.title}
             </Text>
             <Text
-              x={330}
-              y={y + 2}
-              width={410}
-              height={38}
-              style={{ fontSize: 21, color: colors.cobalt }}
+              style={{
+                position: "absolute",
+                left: 330,
+                top: y + 2,
+                width: 410,
+                height: 38,
+                fontSize: 21,
+                color: colors.cobalt,
+              }}
             >
               {question.claim}
             </Text>
             <Text
-              x={776}
-              y={y}
-              width={440}
-              height={74}
-              style={{ fontSize: 16, lineHeight: 26, color: colors.muted }}
+              style={{
+                position: "absolute",
+                left: 776,
+                top: y,
+                width: 440,
+                height: 74,
+                fontSize: 16,
+                lineHeight: 26,
+                color: colors.muted,
+              }}
             >
               {question.body}
             </Text>
@@ -102,11 +121,12 @@ export function QuestionsPage() {
         color={colors.cobalt}
       />
       <Text
-        x={90}
-        y={596}
-        width={1100}
-        height={42}
         style={{
+          position: "absolute",
+          left: 90,
+          top: 596,
+          width: 1100,
+          height: 42,
           fontFamily: "display",
           fontSize: 26,
           color: colors.ink,

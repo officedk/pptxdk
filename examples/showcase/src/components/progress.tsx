@@ -37,11 +37,12 @@ export function Progress({
   return (
     <Group id="progress-example">
       <Text
-        x={x}
-        y={localY(56)}
-        width={size(570)}
-        height={size(160)}
         style={{
+          position: "absolute",
+          left: x,
+          top: localY(56),
+          width: size(570),
+          height: size(160),
           fontSize: size(142),
           lineHeight: size(145),
           fontWeight: 700,
@@ -51,11 +52,12 @@ export function Progress({
         {Math.round(fraction * 100)}%
       </Text>
       <Text
-        x={localX(4)}
-        y={localY(226)}
-        width={size(180)}
-        height={size(48)}
         style={{
+          position: "absolute",
+          left: localX(4),
+          top: localY(226),
+          width: size(180),
+          height: size(48),
           fontSize: size(28),
           fontFamily: "medium",
           fontWeight: 500,
@@ -65,11 +67,12 @@ export function Progress({
         {completed} / {total}
       </Text>
       <Text
-        x={localX(234)}
-        y={localY(224)}
-        width={size(388)}
-        height={size(78)}
         style={{
+          position: "absolute",
+          left: localX(234),
+          top: localY(224),
+          width: size(388),
+          height: size(78),
           fontSize: size(18),
           lineHeight: size(27),
           color: colors.accentSoft,
@@ -80,13 +83,16 @@ export function Progress({
       {Array.from({ length: total }, (_, index) => (
         <Shape
           key={index}
-          x={localX(4) + index * (segmentWidth + segmentGap)}
-          y={localY(350)}
-          width={segmentWidth}
-          height={size(12)}
-          fill={colors.darkSurface}
           geometry={preset("roundRect")}
-          style={{ borderRadius: size(4) }}
+          style={{
+            position: "absolute",
+            left: localX(4) + index * (segmentWidth + segmentGap),
+            top: localY(350),
+            width: segmentWidth,
+            height: size(12),
+            background: colors.darkSurface,
+            borderRadius: size(4),
+          }}
         />
       ))}
       <Step n={1}>
@@ -94,13 +100,17 @@ export function Progress({
           {Array.from({ length: completed }, (_, index) => (
             <Shape
               key={index}
-              x={localX(4) + index * (segmentWidth + segmentGap)}
-              y={localY(350)}
-              width={segmentWidth}
-              height={size(12)}
-              fill={index === completed - 1 ? colors.current : colors.accent}
               geometry={preset("roundRect")}
-              style={{ borderRadius: size(4) }}
+              style={{
+                position: "absolute",
+                left: localX(4) + index * (segmentWidth + segmentGap),
+                top: localY(350),
+                width: segmentWidth,
+                height: size(12),
+                background:
+                  index === completed - 1 ? colors.current : colors.accent,
+                borderRadius: size(4),
+              }}
             />
           ))}
         </Group>
@@ -108,11 +118,12 @@ export function Progress({
       {Array.from({ length: total }, (_, index) => (
         <Text
           key={index}
-          x={localX(4) + index * (segmentWidth + segmentGap)}
-          y={localY(382)}
-          width={segmentWidth}
-          height={size(28)}
           style={{
+            position: "absolute",
+            left: localX(4) + index * (segmentWidth + segmentGap),
+            top: localY(382),
+            width: segmentWidth,
+            height: size(28),
             fontSize: size(16),
             align: "center",
             color:
@@ -127,59 +138,75 @@ export function Progress({
         </Text>
       ))}
       <Shape
-        x={panelX}
-        y={y}
-        width={panelWidth}
-        height={size(468)}
-        fill={colors.darkSurface}
         geometry={preset("roundRect")}
-        style={{ borderRadius: size(6) }}
+        style={{
+          position: "absolute",
+          left: panelX,
+          top: y,
+          width: panelWidth,
+          height: size(468),
+          background: colors.darkSurface,
+          borderRadius: size(6),
+        }}
       />
       <Shape
-        x={panelX + size(40)}
-        y={localY(40)}
-        width={size(40)}
-        height={size(4)}
-        fill={colors.current}
+        style={{
+          position: "absolute",
+          left: panelX + size(40),
+          top: localY(40),
+          width: size(40),
+          height: size(4),
+          background: colors.current,
+        }}
       />
       <Shape
-        x={panelX + size(53)}
-        y={localY(78)}
-        width={size(250)}
-        height={size(250)}
-        fill={colors.ink}
         geometry={preset("ellipse")}
+        style={{
+          position: "absolute",
+          left: panelX + size(53),
+          top: localY(78),
+          width: size(250),
+          height: size(250),
+          background: colors.ink,
+        }}
       />
       <Shape
-        x={panelX + size(81)}
-        y={localY(106)}
-        width={size(194)}
-        height={size(194)}
-        fill={colors.ink}
         geometry={preset("ellipse")}
+        style={{
+          position: "absolute",
+          left: panelX + size(81),
+          top: localY(106),
+          width: size(194),
+          height: size(194),
+          background: colors.ink,
+        }}
       />
       <Step n={2}>
         <Group enter={zoom({ duration: motion.settle })}>
           <Shape
-            x={panelX + size(53)}
-            y={localY(78)}
-            width={size(250)}
-            height={size(250)}
-            fill={colors.current}
             geometry={blockArc({
               startAngle: 270,
               endAngle: 270 + fraction * 360,
               thickness: 0.115,
             })}
+            style={{
+              position: "absolute",
+              left: panelX + size(53),
+              top: localY(78),
+              width: size(250),
+              height: size(250),
+              background: colors.current,
+            }}
           />
         </Group>
       </Step>
       <Text
-        x={panelX + size(88)}
-        y={localY(156)}
-        width={size(180)}
-        height={size(72)}
         style={{
+          position: "absolute",
+          left: panelX + size(88),
+          top: localY(156),
+          width: size(180),
+          height: size(72),
           fontSize: size(58),
           lineHeight: size(66),
           fontFamily: "medium",
@@ -191,11 +218,12 @@ export function Progress({
         {completed}/{total}
       </Text>
       <Text
-        x={panelX + size(38)}
-        y={localY(374)}
-        width={size(290)}
-        height={size(34)}
         style={{
+          position: "absolute",
+          left: panelX + size(38),
+          top: localY(374),
+          width: size(290),
+          height: size(34),
           fontSize: size(17),
           align: "center",
           color: colors.accentSoft,

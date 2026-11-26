@@ -19,21 +19,25 @@ export function GitHubProjectsPage({
       title="开源项目近况"
       source={`数据来源：GitHub · 获取时间：${fetchedAt.replace("T", " ").slice(0, 19)} UTC`}
     >
-      <Text x={48} y={118} width={1184} height={36} style={{ fontSize: 18 }}>
+      <Text
+        style={{
+          position: "absolute",
+          left: 48,
+          top: 118,
+          width: 1184,
+          height: 36,
+          fontSize: 18,
+        }}
+      >
         GitHub 星标数
       </Text>
       <Chart
         id="github-stars"
-        x={48}
-        y={166}
-        width={1184}
-        height={410}
         legend={false}
         axes={{
           category: { kind: "category", reversed: true, position: "left" },
           value: { kind: "value", min: 0, position: "bottom" },
         }}
-        style={{ fontFamily: "body", fontSize: 14, color: colors.ink }}
         groups={[
           {
             kind: "bar",
@@ -51,20 +55,31 @@ export function GitHubProjectsPage({
             dataLabels: { value: true, position: "outsideEnd" },
           },
         ]}
+        style={{
+          position: "absolute",
+          left: 48,
+          top: 166,
+          width: 1184,
+          height: 410,
+          fontFamily: "body",
+          fontSize: 14,
+          color: colors.ink,
+        }}
       />
       {projects.map(({ name, url }, index) => (
         <Text
           key={name}
-          x={48 + index * 400}
-          y={610}
-          width={384}
-          height={36}
+          link={{ url }}
           style={{
+            position: "absolute",
+            left: 48 + index * 400,
+            top: 610,
+            width: 384,
+            height: 36,
             fontSize: 16,
             color: colors.compute,
             textDecoration: "underline",
           }}
-          link={{ url }}
         >
           {name}
         </Text>

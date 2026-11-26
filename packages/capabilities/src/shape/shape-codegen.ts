@@ -4,12 +4,90 @@ import {
   type CodegenContext,
   type CodegenExpr,
 } from "@pptxdk/codegen";
+import type { DeclarationText } from "@pptxdk/core/build";
 import { CommonNode } from "@pptxdk/core/document";
+
+import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
+import {
+  shapeDeclarationPropsSchema,
+  shapeStyleSchema,
+} from "./shape-declaration.ts";
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
+const legacyShapePropKeys = new Set([
+  "x",
+  "y",
+  "width",
+  "height",
+  "flipH",
+  "flipV",
+  "fill",
+  "text",
+  "textStyle",
+]);
+
+const legacyVisualStyleKeys = new Set([
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "startArrow",
+  "endArrow",
+]);
+
+const shapeAllowedPropKeys = new Set(
+  Object.keys(shapeDeclarationPropsSchema.unwrap().shape).filter(
+    (key) => !legacyShapePropKeys.has(key),
+  ),
+);
+
+const shapeAllowedChildKinds = new Set([
+  "paragraph",
+  "span",
+  "slide-number",
+  "br",
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function singleTextLeaf(node: CommonNode): string | undefined {
+  if (node.children.length !== 1) return undefined;
+  const only = node.children[0];
+  if (only === undefined || only instanceof CommonNode) return undefined;
+  const leaf = only as DeclarationText;
+  return leaf.type === "#text" ? leaf.text : undefined;
+}
+
+function assertAllowedShapeChildren(
+  node: CommonNode,
+  ctx: CodegenContext,
+): void {
+  let childIndex = 0;
+  for (const child of node.children) {
+    if (!(child instanceof CommonNode)) continue;
+    const label =
+      child.id === undefined
+        ? `${child.type}[${childIndex + 1}]`
+        : `${child.type}[${child.id}]`;
+    if (!shapeAllowedChildKinds.has(child.type)) {
+      ctx.fail(
+        "invalid-document",
+        `shape declaration cannot contain ${JSON.stringify(child.type)} child`,
+        `${ctx.path}/${label}`,
+      );
+    }
+    childIndex += 1;
+  }
 }
 
 function formatSvgNumber(
@@ -138,7 +216,10 @@ function trySerializeCustomAsPath(
   );
 }
 
-function serializeGeometryProp(value: unknown, ctx: CodegenContext): unknown {
+export function serializeGeometryProp(
+  value: unknown,
+  ctx: CodegenContext,
+): unknown {
   if (typeof value === "string") return value;
   if (!isRecord(value)) {
     return expr(ctx.emitValueExpr(value, "@geometry"));
@@ -201,23 +282,80 @@ function serializeGradientValue(
   return undefined;
 }
 
+function serializeShapeStyleProp(
+  style: unknown,
+  ctx: CodegenContext,
+): CodegenExpr {
+  if (!isPlainRecord(style)) {
+    ctx.fail(
+      "unexpressible-value",
+      "Shape.style must be a plain object",
+      "@style",
+    );
+  }
+  for (const [key, entryValue] of Object.entries(style)) {
+    if (entryValue === undefined) continue;
+    if (legacyVisualStyleKeys.has(key)) {
+      ctx.fail(
+        "unexpressible-value",
+        `Shape.style does not support legacy property ${JSON.stringify(key)}`,
+        `@style.${key}`,
+      );
+    }
+  }
+  const parsed = shapeStyleSchema.safeParse(style);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const issuePath =
+      issue !== undefined && issue.path.length > 0
+        ? `@style.${issue.path.join(".")}`
+        : "@style";
+    ctx.fail(
+      "unexpressible-value",
+      issue?.message ?? "Shape.style cannot be expressed",
+      issuePath,
+    );
+  }
+  const entries: [string, unknown][] = [];
+  for (const [key, entryValue] of Object.entries(style)) {
+    if (entryValue === undefined) continue;
+    if (key === "background") {
+      const serializedImage = serializeImageDescriptorValue(entryValue, ctx);
+      entries.push([key, serializedImage ?? entryValue]);
+      continue;
+    }
+    entries.push([key, entryValue]);
+  }
+  return expr(ctx.formatProps(entries));
+}
+
 function collectShapeProps(
   node: CommonNode,
   ctx: CodegenContext,
 ): readonly (readonly [string, unknown])[] {
-  const hasChildren = node.children.length > 0;
-  if (hasChildren && node.props["text"] !== undefined) {
-    ctx.fail(
-      "unexpressible-value",
-      "Shape.text and Shape children cannot be expressed simultaneously",
-      "@text",
-    );
-  }
-
   const extra = ctx.emitObjectExtraProps(node.props);
   const entries: [string, unknown][] = [];
   for (const [key, value] of Object.entries(node.props)) {
     if (value === undefined) continue;
+    if (
+      key === "nativePlaceholder" &&
+      isPlainRecord(value) &&
+      Object.hasOwn(value, "sz") &&
+      value["sz"] !== undefined
+    ) {
+      ctx.fail(
+        "unexpressible-value",
+        "Shape.nativePlaceholder.sz is no longer supported; use size",
+        "@nativePlaceholder.sz",
+      );
+    }
+    if (!shapeAllowedPropKeys.has(key)) {
+      ctx.fail(
+        "invalid-document",
+        `shape declaration does not support property ${JSON.stringify(key)}`,
+        `@${key}`,
+      );
+    }
     if (objectMotionPropKeys.has(key)) {
       if (Object.hasOwn(extra, key)) {
         entries.push([key, extra[key]]);
@@ -234,21 +372,43 @@ function collectShapeProps(
       entries.push([key, serializeGeometryProp(value, ctx)]);
       continue;
     }
+    if (key === "style") {
+      entries.push([key, serializeShapeStyleProp(value, ctx)]);
+      continue;
+    }
     entries.push([key, value]);
   }
   return entries;
 }
 
 function emitShapeVanilla(node: CommonNode, ctx: CodegenContext): string {
+  assertAllowedShapeChildren(node, ctx);
   const callee = ctx.useImport("shape");
   const propsEntries = collectShapeProps(node, ctx);
-  const args = propsEntries.length === 0 ? [] : [ctx.formatProps(propsEntries)];
-  const children =
-    node.children.length === 0 ? [] : ctx.emitRichTextChildren(node.children);
-  return ctx.formatVanillaCall(callee, args, children);
+  const leafText = singleTextLeaf(node);
+  if (leafText !== undefined) {
+    const args =
+      propsEntries.length === 0
+        ? [JSON.stringify(leafText)]
+        : [JSON.stringify(leafText), ctx.formatProps(propsEntries)];
+    return ctx.formatVanillaCall(callee, args);
+  }
+  if (node.children.length === 0) {
+    const args =
+      propsEntries.length === 0 ? [] : [ctx.formatProps(propsEntries)];
+    return ctx.formatVanillaCall(callee, args);
+  }
+  const children = ctx.emitRichTextChildren(node.children);
+  const contentArg = ctx.emitValueExpr(children.map((code) => expr(code)));
+  const args =
+    propsEntries.length === 0
+      ? [contentArg]
+      : [contentArg, ctx.formatProps(propsEntries)];
+  return ctx.formatVanillaCall(callee, args);
 }
 
 function emitShapeReact(node: CommonNode, ctx: CodegenContext): string {
+  assertAllowedShapeChildren(node, ctx);
   const tag = ctx.useImport("Shape");
   const propsEntries = collectShapeProps(node, ctx);
   const children =

@@ -25,7 +25,6 @@ import {
   readDrawingColor,
   readLineBorder,
   readTransformXml,
-  type ImportedLineBorder,
 } from "../shared/visual.ts";
 import { populateRichTextNode, readRichTextBody } from "../text/text-import.ts";
 import {
@@ -37,6 +36,7 @@ import {
   type RowNode,
   type TableCellStyle,
   type TableDeclarationProps,
+  type TableStyle,
   type TableVerticalAlign,
 } from "./table-declaration.ts";
 import {
@@ -118,6 +118,34 @@ function consumeContinuationCell(tcCursor: XmlElementCursor): void {
   tcCursor.suppressUnconsumed();
 }
 
+type BorderSideValue = NonNullable<TableCellStyle["border"]>;
+
+function readCellBorderSide(
+  tcPr: XmlElementCursor,
+  side: "lnL" | "lnR" | "lnT" | "lnB",
+  cellLocation: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): BorderSideValue | undefined {
+  const ln = tcPr.child(A_NS, side);
+  if (ln === undefined) return undefined;
+  const parsed = readLineBorder(ln, cellLocation, diagnostics);
+  if (parsed.noFill === true) {
+    return "none";
+  }
+  if (parsed.borderColor !== undefined) {
+    return {
+      color: parsed.borderColor,
+      ...(parsed.borderWidth === undefined
+        ? {}
+        : { width: parsed.borderWidth }),
+      ...(parsed.borderStyle === undefined
+        ? {}
+        : { style: parsed.borderStyle }),
+    };
+  }
+  return undefined;
+}
+
 function readCellProperties(
   tcPr: XmlElementCursor | undefined,
   cellLocation: ImportLocation,
@@ -181,34 +209,62 @@ function readCellProperties(
     }
   }
 
-  let border: ImportedLineBorder | undefined;
-  for (const side of ["lnL", "lnR", "lnT", "lnB"] as const) {
-    const ln = tcPr.child(A_NS, side);
-    if (ln === undefined) continue;
-    const parsedBorder = readLineBorder(ln, cellLocation, diagnostics);
-    if (border === undefined && parsedBorder.borderColor !== undefined) {
-      border = parsedBorder;
+  const borderLeft = readCellBorderSide(tcPr, "lnL", cellLocation, diagnostics);
+  const borderRight = readCellBorderSide(
+    tcPr,
+    "lnR",
+    cellLocation,
+    diagnostics,
+  );
+  const borderTop = readCellBorderSide(tcPr, "lnT", cellLocation, diagnostics);
+  const borderBottom = readCellBorderSide(
+    tcPr,
+    "lnB",
+    cellLocation,
+    diagnostics,
+  );
+
+  let border: BorderSideValue | undefined;
+  let individualBorders = false;
+  if (
+    borderLeft !== undefined &&
+    borderRight !== undefined &&
+    borderTop !== undefined &&
+    borderBottom !== undefined
+  ) {
+    const leftKey = JSON.stringify(borderLeft);
+    if (
+      JSON.stringify(borderRight) === leftKey &&
+      JSON.stringify(borderTop) === leftKey &&
+      JSON.stringify(borderBottom) === leftKey
+    ) {
+      border = borderLeft;
+    } else {
+      individualBorders = true;
     }
+  } else {
+    individualBorders = true;
   }
 
   tcPr.ignoreEmptyChild(A_NS, "noFill");
-  let backgroundColor: ColorValue | undefined;
+  let background: ColorValue | undefined;
   const solidFill = tcPr.child(A_NS, "solidFill");
   if (solidFill !== undefined) {
-    backgroundColor = readDrawingColor(solidFill, cellLocation, diagnostics);
+    background = readDrawingColor(solidFill, cellLocation, diagnostics);
   }
 
   return {
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
-    ...(border?.borderColor === undefined
-      ? {}
-      : { borderColor: border.borderColor }),
-    ...(border?.borderWidth === undefined
-      ? {}
-      : { borderWidth: border.borderWidth }),
-    ...(border?.borderStyle === undefined
-      ? {}
-      : { borderStyle: border.borderStyle }),
+    ...(background === undefined ? {} : { background }),
+    ...(border !== undefined
+      ? { border }
+      : individualBorders
+        ? {
+            ...(borderLeft === undefined ? {} : { borderLeft }),
+            ...(borderRight === undefined ? {} : { borderRight }),
+            ...(borderTop === undefined ? {} : { borderTop }),
+            ...(borderBottom === undefined ? {} : { borderBottom }),
+          }
+        : {}),
     ...(paddingTop === undefined ? {} : { paddingTop }),
     ...(paddingRight === undefined ? {} : { paddingRight }),
     ...(paddingBottom === undefined ? {} : { paddingBottom }),
@@ -681,14 +737,20 @@ export function readTableGraphicFrame(
   }
 
   const columns = columnWidths as unknown as readonly [number, ...number[]];
+  const tableStyle: TableStyle = {
+    position: "absolute",
+    left: transform.x,
+    top: transform.y,
+    width: transform.width,
+    height: transform.height,
+  };
   const tableProps: TableDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
     ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
-    x: transform.x,
-    y: transform.y,
     columns,
+    style: tableStyle,
   };
   const tableNode = createTableNode(tableProps);
   tableNode.append(...rowNodes);

@@ -6,19 +6,38 @@ import {
   type DeclarationCodegenHandler,
 } from "@pptxdk/codegen";
 import type { DeclarationText } from "@pptxdk/core/build";
+import { nativePlaceholderRefSchema } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
+import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
 import {
   paragraphAuthorPropsSchema,
+  paragraphStyleSchema,
+  runStyleSchema,
   slideNumberAuthorPropsSchema,
   spanAuthorPropsSchema,
   textAuthorPropsSchema,
+  textBoxStyleSchema,
 } from "../shared/text-schemas.ts";
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
+const legacyTextPropKeys = new Set(["x", "y", "width", "height"]);
+
+const legacyVisualStyleKeys = new Set([
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "startArrow",
+  "endArrow",
+]);
+
 const textAllowedPropKeys = new Set(
-  Object.keys(textAuthorPropsSchema.unwrap().shape),
+  Object.keys(textAuthorPropsSchema.unwrap().shape).filter(
+    (key) => !legacyTextPropKeys.has(key),
+  ),
 );
 const paragraphAllowedPropKeys = new Set(
   Object.keys(paragraphAuthorPropsSchema.unwrap().shape),
@@ -29,6 +48,99 @@ const spanAllowedPropKeys = new Set(
 const slideNumberAllowedPropKeys = new Set(
   Object.keys(slideNumberAuthorPropsSchema.unwrap().shape),
 );
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function validateRichTextNativePlaceholder(
+  nodeType: string,
+  value: unknown,
+  ctx: CodegenContext,
+): void {
+  if (
+    isPlainRecord(value) &&
+    Object.hasOwn(value, "sz") &&
+    value["sz"] !== undefined
+  ) {
+    ctx.fail(
+      "unexpressible-value",
+      `${nodeType}.nativePlaceholder.sz is no longer supported; use size`,
+      "@nativePlaceholder.sz",
+    );
+  }
+  const parsed = nativePlaceholderRefSchema.safeParse(value);
+  if (!parsed.success) {
+    ctx.fail(
+      "unexpressible-value",
+      parsed.error.issues[0]?.message ??
+        `${nodeType}.nativePlaceholder cannot be expressed`,
+      "@nativePlaceholder",
+    );
+  }
+}
+
+function serializeRichTextStyleProp(
+  nodeType: string,
+  style: unknown,
+  ctx: CodegenContext,
+): CodegenExpr {
+  if (!isPlainRecord(style)) {
+    ctx.fail(
+      "unexpressible-value",
+      `${nodeType}.style must be a plain object`,
+      "@style",
+    );
+  }
+  for (const [key, entryValue] of Object.entries(style)) {
+    if (entryValue === undefined) continue;
+    if (legacyVisualStyleKeys.has(key)) {
+      ctx.fail(
+        "unexpressible-value",
+        `${nodeType}.style does not support legacy property ${JSON.stringify(key)}`,
+        `@style.${key}`,
+      );
+    }
+  }
+  const schema =
+    nodeType === "text"
+      ? textBoxStyleSchema
+      : nodeType === "paragraph"
+        ? paragraphStyleSchema
+        : nodeType === "span" || nodeType === "slide-number"
+          ? runStyleSchema
+          : undefined;
+  if (schema !== undefined) {
+    const parsed = schema.safeParse(style);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const issuePath =
+        issue !== undefined && issue.path.length > 0
+          ? `@style.${issue.path.join(".")}`
+          : "@style";
+      ctx.fail(
+        "unexpressible-value",
+        issue?.message ?? `${nodeType}.style cannot be expressed`,
+        issuePath,
+      );
+    }
+  }
+  const entries: [string, unknown][] = [];
+  for (const [key, entryValue] of Object.entries(style)) {
+    if (entryValue === undefined) continue;
+    if (key === "background") {
+      const serializedImage = serializeImageDescriptorValue(entryValue, ctx);
+      entries.push([key, serializedImage ?? entryValue]);
+      continue;
+    }
+    entries.push([key, entryValue]);
+  }
+  return expr(ctx.formatProps(entries));
+}
 
 /** Container-level rich-text child declaration types allowed directly inside `Text` and `Notes`. */
 export const blockRichTextChildKinds: ReadonlySet<string> = new Set([
@@ -70,6 +182,15 @@ export function collectRichTextNodeProps(
         `${node.type} declaration does not support property ${JSON.stringify(key)}`,
         `@${key}`,
       );
+    }
+    if (key === "nativePlaceholder") {
+      validateRichTextNativePlaceholder(node.type, value, ctx);
+      entries.push([key, value]);
+      continue;
+    }
+    if (key === "style") {
+      entries.push([key, serializeRichTextStyleProp(node.type, value, ctx)]);
+      continue;
     }
     if (supportObjectExtras && objectMotionPropKeys.has(key)) {
       if (Object.hasOwn(extra, key)) {

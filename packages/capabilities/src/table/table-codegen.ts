@@ -9,12 +9,31 @@ import {
 import {
   cellDeclarationPropsSchema,
   rowDeclarationPropsSchema,
+  rowStyleKeys,
+  tableCellStyleSchema,
   tableColumnSchema,
   tableDeclarationPropsSchema,
+  tableRowStyleSchema,
+  tableStyleKeys,
+  tableStyleSchema,
+  tableTextStyleKeys,
 } from "./table-schemas.ts";
 
+const legacyTablePropKeys = new Set(["x", "y", "width", "height"]);
+const legacyVisualStyleKeys = new Set([
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "startArrow",
+  "endArrow",
+]);
+
 const tableAllowedPropKeys = new Set(
-  Object.keys(tableDeclarationPropsSchema.unwrap().shape),
+  Object.keys(tableDeclarationPropsSchema.unwrap().shape).filter(
+    (key) => !legacyTablePropKeys.has(key),
+  ),
 );
 const rowAllowedPropKeys = new Set(
   Object.keys(rowDeclarationPropsSchema.unwrap().shape),
@@ -22,6 +41,89 @@ const rowAllowedPropKeys = new Set(
 const cellAllowedPropKeys = new Set(
   Object.keys(cellDeclarationPropsSchema.unwrap().shape),
 );
+
+const tableCleanStyleKeys = new Set(tableStyleKeys);
+const rowCleanStyleKeys = new Set([
+  ...tableTextStyleKeys,
+  ...rowStyleKeys.filter((key) => !legacyVisualStyleKeys.has(key)),
+]);
+const cellCleanStyleKeys = new Set([
+  ...tableTextStyleKeys,
+  ...Object.keys(tableCellStyleSchema.unwrap().shape).filter(
+    (key) => !legacyVisualStyleKeys.has(key),
+  ),
+]);
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function validateTableNativePlaceholder(
+  node: CommonNode,
+  ctx: CodegenContext,
+): void {
+  const nativePh = node.props["nativePlaceholder"];
+  if (
+    isPlainRecord(nativePh) &&
+    Object.hasOwn(nativePh, "sz") &&
+    nativePh["sz"] !== undefined
+  ) {
+    ctx.fail(
+      "unexpressible-value",
+      "Table.nativePlaceholder.sz is no longer supported; use size",
+      "@nativePlaceholder.sz",
+    );
+  }
+}
+
+function validateTableLayerStyle(
+  style: unknown,
+  layerLabel: "Table" | "Row" | "Cell",
+  allowedKeys: ReadonlySet<string>,
+  ctx: CodegenContext,
+): void {
+  if (style === undefined) return;
+  if (!isPlainRecord(style)) {
+    ctx.fail(
+      "unexpressible-value",
+      `${layerLabel}.style must be a plain object`,
+      "@style",
+    );
+  }
+  for (const [key, value] of Object.entries(style)) {
+    if (value === undefined) continue;
+    if (legacyVisualStyleKeys.has(key) || !allowedKeys.has(key)) {
+      ctx.fail(
+        "unexpressible-value",
+        `${layerLabel}.style does not support property ${JSON.stringify(key)}`,
+        `@style.${key}`,
+      );
+    }
+  }
+  const schema =
+    layerLabel === "Table"
+      ? tableStyleSchema
+      : layerLabel === "Row"
+        ? tableRowStyleSchema
+        : tableCellStyleSchema;
+  const parsed = schema.safeParse(style);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const issuePath =
+      issue !== undefined && issue.path.length > 0
+        ? `@style.${issue.path.join(".")}`
+        : "@style";
+    ctx.fail(
+      "unexpressible-value",
+      issue?.message ?? `${layerLabel}.style cannot be expressed`,
+      issuePath,
+    );
+  }
+}
 
 function validateTableColumns(node: CommonNode, ctx: CodegenContext): void {
   const columns = node.props["columns"];
@@ -88,6 +190,14 @@ function emitTableContainerChildren(
   return children;
 }
 
+const cellRichTextHandler = createRichTextCodegenHandler({
+  vanillaFactory: "cell",
+  reactComponent: "Cell",
+  allowedPropKeys: cellAllowedPropKeys,
+  allowedChildKinds: blockRichTextChildKinds,
+  supportObjectExtras: false,
+});
+
 /**
  * Source codegen contribution for native `table`, `row`, and `cell` declarations.
  *
@@ -106,6 +216,13 @@ export const tableCodegen = defineObjectCodegen({
           tableAllowedPropKeys,
           true,
         );
+        validateTableNativePlaceholder(node, ctx);
+        validateTableLayerStyle(
+          node.props["style"],
+          "Table",
+          tableCleanStyleKeys,
+          ctx,
+        );
         const rows = emitTableContainerChildren(node, ctx, "row");
         return ctx.formatVanillaCall(
           callee,
@@ -122,6 +239,13 @@ export const tableCodegen = defineObjectCodegen({
           tableAllowedPropKeys,
           true,
         );
+        validateTableNativePlaceholder(node, ctx);
+        validateTableLayerStyle(
+          node.props["style"],
+          "Table",
+          tableCleanStyleKeys,
+          ctx,
+        );
         const rows = emitTableContainerChildren(node, ctx, "row");
         return ctx.formatJsxElement(tag, propsEntries, rows);
       },
@@ -134,6 +258,12 @@ export const tableCodegen = defineObjectCodegen({
           ctx,
           rowAllowedPropKeys,
           false,
+        );
+        validateTableLayerStyle(
+          node.props["style"],
+          "Row",
+          rowCleanStyleKeys,
+          ctx,
         );
         const cells = emitTableContainerChildren(node, ctx, "cell");
         const args =
@@ -148,16 +278,35 @@ export const tableCodegen = defineObjectCodegen({
           rowAllowedPropKeys,
           false,
         );
+        validateTableLayerStyle(
+          node.props["style"],
+          "Row",
+          rowCleanStyleKeys,
+          ctx,
+        );
         const cells = emitTableContainerChildren(node, ctx, "cell");
         return ctx.formatJsxElement(tag, propsEntries, cells);
       },
     },
-    cell: createRichTextCodegenHandler({
-      vanillaFactory: "cell",
-      reactComponent: "Cell",
-      allowedPropKeys: cellAllowedPropKeys,
-      allowedChildKinds: blockRichTextChildKinds,
-      supportObjectExtras: false,
-    }),
+    cell: {
+      emitVanilla(node, ctx) {
+        validateTableLayerStyle(
+          node.props["style"],
+          "Cell",
+          cellCleanStyleKeys,
+          ctx,
+        );
+        return cellRichTextHandler.emitVanilla(node, ctx);
+      },
+      emitReact(node, ctx) {
+        validateTableLayerStyle(
+          node.props["style"],
+          "Cell",
+          cellCleanStyleKeys,
+          ctx,
+        );
+        return cellRichTextHandler.emitReact(node, ctx);
+      },
+    },
   },
 });

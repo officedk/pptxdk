@@ -493,6 +493,7 @@ export function readBlipFill(
 }
 
 export type ImportedLineBorder = {
+  readonly noFill?: boolean;
   readonly borderColor?: ColorValue;
   readonly borderWidth?: number;
   readonly borderStyle?: "solid" | "dashed" | "dotted";
@@ -611,7 +612,10 @@ export function readLineBorder(
     }
   }
 
-  if (hasNoFill || borderColor === undefined) {
+  if (hasNoFill) {
+    return { noFill: true };
+  }
+  if (borderColor === undefined) {
     return {};
   }
 
@@ -802,18 +806,22 @@ function readBasicPlaceholderAppearance(
       : parsedPrst.data
     : undefined;
 
+  const background = backgroundColor ?? backgroundImage;
   const style: Record<string, unknown> = {
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
-    ...(backgroundImage === undefined ? {} : { backgroundImage }),
+    ...(background === undefined ? {} : { background }),
     ...(border.borderColor === undefined
       ? {}
-      : { borderColor: border.borderColor }),
-    ...(border.borderWidth === undefined
-      ? {}
-      : { borderWidth: border.borderWidth }),
-    ...(border.borderStyle === undefined
-      ? {}
-      : { borderStyle: border.borderStyle }),
+      : {
+          border: {
+            color: border.borderColor,
+            ...(border.borderWidth !== undefined
+              ? { width: border.borderWidth }
+              : {}),
+            ...(border.borderStyle !== undefined
+              ? { style: border.borderStyle }
+              : {}),
+          },
+        }),
     ...(opacity === undefined ? {} : { opacity }),
     ...(effects.boxShadow === undefined
       ? {}
@@ -920,21 +928,32 @@ export function readPlaceholderSpPrVisuals(
       style[key] = value;
     }
   }
+  if (x !== undefined && y !== undefined) {
+    style["position"] = "absolute";
+    style["left"] = x;
+    style["top"] = y;
+  }
+  if (width !== undefined) {
+    style["width"] = width;
+  }
+  if (height !== undefined) {
+    style["height"] = height;
+  }
   if (borderRadius !== undefined) {
     style["borderRadius"] = borderRadius;
   }
   if (rotate !== undefined) {
     style["rotate"] = rotate;
   }
+  if (flipH) {
+    style["flipH"] = true;
+  }
+  if (flipV) {
+    style["flipV"] = true;
+  }
 
   return {
-    ...(x === undefined ? {} : { x }),
-    ...(y === undefined ? {} : { y }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
     ...(exportedGeometry === undefined ? {} : { geometry: exportedGeometry }),
-    ...(flipH ? { flipH: true } : {}),
-    ...(flipV ? { flipV: true } : {}),
     ...(Object.keys(style).length === 0 ? {} : { style }),
   };
 }

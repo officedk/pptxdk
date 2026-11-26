@@ -207,7 +207,7 @@ const reactTagByKind: Readonly<Record<string, RegExp>> = {
   paragraph: /<P[\s>]/gu,
   placeholder: /<Placeholder[\s>]/gu,
   row: /<Row[\s>]/gu,
-  shape: /<Shape[\s>]/gu,
+  shape: /<Shape[\s/>]/gu,
   "slide-number": /<SlideNumber[\s/>]/gu,
   span: /<Span[\s>]/gu,
   table: /<Table[\s>]/gu,

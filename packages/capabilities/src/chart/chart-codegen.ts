@@ -10,9 +10,7 @@ import type { z } from "zod";
 import {
   chartAllowedPropKeys,
   chartAxesSchema,
-  chartCoordinateSchema,
   chartDisplayBlanksAsSchema,
-  chartExtentSchema,
   chartLegendSchema,
   chartPlotAreaSchema,
   chartStyleSchema,
@@ -20,8 +18,19 @@ import {
   parseChartGroupBySchema,
 } from "./chart-schemas.ts";
 
-const chartAllowedPropKeySet = new Set(chartAllowedPropKeys);
+const legacyChartPropKeys = new Set(["x", "y", "width", "height"]);
+const chartAllowedPropKeySet = new Set(
+  chartAllowedPropKeys.filter((key) => !legacyChartPropKeys.has(key)),
+);
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 
 function validatePropWithSchema(
   schema: z.ZodType,
@@ -65,11 +74,19 @@ function validateChartStructure(
     }
   }
 
+  const nativePh = props["nativePlaceholder"];
+  if (
+    isPlainRecord(nativePh) &&
+    Object.hasOwn(nativePh, "sz") &&
+    nativePh["sz"] !== undefined
+  ) {
+    ctx.fail(
+      "unexpressible-value",
+      "Chart.nativePlaceholder.sz is no longer supported; use size",
+      "@nativePlaceholder.sz",
+    );
+  }
   validatePropWithSchema(chartAxesSchema, props["axes"], "axes", ctx);
-  validatePropWithSchema(chartCoordinateSchema, props["x"], "x", ctx);
-  validatePropWithSchema(chartCoordinateSchema, props["y"], "y", ctx);
-  validatePropWithSchema(chartExtentSchema, props["width"], "width", ctx);
-  validatePropWithSchema(chartExtentSchema, props["height"], "height", ctx);
   validatePropWithSchema(chartTitleSchema, props["title"], "title", ctx);
   validatePropWithSchema(
     chartDisplayBlanksAsSchema,

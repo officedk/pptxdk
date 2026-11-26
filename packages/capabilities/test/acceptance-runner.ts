@@ -362,17 +362,17 @@ function assertPageOutput(
   label: string,
 ): void {
   const isRejection = scenario.kind === "rejection";
-  const hasError = page.diagnostics.some((item) => item.severity === "error");
+  const hasError = page.errors.length > 0;
 
   if (isRejection && hasError) {
     assert.equal(page.png, undefined, `${label} failed page must omit png`);
     assert.equal(page.svg, undefined, `${label} failed page must omit svg`);
-    for (const diagnostic of page.diagnostics) {
-      assert.notEqual(diagnostic.path.trim(), "", `${label} diagnostic path`);
+    for (const previewError of page.errors) {
+      assert.notEqual(previewError.path.trim(), "", `${label} error path`);
       assert.notEqual(
-        diagnostic.message.trim(),
+        previewError.message.trim(),
         "",
-        `${label} diagnostic message`,
+        `${label} error message`,
       );
     }
     return;
@@ -380,9 +380,9 @@ function assertPageOutput(
 
   if (!isRejection) {
     assert.deepEqual(
-      page.diagnostics,
+      page.errors,
       [],
-      `${label} positive scenario must have zero preview diagnostics`,
+      `${label} positive scenario must have zero preview errors`,
     );
   }
 
@@ -438,10 +438,11 @@ function assertDualAuthorEquivalence(
     const pageLabel = `${scenario.id} page ${jsxPage.page}`;
     assert.equal(jsxPage.page, docPage.page, `${pageLabel} page number`);
     assert.equal(jsxPage.id, docPage.id, `${pageLabel} slide id`);
+    assert.deepEqual(jsxPage.errors, docPage.errors, `${pageLabel} errors`);
     assert.deepEqual(
-      jsxPage.diagnostics,
-      docPage.diagnostics,
-      `${pageLabel} diagnostics`,
+      jsxPage.placeholders,
+      docPage.placeholders,
+      `${pageLabel} placeholders`,
     );
     assert.deepEqual(jsxPage.nodes, docPage.nodes, `${pageLabel} nodes`);
     assert.deepEqual(jsxPage.layouts, docPage.layouts, `${pageLabel} layouts`);
@@ -486,27 +487,22 @@ function assertPositiveRoundtripPageOutput(
 ): void {
   if (
     scenario.emitOptions?.embedFonts !== undefined ||
-    page.diagnostics.length === 0
+    page.errors.length === 0
   ) {
     assertPageOutput(page, scenario, expectedSize, label);
     return;
   }
 
-  for (const diagnostic of page.diagnostics) {
+  for (const previewError of page.errors) {
     assert.equal(
-      diagnostic.severity,
-      "error",
-      `${label} unexpected non-error preview diagnostic: ${JSON.stringify(diagnostic)}`,
-    );
-    assert.match(
-      diagnostic.message,
-      /explicit monochrome outline font file/u,
-      `${label} unexpected unembedded-font roundtrip preview diagnostic: ${diagnostic.message}`,
+      previewError.code,
+      "preview-missing-font",
+      `${label} unexpected unembedded-font roundtrip preview error: ${JSON.stringify(previewError)}`,
     );
     assert.notEqual(
-      diagnostic.path.trim(),
+      previewError.path.trim(),
       "",
-      `${label} diagnostic path must be non-empty`,
+      `${label} error path must be non-empty`,
     );
   }
   assert.equal(
@@ -520,10 +516,8 @@ function assertPositiveRoundtripPageOutput(
     `${label} unembedded-font page must omit svg`,
   );
   assert.ok(
-    roundtrip.resolution.report.diagnostics.some(
-      (diagnostic) => diagnostic.code === "font-measurement-unavailable",
-    ),
-    `${label} expected font-measurement-unavailable diagnostic on roundtrip resolution`,
+    roundtrip.resolution.report.fonts.some((font) => !font.hasResource),
+    `${label} expected unembedded font without resource on roundtrip resolution`,
   );
 }
 
@@ -621,13 +615,14 @@ export async function runCapabilityScenario(
               page: page.page,
               id: page.id,
               hasPng: page.png !== undefined,
-              diagnostics: page.diagnostics,
+              errors: page.errors,
+              placeholders: page.placeholders,
               nodes: page.nodes.map((node) => ({
                 id: node.id,
                 authorId: node.authorId,
                 kind: node.kind,
                 box: node.box,
-                screenBox: node.screenBox,
+                bounds: node.bounds,
                 path: node.path,
               })),
             })),
@@ -712,25 +707,17 @@ export async function runCapabilityScenario(
       for (let i = 0; i < primary.preview.pages.length; i += 1) {
         const initPage = primary.preview.pages[i]!;
         const rtPage = roundtrip.preview.pages[i]!;
-        const initHasError = initPage.diagnostics.some(
-          (diag) => diag.severity === "error",
-        );
-        const rtHasError = rtPage.diagnostics.some(
-          (diag) => diag.severity === "error",
-        );
+        const initHasError = initPage.errors.length > 0;
+        const rtHasError = rtPage.errors.length > 0;
         const isPureFileUnembeddedFontOnly =
           !initHasError &&
           rtHasError &&
           scenario.emitOptions?.embedFonts === undefined &&
-          rtPage.diagnostics.length > 0 &&
-          rtPage.diagnostics.every(
-            (diag) =>
-              diag.severity === "error" &&
-              /explicit monochrome outline font file/u.test(diag.message),
+          rtPage.errors.length > 0 &&
+          rtPage.errors.every(
+            (previewError) => previewError.code === "preview-missing-font",
           ) &&
-          roundtrip.resolution.report.diagnostics.some(
-            (diag) => diag.code === "font-measurement-unavailable",
-          );
+          roundtrip.resolution.report.fonts.some((font) => !font.hasResource);
         if (!isPureFileUnembeddedFontOnly) {
           assert.equal(
             rtHasError,

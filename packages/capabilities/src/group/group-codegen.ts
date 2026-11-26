@@ -1,7 +1,81 @@
-import { defineObjectCodegen, type CodegenContext } from "@pptxdk/codegen";
+import {
+  defineObjectCodegen,
+  expr,
+  type CodegenContext,
+  type CodegenExpr,
+} from "@pptxdk/codegen";
 import { CommonNode } from "@pptxdk/core/document";
 
+import {
+  groupDeclarationPropsKeys,
+  groupStyleSchema,
+} from "./group-declaration.ts";
+
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+
+const legacyGroupPropKeys = new Set(["bounds", "flipH", "flipV"]);
+
+const legacyVisualStyleKeys = new Set([
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "startArrow",
+  "endArrow",
+]);
+
+const groupAllowedPropKeys = new Set(
+  groupDeclarationPropsKeys.filter((key) => !legacyGroupPropKeys.has(key)),
+);
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function serializeGroupStyleProp(
+  style: unknown,
+  ctx: CodegenContext,
+): CodegenExpr {
+  if (!isPlainRecord(style)) {
+    ctx.fail(
+      "unexpressible-value",
+      "Group.style must be a plain object",
+      "@style",
+    );
+  }
+  for (const [key, entryValue] of Object.entries(style)) {
+    if (entryValue === undefined) continue;
+    if (legacyVisualStyleKeys.has(key)) {
+      ctx.fail(
+        "unexpressible-value",
+        `Group.style does not support legacy property ${JSON.stringify(key)}`,
+        `@style.${key}`,
+      );
+    }
+  }
+  const parsed = groupStyleSchema.safeParse(style);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const issuePath =
+      issue !== undefined && issue.path.length > 0
+        ? `@style.${issue.path.join(".")}`
+        : "@style";
+    ctx.fail(
+      "unexpressible-value",
+      issue?.message ?? "Group.style cannot be expressed",
+      issuePath,
+    );
+  }
+  const entries = Object.entries(style).filter(
+    ([, entryValue]) => entryValue !== undefined,
+  );
+  return expr(ctx.formatProps(entries));
+}
 
 function collectGroupProps(
   node: CommonNode,
@@ -11,6 +85,17 @@ function collectGroupProps(
   const entries: [string, unknown][] = [];
   for (const [key, value] of Object.entries(node.props)) {
     if (value === undefined) continue;
+    if (!groupAllowedPropKeys.has(key)) {
+      ctx.fail(
+        "invalid-document",
+        `group declaration does not support property ${JSON.stringify(key)}`,
+        `@${key}`,
+      );
+    }
+    if (key === "style") {
+      entries.push([key, serializeGroupStyleProp(value, ctx)]);
+      continue;
+    }
     if (objectMotionPropKeys.has(key)) {
       if (Object.hasOwn(extra, key)) {
         entries.push([key, extra[key]]);

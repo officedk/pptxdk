@@ -476,10 +476,13 @@ describe("@pptxdk/codegen core contract", () => {
         createSlideNode({ id: "s-esc" }).append(
           new CommonNode("shape", "shape", {
             id: "sh-esc",
-            x: 10,
-            y: 10,
-            width: 160,
-            height: 50,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 160,
+              height: 50,
+            },
             text: "C:\\Users\\Alice &lt;tag&gt; &amp; Co.",
           }),
         ),
@@ -604,5 +607,210 @@ describe("@pptxdk/codegen core contract", () => {
     );
     assert.match(source, /<Text id="single-text">Simple heading<\/Text>/u);
     assert.match(source, /<Box>\s*\{"Hello"\}\s*\{"World"\}\s*<\/Box>/u);
+  });
+
+  it("serializes SlideMaster/SlideLayout placeholders with size and style, Slide background/style, and strips redundant nativePlaceholder by size", () => {
+    const placeholderCap = {
+      declaration: "placeholder",
+      codegen: defineObjectCodegen({
+        declarations: {
+          placeholder: {
+            emitVanilla: (node, ctx) =>
+              ctx.formatVanillaCall(ctx.useImport("placeholder"), [
+                ctx.formatProps(Object.entries(node.props)),
+              ]),
+            emitReact: (node, ctx) =>
+              ctx.formatJsxElement(
+                ctx.useImport("Placeholder"),
+                Object.entries(node.props),
+              ),
+          },
+        },
+      }),
+      bind() {
+        throw new Error("not used in codegen unit test");
+      },
+    } as unknown as RegisteredCapabilityModule;
+
+    const slideVisualCap = {
+      declaration: "background",
+      slideProp: "background",
+      slot: "background",
+      codegen: defineSlideCodegen({
+        slideProps: {
+          background: (value, ctx) => expr(ctx.emitValueExpr(value)),
+          footerPlaceholders: (value, ctx) => expr(ctx.emitValueExpr(value)),
+        },
+      }),
+      bindSlide() {
+        throw new Error("not used in codegen unit test");
+      },
+    } as unknown as RegisteredCapabilityModule;
+
+    const layoutDef = defineSlideLayout({
+      id: "content-layout",
+      name: "Content Layout",
+      placeholders: {
+        title: {
+          type: "title",
+          idx: 0,
+          size: "full",
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 32,
+            width: 864,
+            height: 80,
+            flipH: true,
+            flipV: false,
+            background: "#F8FAFC",
+            border: { color: "#CBD5E1", width: 1 },
+          },
+        },
+      },
+    });
+
+    const master = createSlideMasterNode({
+      id: "master-1",
+      placeholders: {
+        body: {
+          type: "body",
+          idx: 1,
+          size: "half",
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 130,
+            width: 864,
+            height: 350,
+            background: "#FFFFFF",
+            border: { color: "#E2E8F0", width: 2 },
+          },
+        },
+      },
+      footerPlaceholders: {
+        footer: {
+          size: "quarter",
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 500,
+            width: 300,
+            height: 24,
+          },
+        },
+      },
+    }).append(createSlideLayoutNode(layoutDef));
+
+    const redundantPh = new CommonNode("placeholder", "placeholder", {
+      id: "ph-redundant",
+      placeholder: "title",
+      nativePlaceholder: {
+        type: "title",
+        idx: 0,
+        size: "full",
+      },
+    });
+    const mismatchedPh = new CommonNode("placeholder", "placeholder", {
+      id: "ph-mismatch",
+      placeholder: "title",
+      nativePlaceholder: {
+        type: "title",
+        idx: 0,
+        size: "half",
+      },
+    });
+
+    const doc = createDeckNode({
+      width: 960,
+      height: 540,
+      style: { background: "#0F172A" },
+    }).append(
+      master,
+      createSlideNode({
+        id: "s1",
+        layout: layoutDef,
+        background: "#1E293B",
+        style: { border: { color: "#334155", width: 1 } },
+      }).append(redundantPh, mismatchedPh),
+    );
+
+    const generate = createCodegen([placeholderCap, slideVisualCap]);
+    for (const target of ["vanilla", "react"] as const) {
+      const result = generate(doc, { target });
+      const source = result.files[result.entry] as string;
+      assert.match(source, /size:\s*"full"/u);
+      assert.match(source, /size:\s*"half"/u);
+      assert.match(source, /size:\s*"quarter"/u);
+      assert.match(source, /position:\s*"absolute"/u);
+      assert.match(source, /background:\s*"#F8FAFC"/u);
+      assert.match(
+        source,
+        target === "vanilla"
+          ? /background:\s*"#1E293B"/u
+          : /background=\{"#1E293B"\}/u,
+      );
+      assert.match(
+        source,
+        /border:\s*\{\s*color:\s*"#CBD5E1",\s*width:\s*1\s*\}/u,
+      );
+      assert.doesNotMatch(source, /\bsz:/u);
+      // Redundant nativePlaceholder with matching `size: "full"` must be stripped,
+      // while mismatched `size: "half"` must be preserved.
+      assert.equal((source.match(/nativePlaceholder/gu) ?? []).length, 1);
+    }
+  });
+
+  it("preserves owner path and populates field when ctx.fail reports nested capability value errors", () => {
+    const cap = {
+      declaration: "transition",
+      slideProp: "transition",
+      slot: "transition",
+      codegen: defineSlideCodegen({
+        slideProps: {
+          transition: (value, ctx) =>
+            expr(
+              `${ctx.useImport("transitions")}.fade(${ctx.emitValueExpr(value)})`,
+            ),
+        },
+      }),
+      bindSlide() {
+        throw new Error("not used in codegen unit test");
+      },
+    } as unknown as RegisteredCapabilityModule;
+
+    const generate = createCodegen([cap]);
+
+    const badObjProp = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideNode({
+        id: "s1",
+        transition: { duration: Number.NaN },
+      }),
+    );
+    assert.throws(
+      () => generate(badObjProp, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "unexpressible-value" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]@transition.duration" &&
+        error.diagnostics[0]?.field === "transition.duration" &&
+        !("severity" in error.diagnostics[0]),
+    );
+
+    const badArrayProp = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideNode({
+        id: "s1",
+        transition: [Number.NaN],
+      }),
+    );
+    assert.throws(
+      () => generate(badArrayProp, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "unexpressible-value" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]@transition[0]" &&
+        error.diagnostics[0]?.field === "transition[0]" &&
+        !("severity" in error.diagnostics[0]),
+    );
   });
 });

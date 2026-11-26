@@ -323,7 +323,17 @@ export function readContentPlaceholderSp(
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
     nativePlaceholder: nativeRef,
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
-    ...localBox,
+    ...(localBox === undefined
+      ? {}
+      : {
+          style: {
+            position: "absolute",
+            left: localBox.x,
+            top: localBox.y,
+            width: localBox.width,
+            height: localBox.height,
+          },
+        }),
   });
 
   if (

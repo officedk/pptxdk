@@ -488,16 +488,19 @@ function serializeEffectCall(
   }
 
   if (effect.preset === "spin") {
+    const hasDelta = typeof effect.by === "number";
     const hasNonZeroTo = effect.to !== undefined && effect.to !== 0;
     const omitDefaultFrom =
-      typeof effect.by !== "number" &&
+      !hasDelta &&
       ((!hasNonZeroTo && effect.from === 360) ||
         (hasNonZeroTo && effect.from === 0));
     const candidate = {
       ...(effect.from === undefined || omitDefaultFrom
         ? {}
         : { from: effect.from }),
-      ...(!hasNonZeroTo ? {} : { to: effect.to }),
+      ...(effect.to === undefined || (!hasDelta && !hasNonZeroTo)
+        ? {}
+        : { to: effect.to }),
       ...(effect.duration === 1000 ? {} : { duration: effect.duration }),
       ...(effect.delay === 0 ? {} : { delay: effect.delay }),
       ...(effect.by === undefined ? {} : { by: effect.by }),

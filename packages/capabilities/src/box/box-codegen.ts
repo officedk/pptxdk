@@ -1,7 +1,82 @@
-import { defineObjectCodegen, type CodegenContext } from "@pptxdk/codegen";
+import {
+  defineObjectCodegen,
+  expr,
+  type CodegenContext,
+  type CodegenExpr,
+} from "@pptxdk/codegen";
 import { CommonNode } from "@pptxdk/core/document";
 
+import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
+import { boxDeclarationPropsKeys, boxStyleSchema } from "./box-declaration.ts";
+
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+
+const boxAllowedPropKeys = new Set<string>(boxDeclarationPropsKeys);
+
+const legacyVisualStyleKeys = new Set([
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "startArrow",
+  "endArrow",
+]);
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function serializeBoxStyleProp(
+  style: unknown,
+  ctx: CodegenContext,
+): CodegenExpr {
+  if (!isPlainRecord(style)) {
+    ctx.fail(
+      "unexpressible-value",
+      "Box.style must be a plain object",
+      "@style",
+    );
+  }
+  for (const [key, entryValue] of Object.entries(style)) {
+    if (entryValue === undefined) continue;
+    if (legacyVisualStyleKeys.has(key)) {
+      ctx.fail(
+        "unexpressible-value",
+        `Box.style does not support legacy property ${JSON.stringify(key)}`,
+        `@style.${key}`,
+      );
+    }
+  }
+  const parsed = boxStyleSchema.safeParse(style);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const issuePath =
+      issue !== undefined && issue.path.length > 0
+        ? `@style.${issue.path.join(".")}`
+        : "@style";
+    ctx.fail(
+      "unexpressible-value",
+      issue?.message ?? "Box.style cannot be expressed",
+      issuePath,
+    );
+  }
+  const entries: [string, unknown][] = [];
+  for (const [key, entryValue] of Object.entries(style)) {
+    if (entryValue === undefined) continue;
+    if (key === "background") {
+      const serializedImage = serializeImageDescriptorValue(entryValue, ctx);
+      entries.push([key, serializedImage ?? entryValue]);
+      continue;
+    }
+    entries.push([key, entryValue]);
+  }
+  return expr(ctx.formatProps(entries));
+}
 
 function collectBoxProps(
   node: CommonNode,
@@ -11,6 +86,17 @@ function collectBoxProps(
   const entries: [string, unknown][] = [];
   for (const [key, value] of Object.entries(node.props)) {
     if (value === undefined) continue;
+    if (!boxAllowedPropKeys.has(key)) {
+      ctx.fail(
+        "invalid-document",
+        `box declaration does not support property ${JSON.stringify(key)}`,
+        `@${key}`,
+      );
+    }
+    if (key === "style") {
+      entries.push([key, serializeBoxStyleProp(value, ctx)]);
+      continue;
+    }
     if (objectMotionPropKeys.has(key)) {
       if (Object.hasOwn(extra, key)) {
         entries.push([key, extra[key]]);

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  CodegenError,
   CommonContainer,
   CommonNode,
   DeckContainer,
   RichTextContainer,
   build,
+  codegen,
   defineSlideLayout,
   font,
   importPptx,
@@ -14,21 +16,34 @@ import {
 } from "@officedk/pptxdk";
 import { preview } from "@officedk/pptxdk/preview";
 import {
+  Box,
   Cell,
   Chart,
   Deck,
   Group,
   Image,
+  P,
   Row,
   Shape,
   Slide,
   SlideLayout,
   SlideMaster,
+  Span,
   Table,
   Text,
 } from "@officedk/pptxdk/react";
+import {
+  deck as vanillaDeck,
+  slide as vanillaSlide,
+} from "@officedk/pptxdk/vanilla";
 import { validatePptx } from "@pptxdk/validation";
 import { describe, it } from "vitest";
+
+import {
+  previewGeneratedSourceRelocated,
+  rebuildGeneratedSourceRelocated,
+  verifyGeneratedSourcesTypecheck,
+} from "./helpers/codegen-acceptance.ts";
 
 const jostBookBytes = new Uint8Array(
   readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
@@ -616,5 +631,454 @@ describe("Ticket 06 Part 1: importPptx single-track style, orthogonal visuals, S
     assert.ok(posGroupLoc?.box !== undefined);
     assert.equal(posGroupLoc.box.width, 260);
     assert.equal(posGroupLoc.box.height, 140);
+  });
+});
+
+describe("Ticket 06 Part 2: codegen vanilla + react new author syntax, strict consumer typecheck, buildFromSource, and previewFromSource", () => {
+  it("generates clean vanilla and react sources for imported representative deck and verifies strict tsc, buildFromSource, validatePptx, and previewFromSource", async () => {
+    const layoutDef = defineSlideLayout({
+      id: "codegen-layout",
+      name: "Codegen Layout",
+      placeholders: {
+        hero: {
+          type: "body",
+          idx: 1,
+          size: "half",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 420,
+            width: 300,
+            height: 60,
+            background: "#E0F2FE",
+            border: { color: "#0284C7", width: 1, style: "solid" },
+            fontFamily: jostFont,
+            fontSize: 14,
+            color: "#0F172A",
+          },
+        },
+      },
+      footerPlaceholders: {
+        footer: {
+          text: "Master Footer",
+          size: "quarter",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 496,
+            width: 220,
+            height: 24,
+            fontFamily: jostFont,
+            fontSize: 10,
+            color: "#475569",
+          },
+        },
+      },
+    });
+
+    const initial = await build(
+      <Deck
+        width={960}
+        height={540}
+        theme={{ fonts: { major: jostFont, minor: jostFont } }}
+      >
+        <SlideMaster
+          id="codegen-master"
+          headerFooter={{ footer: true }}
+          placeholders={{
+            title: {
+              type: "title",
+              size: "full",
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 16,
+                width: 880,
+                height: 36,
+              },
+            },
+          }}
+        >
+          <SlideLayout layout={layoutDef} />
+        </SlideMaster>
+        <Slide
+          id="codegen-slide"
+          layout={layoutDef}
+          background={{ image: samplePng, fit: "cover", opacity: 0.9 }}
+          footer="Slide Footer"
+        >
+          <Shape
+            id="plain-shape"
+            geometry="roundRect"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 220,
+              height: 70,
+              background: linearGradient(90, "#0EA5E9", "#2563EB"),
+              border: {
+                color: "#0F172A",
+                width: 2,
+                style: "dashed",
+                startArrow: "oval",
+                endArrow: "triangle",
+              },
+              flipH: true,
+              boxShadow: { color: "#000000", blur: 4, distance: 3, angle: 45 },
+              fontFamily: jostFont,
+              fontSize: 16,
+              color: "#FFFFFF",
+            }}
+          >
+            Shape Content
+          </Shape>
+          <Shape
+            id="empty-styled-shape"
+            geometry="rect"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 120,
+              width: 110,
+              height: 44,
+              background: "#E2E8F0",
+              fontFamily: jostFont,
+              fontSize: 13,
+              color: "#1E293B",
+            }}
+          >
+            {""}
+          </Shape>
+          <Shape
+            id="rich-shape"
+            geometry="roundRect"
+            style={{
+              position: "absolute",
+              left: 160,
+              top: 120,
+              width: 120,
+              height: 44,
+              background: { image: samplePng, fit: "cover" },
+            }}
+          >
+            <P style={{ align: "center" }}>
+              <Span
+                style={{
+                  fontFamily: jostFont,
+                  textDecoration: "underline",
+                  color: "#0F172A",
+                }}
+              >
+                Rich
+              </Span>{" "}
+              <Span style={{ fontFamily: jostFont, color: "#2563EB" }}>
+                Shape
+              </Span>
+            </P>
+          </Shape>
+          <Group
+            id="pos-group"
+            style={{
+              position: "absolute",
+              left: 300,
+              top: 40,
+              width: 260,
+              height: 130,
+              flipV: true,
+            }}
+          >
+            <Shape
+              id="pos-group-child"
+              geometry="rect"
+              style={{
+                position: "absolute",
+                left: 20,
+                top: 30,
+                width: 110,
+                height: 50,
+                background: "#38BDF8",
+              }}
+            />
+          </Group>
+          <Group id="unpos-group" style={{ rotate: 15 }}>
+            <Shape
+              id="unpos-child-a"
+              geometry="rect"
+              style={{
+                position: "absolute",
+                left: 300,
+                top: 200,
+                width: 80,
+                height: 40,
+                background: "#A855F7",
+              }}
+            />
+            <Shape
+              id="unpos-child-b"
+              geometry="rect"
+              style={{
+                position: "absolute",
+                left: 400,
+                top: 200,
+                width: 80,
+                height: 40,
+                background: "#EC4899",
+              }}
+            />
+          </Group>
+          <Table
+            id="summary-table"
+            columns={[120, 120]}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 180,
+              width: 240,
+              fontFamily: jostFont,
+              fontSize: 12,
+            }}
+          >
+            <Row style={{ height: 40, background: "#E2E8F0" }}>
+              <Cell
+                id="cell-a"
+                style={{
+                  background: "#FFFFFF",
+                  border: { color: "#334155", width: 1, style: "solid" },
+                }}
+              >
+                Cell A
+              </Cell>
+              <Cell
+                id="cell-b"
+                style={{
+                  borderBottom: { color: "#DC2626", width: 2, style: "solid" },
+                }}
+              >
+                Cell B
+              </Cell>
+            </Row>
+          </Table>
+          <Chart
+            id="sales-chart"
+            groups={[
+              {
+                kind: "column",
+                data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+                series: [{ name: "Sales", values: [10, 20] }],
+              },
+            ]}
+            style={{
+              position: "absolute",
+              left: 600,
+              top: 40,
+              width: 300,
+              height: 180,
+              fontFamily: jostFont,
+              fontSize: 11,
+            }}
+          />
+          <Image
+            id="brand-image"
+            src={samplePng}
+            style={{
+              position: "absolute",
+              left: 600,
+              top: 240,
+              width: 100,
+              height: 80,
+              border: { color: "#10B981", width: 2, style: "solid" },
+              flipH: true,
+            }}
+          />
+          <Box
+            id="author-box"
+            style={{
+              position: "absolute",
+              left: 600,
+              top: 340,
+              width: 180,
+              height: 60,
+              background: "#FEF3C7",
+              border: { color: "#D97706", width: 1, style: "solid" },
+            }}
+          >
+            <Text
+              id="free-text"
+              style={{
+                fontFamily: jostFont,
+                fontSize: 14,
+                color: "#0F172A",
+              }}
+            >
+              Free Text
+            </Text>
+          </Box>
+          <Text id="bound-hero" placeholder="hero">
+            Placeholder Text
+          </Text>
+        </Slide>
+      </Deck>,
+      { embedFonts: "full" },
+    );
+
+    const imported = importPptx(initial.pptx);
+    const vanillaOut = codegen(imported.document, { target: "vanilla" });
+    const reactOut = codegen(imported.document, { target: "react" });
+
+    const vanillaSource = vanillaOut.files["deck.ts"];
+    const reactSource = reactOut.files["deck.tsx"];
+    assert.equal(typeof vanillaSource, "string");
+    assert.equal(typeof reactSource, "string");
+
+    for (const [label, source] of [
+      ["vanilla", vanillaSource as string],
+      ["react", reactSource as string],
+    ] as const) {
+      for (const forbidden of [
+        /\bbackgroundColor\b/u,
+        /\bbackgroundImage\b/u,
+        /\bborderColor\b/u,
+        /\bborderWidth\b/u,
+        /\bborderStyle\b/u,
+        /\btextStyle\b/u,
+        /\bbounds:/u,
+        /\bsz:/u,
+      ]) {
+        assert.doesNotMatch(
+          source,
+          forbidden,
+          `${label} output must not contain legacy token ${String(forbidden)}`,
+        );
+      }
+      assert.match(source, /position:\s*"absolute"/u);
+      assert.match(source, /background:/u);
+      assert.match(source, /border:/u);
+      assert.match(source, /size:\s*"half"/u);
+    }
+
+    assert.match(vanillaSource as string, /shape\(\s*"Shape Content",/u);
+    assert.match(vanillaSource as string, /shape\(\s*"",/u);
+    assert.match(vanillaSource as string, /shape\(\s*\[/u);
+
+    assert.match(
+      reactSource as string,
+      /<Shape[\s\S]*?>\s*Shape Content\s*<\/Shape>/u,
+    );
+    assert.match(reactSource as string, /\{\s*""\s*\}/u);
+    assert.match(reactSource as string, /<P\b/u);
+
+    await verifyGeneratedSourcesTypecheck([
+      { label: "vanilla", result: vanillaOut },
+      { label: "react", result: reactOut },
+    ]);
+
+    for (const out of [vanillaOut, reactOut] as const) {
+      const rebuilt = await rebuildGeneratedSourceRelocated(out);
+      assert.deepEqual(rebuilt.file.errors, []);
+
+      const previewed = await previewGeneratedSourceRelocated(out);
+      assert.equal(previewed.pages.length, 1);
+      assert.deepEqual(previewed.pages[0]?.errors, []);
+    }
+
+    // Also verify external image URLs in Image.src and style.background image descriptors
+    const extDoc = vanillaDeck({ width: 960, height: 540 }).append(
+      vanillaSlide({ id: "ext-slide", background: "none" }).append(
+        new CommonNode("image", "image", {
+          id: "ext-img",
+          src: { externalUrl: "https://example.com/logo.png" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 120,
+            height: 60,
+          },
+        }) as never,
+        new RichTextContainer("shape", "shape", {
+          id: "ext-bg-shape",
+          geometry: "rect",
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 20,
+            width: 140,
+            height: 60,
+            background: {
+              image: { externalUrl: "https://example.com/bg.png" },
+              fit: "contain",
+              position: "center",
+              opacity: 0.8,
+            },
+          },
+        }) as never,
+      ),
+    );
+    const extVanilla = codegen(extDoc, { target: "vanilla" });
+    const extReact = codegen(extDoc, { target: "react" });
+    assert.match(
+      extVanilla.files["deck.ts"] as string,
+      /externalUrl:\s*"https:\/\/example\.com\/bg\.png"/u,
+    );
+    assert.match(extVanilla.files["deck.ts"] as string, /fit:\s*"contain"/u);
+    assert.match(
+      extVanilla.files["deck.ts"] as string,
+      /position:\s*"center"/u,
+    );
+    assert.match(extVanilla.files["deck.ts"] as string, /opacity:\s*0\.8/u);
+    await verifyGeneratedSourcesTypecheck([
+      { label: "ext-vanilla", result: extVanilla },
+      { label: "ext-react", result: extReact },
+    ]);
+  });
+
+  it("rejects legacy top-level geometry and legacy visual style keys across canvas/media declarations", () => {
+    const makeDocWith = (child: CommonNode): DeckContainer =>
+      vanillaDeck({ width: 960, height: 540 }).append(
+        vanillaSlide({ id: "s1" }).append(child as never),
+      );
+
+    const legacyCases: readonly CommonNode[] = [
+      new RichTextContainer("shape", "shape", {
+        x: 10,
+        y: 20,
+        width: 100,
+        height: 50,
+      }),
+      new RichTextContainer("shape", "shape", { fill: "#FF0000" }),
+      new RichTextContainer("shape", "shape", { text: "Legacy" }),
+      new RichTextContainer("shape", "shape", {
+        style: { backgroundColor: "#FF0000" },
+      }),
+      new CommonNode("image", "image", { src: samplePng, x: 10 }),
+      new CommonNode("image", "image", {
+        src: samplePng,
+        nativePlaceholder: { type: "pic", sz: "half" },
+      }),
+      new CommonContainer("box", "box", {
+        x: 10,
+        y: 10,
+        width: 100,
+        height: 50,
+      }),
+      new CommonContainer("box", "box", { style: { borderColor: "#000000" } }),
+      new CommonContainer("group", "group", {
+        bounds: { x: 0, y: 0, width: 100, height: 100 },
+      }),
+      new RichTextContainer("text", "text", { x: 10, y: 10, width: 100 }),
+      new RichTextContainer("text", "text", {
+        style: { backgroundImage: { image: samplePng } },
+      }),
+    ];
+
+    for (const badNode of legacyCases) {
+      const doc = makeDocWith(badNode);
+      assert.throws(
+        () => codegen(doc, { target: "vanilla" }),
+        (err: unknown) => err instanceof CodegenError,
+        `Expected CodegenError for legacy ${badNode.type} node`,
+      );
+    }
   });
 });

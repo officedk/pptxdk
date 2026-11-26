@@ -435,9 +435,9 @@ const { transitions } = await import("@pptxdk/capabilities/transition");
 const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
 const doc = deck({ width: 960, height: 540 }).append(
   slide({ id: "s1", background: "#F8FAFC", transition: transitions.fade() }).append(
-    shape({ id: "sh1", x: 10, y: 10, width: 80, height: 40, fill: "#2563EB" }),
-    image({ id: "img1", src: pngBytes, x: 100, y: 20, width: 40, height: 40 }),
-    step({ n: 1 }).append(text("Animated", { id: "t1", x: 160, y: 20, width: 120, height: 32, enter: fade() })),
+    shape({ id: "sh1", style: { position: "absolute", left: 10, top: 10, width: 80, height: 40, background: "#2563EB" } }),
+    image({ id: "img1", src: pngBytes, style: { position: "absolute", left: 100, top: 20, width: 40, height: 40 } }),
+    step({ n: 1 }).append(text("Animated", { id: "t1", style: { position: "absolute", left: 160, top: 20, width: 120, height: 32 }, enter: fade() })),
     notes("Note"),
   ),
 );

@@ -8,6 +8,19 @@ import { slideBackgroundSchema } from "@pptxdk/core/capability";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
 
+const legacyOwnerVisualKeys = new Set([
+  "backgroundColor",
+  "backgroundImage",
+  "borderColor",
+  "borderWidth",
+  "borderStyle",
+  "startArrow",
+  "endArrow",
+]);
+
+const ownerStylePathPattern =
+  /^deck(?:\/(?:section\[[^\]]+\]\/)?slide\[[^\]]+\]|\/slide-master\[[^\]]+\](?:\/slide-layout\[[^\]]+\])?)?$/u;
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -16,9 +29,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
+function rejectLegacyOwnerStyleValue(
+  value: unknown,
+  ctx: CodegenContext,
+): undefined {
+  if (!ownerStylePathPattern.test(ctx.path) || !isPlainObject(value)) {
+    return undefined;
+  }
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (entryValue !== undefined && legacyOwnerVisualKeys.has(key)) {
+      ctx.fail(
+        "unexpressible-value",
+        `Owner style does not support legacy property ${JSON.stringify(key)}`,
+        `@style.${key}`,
+      );
+    }
+  }
+  return undefined;
+}
+
 /**
  * Serializes `LinearGradient` and `RadialGradient` author values back into `linearGradient(...)`
- * and `radialGradient(...)` calls so gradients in `Slide.background` and `VisualStyle.backgroundImage`
+ * and `radialGradient(...)` calls so gradients in `Slide.background` and `VisualStyle.background`
  * round-trip idiomatically.
  */
 export function serializeGradientValue(
@@ -34,7 +66,7 @@ export function serializeGradientValue(
   const definedKeys = Object.keys(value).filter(
     (key) => value[key] !== undefined,
   );
-  const subPath = ctx.path.includes("@") ? undefined : "@style.backgroundImage";
+  const subPath = ctx.path.includes("@") ? undefined : "@style.background";
 
   if (type === "linear-gradient") {
     if (
@@ -71,6 +103,17 @@ export function serializeGradientValue(
 export const slideBackgroundCodegen = defineSlideCodegen({
   slideProps: {
     background: (value, ctx) => {
+      if (isPlainObject(value)) {
+        for (const [key, entryValue] of Object.entries(value)) {
+          if (entryValue !== undefined && legacyOwnerVisualKeys.has(key)) {
+            ctx.fail(
+              "unexpressible-value",
+              `Slide.background does not support legacy property ${JSON.stringify(key)}`,
+              key,
+            );
+          }
+        }
+      }
       const parsed = slideBackgroundSchema.safeParse(value);
       if (!parsed.success) {
         ctx.fail(
@@ -82,5 +125,9 @@ export const slideBackgroundCodegen = defineSlideCodegen({
       return expr(ctx.emitValueExpr(parsed.data));
     },
   },
-  valueSerializers: [serializeGradientValue, serializeImageDescriptorValue],
+  valueSerializers: [
+    rejectLegacyOwnerStyleValue,
+    serializeGradientValue,
+    serializeImageDescriptorValue,
+  ],
 });

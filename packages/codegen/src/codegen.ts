@@ -209,6 +209,27 @@ function extractDeclarationFromCodegenPath(path: string): string | undefined {
   return bracketIdx === -1 ? lastSegment : lastSegment.slice(0, bracketIdx);
 }
 
+function resolveFailSubPath(basePath: string, subPath?: string): string {
+  if (subPath === undefined || subPath === "") return basePath;
+  if (
+    subPath === "deck" ||
+    subPath.startsWith("deck/") ||
+    subPath.startsWith("deck@")
+  ) {
+    return subPath;
+  }
+  const hasField = extractFieldFromCodegenPath(basePath) !== undefined;
+  if (subPath.startsWith("@")) {
+    return hasField
+      ? `${basePath}.${subPath.slice(1)}`
+      : `${basePath}${subPath}`;
+  }
+  if (subPath.startsWith("[")) {
+    return `${basePath}${subPath}`;
+  }
+  return hasField ? `${basePath}.${subPath}` : `${basePath}@${subPath}`;
+}
+
 function failAt(
   path: string,
   code: CodegenDiagnosticCode,
@@ -337,7 +358,7 @@ const knownNativePlaceholderKeys = new Set([
   "type",
   "explicitType",
   "idx",
-  "sz",
+  "size",
   "orient",
   "hasCustomPrompt",
 ]);
@@ -357,7 +378,7 @@ function isNativePlaceholderRedundant(
     (nativeRef["explicitType"] !== false) ===
       (layoutSpec.explicitType !== false) &&
     nativeRef["idx"] === layoutSpec.idx &&
-    nativeRef["sz"] === layoutSpec.sz &&
+    nativeRef["size"] === layoutSpec.size &&
     nativeRef["orient"] === layoutSpec.orient &&
     (nativeRef["hasCustomPrompt"] === true) ===
       (layoutSpec.hasCustomPrompt === true)
@@ -709,13 +730,7 @@ export function createCodegen(
         formatVanillaCall: (callee, args, children = []) =>
           formatVanillaCall(callee, args, children),
         fail: (code, message, subPath) => {
-          const fullPath =
-            subPath === undefined || subPath === ""
-              ? path
-              : subPath.startsWith("@")
-                ? `${path}${subPath}`
-                : subPath;
-          failAt(fullPath, code, message);
+          failAt(resolveFailSubPath(path, subPath), code, message);
         },
       };
       return ctx;
@@ -1173,6 +1188,7 @@ export function createCodegen(
             sectionPath,
             "invalid-document",
             "Section.name must be a non-empty string",
+            { field: "name" },
           );
         }
         const sectionSlideRefs: string[] = [];

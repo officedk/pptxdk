@@ -24,10 +24,6 @@ describe("chart capability codegen", () => {
           placeholder: "chart",
           nativePlaceholder: { type: "chart", idx: 2 },
           link: { url: "https://example.com/report" },
-          x: 40,
-          y: 48,
-          width: 520,
-          height: 320,
           title: {
             text: "Revenue & Margin",
             style: { fontSize: 16, fontWeight: "bold", color: "#0F172A" },
@@ -36,6 +32,11 @@ describe("chart capability codegen", () => {
           legend: "bottom",
           plotArea: { left: 48, top: 44, width: 420, height: 220 },
           style: {
+            position: "absolute",
+            left: 40,
+            top: 48,
+            width: 520,
+            height: 320,
             fontFamily: chartFont,
             fontSize: 11,
             color: { slot: "accent1", lumMod: 0.6, lumOff: 0.4 },
@@ -101,10 +102,13 @@ describe("chart capability codegen", () => {
         }),
         chart({
           id: "empty-named-series",
-          x: 580,
-          y: 48,
-          width: 340,
-          height: 320,
+          style: {
+            position: "absolute",
+            left: 580,
+            top: 48,
+            width: 340,
+            height: 320,
+          },
           groups: [
             {
               kind: "doughnut",
@@ -119,10 +123,13 @@ describe("chart capability codegen", () => {
         chart({
           id: "empty-scatter",
           morphKey: morphScope.handle("sales-chart"),
-          x: 40,
-          y: 380,
-          width: 300,
-          height: 140,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 380,
+            width: 300,
+            height: 140,
+          },
           groups: [
             {
               kind: "scatter",
@@ -198,10 +205,13 @@ describe("chart capability codegen", () => {
 
     const withChildren = new CommonContainer("chart", "chart", {
       id: "bad-children",
-      x: 10,
-      y: 10,
-      width: 300,
-      height: 200,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 300,
+        height: 200,
+      },
       groups: [
         {
           kind: "column",
@@ -227,10 +237,13 @@ describe("chart capability codegen", () => {
       ) => ReturnType<typeof chart>
     )({
       id: "unknown-prop",
-      x: 10,
-      y: 10,
-      width: 300,
-      height: 200,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 300,
+        height: 200,
+      },
       bogus: true,
       groups: [
         {
@@ -256,10 +269,13 @@ describe("chart capability codegen", () => {
       slide({ id: "s1" }).append(
         chart({
           id: "nan-chart",
-          x: 10,
-          y: 10,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "column",
@@ -283,10 +299,13 @@ describe("chart capability codegen", () => {
       slide({ id: "s1" }).append(
         chart({
           id: "mismatch-chart",
-          x: 10,
-          y: 10,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "column",
@@ -317,10 +336,13 @@ describe("chart capability codegen", () => {
             slide({ id: "s1" }).append(
               chart({
                 id: "trimmed",
-                x: 10,
-                y: 10,
-                width: 300,
-                height: 200,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 300,
+                  height: 200,
+                },
                 groups: [
                   {
                     kind: "column",

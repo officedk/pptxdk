@@ -41,7 +41,6 @@ function previewDocWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(document);
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -54,7 +53,6 @@ function previewJsxWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(await expandDocument(element));
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -119,11 +117,14 @@ describe("Chart capability acceptance", () => {
         slide({ id: "chart-trim", background: "#FFFFFF" }).append(
           chart({
             id: "c1",
-            x: 20,
-            y: 20,
-            width: 280,
-            height: 160,
-            style: { fontFamily: chartFont },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 280,
+              height: 160,
+              fontFamily: chartFont,
+            },
             groups: [chartGroup],
           }),
         ),
@@ -138,11 +139,14 @@ describe("Chart capability acceptance", () => {
           { id: "chart-trim", background: "#FFFFFF" },
           createElement(Chart, {
             id: "c1",
-            x: 20,
-            y: 20,
-            width: 280,
-            height: 160,
-            style: { fontFamily: chartFont },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 280,
+              height: 160,
+              fontFamily: chartFont,
+            },
             groups: [chartGroup],
           }),
         ),
@@ -157,7 +161,16 @@ describe("Chart capability acceptance", () => {
         chartTrimmedDoc(
           deck({ width: 320, height: 200 }).append(
             slide({ id: "missing-shape" }).append(
-              shape({ id: "s1", x: 10, y: 10, width: 50, height: 50 }),
+              shape({
+                id: "s1",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 50,
+                  height: 50,
+                },
+              }),
             ),
           ),
         ),

@@ -57,10 +57,7 @@ function labelCaseChart(
 ): ChartProps {
   return {
     id,
-    x: 0,
-    y: 0,
-    width: 400,
-    height: 300,
+    style: { position: "absolute", left: 0, top: 0, width: 400, height: 300 },
     groups: [
       {
         kind,
@@ -115,10 +112,6 @@ describe("pie and doughnut depth", () => {
           <Chart
             id="pie-depth"
             name="pie-depth"
-            x={24}
-            y={24}
-            width={520}
-            height={460}
             title={{
               text: "Channel mix",
               style: {
@@ -129,7 +122,16 @@ describe("pie and doughnut depth", () => {
               },
             }}
             legend="top"
-            style={{ fontFamily: "Jost", fontSize: "10pt", color: "#112233" }}
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 520,
+              height: 460,
+              fontFamily: "Jost",
+              fontSize: "10pt",
+              color: "#112233",
+            }}
             groups={[
               {
                 kind: "pie",
@@ -193,13 +195,18 @@ describe("pie and doughnut depth", () => {
           <Chart
             id="doughnut-depth"
             name="doughnut-depth"
-            x={568}
-            y={24}
-            width={308}
-            height={460}
             title="Single ring"
             legend="right"
-            style={{ fontFamily: "Jost", fontSize: "10pt", color: "#112233" }}
+            style={{
+              position: "absolute",
+              left: 568,
+              top: 24,
+              width: 308,
+              height: 460,
+              fontFamily: "Jost",
+              fontSize: "10pt",
+              color: "#112233",
+            }}
             groups={[
               {
                 kind: "doughnut",
@@ -377,10 +384,13 @@ describe("pie and doughnut depth", () => {
     const chart = documentChart({
       id: "imperative-pie",
       name: "imperative-pie",
-      x: 20,
-      y: 20,
-      width: 520,
-      height: 420,
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 520,
+        height: 420,
+      },
       title: "Imperative pie",
       legend: "bottom",
       groups: [
@@ -448,10 +458,13 @@ describe("pie and doughnut depth", () => {
         <Slide id="pie-label-overrides">
           <Chart
             id="pie-label-overrides"
-            x={0}
-            y={0}
-            width={420}
-            height={300}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 420,
+              height: 300,
+            }}
             groups={[
               {
                 kind: "pie",
@@ -509,10 +522,13 @@ describe("pie and doughnut depth", () => {
         <Slide id="column-leader-line-reader">
           <Chart
             id="column-leader-line-reader"
-            x={0}
-            y={0}
-            width={240}
-            height={160}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 160,
+            }}
             groups={[
               {
                 kind: "column",
@@ -579,7 +595,7 @@ describe("pie and doughnut depth", () => {
     }[] = [
       {
         id: "pie-axis",
-        code: "invalid-chart-axes",
+        code: "invalid-prop",
         props: {
           ...base,
           axes: {
@@ -591,7 +607,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-stacking",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [
@@ -606,7 +622,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-series-marker",
-        code: "invalid-marker",
+        code: "invalid-prop",
         message:
           'Series "S".marker is only applicable to line and scatter chart series and points',
         props: {
@@ -628,7 +644,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-series-smooth",
-        code: "invalid-smooth",
+        code: "invalid-prop",
         message: 'Series "S".smooth is only applicable to line chart series',
         props: {
           ...base,
@@ -649,7 +665,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "doughnut-label-position",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           "Office does not allow dLblPos for doughnutChart series data labels",
         props: {
@@ -666,7 +682,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-line-position",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           'Office does not allow dLblPos="l" for pieChart series data labels',
         props: {
@@ -683,7 +699,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-inside-base",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           'Office does not allow dLblPos="inBase" for pieChart series data labels',
         props: {
@@ -700,7 +716,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "column-leader-lines",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message: "leaderLines is only supported for pie and doughnut charts",
         props: {
           ...base,
@@ -721,7 +737,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-point-leader-lines",
-        code: "unknown-parameter",
+        code: "unknown-prop",
         props: {
           ...base,
           groups: [
@@ -748,7 +764,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "column-series-explosion",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         message:
           'Series "S" explosion is only supported for pie and doughnut charts',
         props: {
@@ -770,7 +786,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "column-point-explosion",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         message:
           'Series "S" data point 0 explosion is only supported for pie and doughnut charts',
         props: {
@@ -792,7 +808,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-leader-lines-without-labels",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           "leaderLines requires at least one visible data label value, percent, or category",
         props: {
@@ -809,7 +825,7 @@ describe("pie and doughnut depth", () => {
       },
       {
         id: "pie-leader-lines-series-hides-value",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           "leaderLines requires at least one visible data label value, percent, or category",
         props: {
@@ -980,10 +996,13 @@ describe("pie and doughnut depth", () => {
         <Slide id="multi-series-label-inheritance">
           <Chart
             id="multi-series-label-inheritance"
-            x={0}
-            y={0}
-            width={400}
-            height={300}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 400,
+              height: 300,
+            }}
             groups={[
               {
                 kind: "column",
@@ -1030,10 +1049,13 @@ describe("pie and doughnut depth", () => {
         <Slide id="reader-leader-lines-without-labels">
           <Chart
             id="reader-leader-lines-without-labels"
-            x={0}
-            y={0}
-            width={240}
-            height={160}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 160,
+            }}
             groups={[
               {
                 kind: "pie",

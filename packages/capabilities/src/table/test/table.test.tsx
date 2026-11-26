@@ -157,7 +157,7 @@ describe("native tables", () => {
         error.diagnostics.map(({ code, path }) => ({ code, path })),
         [
           {
-            code: "invalid-table-structure",
+            code: "invalid-structure",
             path: "deck/slide[invalid]/table[short]/row[missing]",
           },
         ],
@@ -233,7 +233,7 @@ describe("native tables", () => {
     );
   });
 
-  it("expands auto row height using actual text measurement while preserving explicitly small row height with warning", async () => {
+  it("expands auto row height using actual text measurement while preserving explicitly small row height with textMetrics.fits === false", async () => {
     const style = {
       fontFamily: font("Noto Sans CJK SC", [
         { weight: 400, data: notoSansScRegular },
@@ -269,12 +269,12 @@ describe("native tables", () => {
       ),
     );
     const autoHeight =
-      automatic.report.slides[0]?.objects[0]?.table?.rowHeights[0] ?? 0;
+      automatic.slide("automatic").get("automatic-row").objects[0]?.table
+        ?.rows[0]?.height ?? 0;
     assert.ok(
       autoHeight > 80,
       `measured content height should wrap: ${autoHeight}px`,
     );
-    assert.deepEqual(automatic.report.diagnostics, []);
     const automaticFile = await validatePptx(automatic.pptx);
     assert.deepEqual(automaticFile.errors, []);
     const automaticParagraphs =
@@ -350,23 +350,18 @@ describe("native tables", () => {
       ),
     );
 
+    const fixedTableLocator = fixed.slide("fixed").get("fixed-row");
     assert.deepEqual(
-      fixed.report.slides[0]?.objects[0]?.table?.rowHeights,
+      fixedTableLocator.objects[0]?.table?.rows.map((r) => r.height),
       [20],
     );
-    assert.deepEqual(
-      fixed.report.diagnostics.map(({ severity, code, path }) => ({
-        severity,
-        code,
-        path,
-      })),
-      [
-        {
-          severity: "warning",
-          code: "overset",
-          path: "deck/slide[fixed]/table[fixed-row]/row[short]/cell[long]",
-        },
-      ],
+    const fixedCellMetrics = fixedTableLocator
+      .get("short")
+      .get("long").textMetrics;
+    assert.equal(fixedCellMetrics?.status, "measured");
+    assert.equal(fixedCellMetrics.fits, false);
+    assert.ok(
+      fixedCellMetrics.content.height > fixedCellMetrics.available.height,
     );
     const file = await validatePptx(fixed.pptx);
     assert.deepEqual(file.errors, []);
@@ -619,13 +614,14 @@ describe("native tables", () => {
       ),
     );
 
-    assert.deepEqual(result.report.diagnostics, []);
-    assert.deepEqual(result.report.slides[0]?.objects[0]?.table?.merges, [
+    const mergedTable = result.slide("merged").get("merged-table")
+      .objects[0]?.table;
+    assert.deepEqual(mergedTable?.merges, [
       { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
       { row: 1, column: 0, rowSpan: 2, colSpan: 1 },
     ]);
     assert.deepEqual(
-      result.report.slides[0]?.objects[0]?.table?.cells.map((c) => ({
+      mergedTable?.cells.map((c) => ({
         row: c.row,
         column: c.column,
         text: c.text,
@@ -665,11 +661,12 @@ describe("native tables", () => {
             Table,
             {
               id: "tracks",
-              x: 10,
-              y: 12,
-              width: 180,
               columns: [40, "2fr", "auto"],
               style: {
+                position: "absolute",
+                left: 10,
+                top: 12,
+                width: 180,
                 fontFamily: font("Noto Sans CJK SC", [
                   { weight: 400, data: notoSansScRegular },
                 ]),
@@ -688,13 +685,12 @@ describe("native tables", () => {
       ),
     );
 
-    const table = result.report.slides[0]?.objects[0]?.table;
-    assert.deepEqual(result.report.diagnostics, []);
-    assert.equal(table?.columnWidths[0], 40);
-    assert.ok((table?.columnWidths[1] ?? 0) > (table?.columnWidths[2] ?? 0));
+    const table = result.slide("tracks").get("tracks").objects[0]?.table;
+    assert.equal(table?.columns[0], 40);
+    assert.ok((table?.columns[1] ?? 0) > (table?.columns[2] ?? 0));
     assert.ok(
       Math.abs(
-        (table?.columnWidths.reduce((sum, width) => sum + width, 0) ?? 0) - 180,
+        (table?.columns.reduce((sum, width) => sum + width, 0) ?? 0) - 180,
       ) < 0.01,
     );
     const file = await validatePptx(result.pptx);
@@ -708,7 +704,7 @@ describe("native tables", () => {
     );
   });
 
-  it("requires real font measurement for auto columns and preserves px tracks with warning for overly narrow widths", async () => {
+  it("requires real font measurement for auto columns and enforces px track minimums over target width without sibling overlap", async () => {
     const autoWithoutMetrics = createElement(
       Table,
       { id: "measured-auto", columns: ["auto"] },
@@ -737,16 +733,17 @@ describe("native tables", () => {
         { width: 960, height: 540 },
         createElement(
           Slide,
-          { id: "narrow" },
+          {
+            id: "narrow",
+            style: { display: "flex", flexDirection: "row", gap: 12 },
+          },
           createElement(
             Table,
             {
               id: "preserved-px",
-              x: 0,
-              y: 0,
-              width: 120,
               columns: [80, 80],
               style: {
+                width: 120,
                 fontFamily: font("Noto Sans CJK SC", [
                   { weight: 400, data: notoSansScRegular },
                 ]),
@@ -760,21 +757,24 @@ describe("native tables", () => {
               createElement(Cell, null, "B"),
             ),
           ),
+          createElement(Box, {
+            id: "sibling-box",
+            style: { width: 100, height: 24 },
+          }),
         ),
       ),
     );
+    const narrowSlide = narrow.slide("narrow");
+    const preservedTableLocator = narrowSlide.get("preserved-px");
+    const siblingBox = narrowSlide.get("sibling-box").box!;
     assert.deepEqual(
-      narrow.report.slides[0]?.objects[0]?.table?.columnWidths,
+      preservedTableLocator.objects[0]?.table?.columns,
       [80, 80],
     );
-    assert.deepEqual(
-      narrow.report.diagnostics.map(({ code, path }) => ({ code, path })),
-      [
-        {
-          code: "table-width-overflow",
-          path: "deck/slide[narrow]/table[preserved-px]",
-        },
-      ],
+    assert.equal(preservedTableLocator.box?.width, 160);
+    assert.ok(
+      siblingBox.x >= (preservedTableLocator.box?.x ?? 0) + 160,
+      `Sibling x=${siblingBox.x} must not overlap expanded 160px table`,
     );
   });
 
@@ -791,10 +791,11 @@ describe("native tables", () => {
             {
               id: "plans",
               name: "plans",
-              x: 12,
-              y: 8,
               columns: [80, 80],
               style: {
+                position: "absolute",
+                left: 12,
+                top: 8,
                 fontFamily: font("Noto Sans CJK SC", [
                   { weight: 400, data: notoSansScRegular },
                 ]),
@@ -803,7 +804,7 @@ describe("native tables", () => {
             },
             createElement(
               Row,
-              { style: { height: 28, backgroundColor: "#336699" } },
+              { style: { height: 28, background: "#336699" } },
               createElement(Cell, { style: { color: "#FFFFFF" } }, "方案"),
               createElement(Cell, null, "说明"),
             ),
@@ -818,15 +819,18 @@ describe("native tables", () => {
       ),
     );
 
-    assert.deepEqual(result.report.diagnostics, []);
-    const tableObj = result.report.slides[0]?.objects[0];
+    const plansLocator = result.slide("comparison").get("plans");
+    const tableObj = plansLocator.objects[0];
     assert.equal(tableObj?.id, 2);
     assert.equal(tableObj?.kind, "table");
     assert.equal(tableObj?.name, "plans");
     assert.equal(tableObj?.authorId, "plans");
-    assert.deepEqual(tableObj?.box, { x: 12, y: 8, width: 160, height: 56 });
-    assert.deepEqual(tableObj?.table?.columnWidths, [80, 80]);
-    assert.deepEqual(tableObj?.table?.rowHeights, [28, 28]);
+    assert.deepEqual(plansLocator.box, { x: 12, y: 8, width: 160, height: 56 });
+    assert.deepEqual(tableObj?.table?.columns, [80, 80]);
+    assert.deepEqual(
+      tableObj?.table?.rows.map((r) => r.height),
+      [28, 28],
+    );
     assert.deepEqual(
       tableObj?.table?.cells.map((c) => ({
         row: c.row,
@@ -841,12 +845,11 @@ describe("native tables", () => {
       ],
     );
     assert.deepEqual(tableObj?.table?.merges, []);
-    const cellParts = tableObj?.table?.parts?.filter(
-      (part) => part.kind === "cell",
-    );
-    assert.equal(cellParts?.length, 4);
+    assert.equal(tableObj?.table?.cells.length, 4);
     assert.ok(
-      cellParts?.every((part) => part.textMetrics?.status === "measured"),
+      tableObj?.table?.cells.every(
+        (cellObs) => cellObs.textMetrics.status === "measured",
+      ),
     );
 
     const file = await validatePptx(result.pptx);
@@ -987,7 +990,7 @@ describe("native tables", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+        assert.equal(error.diagnostics[0]?.code, "unknown-prop");
         return true;
       },
     );
@@ -1014,7 +1017,7 @@ describe("native tables", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unknown-style");
+        assert.equal(error.diagnostics[0]?.code, "unknown-prop");
         return true;
       },
     );
@@ -1040,7 +1043,7 @@ describe("native tables", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-layout-context");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         return true;
       },
     );

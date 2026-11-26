@@ -14,7 +14,7 @@ import { font } from "@pptxdk/capabilities/font";
 import {
   fade,
   motionCapability,
-  observeMotion,
+  motionSchedule,
 } from "@pptxdk/capabilities/motion";
 import { BuildError, createMorphScope, targets } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
@@ -49,13 +49,17 @@ describe("chartCapability resolved contract", () => {
           createElement(Chart, {
             id: "sales",
             name: "SalesChart",
-            x: 24,
-            y: 20,
-            width: 592,
-            height: 320,
             title: "Quarterly sales",
             legend: "bottom",
-            style: { fontFamily: jostFont, fontSize: 16 },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 20,
+              width: 592,
+              height: 320,
+              fontFamily: jostFont,
+              fontSize: 16,
+            },
             groups: [
               {
                 kind: "column",
@@ -77,18 +81,24 @@ describe("chartCapability resolved contract", () => {
 
     const resolution = resolve(doc);
 
-    const observed = resolution.report.slides[0]?.objects.find(
-      (obj) => obj.authorId === "sales",
-    );
-    assert.ok(observed !== undefined);
-    assert.equal(observed.kind, "chart");
-    assert.equal(observed.name, "SalesChart");
-    assert.deepEqual(observed.box, {
+    const salesLocator = resolution.slide("overview").get("sales");
+    assert.equal(salesLocator.kind, "chart");
+    assert.deepEqual(salesLocator.box, {
       x: 24,
       y: 20,
       width: 592,
       height: 320,
     });
+    assert.deepEqual(salesLocator.bounds, {
+      x: 24,
+      y: 20,
+      width: 592,
+      height: 320,
+    });
+    const observed = resolution.report.slides[0]?.objects.find(
+      (obj) => obj.authorId === "sales",
+    );
+    assert.equal(observed?.name, "SalesChart");
 
     // Paint runs independently without calling emit.
     const painted = paint(resolution);
@@ -96,7 +106,7 @@ describe("chartCapability resolved contract", () => {
     const page = painted.pages[0]!;
     assert.ok(page.png !== undefined);
     assert.ok(page.svg?.includes("<path"));
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
 
     // Native emit keeps automatic <c:layout/> without preview's computed plot area.
     const emitted = emit(resolution);
@@ -128,10 +138,13 @@ describe("chartCapability resolved contract", () => {
               impChart({
                 id: "bad-name",
                 name: "Bad\u0000Name",
-                x: 10,
-                y: 10,
-                width: 300,
-                height: 200,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 300,
+                  height: 200,
+                },
                 groups: [
                   {
                     kind: "column",
@@ -159,10 +172,13 @@ describe("chartCapability resolved contract", () => {
             impSlide({ id: "s1" }).append(
               impChart({
                 id: "bad-category",
-                x: 10,
-                y: 10,
-                width: 300,
-                height: 200,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 300,
+                  height: 200,
+                },
                 groups: [
                   {
                     kind: "column",
@@ -189,11 +205,14 @@ describe("chartCapability resolved contract", () => {
             impSlide({ id: "s1" }).append(
               impChart({
                 id: "bad-text-style",
-                x: 10,
-                y: 10,
-                width: 300,
-                height: 200,
-                style: { fontSize: -12 },
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 300,
+                  height: 200,
+                  fontSize: -12,
+                },
                 groups: [
                   {
                     kind: "column",
@@ -217,10 +236,13 @@ describe("chartCapability resolved contract", () => {
             impSlide({ id: "s1" }).append(
               impChart({
                 id: "bad-series-color",
-                x: 10,
-                y: 10,
-                width: 300,
-                height: 200,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 300,
+                  height: 200,
+                },
                 groups: [
                   {
                     kind: "column",
@@ -244,10 +266,13 @@ describe("chartCapability resolved contract", () => {
             impSlide({ id: "s1" }).append(
               impChart({
                 id: "bad-plot-area",
-                x: 10,
-                y: 10,
-                width: 300,
-                height: 200,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 300,
+                  height: 200,
+                },
                 plotArea: { left: 100, top: 10, width: 250, height: 100 },
                 groups: [
                   {
@@ -277,10 +302,13 @@ describe("chartCapability resolved contract", () => {
     ]);
     const chartNode = impChart({
       id: "doughnut",
-      x: 20,
-      y: 20,
-      width: 400,
-      height: 260,
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 400,
+        height: 260,
+      },
       groups: [
         {
           kind: "doughnut",
@@ -318,9 +346,9 @@ describe("chartCapability resolved contract", () => {
     assert.equal(painted.pages.length, 1);
     assert.equal(painted.pages[0]?.png, undefined);
     assert.ok(
-      painted.pages[0]?.diagnostics.some(
+      painted.pages[0]?.errors.some(
         (diag) =>
-          diag.severity === "error" &&
+          diag.code === "preview-missing-font" &&
           diag.path === "deck/slide[rings]/chart[doughnut]",
       ),
     );
@@ -353,13 +381,17 @@ describe("chartCapability resolved contract", () => {
       impSlide({ id: "fonts", background: "#FFFFFF" }).append(
         impChart({
           id: "sales",
-          x: 20,
-          y: 20,
-          width: 560,
-          height: 300,
           title: "Revenue",
           legend: "bottom",
-          style: { fontFamily: impJostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 560,
+            height: 300,
+            fontFamily: impJostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -398,12 +430,16 @@ describe("chartCapability resolved contract", () => {
       impSlide({ id: "missing", background: "#FFFFFF" }).append(
         impChart({
           id: "cjk-chart",
-          x: 20,
-          y: 20,
-          width: 560,
-          height: 300,
           title: "中文标题",
-          style: { fontFamily: impJostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 560,
+            height: 300,
+            fontFamily: impJostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -417,14 +453,15 @@ describe("chartCapability resolved contract", () => {
 
     const missingResolution = resolve(missingDoc);
     assert.ok(
-      missingResolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" && diag.code === "font-missing-glyph",
+      missingResolution.report.fonts.some(
+        (fontUsage) =>
+          fontUsage.family === "Jost*" &&
+          (fontUsage.missingGlyphs?.length ?? 0) > 0,
       ),
     );
     const missingPaint = paint(missingResolution);
     assert.equal(missingPaint.pages[0]?.png, undefined);
-    assert.ok((missingPaint.pages[0]?.diagnostics.length ?? 0) > 0);
+    assert.ok((missingPaint.pages[0]?.errors.length ?? 0) > 0);
     const missingPlainEmit = emit(missingResolution);
     assert.deepEqual((await validatePptx(missingPlainEmit.pptx)).errors, []);
 
@@ -462,11 +499,15 @@ describe("chartCapability resolved contract", () => {
             morphKey: chartMorph,
             link: { id: "second" },
             enter: fade(),
-            x: 24,
-            y: 20,
-            width: 592,
-            height: 320,
-            style: { fontFamily: jostFont, fontSize: 14 },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 20,
+              width: 592,
+              height: 320,
+              fontFamily: jostFont,
+              fontSize: 14,
+            },
             groups: [
               {
                 kind: "column",
@@ -482,11 +523,15 @@ describe("chartCapability resolved contract", () => {
           createElement(Chart, {
             id: "chart-2",
             morphKey: chartMorph,
-            x: 24,
-            y: 20,
-            width: 592,
-            height: 320,
-            style: { fontFamily: jostFont, fontSize: 14 },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 20,
+              width: 592,
+              height: 320,
+              fontFamily: jostFont,
+              fontSize: 14,
+            },
             groups: [
               {
                 kind: "column",
@@ -504,7 +549,7 @@ describe("chartCapability resolved contract", () => {
     assert.ok(morphName?.startsWith("!!"));
     assert.equal(resolution.report.slides[1]?.objects[0]?.name, morphName);
     assert.equal(resolution.report.slides[0]?.objects[0]?.link, "slide:second");
-    const motion = observeMotion(resolution.report.slides[0]);
+    const motion = motionSchedule(resolution.slide("first"));
     assert.ok(motion !== undefined);
     assert.equal(motion.steps.length, 1);
 

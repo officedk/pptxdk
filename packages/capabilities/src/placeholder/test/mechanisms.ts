@@ -41,10 +41,13 @@ const unpopulatedLayout = defineSlideLayout({
     content: {
       type: "obj",
       idx: 1,
-      x: 48,
-      y: 96,
-      width: 544,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 48,
+        top: 96,
+        width: 544,
+        height: 220,
+      },
     },
   },
 });
@@ -87,10 +90,13 @@ export const contentPlaceholderRoundtripScenario: CapabilityScenario = {
         createElement("placeholder" as never, {
           id: "local-obj",
           placeholder: "content",
-          x: 96,
-          y: 120,
-          width: 320,
-          height: 140,
+          style: {
+            position: "absolute",
+            left: 96,
+            top: 120,
+            width: 320,
+            height: 140,
+          },
         }),
       ),
     );
@@ -109,10 +115,13 @@ export const contentPlaceholderRoundtripScenario: CapabilityScenario = {
         createPlaceholderNode({
           id: "local-obj",
           placeholder: "content",
-          x: 96,
-          y: 120,
-          width: 320,
-          height: 140,
+          style: {
+            position: "absolute",
+            left: 96,
+            top: 120,
+            width: 320,
+            height: 140,
+          },
         }),
       ),
     );
@@ -122,7 +131,7 @@ export const contentPlaceholderRoundtripScenario: CapabilityScenario = {
     assert.equal(validation.slides.length, 2);
     assert.equal(preview.pages.length, 2);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.equal(page.svg?.includes("<path "), false);
     }
   },
@@ -217,7 +226,7 @@ export const placeholderMechanismVerifications = {
       const preview = paint(resolution, { pages: [4, 5, 6, 7, 8, 9] });
       assert.equal(preview.pages.length, 6);
       for (const page of preview.pages) {
-        assert.deepEqual(page.diagnostics, []);
+        assert.deepEqual(page.errors, []);
         assert.ok(page.png instanceof Uint8Array);
         assert.equal(page.svg?.includes("<path "), false);
       }
@@ -226,7 +235,7 @@ export const placeholderMechanismVerifications = {
       for (const preview of [initial, roundtrip]) {
         assert.equal(preview.pages.length, 2);
         for (const page of preview.pages) {
-          assert.deepEqual(page.diagnostics, []);
+          assert.deepEqual(page.errors, []);
           assert.ok(page.png instanceof Uint8Array);
           assert.equal(page.svg?.includes("<path "), false);
         }

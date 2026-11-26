@@ -4,10 +4,14 @@ import {
   BuildError,
   createMorphScope,
   deckPropsSchema,
+  layoutPlaceholderSpecSchema,
   sectionPropsSchema,
   slideBackgroundSchema,
+  slideFooterValueSchema,
+  slideNumberValueSchema,
   slidePropsSchema,
   type DeckProps,
+  type LayoutPlaceholderSpec,
   type SectionProps,
   type SlideBackground,
   type SlideProps,
@@ -39,10 +43,52 @@ describe("Slice 3: Deck/Slide/Section schemas, resolve validation, and declarati
     const slideProps: SlideProps = slidePropsSchema.parse({
       id: "cover",
       hidden: false,
-      background: bg,
-      style: { fontSize: 32, display: "flex", flexDirection: "column" },
+      style: {
+        fontSize: 32,
+        display: "flex",
+        flexDirection: "column",
+        background: bg,
+      },
+      footer: slideFooterValueSchema.parse({
+        text: "Confidential",
+        size: "quarter",
+        style: {
+          position: "absolute",
+          left: 48,
+          top: 660,
+          width: 320,
+          height: 28,
+          fontSize: 12,
+        },
+      }),
+      slideNumber: slideNumberValueSchema.parse({
+        size: "quarter",
+        style: { position: "absolute", left: 1120, top: 660, width: 100 },
+      }),
     });
     assert.equal(slideProps.id, "cover");
+    assert.deepEqual(slideProps.style?.background, bg);
+
+    const placeholderSpec: LayoutPlaceholderSpec =
+      layoutPlaceholderSpecSchema.parse({
+        type: "body",
+        idx: 1,
+        size: "half",
+        style: {
+          position: "absolute",
+          left: 80,
+          top: 140,
+          width: 520,
+          height: 400,
+          background: "none",
+          border: "none",
+          boxShadow: "none",
+          flipH: false,
+          flipV: true,
+        },
+      });
+    assert.equal(placeholderSpec.size, "half");
+    assert.equal(placeholderSpec.style?.flipV, true);
 
     const sectionProps: SectionProps = sectionPropsSchema.parse({
       name: "Introduction",

@@ -46,27 +46,37 @@ describe("masters capability codegen", () => {
       placeholders: {
         title: {
           type: "ctrTitle",
-          x: 60,
-          y: 120,
-          width: 840,
-          height: 80,
-          style: { fontSize: "28pt", color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 120,
+            width: 840,
+            height: 80,
+            fontSize: "28pt",
+            color: "#0F172A",
+          },
         },
         "body-1": {
           type: "body",
           idx: 1,
-          x: 60,
-          y: 220,
-          width: 400,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 220,
+            width: 400,
+            height: 200,
+          },
         },
         "body-2": {
           type: "body",
           idx: 2,
-          x: 500,
-          y: 220,
-          width: 400,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 500,
+            top: 220,
+            width: 400,
+            height: 200,
+          },
         },
       },
     });
@@ -99,10 +109,13 @@ describe("masters capability codegen", () => {
       }).append(
         text("Master Watermark", {
           id: "m1-watermark",
-          x: 24,
-          y: 16,
-          width: 240,
-          height: 28,
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 16,
+            width: 240,
+            height: 28,
+          },
         }),
         slideLayout(m1TitleLayout),
         slideLayout(m1UnusedLayout),

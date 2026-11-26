@@ -28,13 +28,18 @@ function sheetXml(parts: Unzipped, workbookPart: string): string {
 function categoryChart(groups: ChartProps["groups"]): ChartProps {
   return {
     id: "empty-category",
-    x: 24,
-    y: 24,
-    width: 560,
-    height: 360,
     title: { text: "Empty category chart" },
     legend: "bottom",
-    style: { fontFamily: "Arial", fontSize: "12pt", color: "#112233" },
+    style: {
+      position: "absolute",
+      left: 24,
+      top: 24,
+      width: 560,
+      height: 360,
+      fontFamily: "Arial",
+      fontSize: "12pt",
+      color: "#112233",
+    },
     groups,
   };
 }
@@ -100,10 +105,13 @@ describe("editable empty charts", () => {
         <Slide id="empty-scatter">
           <Chart
             id="empty-scatter"
-            x={24}
-            y={24}
-            width={560}
-            height={360}
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 560,
+              height: 360,
+            }}
             title="Empty scatter"
             groups={[
               {
@@ -160,10 +168,13 @@ describe("editable empty charts", () => {
           <Slide id={`empty-${kind}`}>
             <Chart
               id={`empty-${kind}`}
-              x={16}
-              y={16}
-              width={288}
-              height={180}
+              style={{
+                position: "absolute",
+                left: 16,
+                top: 16,
+                width: 288,
+                height: 180,
+              }}
               groups={[
                 {
                   kind,
@@ -201,10 +212,13 @@ describe("editable empty charts", () => {
         <Slide id="empty-multi-group">
           <Chart
             id="empty-multi-group"
-            x={24}
-            y={24}
-            width={560}
-            height={360}
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 560,
+              height: 360,
+            }}
             title="Two empty groups"
             legend="bottom"
             groups={[
@@ -275,10 +289,13 @@ describe("editable empty charts", () => {
         <Slide id="multi-ring-empty">
           <Chart
             id="independent-rings"
-            x={20}
-            y={20}
-            width={440}
-            height={260}
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 440,
+              height: 260,
+            }}
             title="Independent rings"
             legend="right"
             groups={[
@@ -305,10 +322,13 @@ describe("editable empty charts", () => {
           />
           <Chart
             id="shared-rings"
-            x={500}
-            y={20}
-            width={440}
-            height={260}
+            style={{
+              position: "absolute",
+              left: 500,
+              top: 20,
+              width: 440,
+              height: 260,
+            }}
             title="Shared rings"
             legend="right"
             groups={[
@@ -401,10 +421,13 @@ describe("editable empty charts", () => {
     ];
     const node = documentChart({
       id: "combo-empty-fill",
-      x: 20,
-      y: 20,
-      width: 600,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 600,
+        height: 360,
+      },
       axes,
       title: "Mixed empty and filled",
       groups: initialGroups,
@@ -482,10 +505,13 @@ describe("editable empty charts", () => {
         <Slide id="scatter-empty-mixed">
           <Chart
             id="scatter-empty-mixed"
-            x={20}
-            y={20}
-            width={600}
-            height={360}
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 600,
+              height: 360,
+            }}
             title="Scatter empty and filled"
             groups={[
               {
@@ -546,10 +572,7 @@ describe("editable empty charts", () => {
       values: readonly (number | null)[],
     ): ChartProps => ({
       id,
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 120,
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
       groups: [
         {
           kind: "column",
@@ -611,13 +634,18 @@ describe("editable empty charts", () => {
   it("fills a command-authoring chart node and rebuilds consistent native data", async () => {
     const node = documentChart({
       id: "empty-command",
-      x: 24,
-      y: 24,
-      width: 560,
-      height: 360,
       title: "Command fill",
       legend: "bottom",
-      style: { fontFamily: "Arial", fontSize: "12pt", color: "#112233" },
+      style: {
+        position: "absolute",
+        left: 24,
+        top: 24,
+        width: 560,
+        height: 360,
+        fontFamily: "Arial",
+        fontSize: "12pt",
+        color: "#112233",
+      },
       groups: [
         {
           kind: "column",
@@ -690,12 +718,15 @@ describe("editable empty charts", () => {
         <Slide id="fill-react">
           <Chart
             id="empty-react"
-            x={24}
-            y={24}
-            width={560}
-            height={360}
             title="React fill"
-            style={{ fontFamily: "Arial" }}
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 560,
+              height: 360,
+              fontFamily: "Arial",
+            }}
             groups={[
               {
                 kind: "line",
@@ -756,10 +787,7 @@ describe("editable empty charts", () => {
   it("preserves data and axis diagnostics instead of treating every empty declaration as valid", async () => {
     const base = {
       id: "invalid-empty",
-      x: 0,
-      y: 0,
-      width: 240,
-      height: 160,
+      style: { position: "absolute", left: 0, top: 0, width: 240, height: 160 },
     } as const;
     const rejectsWithCode = async (
       props: ChartProps,
@@ -792,7 +820,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-data",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -805,7 +833,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-data",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -818,7 +846,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-data",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -831,7 +859,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-data",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -844,7 +872,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-data",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -864,7 +892,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-data",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -877,7 +905,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-data",
+      "invalid-prop",
     );
     await rejectsWithCode(
       {
@@ -895,7 +923,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "unknown-chart-axis",
+      "broken-reference",
     );
     await rejectsWithCode(
       {
@@ -909,7 +937,7 @@ describe("editable empty charts", () => {
           },
         ],
       },
-      "invalid-chart-axes",
+      "invalid-prop",
     );
   });
   it("keeps invalid empty-cache references and workbook mismatches as reader errors", async () => {
@@ -918,10 +946,13 @@ describe("editable empty charts", () => {
         <Slide id="reader-empty">
           <Chart
             id="reader-empty"
-            x={16}
-            y={16}
-            width={288}
-            height={180}
+            style={{
+              position: "absolute",
+              left: 16,
+              top: 16,
+              width: 288,
+              height: 180,
+            }}
             groups={[
               {
                 kind: "column",
@@ -992,10 +1023,13 @@ describe("editable empty charts", () => {
         <Slide id="reader-scatter-single-source">
           <Chart
             id="reader-scatter-single-source"
-            x={16}
-            y={16}
-            width={288}
-            height={180}
+            style={{
+              position: "absolute",
+              left: 16,
+              top: 16,
+              width: 288,
+              height: 180,
+            }}
             groups={[
               {
                 kind: "scatter",

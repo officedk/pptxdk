@@ -51,10 +51,18 @@ describe("native content in the common document", () => {
       stops,
     };
     const style = {
-      backgroundImage: gradient,
-      borderColor: "#123456",
-      borderWidth: 2,
-      borderStyle: "dashed" as const,
+      position: "absolute" as const,
+      left: 20,
+      top: 24,
+      width: 120,
+      height: 72,
+      background: gradient,
+      border: {
+        color: "#123456",
+        width: 2,
+        style: "dashed" as const,
+      },
+      flipH: true,
       rotate: -15,
       boxShadow: {
         color: { color: "#000000", alpha: 0.4 },
@@ -73,11 +81,6 @@ describe("native content in the common document", () => {
       id: "editable-shape",
       morphKey: hero,
       geometry: "hexagon",
-      x: 20,
-      y: 24,
-      width: 120,
-      height: 72,
-      flipH: true,
       style,
     }).append(body);
     const document = deck({ width: 960, height: 540 }).append(
@@ -102,7 +105,7 @@ describe("native content in the common document", () => {
     assert.doesNotMatch(firstXml, /0000FF/u);
 
     stops[0]!.color = "#0000FF";
-    style.borderColor = "#654321";
+    style.border.color = "#654321";
     const isolated = await build(document);
     assert.equal(isolated.report.slides[0]?.objects[0]?.name, firstObject.name);
     assert.match(slideXml(isolated), /AA0000/u);
@@ -110,9 +113,8 @@ describe("native content in the common document", () => {
     assert.doesNotMatch(slideXml(isolated), /0000FF|654321/u);
 
     node.style({
-      borderColor: "#00AA00",
-      backgroundColor: "#00AA00",
-      backgroundImage: undefined,
+      border: { color: "#00AA00", width: 2, style: "dashed" },
+      background: "#00AA00",
     });
     const updated = await build(document);
     assert.deepEqual((await validatePptx(updated.pptx)).errors, []);
@@ -128,20 +130,27 @@ describe("native content in the common document", () => {
     const member = shape({
       id: "group-shape",
       name: "group-shape",
-      x: 20,
-      y: 24,
-      width: 120,
-      height: 72,
-      style: { backgroundColor: "ink", borderWidth: 1 },
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 24,
+        width: 120,
+        height: 72,
+        background: "ink",
+        border: { color: "#000000", width: 1 },
+      },
     });
     const badge = image({
       id: "group-image",
       name: "group-image",
       src: png,
-      x: 160,
-      y: 24,
-      width: 40,
-      height: 40,
+      style: {
+        position: "absolute",
+        left: 160,
+        top: 24,
+        width: 40,
+        height: 40,
+      },
     });
     const node = group({
       id: "editable-group",
@@ -172,7 +181,7 @@ describe("native content in the common document", () => {
     assert.match(slideXml(isolated), /112233/u);
     assert.doesNotMatch(slideXml(isolated), /0000FF/u);
 
-    member.style({ borderColor: "#445566" });
+    member.style({ border: { color: "#445566", width: 1 } });
     node.set({ theme: { colors: { ink: "#778899" } } });
     const updated = await build(document);
     assert.deepEqual((await validatePptx(updated.pptx)).errors, []);
@@ -190,11 +199,14 @@ describe("native content in the common document", () => {
     }).append(
       shape({
         id: "theme-shape",
-        x: 20,
-        y: 24,
-        width: 120,
-        height: 72,
-        style: { backgroundColor: "ink" },
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 24,
+          width: 120,
+          height: 72,
+          background: "ink",
+        },
       }),
     );
     const document = deck({
@@ -242,14 +254,14 @@ describe("native content in the common document", () => {
       id: "photo",
       src: source,
       alt: "Picture",
-      x: 32,
-      y: 48,
-      width: 120,
-      height: 72,
       fit: "cover",
       style: {
-        borderColor: "#123456",
-        borderWidth: 1,
+        position: "absolute",
+        left: 32,
+        top: 48,
+        width: 120,
+        height: 72,
+        border: { color: "#123456", width: 1 },
         opacity: 0.5,
         softEdge: 2,
         boxShadow: {
@@ -294,7 +306,7 @@ describe("native content in the common document", () => {
     node.set({ src: widePng, fit: "fill", crop: { left: 0.25, right: 0.25 } });
     node.style({
       opacity: 0.25,
-      borderColor: undefined,
+      border: undefined,
       softEdge: undefined,
       boxShadow: undefined,
     });
@@ -314,10 +326,7 @@ describe("native content in the common document", () => {
   it("keeps native capability registration explicit for trimmed builds", async () => {
     const node = shape({
       id: "trimmed-shape",
-      x: 10,
-      y: 10,
-      width: 40,
-      height: 30,
+      style: { position: "absolute", left: 10, top: 10, width: 40, height: 30 },
     });
     const document = deck({ width: 960, height: 540 }).append(
       slide({ id: "trimmed" }).append(node),
@@ -338,34 +347,43 @@ describe("native content in the common document", () => {
   it("matches the React entry for representative native objects", async () => {
     const commandDocument = deck({ width: 960, height: 540 }).append(
       slide({ id: "native" }).append(
-        shape({
+        shape("Shape", {
           id: "shape",
           geometry: "ellipse",
-          x: 12,
-          y: 16,
-          width: 120,
-          height: 80,
-          text: "Shape",
-          style: { backgroundColor: "#336699", borderWidth: 1 },
+          style: {
+            position: "absolute",
+            left: 12,
+            top: 16,
+            width: 120,
+            height: 80,
+            background: "#336699",
+            border: { color: "#000000", width: 1 },
+          },
         }),
         image({
           id: "image",
           src: png,
-          x: 150,
-          y: 16,
-          width: 80,
-          height: 60,
           fit: "cover",
-          style: { borderColor: "#AA0000", borderWidth: 1 },
+          style: {
+            position: "absolute",
+            left: 150,
+            top: 16,
+            width: 80,
+            height: 60,
+            border: { color: "#AA0000", width: 1 },
+          },
         }),
         group({ id: "group" }).append(
           shape({
             id: "group-shape",
-            x: 260,
-            y: 16,
-            width: 60,
-            height: 40,
-            style: { backgroundColor: "#00AA00" },
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 16,
+              width: 60,
+              height: 40,
+              background: "#00AA00",
+            },
           }),
         ),
       ),
@@ -376,36 +394,49 @@ describe("native content in the common document", () => {
       createElement(
         Slide,
         { id: "native" },
-        createElement(ReactShape, {
-          id: "shape",
-          geometry: "ellipse",
-          x: 12,
-          y: 16,
-          width: 120,
-          height: 80,
-          text: "Shape",
-          style: { backgroundColor: "#336699", borderWidth: 1 },
-        }),
+        createElement(
+          ReactShape,
+          {
+            id: "shape",
+            geometry: "ellipse",
+            style: {
+              position: "absolute",
+              left: 12,
+              top: 16,
+              width: 120,
+              height: 80,
+              background: "#336699",
+              border: { color: "#000000", width: 1 },
+            },
+          },
+          "Shape",
+        ),
         createElement(ReactImage, {
           id: "image",
           src: png,
-          x: 150,
-          y: 16,
-          width: 80,
-          height: 60,
           fit: "cover",
-          style: { borderColor: "#AA0000", borderWidth: 1 },
+          style: {
+            position: "absolute",
+            left: 150,
+            top: 16,
+            width: 80,
+            height: 60,
+            border: { color: "#AA0000", width: 1 },
+          },
         }),
         createElement(
           ReactGroup,
           { id: "group" },
           createElement(ReactShape, {
             id: "group-shape",
-            x: 260,
-            y: 16,
-            width: 60,
-            height: 40,
-            style: { backgroundColor: "#00AA00" },
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 16,
+              width: 60,
+              height: 40,
+              background: "#00AA00",
+            },
           }),
         ),
       ),

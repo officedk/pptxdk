@@ -61,11 +61,14 @@ export const transitionRoundtripScenario: CapabilityScenario = {
         { id: "slide-inherited-strips", layout: stripsLayout },
         createElement(Shape, {
           id: "card-1",
-          x: 40,
-          y: 40,
-          width: 140,
-          height: 80,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 140,
+            height: 80,
+            background: "#2563EB",
+          },
         }),
       ),
       createElement(
@@ -82,11 +85,14 @@ export const transitionRoundtripScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "card-2",
-          x: 200,
-          y: 100,
-          width: 160,
-          height: 90,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 100,
+            width: 160,
+            height: 90,
+            background: "#059669",
+          },
         }),
       ),
       createElement(
@@ -101,11 +107,14 @@ export const transitionRoundtripScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "card-3",
-          x: 360,
-          y: 140,
-          width: 160,
-          height: 90,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 360,
+            top: 140,
+            width: 160,
+            height: 90,
+            background: "#D97706",
+          },
         }),
       ),
     );
@@ -121,11 +130,14 @@ export const transitionRoundtripScenario: CapabilityScenario = {
       slide({ id: "slide-inherited-strips", layout: stripsLayout }).append(
         shape({
           id: "card-1",
-          x: 40,
-          y: 40,
-          width: 140,
-          height: 80,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 140,
+            height: 80,
+            background: "#2563EB",
+          },
         }),
       ),
       slide({
@@ -140,11 +152,14 @@ export const transitionRoundtripScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "card-2",
-          x: 200,
-          y: 100,
-          width: 160,
-          height: 90,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 100,
+            width: 160,
+            height: 90,
+            background: "#059669",
+          },
         }),
       ),
       slide({
@@ -157,11 +172,14 @@ export const transitionRoundtripScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "card-3",
-          x: 360,
-          y: 140,
-          width: 160,
-          height: 90,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 360,
+            top: 140,
+            width: 160,
+            height: 90,
+            background: "#D97706",
+          },
         }),
       ),
     );

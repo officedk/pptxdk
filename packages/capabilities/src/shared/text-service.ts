@@ -2644,6 +2644,14 @@ export function withPreviewFontBoundary<T>(fn: () => T): T {
           error.details,
         );
       }
+      if (error.code === "font-missing-glyph") {
+        throw new CapabilityError(
+          "preview-missing-glyph",
+          error.message,
+          error.path,
+          error.details,
+        );
+      }
       if (
         error.code === "font-format-unsupported" ||
         error.code === "font-substitution-required" ||

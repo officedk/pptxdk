@@ -44,7 +44,7 @@ function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {
 describe("table authoring through the common document", () => {
   it("creates an editable native table, preserves rich text, spans, styles, and measured tracks, then edits it", async () => {
     const columns: TableColumn[] = ["auto", "1fr"];
-    const mergedStyle = { backgroundColor: "#DDEEFF" };
+    const mergedStyle = { background: "#DDEEFF" };
     const merged = cell(
       paragraph().append(
         span("North").style({ fontWeight: "bold", color: "#AA0000" }),
@@ -60,11 +60,15 @@ describe("table authoring through the common document", () => {
     assert.ok(firstRow instanceof CommonContainer);
     const tableNode = table({
       id: "document-table",
-      x: 16,
-      y: 20,
-      width: 360,
       columns,
-      style: { fontFamily: metricFont, fontSize: 12 },
+      style: {
+        position: "absolute",
+        left: 16,
+        top: 20,
+        width: 360,
+        fontFamily: metricFont,
+        fontSize: 12,
+      },
     }).append(firstRow, secondRow);
     assert.ok(tableNode instanceof CommonContainer);
     const document = deck({ width: 960, height: 540 }).append(
@@ -73,7 +77,7 @@ describe("table authoring through the common document", () => {
 
     // Values are received at construction time; later edits to the caller's inputs do not leak in.
     columns.push("1fr");
-    mergedStyle.backgroundColor = "#0000FF";
+    mergedStyle.background = "#0000FF";
 
     const first = await build(document);
     const firstFile = await validatePptx(first.pptx);
@@ -109,7 +113,7 @@ describe("table authoring through the common document", () => {
     assert.doesNotMatch(slideXml(first), /0000FF/u);
 
     merged.content("Updated ", span("cell").style({ fontStyle: "italic" }));
-    value.style({ backgroundColor: "#FFFF00" });
+    value.style({ background: "#FFFF00" });
     secondRow.style({ height: 40 });
 
     const second = await build(document);

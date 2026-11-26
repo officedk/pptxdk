@@ -45,7 +45,16 @@ describe("transition capability codegen", () => {
       section({ name: "Empty" }),
       section({ name: "Showcase" }).append(
         slide({ id: "inherited-slide", layout: inheritedLayout }).append(
-          shape({ id: "s1-box", x: 40, y: 40, width: 100, height: 60 }),
+          shape({
+            id: "s1-box",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 100,
+              height: 60,
+            },
+          }),
         ),
         slide({
           id: "fade-timed",

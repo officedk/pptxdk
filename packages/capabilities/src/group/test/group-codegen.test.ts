@@ -16,19 +16,28 @@ describe("group capability codegen", () => {
           id: "outer-cluster",
           name: "Outer Cluster",
           morphKey: morphScope.handle("cluster"),
-          bounds: { x: 40, y: 40, width: 320, height: 200 },
-          style: { rotate: 12 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 320,
+            height: 200,
+            rotate: 12,
+          },
         }).append(
           shape({
             id: "first-member",
             name: "First Member",
             geometry: "hexagon",
-            x: 50,
-            y: 60,
-            width: 100,
-            height: 80,
-            fill: "#2563EB",
-            flipH: true,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 20,
+              width: 100,
+              height: 80,
+              background: "#2563EB",
+              flipH: true,
+            },
           }),
           group({
             id: "inner-cluster",
@@ -39,21 +48,27 @@ describe("group capability codegen", () => {
               id: "inner-leaf",
               name: "Inner Leaf",
               geometry: "diamond",
-              x: 180,
-              y: 80,
-              width: 90,
-              height: 60,
-              fill: "#10B981",
-              flipV: true,
-              style: { rotate: 30 },
+              style: {
+                position: "absolute",
+                left: 140,
+                top: 40,
+                width: 90,
+                height: 60,
+                background: "#10B981",
+                flipV: true,
+                rotate: 30,
+              },
             }),
             text("Member Label", {
               id: "member-label",
               name: "Member Label",
-              x: 180,
-              y: 150,
-              width: 120,
-              height: 32,
+              style: {
+                position: "absolute",
+                left: 140,
+                top: 110,
+                width: 120,
+                height: 32,
+              },
             }),
           ),
         ),
@@ -69,9 +84,10 @@ describe("group capability codegen", () => {
     assert.match(vanillaSource, /name: "Outer Cluster"/u);
     assert.match(
       vanillaSource,
-      /bounds: \{ x: 40, y: 40, width: 320, height: 200 \}/u,
+      /style: \{\s*position: "absolute",\s*left: 40,\s*top: 40,\s*width: 320,\s*height: 200,\s*rotate: 12/u,
     );
-    assert.match(vanillaSource, /style: \{ rotate: 12 \}/u);
+    assert.match(vanillaSource, /flipH: true/u);
+    assert.match(vanillaSource, /flipV: true/u);
     assert.match(vanillaSource, /morphScope\.handle\("cluster"\)/u);
     const firstIdx = vanillaSource.indexOf("First Member");
     const innerIdx = vanillaSource.indexOf("Inner Cluster");
@@ -98,7 +114,16 @@ describe("group capability codegen", () => {
           id: "bad-group",
           style: { rotate: Number.POSITIVE_INFINITY },
         }).append(
-          shape({ x: 10, y: 10, width: 40, height: 40, fill: "#000000" }),
+          shape({
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 40,
+              height: 40,
+              background: "#000000",
+            },
+          }),
         ),
       ),
     );

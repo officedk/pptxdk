@@ -28,14 +28,19 @@ describe("box capability codegen", () => {
             alignItems: "center",
             gap: 12,
             padding: 16,
-            backgroundColor: "panelBg",
-            borderColor: "#CBD5E1",
-            borderWidth: 1,
+            background: "panelBg",
+            border: { color: "#CBD5E1", width: 1 },
             borderRadius: 8,
           },
         }).append(
-          shape({ id: "item-1", width: 120, height: 48, fill: "#2563EB" }),
-          shape({ id: "item-2", width: 120, height: 48, fill: "#16A34A" }),
+          shape({
+            id: "item-1",
+            style: { width: 120, height: 48, background: "#2563EB" },
+          }),
+          shape({
+            id: "item-2",
+            style: { width: 120, height: 48, background: "#16A34A" },
+          }),
           box({
             id: "nested-grid",
             style: {

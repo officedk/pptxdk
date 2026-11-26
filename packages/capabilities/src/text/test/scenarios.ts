@@ -152,17 +152,17 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "mixed-wrap",
-            x: 24,
-            y: 20,
-            width: 280,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 20,
+              width: 280,
               fontFamily: notoFont,
               fontSize: 18,
               color: "#0F172A",
               padding: 12,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              background: "#FFFFFF",
+              border: { color: "#CBD5E1", width: 1 },
             },
           },
           createElement(
@@ -198,11 +198,12 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "fixed-align",
-            x: 332,
-            y: 20,
-            width: 280,
-            height: 150,
             style: {
+              position: "absolute",
+              left: 332,
+              top: 20,
+              width: 280,
+              height: 150,
               fontFamily: notoFont,
               fontSize: 18,
               color: "#1E3A8A",
@@ -210,9 +211,8 @@ export const textPositiveScenario: CapabilityScenario = {
               verticalAlign: "middle",
               align: "right",
               lineHeight: 26,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#3B82F6",
-              borderWidth: 2,
+              background: "#EFF6FF",
+              border: { color: "#3B82F6", width: 2 },
             },
           },
           "第",
@@ -228,18 +228,18 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "multiscript-symbols",
-            x: 24,
-            y: 220,
-            width: 280,
-            height: 100,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 220,
+              width: 280,
+              height: 100,
               fontFamily: notoFont,
               fontSize: 17,
               color: "#0F172A",
               padding: 10,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              background: "#FFFFFF",
+              border: { color: "#CBD5E1", width: 1 },
               borderRadius: 8,
             },
           },
@@ -249,18 +249,18 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "bidi-mixed",
-            x: 332,
-            y: 190,
-            width: 280,
-            height: 130,
             style: {
+              position: "absolute",
+              left: 332,
+              top: 190,
+              width: 280,
+              height: 130,
               fontFamily: notoArabicFont,
               fontSize: 18,
               color: "#0F172A",
               padding: 10,
-              backgroundColor: "#F0FDF4",
-              borderColor: "#10B981",
-              borderWidth: 1,
+              background: "#F0FDF4",
+              border: { color: "#10B981", width: 1 },
             },
           },
           createElement(
@@ -296,19 +296,19 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "top-aligned",
-            x: 32,
-            y: 24,
-            width: 250,
-            height: 110,
             style: {
+              position: "absolute",
+              left: 32,
+              top: 24,
+              width: 250,
+              height: 110,
               fontFamily: jostFont,
               fontSize: 18,
               color: "#78350F",
               padding: 10,
               verticalAlign: "top",
-              backgroundColor: "#FFFFFF",
-              borderColor: "#D97706",
-              borderWidth: 1,
+              background: "#FFFFFF",
+              border: { color: "#D97706", width: 1 },
             },
           },
           "Top aligned box",
@@ -317,20 +317,20 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "bottom-aligned",
-            x: 32,
-            y: 156,
-            width: 250,
-            height: 140,
             style: {
+              position: "absolute",
+              left: 32,
+              top: 156,
+              width: 250,
+              height: 140,
               fontFamily: notoFont,
               fontSize: 18,
               color: "#92400E",
               padding: 10,
               verticalAlign: "bottom",
               align: "center",
-              backgroundColor: "#FEF3C7",
-              borderColor: "#D97706",
-              borderWidth: 1,
+              background: "#FEF3C7",
+              border: { color: "#D97706", width: 1 },
             },
           },
           createElement(Span, { style: { fontFamily: jostFont } }, "Bottom "),
@@ -341,18 +341,19 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "rotated-tag",
-            x: 340,
-            y: 34,
-            width: 220,
-            height: 70,
             style: {
+              position: "absolute",
+              left: 340,
+              top: 34,
+              width: 220,
+              height: 70,
               fontFamily: jostFont,
               fontSize: 20,
               fontWeight: "bold",
               color: "#FFFFFF",
               verticalAlign: "middle",
               align: "center",
-              backgroundColor: "#1E293B",
+              background: "#1E293B",
               opacity: 0.85,
               rotate: 12,
               textShadow: { color: "#000000", blur: 2, distance: 3, angle: 90 },
@@ -364,18 +365,17 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "decorations-card",
-            x: 320,
-            y: 136,
-            width: 280,
-            height: 160,
             style: {
+              position: "absolute",
+              left: 320,
+              top: 136,
+              width: 280,
+              height: 160,
               fontFamily: jostFont,
               fontSize: 18,
               padding: 12,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#6366F1",
-              borderWidth: 2,
-              borderStyle: "dashed",
+              background: "#FFFFFF",
+              border: { color: "#6366F1", width: 2, style: "dashed" },
               borderRadius: 12,
               boxShadow: { color: "#1E293B", blur: 4, distance: 3, angle: 90 },
             },
@@ -435,17 +435,17 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "justify-box",
-            x: 24,
-            y: 24,
-            width: 270,
-            height: 290,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 270,
+              height: 290,
               fontFamily: notoFont,
               fontSize: 16,
               padding: 12,
-              backgroundColor: "#F8FAFC",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "#F8FAFC",
+              border: { color: "#94A3B8", width: 1 },
             },
           },
           createElement(
@@ -470,17 +470,17 @@ export const textPositiveScenario: CapabilityScenario = {
           Text,
           {
             id: "list-box",
-            x: 324,
-            y: 24,
-            width: 280,
-            height: 290,
             style: {
+              position: "absolute",
+              left: 324,
+              top: 24,
+              width: 280,
+              height: 290,
               fontFamily: jostFont,
               fontSize: 16,
               padding: 12,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#3B82F6",
-              borderWidth: 1,
+              background: "#EFF6FF",
+              border: { color: "#3B82F6", width: 1 },
             },
           },
           createElement(
@@ -579,17 +579,17 @@ export const textPositiveScenario: CapabilityScenario = {
           ],
           {
             id: "mixed-wrap",
-            x: 24,
-            y: 20,
-            width: 280,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 20,
+              width: 280,
               fontFamily: notoFont,
               fontSize: 18,
               color: "#0F172A",
               padding: 12,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              background: "#FFFFFF",
+              border: { color: "#CBD5E1", width: 1 },
             },
           },
         ),
@@ -602,11 +602,12 @@ export const textPositiveScenario: CapabilityScenario = {
           ],
           {
             id: "fixed-align",
-            x: 332,
-            y: 20,
-            width: 280,
-            height: 150,
             style: {
+              position: "absolute",
+              left: 332,
+              top: 20,
+              width: 280,
+              height: 150,
               fontFamily: notoFont,
               fontSize: 18,
               color: "#1E3A8A",
@@ -614,26 +615,25 @@ export const textPositiveScenario: CapabilityScenario = {
               verticalAlign: "middle",
               align: "right",
               lineHeight: 26,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#3B82F6",
-              borderWidth: 2,
+              background: "#EFF6FF",
+              border: { color: "#3B82F6", width: 2 },
             },
           },
         ),
         text("あア 한 Д Ω ∑√≠", {
           id: "multiscript-symbols",
-          x: 24,
-          y: 220,
-          width: 280,
-          height: 100,
           style: {
+            position: "absolute",
+            left: 24,
+            top: 220,
+            width: 280,
+            height: 100,
             fontFamily: notoFont,
             fontSize: 17,
             color: "#0F172A",
             padding: 10,
-            backgroundColor: "#FFFFFF",
-            borderColor: "#CBD5E1",
-            borderWidth: 1,
+            background: "#FFFFFF",
+            border: { color: "#CBD5E1", width: 1 },
             borderRadius: 8,
           },
         }),
@@ -659,18 +659,18 @@ export const textPositiveScenario: CapabilityScenario = {
           ],
           {
             id: "bidi-mixed",
-            x: 332,
-            y: 190,
-            width: 280,
-            height: 130,
             style: {
+              position: "absolute",
+              left: 332,
+              top: 190,
+              width: 280,
+              height: 130,
               fontFamily: notoArabicFont,
               fontSize: 18,
               color: "#0F172A",
               padding: 10,
-              backgroundColor: "#F0FDF4",
-              borderColor: "#10B981",
-              borderWidth: 1,
+              background: "#F0FDF4",
+              border: { color: "#10B981", width: 1 },
             },
           },
         ),
@@ -678,19 +678,19 @@ export const textPositiveScenario: CapabilityScenario = {
       slide({ id: "vertical-and-rotation", background: "#FFFBEB" }).append(
         text("Top aligned box", {
           id: "top-aligned",
-          x: 32,
-          y: 24,
-          width: 250,
-          height: 110,
           style: {
+            position: "absolute",
+            left: 32,
+            top: 24,
+            width: 250,
+            height: 110,
             fontFamily: jostFont,
             fontSize: 18,
             color: "#78350F",
             padding: 10,
             verticalAlign: "top",
-            backgroundColor: "#FFFFFF",
-            borderColor: "#D97706",
-            borderWidth: 1,
+            background: "#FFFFFF",
+            border: { color: "#D97706", width: 1 },
           },
         }),
         text(
@@ -701,37 +701,38 @@ export const textPositiveScenario: CapabilityScenario = {
           ],
           {
             id: "bottom-aligned",
-            x: 32,
-            y: 156,
-            width: 250,
-            height: 140,
             style: {
+              position: "absolute",
+              left: 32,
+              top: 156,
+              width: 250,
+              height: 140,
               fontFamily: notoFont,
               fontSize: 18,
               color: "#92400E",
               padding: 10,
               verticalAlign: "bottom",
               align: "center",
-              backgroundColor: "#FEF3C7",
-              borderColor: "#D97706",
-              borderWidth: 1,
+              background: "#FEF3C7",
+              border: { color: "#D97706", width: 1 },
             },
           },
         ),
         text("Rotated 12", {
           id: "rotated-tag",
-          x: 340,
-          y: 34,
-          width: 220,
-          height: 70,
           style: {
+            position: "absolute",
+            left: 340,
+            top: 34,
+            width: 220,
+            height: 70,
             fontFamily: jostFont,
             fontSize: 20,
             fontWeight: "bold",
             color: "#FFFFFF",
             verticalAlign: "middle",
             align: "center",
-            backgroundColor: "#1E293B",
+            background: "#1E293B",
             opacity: 0.85,
             rotate: 12,
             textShadow: { color: "#000000", blur: 2, distance: 3, angle: 90 },
@@ -779,18 +780,17 @@ export const textPositiveScenario: CapabilityScenario = {
           ],
           {
             id: "decorations-card",
-            x: 320,
-            y: 136,
-            width: 280,
-            height: 160,
             style: {
+              position: "absolute",
+              left: 320,
+              top: 136,
+              width: 280,
+              height: 160,
               fontFamily: jostFont,
               fontSize: 18,
               padding: 12,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#6366F1",
-              borderWidth: 2,
-              borderStyle: "dashed",
+              background: "#FFFFFF",
+              border: { color: "#6366F1", width: 2, style: "dashed" },
               borderRadius: 12,
               boxShadow: { color: "#1E293B", blur: 4, distance: 3, angle: 90 },
             },
@@ -817,17 +817,17 @@ export const textPositiveScenario: CapabilityScenario = {
           ],
           {
             id: "justify-box",
-            x: 24,
-            y: 24,
-            width: 270,
-            height: 290,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 270,
+              height: 290,
               fontFamily: notoFont,
               fontSize: 16,
               padding: 12,
-              backgroundColor: "#F8FAFC",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "#F8FAFC",
+              border: { color: "#94A3B8", width: 1 },
             },
           },
         ),
@@ -874,17 +874,17 @@ export const textPositiveScenario: CapabilityScenario = {
           ],
           {
             id: "list-box",
-            x: 324,
-            y: 24,
-            width: 280,
-            height: 290,
             style: {
+              position: "absolute",
+              left: 324,
+              top: 24,
+              width: 280,
+              height: 290,
               fontFamily: jostFont,
               fontSize: 16,
               padding: 12,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#3B82F6",
-              borderWidth: 1,
+              background: "#EFF6FF",
+              border: { color: "#3B82F6", width: 1 },
             },
           },
         ),
@@ -896,36 +896,30 @@ export const textPositiveScenario: CapabilityScenario = {
     assert.equal(validation.slides.length, 3, author);
 
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, [], author);
+      assert.deepEqual(page.errors, [], author);
       assert.ok(page.png !== undefined, author);
       assert.ok(page.svg?.includes("<path"), author);
     }
 
-    const mixedNode = preview.pages[0]?.nodes.find(
-      (node) => node.authorId === "mixed-wrap",
-    );
-    assert.ok((mixedNode?.box?.height ?? 0) > 100, author);
+    const mixedLocator = resolution
+      .slide("cjk-latin-wrapping")
+      .get("mixed-wrap");
+    assert.ok((mixedLocator.box?.height ?? 0) > 100, author);
     assert.equal(
-      resolution.query
-        .getSlide("cjk-latin-wrapping")
-        .get("fixed-align")
-        .observe().text,
+      resolution.slide("cjk-latin-wrapping").get("fixed-align").text,
       "第1页\nRight middle aligned",
       author,
     );
     assert.equal(
-      resolution.query
-        .getSlide("vertical-and-rotation")
-        .get("bottom-aligned")
-        .observe().text,
+      resolution.slide("vertical-and-rotation").get("bottom-aligned").text,
       "Bottom 页码 2",
       author,
     );
-    const rotatedNode = preview.pages[1]?.nodes.find(
-      (node) => node.authorId === "rotated-tag",
-    );
-    assert.ok((rotatedNode?.screenBox?.width ?? 0) > 220, author);
-    assert.ok((rotatedNode?.screenBox?.height ?? 0) > 70, author);
+    const rotatedLocator = resolution
+      .slide("vertical-and-rotation")
+      .get("rotated-tag");
+    assert.ok((rotatedLocator.bounds?.width ?? 0) > 220, author);
+    assert.ok((rotatedLocator.bounds?.height ?? 0) > 70, author);
 
     const zip = unzipSync(pptx);
     const s2Xml = strFromU8(zip["ppt/slides/slide2.xml"]!);
@@ -968,11 +962,14 @@ export const textRejectionScenario: CapabilityScenario = {
           Text,
           {
             id: "missing-glyph",
-            x: 10,
-            y: 10,
-            width: 180,
-            height: 40,
-            style: { fontFamily: jostFont },
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 180,
+              height: 40,
+              fontFamily: jostFont,
+            },
           },
           "汉",
         ),
@@ -980,11 +977,14 @@ export const textRejectionScenario: CapabilityScenario = {
           Text,
           {
             id: "missing-bullet-glyph",
-            x: 10,
-            y: 60,
-            width: 180,
-            height: 40,
-            style: { fontFamily: jostFont },
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 60,
+              width: 180,
+              height: 40,
+              fontFamily: jostFont,
+            },
           },
           createElement(
             P,
@@ -996,11 +996,14 @@ export const textRejectionScenario: CapabilityScenario = {
           Text,
           {
             id: "colr-font",
-            x: 220,
-            y: 10,
-            width: 180,
-            height: 40,
-            style: { fontFamily: colrJostFont },
+            style: {
+              position: "absolute",
+              left: 220,
+              top: 10,
+              width: 180,
+              height: 40,
+              fontFamily: colrJostFont,
+            },
           },
           "Color",
         ),
@@ -1008,11 +1011,14 @@ export const textRejectionScenario: CapabilityScenario = {
           Text,
           {
             id: "sbix-font",
-            x: 220,
-            y: 60,
-            width: 180,
-            height: 40,
-            style: { fontFamily: sbixJostFont },
+            style: {
+              position: "absolute",
+              left: 220,
+              top: 60,
+              width: 180,
+              height: 40,
+              fontFamily: sbixJostFont,
+            },
           },
           "Bitmap",
         ),
@@ -1024,18 +1030,18 @@ export const textRejectionScenario: CapabilityScenario = {
           Text,
           {
             id: "ok-text",
-            x: 40,
-            y: 60,
-            width: 240,
-            height: 60,
             style: {
+              position: "absolute",
+              left: 40,
+              top: 60,
+              width: 240,
+              height: 60,
               fontFamily: jostFont,
               fontSize: 22,
               padding: 12,
               verticalAlign: "middle",
-              backgroundColor: "#EFF6FF",
-              borderColor: "#2563EB",
-              borderWidth: 2,
+              background: "#EFF6FF",
+              border: { color: "#2563EB", width: 2 },
             },
           },
           "Valid sibling text",
@@ -1048,11 +1054,14 @@ export const textRejectionScenario: CapabilityScenario = {
       slide({ id: "text-rejections" }).append(
         text("汉", {
           id: "missing-glyph",
-          x: 10,
-          y: 10,
-          width: 180,
-          height: 40,
-          style: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 180,
+            height: 40,
+            fontFamily: jostFont,
+          },
         }),
         text(
           [
@@ -1062,45 +1071,54 @@ export const textRejectionScenario: CapabilityScenario = {
           ],
           {
             id: "missing-bullet-glyph",
-            x: 10,
-            y: 60,
-            width: 180,
-            height: 40,
-            style: { fontFamily: jostFont },
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 60,
+              width: 180,
+              height: 40,
+              fontFamily: jostFont,
+            },
           },
         ),
         text("Color", {
           id: "colr-font",
-          x: 220,
-          y: 10,
-          width: 180,
-          height: 40,
-          style: { fontFamily: colrJostFont },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 10,
+            width: 180,
+            height: 40,
+            fontFamily: colrJostFont,
+          },
         }),
         text("Bitmap", {
           id: "sbix-font",
-          x: 220,
-          y: 60,
-          width: 180,
-          height: 40,
-          style: { fontFamily: sbixJostFont },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 60,
+            width: 180,
+            height: 40,
+            fontFamily: sbixJostFont,
+          },
         }),
       ),
       slide({ id: "valid-sibling" }).append(
         text("Valid sibling text", {
           id: "ok-text",
-          x: 40,
-          y: 60,
-          width: 240,
-          height: 60,
           style: {
+            position: "absolute",
+            left: 40,
+            top: 60,
+            width: 240,
+            height: 60,
             fontFamily: jostFont,
             fontSize: 22,
             padding: 12,
             verticalAlign: "middle",
-            backgroundColor: "#EFF6FF",
-            borderColor: "#2563EB",
-            borderWidth: 2,
+            background: "#EFF6FF",
+            border: { color: "#2563EB", width: 2 },
           },
         }),
       ),
@@ -1108,24 +1126,26 @@ export const textRejectionScenario: CapabilityScenario = {
   },
   assert({ author, preview }) {
     const p1 = preview.pages[0]!;
+    assert.equal(p1.svg, undefined, author);
     assert.equal(p1.png, undefined, author);
-    assert.equal(p1.diagnostics.length, 4, author);
-    for (const id of [
-      "missing-glyph",
-      "missing-bullet-glyph",
-      "colr-font",
-      "sbix-font",
-    ]) {
+    assert.equal(p1.errors.length, 4, author);
+    for (const [id, expectedCode] of [
+      ["missing-glyph", "preview-missing-glyph"],
+      ["missing-bullet-glyph", "preview-missing-glyph"],
+      ["colr-font", "preview-unsupported-font"],
+      ["sbix-font", "preview-unsupported-font"],
+    ] as const) {
       assert.ok(
-        p1.diagnostics.some(
-          (d) => d.severity === "error" && d.path.includes(`text[${id}]`),
+        p1.errors.some(
+          (err) =>
+            err.code === expectedCode && err.path.includes(`text[${id}]`),
         ),
-        `${author}: missing diagnostic for ${id}`,
+        `${author}: missing ${expectedCode} error for ${id}`,
       );
     }
 
     const p2 = preview.pages[1]!;
-    assert.deepEqual(p2.diagnostics, [], author);
+    assert.deepEqual(p2.errors, [], author);
     assert.ok(p2.png !== undefined, author);
   },
 };
@@ -1162,18 +1182,18 @@ export const textRtlListsAndFillsScenario: CapabilityScenario = {
           Text,
           {
             id: "rtl-lists",
-            x: 20,
-            y: 20,
-            width: 300,
-            height: 220,
             style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 300,
+              height: 220,
               fontFamily: notoArabicFont,
               fontSize: 15,
               color: "#0F172A",
               padding: 10,
-              backgroundColor: "#F8FAFC",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "#F8FAFC",
+              border: { color: "#94A3B8", width: 1 },
             },
           },
           createElement(
@@ -1232,16 +1252,17 @@ export const textRtlListsAndFillsScenario: CapabilityScenario = {
           Text,
           {
             id: "image-filled-text",
-            x: 340,
-            y: 20,
-            width: 280,
-            height: 70,
             style: {
+              position: "absolute",
+              left: 340,
+              top: 20,
+              width: 280,
+              height: 70,
               fontFamily: jostFont,
               fontSize: 16,
               color: "#FFFFFF",
               padding: 10,
-              backgroundImage: { image: textFillPngBytes },
+              background: { image: textFillPngBytes },
             },
           },
           "Image Fill Text",
@@ -1256,9 +1277,8 @@ export const textRtlListsAndFillsScenario: CapabilityScenario = {
               top: 105,
               width: 280,
               height: 150,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#3B82F6",
-              borderWidth: 1,
+              background: "#EFF6FF",
+              border: { color: "#3B82F6", width: 1 },
             },
           },
           createElement(
@@ -1361,33 +1381,34 @@ export const textRtlListsAndFillsScenario: CapabilityScenario = {
           ],
           {
             id: "rtl-lists",
-            x: 20,
-            y: 20,
-            width: 300,
-            height: 220,
             style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 300,
+              height: 220,
               fontFamily: notoArabicFont,
               fontSize: 15,
               color: "#0F172A",
               padding: 10,
-              backgroundColor: "#F8FAFC",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "#F8FAFC",
+              border: { color: "#94A3B8", width: 1 },
             },
           },
         ),
         text("Image Fill Text", {
           id: "image-filled-text",
-          x: 340,
-          y: 20,
-          width: 280,
-          height: 70,
           style: {
+            position: "absolute",
+            left: 340,
+            top: 20,
+            width: 280,
+            height: 70,
             fontFamily: jostFont,
             fontSize: 16,
             color: "#FFFFFF",
             padding: 10,
-            backgroundImage: { image: textFillPngBytes },
+            background: { image: textFillPngBytes },
           },
         }),
         box({
@@ -1398,9 +1419,8 @@ export const textRtlListsAndFillsScenario: CapabilityScenario = {
             top: 105,
             width: 280,
             height: 150,
-            backgroundColor: "#EFF6FF",
-            borderColor: "#3B82F6",
-            borderWidth: 1,
+            background: "#EFF6FF",
+            border: { color: "#3B82F6", width: 1 },
           },
         }).append(
           text(
@@ -1447,7 +1467,7 @@ export const textRtlListsAndFillsScenario: CapabilityScenario = {
   assert({ author, pptx, preview }) {
     assert.equal(preview.pages.length, 1, author);
     const page = preview.pages[0]!;
-    assert.deepEqual(page.diagnostics, [], author);
+    assert.deepEqual(page.errors, [], author);
     assert.ok(page.png !== undefined, author);
     const svg = page.svg ?? "";
     assert.ok(svg.includes("<pattern"), author);

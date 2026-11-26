@@ -22,12 +22,17 @@ describe("text capability codegen", () => {
         slide({ id: "s1" }).append(
           text("Simple heading", {
             id: "heading",
-            x: 48,
-            y: 40,
-            width: 400,
-            height: 48,
             link: { url: "https://example.com/docs" },
-            style: { fontSize: 24, fontWeight: "bold", color: "#111827" },
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 40,
+              width: 400,
+              height: 48,
+              fontSize: 24,
+              fontWeight: "bold",
+              color: "#111827",
+            },
           }),
           text(
             [
@@ -63,22 +68,28 @@ describe("text capability codegen", () => {
             ],
             {
               id: "body",
-              x: 48,
-              y: 110,
-              width: 400,
-              height: 120,
               link: { id: "s2" },
+              style: {
+                position: "absolute",
+                left: 48,
+                top: 110,
+                width: 400,
+                height: 120,
+              },
             },
           ),
         ),
         slide({ id: "s2" }).append(
           text(["Home ", slideNumber()], {
             id: "home-link",
-            x: 48,
-            y: 40,
-            width: 200,
-            height: 40,
             link: { action: "home" },
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 40,
+              width: 200,
+              height: 40,
+            },
           }),
         ),
       ),
@@ -142,10 +153,13 @@ describe("text capability codegen", () => {
       slide({ id: "s1" }).append(
         text([paragraph([badSlideNum])], {
           id: "t1",
-          x: 10,
-          y: 10,
-          width: 100,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 100,
+            height: 40,
+          },
         }),
       ),
     );
@@ -162,7 +176,16 @@ describe("text capability codegen", () => {
       slide({ id: "s1" }).append(
         text(
           [paragraph([paragraph("nested", { id: "inner" })], { id: "outer" })],
-          { id: "t1", x: 10, y: 10, width: 100, height: 40 },
+          {
+            id: "t1",
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 100,
+              height: 40,
+            },
+          },
         ),
       ),
     );
@@ -186,7 +209,16 @@ describe("text capability codegen", () => {
               >),
             ]),
           ],
-          { id: "t1", x: 10, y: 10, width: 100, height: 40 },
+          {
+            id: "t1",
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 100,
+              height: 40,
+            },
+          },
         ),
       ),
     );

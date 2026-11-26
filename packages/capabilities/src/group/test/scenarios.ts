@@ -168,17 +168,13 @@ export const groupPositiveScenario: CapabilityScenario = {
                 display: "flex",
                 flexDirection: "column",
                 gap: 8,
-                backgroundColor: "#EFF6FF",
-                borderColor: "#2563EB",
-                borderWidth: 2,
-                borderStyle: "solid",
+                background: "#EFF6FF",
+                border: { color: "#2563EB", width: 2, style: "solid" },
               },
             },
             createElement(Shape, {
               id: "badge-dot",
-              width: 48,
-              height: 22,
-              fill: "badgeFill",
+              style: { width: 48, height: 22, background: "badgeFill" },
             }),
             createElement(
               Text,
@@ -189,24 +185,28 @@ export const groupPositiveScenario: CapabilityScenario = {
               "原生组合 Native Group",
             ),
           ),
-          createElement(Shape, {
-            id: "badge-tag",
-            geometry: "roundRect",
-            x: 204,
-            y: 40,
-            width: 52,
-            height: 24,
-            fill: "#F59E0B",
-            style: { opacity: 0.85 },
-            text: "TAG",
-            textStyle: {
-              fontFamily: jostFont,
-              fontSize: 11,
-              color: "badgeText",
-              align: "center",
-              verticalAlign: "middle",
+          createElement(
+            Shape,
+            {
+              id: "badge-tag",
+              geometry: "roundRect",
+              style: {
+                position: "absolute",
+                left: 204,
+                top: 40,
+                width: 52,
+                height: 24,
+                background: "#F59E0B",
+                opacity: 0.85,
+                fontFamily: jostFont,
+                fontSize: 11,
+                color: "badgeText",
+                align: "center",
+                verticalAlign: "middle",
+              },
             },
-          }),
+            "TAG",
+          ),
         ),
         createElement(
           Group,
@@ -217,12 +217,15 @@ export const groupPositiveScenario: CapabilityScenario = {
           },
           createElement(Shape, {
             id: "triangle-base",
-            x: 350,
-            y: 70,
-            width: 110,
-            height: 110,
             geometry: trianglePath,
-            fill: "#10B981",
+            style: {
+              position: "absolute",
+              left: 350,
+              top: 70,
+              width: 110,
+              height: 110,
+              background: "#10B981",
+            },
           }),
           createElement(
             Group,
@@ -232,45 +235,53 @@ export const groupPositiveScenario: CapabilityScenario = {
             },
             createElement(Shape, {
               id: "flipped-triangle",
-              x: 470,
-              y: 120,
-              width: 85,
-              height: 75,
               geometry: trianglePath,
-              fill: "#DB2777",
-              flipH: true,
-            }),
-            createElement(Shape, {
-              id: "flipped-arrow",
-              geometry: "rightArrow",
-              x: 370,
-              y: 208,
-              width: 76,
-              height: 36,
-              fill: "#0EA5E9",
-              flipH: true,
-              style: { opacity: 0.75 },
-              text: "Go",
-              textStyle: {
-                fontFamily: jostFont,
-                fontSize: 12,
-                color: "#FFFFFF",
-                align: "center",
-                verticalAlign: "middle",
+              style: {
+                position: "absolute",
+                left: 470,
+                top: 120,
+                width: 85,
+                height: 75,
+                background: "#DB2777",
+                flipH: true,
               },
             }),
+            createElement(
+              Shape,
+              {
+                id: "flipped-arrow",
+                geometry: "rightArrow",
+                style: {
+                  position: "absolute",
+                  left: 370,
+                  top: 208,
+                  width: 76,
+                  height: 36,
+                  background: "#0EA5E9",
+                  flipH: true,
+                  opacity: 0.75,
+                  fontFamily: jostFont,
+                  fontSize: 12,
+                  color: "#FFFFFF",
+                  align: "center",
+                  verticalAlign: "middle",
+                },
+              },
+              "Go",
+            ),
             createElement(
               Text,
               {
                 id: "inner-caption",
-                x: 455,
-                y: 208,
-                width: 110,
                 style: {
+                  position: "absolute",
+                  left: 455,
+                  top: 208,
+                  width: 110,
                   fontFamily: jostFont,
                   fontSize: 14,
                   color: "#FFFFFF",
-                  backgroundColor: "#1E293B",
+                  background: "#1E293B",
                   padding: 6,
                   align: "center",
                 },
@@ -297,10 +308,8 @@ export const groupPositiveScenario: CapabilityScenario = {
               gap: 24,
               alignItems: "flex-start",
               padding: 16,
-              backgroundColor: "#F1F5F9",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
-              borderStyle: "solid",
+              background: "#F1F5F9",
+              border: { color: "#CBD5E1", width: 1, style: "solid" },
             },
           },
           createElement(
@@ -321,20 +330,18 @@ export const groupPositiveScenario: CapabilityScenario = {
             },
             createElement(Shape, {
               id: "left-pill",
-              width: 80,
-              height: 86,
-              fill: "#0F766E",
+              style: { width: 80, height: 86, background: "#0F766E" },
             }),
             createElement(
               Text,
               {
                 id: "right-note",
-                width: 106,
                 style: {
+                  width: 106,
                   fontFamily: jostFont,
                   fontSize: 15,
                   color: "#0F172A",
-                  backgroundColor: "#CCFBF1",
+                  background: "#CCFBF1",
                   padding: 8,
                 },
               },
@@ -348,10 +355,8 @@ export const groupPositiveScenario: CapabilityScenario = {
               style: {
                 width: 290,
                 padding: 14,
-                backgroundColor: "#FEF3C7",
-                borderColor: "#D97706",
-                borderWidth: 2,
-                borderStyle: "solid",
+                background: "#FEF3C7",
+                border: { color: "#D97706", width: 2, style: "solid" },
               },
             },
             createElement(
@@ -392,20 +397,18 @@ export const groupPositiveScenario: CapabilityScenario = {
           },
           createElement(Shape, {
             id: "end-pill",
-            width: 110,
-            height: 108,
-            fill: "#0284C7",
+            style: { width: 110, height: 108, background: "#0284C7" },
           }),
           createElement(
             Text,
             {
               id: "end-note",
-              width: 184,
               style: {
+                width: 184,
                 fontFamily: jostFont,
                 fontSize: 18,
                 color: "#FFFFFF",
-                backgroundColor: "#0369A1",
+                background: "#0369A1",
                 padding: 10,
               },
             },
@@ -441,34 +444,30 @@ export const groupPositiveScenario: CapabilityScenario = {
               display: "flex",
               flexDirection: "column",
               gap: 8,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#2563EB",
-              borderWidth: 2,
-              borderStyle: "solid",
+              background: "#EFF6FF",
+              border: { color: "#2563EB", width: 2, style: "solid" },
             },
           }).append(
             shape({
               id: "badge-dot",
-              width: 48,
-              height: 22,
-              fill: "badgeFill",
+              style: { width: 48, height: 22, background: "badgeFill" },
             }),
             text("原生组合 Native Group", {
               id: "badge-title",
               style: { fontFamily: notoFont, fontSize: 16, color: "#0F172A" },
             }),
           ),
-          shape({
+          shape("TAG", {
             id: "badge-tag",
             geometry: "roundRect",
-            x: 204,
-            y: 40,
-            width: 52,
-            height: 24,
-            fill: "#F59E0B",
-            style: { opacity: 0.85 },
-            text: "TAG",
-            textStyle: {
+            style: {
+              position: "absolute",
+              left: 204,
+              top: 40,
+              width: 52,
+              height: 24,
+              background: "#F59E0B",
+              opacity: 0.85,
               fontFamily: jostFont,
               fontSize: 11,
               color: "badgeText",
@@ -484,12 +483,15 @@ export const groupPositiveScenario: CapabilityScenario = {
         }).append(
           shape({
             id: "triangle-base",
-            x: 350,
-            y: 70,
-            width: 110,
-            height: 110,
             geometry: trianglePath,
-            fill: "#10B981",
+            style: {
+              position: "absolute",
+              left: 350,
+              top: 70,
+              width: 110,
+              height: 110,
+              background: "#10B981",
+            },
           }),
           group({
             id: "nested-inner",
@@ -497,26 +499,29 @@ export const groupPositiveScenario: CapabilityScenario = {
           }).append(
             shape({
               id: "flipped-triangle",
-              x: 470,
-              y: 120,
-              width: 85,
-              height: 75,
               geometry: trianglePath,
-              fill: "#DB2777",
-              flipH: true,
+              style: {
+                position: "absolute",
+                left: 470,
+                top: 120,
+                width: 85,
+                height: 75,
+                background: "#DB2777",
+                flipH: true,
+              },
             }),
-            shape({
+            shape("Go", {
               id: "flipped-arrow",
               geometry: "rightArrow",
-              x: 370,
-              y: 208,
-              width: 76,
-              height: 36,
-              fill: "#0EA5E9",
-              flipH: true,
-              style: { opacity: 0.75 },
-              text: "Go",
-              textStyle: {
+              style: {
+                position: "absolute",
+                left: 370,
+                top: 208,
+                width: 76,
+                height: 36,
+                background: "#0EA5E9",
+                flipH: true,
+                opacity: 0.75,
                 fontFamily: jostFont,
                 fontSize: 12,
                 color: "#FFFFFF",
@@ -526,14 +531,15 @@ export const groupPositiveScenario: CapabilityScenario = {
             }),
             text("Nested", {
               id: "inner-caption",
-              x: 455,
-              y: 208,
-              width: 110,
               style: {
+                position: "absolute",
+                left: 455,
+                top: 208,
+                width: 110,
                 fontFamily: jostFont,
                 fontSize: 14,
                 color: "#FFFFFF",
-                backgroundColor: "#1E293B",
+                background: "#1E293B",
                 padding: 6,
                 align: "center",
               },
@@ -557,10 +563,8 @@ export const groupPositiveScenario: CapabilityScenario = {
             gap: 24,
             alignItems: "flex-start",
             padding: 16,
-            backgroundColor: "#F1F5F9",
-            borderColor: "#CBD5E1",
-            borderWidth: 1,
-            borderStyle: "solid",
+            background: "#F1F5F9",
+            border: { color: "#CBD5E1", width: 1, style: "solid" },
           },
         }).append(
           group({
@@ -579,18 +583,16 @@ export const groupPositiveScenario: CapabilityScenario = {
           }).append(
             shape({
               id: "left-pill",
-              width: 80,
-              height: 86,
-              fill: "#0F766E",
+              style: { width: 80, height: 86, background: "#0F766E" },
             }),
             text("Morph & Link", {
               id: "right-note",
-              width: 106,
               style: {
+                width: 106,
                 fontFamily: jostFont,
                 fontSize: 15,
                 color: "#0F172A",
-                backgroundColor: "#CCFBF1",
+                background: "#CCFBF1",
                 padding: 8,
               },
             }),
@@ -600,10 +602,8 @@ export const groupPositiveScenario: CapabilityScenario = {
             style: {
               width: 290,
               padding: 14,
-              backgroundColor: "#FEF3C7",
-              borderColor: "#D97706",
-              borderWidth: 2,
-              borderStyle: "solid",
+              background: "#FEF3C7",
+              border: { color: "#D97706", width: 2, style: "solid" },
             },
           }).append(
             text("Sibling card follows layout-sized Group cleanly.", {
@@ -636,18 +636,16 @@ export const groupPositiveScenario: CapabilityScenario = {
         }).append(
           shape({
             id: "end-pill",
-            width: 110,
-            height: 108,
-            fill: "#0284C7",
+            style: { width: 110, height: 108, background: "#0284C7" },
           }),
           text("Morphed Group", {
             id: "end-note",
-            width: 184,
             style: {
+              width: 184,
               fontFamily: jostFont,
               fontSize: 18,
               color: "#FFFFFF",
-              backgroundColor: "#0369A1",
+              background: "#0369A1",
               padding: 10,
             },
           }),
@@ -656,19 +654,19 @@ export const groupPositiveScenario: CapabilityScenario = {
     );
   },
   assert({ resolution, pptx, preview, validation }) {
-    assert.deepEqual(resolution.report.diagnostics, []);
+    assert.equal(resolution.slides.length, 3);
     assert.equal(preview.pages.length, 3);
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
     }
 
-    // Page 1: verify Query hierarchy, transformed screenGeometry, and Motion group members.
+    // Page 1: verify Locator hierarchy, transformed bounds, and Motion group members.
     const page1 = preview.pages[0]!;
-    const badgeGroupQuery = resolution.query
-      .getSlide("group-hierarchy-and-transforms")
+    const badgeGroup = resolution
+      .slide("group-hierarchy-and-transforms")
       .get("badge-group");
-    const badgeObjects = badgeGroupQuery.observe().objects;
+    const badgeObjects = badgeGroup.objects;
     assert.equal(badgeObjects[0]?.kind, "group");
     assert.deepEqual(
       badgeObjects.map((o) => o.authorId),
@@ -683,22 +681,22 @@ export const groupPositiveScenario: CapabilityScenario = {
     const flippedArrowNode = page1.nodes.find(
       (n) => n.authorId === "flipped-arrow",
     )!;
-    assert.ok(outerNode.screenBox !== undefined);
-    assert.ok(outerNode.screenBox.width > outerNode.box!.width);
+    assert.ok(outerNode.bounds !== undefined);
+    assert.ok(outerNode.bounds.width > outerNode.box!.width);
     assert.equal(innerNode.corners?.length, 4);
-    assert.ok(flippedNode.screenBox !== undefined);
+    assert.ok(flippedNode.bounds !== undefined);
     assert.equal(flippedArrowNode.corners?.length, 4);
     assert.equal(flippedArrowNode.text, "Go");
-    // Exact screenBox consistency: screenBox bounds equal min/max of the 4 transformed corners.
+    // Exact bounds consistency: bounds bounds equal min/max of the 4 transformed corners.
     const arrowXs = flippedArrowNode.corners.map((pt) => pt.x);
     const arrowYs = flippedArrowNode.corners.map((pt) => pt.y);
-    expect(flippedArrowNode.screenBox!.x).toBeCloseTo(Math.min(...arrowXs), 4);
-    expect(flippedArrowNode.screenBox!.y).toBeCloseTo(Math.min(...arrowYs), 4);
-    expect(flippedArrowNode.screenBox!.width).toBeCloseTo(
+    expect(flippedArrowNode.bounds!.x).toBeCloseTo(Math.min(...arrowXs), 4);
+    expect(flippedArrowNode.bounds!.y).toBeCloseTo(Math.min(...arrowYs), 4);
+    expect(flippedArrowNode.bounds!.width).toBeCloseTo(
       Math.max(...arrowXs) - Math.min(...arrowXs),
       4,
     );
-    expect(flippedArrowNode.screenBox!.height).toBeCloseTo(
+    expect(flippedArrowNode.bounds!.height).toBeCloseTo(
       Math.max(...arrowYs) - Math.min(...arrowYs),
       4,
     );
@@ -785,42 +783,58 @@ export const groupRejectionScenario: CapabilityScenario = {
           { id: "bad-preview-group", style: { rotate: 12 } },
           createElement(Shape, {
             id: "ok-member",
-            x: 20,
-            y: 20,
-            width: 60,
-            height: 40,
-            fill: "#10B981",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 60,
+              height: 40,
+              background: "#10B981",
+            },
           }),
           createElement(Image, {
             id: "unsupported-member",
             src: corruptGroupMemberPng,
-            x: 100,
-            y: 20,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 20,
+              width: 60,
+              height: 40,
+            },
           }),
           createElement(
             Group,
             { id: "nested-text-fail", style: { rotate: -8 } },
-            createElement(Shape, {
-              id: "missing-glyph-member",
-              x: 20,
-              y: 80,
-              width: 80,
-              height: 36,
-              fill: "#1E293B",
-              text: "汉",
-              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
-            }),
+            createElement(
+              Shape,
+              {
+                id: "missing-glyph-member",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 80,
+                  width: 80,
+                  height: 36,
+                  background: "#1E293B",
+                  fontFamily: jostFont,
+                  color: "#FFFFFF",
+                },
+              },
+              "汉",
+            ),
             createElement(
               Text,
               {
                 id: "color-font-member",
-                x: 110,
-                y: 80,
-                width: 80,
-                height: 36,
-                style: { fontFamily: colrJostFont },
+                style: {
+                  position: "absolute",
+                  left: 110,
+                  top: 80,
+                  width: 80,
+                  height: 36,
+                  fontFamily: colrJostFont,
+                },
               },
               "Color",
             ),
@@ -835,11 +849,14 @@ export const groupRejectionScenario: CapabilityScenario = {
           { id: "valid-group" },
           createElement(Shape, {
             id: "valid-shape",
-            x: 24,
-            y: 24,
-            width: 100,
-            height: 60,
-            fill: "#0D9488",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 100,
+              height: 60,
+              background: "#0D9488",
+            },
           }),
         ),
       ),
@@ -851,38 +868,50 @@ export const groupRejectionScenario: CapabilityScenario = {
         group({ id: "bad-preview-group", style: { rotate: 12 } }).append(
           shape({
             id: "ok-member",
-            x: 20,
-            y: 20,
-            width: 60,
-            height: 40,
-            fill: "#10B981",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 60,
+              height: 40,
+              background: "#10B981",
+            },
           }),
           image({
             id: "unsupported-member",
             src: corruptGroupMemberPng,
-            x: 100,
-            y: 20,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 20,
+              width: 60,
+              height: 40,
+            },
           }),
           group({ id: "nested-text-fail", style: { rotate: -8 } }).append(
-            shape({
+            shape("汉", {
               id: "missing-glyph-member",
-              x: 20,
-              y: 80,
-              width: 80,
-              height: 36,
-              fill: "#1E293B",
-              text: "汉",
-              textStyle: { fontFamily: jostFont, color: "#FFFFFF" },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 80,
+                width: 80,
+                height: 36,
+                background: "#1E293B",
+                fontFamily: jostFont,
+                color: "#FFFFFF",
+              },
             }),
             text("Color", {
               id: "color-font-member",
-              x: 110,
-              y: 80,
-              width: 80,
-              height: 36,
-              style: { fontFamily: colrJostFont },
+              style: {
+                position: "absolute",
+                left: 110,
+                top: 80,
+                width: 80,
+                height: 36,
+                fontFamily: colrJostFont,
+              },
             }),
           ),
         ),
@@ -891,11 +920,14 @@ export const groupRejectionScenario: CapabilityScenario = {
         group({ id: "valid-group" }).append(
           shape({
             id: "valid-shape",
-            x: 24,
-            y: 24,
-            width: 100,
-            height: 60,
-            fill: "#0D9488",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 100,
+              height: 60,
+              background: "#0D9488",
+            },
           }),
         ),
       ),
@@ -905,11 +937,11 @@ export const groupRejectionScenario: CapabilityScenario = {
     const failedPage = preview.pages[0]!;
     assert.equal(failedPage.png, undefined);
     assert.equal(failedPage.svg, undefined);
-    assert.equal(failedPage.diagnostics.length, 3);
+    assert.equal(failedPage.errors.length, 3);
     assert.ok(
-      failedPage.diagnostics.some(
+      failedPage.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-corrupt-image" &&
           /group\[bad-preview-group\]\/image\[unsupported-member\]/u.test(
             d.path,
           ) &&
@@ -917,9 +949,9 @@ export const groupRejectionScenario: CapabilityScenario = {
       ),
     );
     assert.ok(
-      failedPage.diagnostics.some(
+      failedPage.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-missing-glyph" &&
           /group\[bad-preview-group\]\/group\[nested-text-fail\]\/shape\[missing-glyph-member\]/u.test(
             d.path,
           ) &&
@@ -927,9 +959,9 @@ export const groupRejectionScenario: CapabilityScenario = {
       ),
     );
     assert.ok(
-      failedPage.diagnostics.some(
+      failedPage.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-unsupported-font" &&
           /group\[bad-preview-group\]\/group\[nested-text-fail\]\/text\[color-font-member\]/u.test(
             d.path,
           ) &&
@@ -942,12 +974,12 @@ export const groupRejectionScenario: CapabilityScenario = {
       "color-font-member",
     ]) {
       const node = failedPage.nodes.find((n) => n.authorId === memberId);
-      assert.ok(node?.screenBox !== undefined, memberId);
+      assert.ok(node?.bounds !== undefined, memberId);
       assert.equal(node?.corners?.length, 4, memberId);
     }
 
     const validPage = preview.pages[1]!;
-    assert.deepEqual(validPage.diagnostics, []);
+    assert.deepEqual(validPage.errors, []);
     assert.ok(validPage.png !== undefined);
 
     // Build-time continuity, empty-group, and missing-capability rejections via formal builder.
@@ -976,8 +1008,7 @@ export const groupRejectionScenario: CapabilityScenario = {
                 createElement(Shape, {
                   id: "m",
                   morphKey: groupMorphKey,
-                  width: 40,
-                  height: 30,
+                  style: { width: 40, height: 30 },
                 }),
               ),
             ),
@@ -1026,7 +1057,13 @@ export const groupRejectionScenario: CapabilityScenario = {
             createElement(
               Group,
               { id: "g" },
-              createElement(Text, { x: 10, y: 10, width: 80 }, "Missing Text"),
+              createElement(
+                Text,
+                {
+                  style: { position: "absolute", left: 10, top: 10, width: 80 },
+                },
+                "Missing Text",
+              ),
             ),
           ),
         ),

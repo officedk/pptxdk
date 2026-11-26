@@ -69,11 +69,12 @@ export const textBoxRoundtripScenario: CapabilityScenario = {
           {
             id: "headline",
             name: "Headline",
-            x: 32,
-            y: 28,
-            width: 320,
-            height: 48,
             style: {
+              position: "absolute",
+              left: 32,
+              top: 28,
+              width: 320,
+              height: 48,
               fontFamily: jostFont,
               fontSize: "24pt",
               color: "#111827",
@@ -88,11 +89,12 @@ export const textBoxRoundtripScenario: CapabilityScenario = {
           {
             id: "caption",
             name: "Caption",
-            x: 32,
-            y: 96,
-            width: 320,
-            height: 64,
             style: {
+              position: "absolute",
+              left: 32,
+              top: 96,
+              width: 320,
+              height: 64,
               fontFamily: jostFont,
               fontSize: "14pt",
               color: "#334155",
@@ -112,11 +114,12 @@ export const textBoxRoundtripScenario: CapabilityScenario = {
         text("Imported Headline", {
           id: "headline",
           name: "Headline",
-          x: 32,
-          y: 28,
-          width: 320,
-          height: 48,
           style: {
+            position: "absolute",
+            left: 32,
+            top: 28,
+            width: 320,
+            height: 48,
             fontFamily: jostFont,
             fontSize: "24pt",
             color: "#111827",
@@ -127,11 +130,12 @@ export const textBoxRoundtripScenario: CapabilityScenario = {
         text("Roundtrip Body Text", {
           id: "caption",
           name: "Caption",
-          x: 32,
-          y: 96,
-          width: 320,
-          height: 64,
           style: {
+            position: "absolute",
+            left: 32,
+            top: 96,
+            width: 320,
+            height: 64,
             fontFamily: jostFont,
             fontSize: "14pt",
             color: "#334155",
@@ -173,11 +177,16 @@ export const textFieldSlideNumRoundtripScenario: CapabilityScenario = {
           {
             id: "num-1",
             name: "Num1",
-            x: 24,
-            y: 24,
-            width: 240,
-            height: 48,
-            style: { fontFamily: jostFont, fontSize: "18pt", color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 240,
+              height: 48,
+              fontFamily: jostFont,
+              fontSize: "18pt",
+              color: "#0F172A",
+            },
           },
           createElement(P, null, "Slide ", createElement(SlideNumber, null)),
         ),
@@ -190,11 +199,16 @@ export const textFieldSlideNumRoundtripScenario: CapabilityScenario = {
           {
             id: "num-2",
             name: "Num2",
-            x: 24,
-            y: 24,
-            width: 240,
-            height: 48,
-            style: { fontFamily: jostFont, fontSize: "18pt", color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 240,
+              height: 48,
+              fontFamily: jostFont,
+              fontSize: "18pt",
+              color: "#0F172A",
+            },
           },
           createElement(P, null, "Slide ", createElement(SlideNumber, null)),
         ),
@@ -207,22 +221,32 @@ export const textFieldSlideNumRoundtripScenario: CapabilityScenario = {
         text([paragraph(["Slide ", slideNumber()])], {
           id: "num-1",
           name: "Num1",
-          x: 24,
-          y: 24,
-          width: 240,
-          height: 48,
-          style: { fontFamily: jostFont, fontSize: "18pt", color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 240,
+            height: 48,
+            fontFamily: jostFont,
+            fontSize: "18pt",
+            color: "#0F172A",
+          },
         }),
       ),
       slide({ id: "p2" }).append(
         text([paragraph(["Slide ", slideNumber()])], {
           id: "num-2",
           name: "Num2",
-          x: 24,
-          y: 24,
-          width: 240,
-          height: 48,
-          style: { fontFamily: jostFont, fontSize: "18pt", color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 240,
+            height: 48,
+            fontFamily: jostFont,
+            fontSize: "18pt",
+            color: "#0F172A",
+          },
         }),
       ),
     );
@@ -260,11 +284,16 @@ export const embeddedFontRoundtripScenario: CapabilityScenario = {
           {
             id: "rich-font",
             name: "RichFont",
-            x: 32,
-            y: 32,
-            width: 360,
-            height: 64,
-            style: { fontFamily: "minor", fontSize: "20pt", color: "#1E293B" },
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 32,
+              width: 360,
+              height: 64,
+              fontFamily: "minor",
+              fontSize: "20pt",
+              color: "#1E293B",
+            },
           },
           createElement(
             P,
@@ -295,11 +324,16 @@ export const embeddedFontRoundtripScenario: CapabilityScenario = {
           {
             id: "rich-font",
             name: "RichFont",
-            x: 32,
-            y: 32,
-            width: 360,
-            height: 64,
-            style: { fontFamily: "minor", fontSize: "20pt", color: "#1E293B" },
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 32,
+              width: 360,
+              height: 64,
+              fontFamily: "minor",
+              fontSize: "20pt",
+              color: "#1E293B",
+            },
           },
         ),
       ),
@@ -307,7 +341,7 @@ export const embeddedFontRoundtripScenario: CapabilityScenario = {
   },
   assert({ validation, preview }) {
     assert.equal(validation.slides.length, 1);
-    assert.deepEqual(preview.pages[0]?.diagnostics, []);
+    assert.deepEqual(preview.pages[0]?.errors, []);
     assert.ok(preview.pages[0]?.png instanceof Uint8Array);
   },
 };
@@ -320,11 +354,16 @@ const placeholderScenarioLayout = defineSlideLayout({
   placeholders: {
     title: {
       type: "title",
-      x: 48,
-      y: 36,
-      width: 544,
-      height: 64,
-      style: { fontFamily: jostFont, fontSize: "32pt", color: "#0F172A" },
+      style: {
+        position: "absolute",
+        left: 48,
+        top: 36,
+        width: 544,
+        height: 64,
+        fontFamily: jostFont,
+        fontSize: "32pt",
+        color: "#0F172A",
+      },
     },
   },
 });
@@ -362,11 +401,16 @@ export const textPlaceholderRoundtripScenario: CapabilityScenario = {
           {
             id: "free-32",
             name: "Free 32pt",
-            x: 48,
-            y: 136,
-            width: 400,
-            height: 56,
-            style: { fontFamily: jostFont, fontSize: "32pt", color: "#334155" },
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 136,
+              width: 400,
+              height: 56,
+              fontFamily: jostFont,
+              fontSize: "32pt",
+              color: "#334155",
+            },
           },
           "Free 32pt",
         ),
@@ -399,11 +443,16 @@ export const textPlaceholderRoundtripScenario: CapabilityScenario = {
         text("Free 32pt", {
           id: "free-32",
           name: "Free 32pt",
-          x: 48,
-          y: 136,
-          width: 400,
-          height: 56,
-          style: { fontFamily: jostFont, fontSize: "32pt", color: "#334155" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 136,
+            width: 400,
+            height: 56,
+            fontFamily: jostFont,
+            fontSize: "32pt",
+            color: "#334155",
+          },
         }),
       ),
       slide({
@@ -461,16 +510,17 @@ export const textMechanismVerifications = {
       assert.equal(caption.text?.paragraphs[0]?.runs[0]?.fontSizePt, 14);
     },
     assertPaint({ initial, roundtrip }) {
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
       assert.ok(initial.pages[0]?.png instanceof Uint8Array);
       assert.equal(roundtrip.pages.length, 1);
-      // This scenario does not embed fonts, so pure-file roundtrip expects preview-unsupported-font.
+      // This scenario does not embed fonts, so pure-file roundtrip expects preview-missing-font.
+      assert.equal(roundtrip.pages[0]?.svg, undefined);
       assert.equal(roundtrip.pages[0]?.png, undefined);
       assert.ok(
-        roundtrip.pages[0]?.diagnostics.some(
-          (diag) =>
-            diag.severity === "error" &&
-            /explicit monochrome outline font file/u.test(diag.message),
+        roundtrip.pages[0]?.errors.some(
+          (err) =>
+            err.code === "preview-missing-font" &&
+            /explicit monochrome outline font file/u.test(err.message),
         ),
       );
     },
@@ -497,7 +547,7 @@ export const textMechanismVerifications = {
       for (const preview of [initial, roundtrip]) {
         assert.equal(preview.pages.length, 2);
         for (const page of preview.pages) {
-          assert.deepEqual(page.diagnostics, []);
+          assert.deepEqual(page.errors, []);
           assert.ok(page.png instanceof Uint8Array);
         }
       }
@@ -555,7 +605,7 @@ export const textMechanismVerifications = {
       for (const preview of [initial, roundtrip]) {
         assert.equal(preview.pages.length, 2);
         for (const page of preview.pages) {
-          assert.deepEqual(page.diagnostics, []);
+          assert.deepEqual(page.errors, []);
           assert.ok(page.png instanceof Uint8Array);
         }
       }

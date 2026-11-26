@@ -60,28 +60,34 @@ export const imageRoundtripScenario: CapabilityScenario = {
           name: "CroppedEllipse",
           alt: "Red and blue split sample",
           src: samplePng,
-          x: 24,
-          y: 24,
-          width: 160,
-          height: 120,
           geometry: "ellipse",
           crop: { left: 0.25, top: 0.1 },
           link: { url: "https://example.com/docs" },
           style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 160,
+            height: 120,
             opacity: 0.75,
-            borderColor: "#1E293B",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            border: {
+              color: "#1E293B",
+              width: 2,
+              style: "dashed",
+            },
           },
         }),
         createElement(Image, {
           id: "custom-mask-jump",
           name: "CustomMaskJump",
           src: samplePng,
-          x: 220,
-          y: 24,
-          width: 140,
-          height: 120,
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 24,
+            width: 140,
+            height: 120,
+          },
           geometry: diamondCustomMask,
           link: { id: "images-target" },
         }),
@@ -89,10 +95,13 @@ export const imageRoundtripScenario: CapabilityScenario = {
           id: "roundrect-home",
           name: "RoundRectHome",
           src: samplePng,
-          x: 400,
-          y: 24,
-          width: 140,
-          height: 120,
+          style: {
+            position: "absolute",
+            left: 400,
+            top: 24,
+            width: 140,
+            height: 120,
+          },
           geometry: preset("roundRect", { adj: 20000 }),
           link: { action: "home" },
         }),
@@ -104,10 +113,13 @@ export const imageRoundtripScenario: CapabilityScenario = {
           id: "target-img",
           name: "TargetImg",
           src: samplePng,
-          x: 40,
-          y: 40,
-          width: 200,
-          height: 100,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 200,
+            height: 100,
+          },
         }),
       ),
     );
@@ -120,28 +132,34 @@ export const imageRoundtripScenario: CapabilityScenario = {
           name: "CroppedEllipse",
           alt: "Red and blue split sample",
           src: samplePng,
-          x: 24,
-          y: 24,
-          width: 160,
-          height: 120,
           geometry: "ellipse",
           crop: { left: 0.25, top: 0.1 },
           link: { url: "https://example.com/docs" },
           style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 160,
+            height: 120,
             opacity: 0.75,
-            borderColor: "#1E293B",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            border: {
+              color: "#1E293B",
+              width: 2,
+              style: "dashed",
+            },
           },
         }),
         image({
           id: "custom-mask-jump",
           name: "CustomMaskJump",
           src: samplePng,
-          x: 220,
-          y: 24,
-          width: 140,
-          height: 120,
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 24,
+            width: 140,
+            height: 120,
+          },
           geometry: diamondCustomMask,
           link: { id: "images-target" },
         }),
@@ -149,10 +167,13 @@ export const imageRoundtripScenario: CapabilityScenario = {
           id: "roundrect-home",
           name: "RoundRectHome",
           src: samplePng,
-          x: 400,
-          y: 24,
-          width: 140,
-          height: 120,
+          style: {
+            position: "absolute",
+            left: 400,
+            top: 24,
+            width: 140,
+            height: 120,
+          },
           geometry: preset("roundRect", { adj: 20000 }),
           link: { action: "home" },
         }),
@@ -162,10 +183,13 @@ export const imageRoundtripScenario: CapabilityScenario = {
           id: "target-img",
           name: "TargetImg",
           src: samplePng,
-          x: 40,
-          y: 40,
-          width: 200,
-          height: 100,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 200,
+            height: 100,
+          },
         }),
       ),
     );
@@ -184,11 +208,14 @@ const pictureHolderLayout = defineSlideLayout({
       type: "pic",
       explicitType: true,
       idx: 10,
-      sz: "quarter",
-      x: 48,
-      y: 48,
-      width: 240,
-      height: 120,
+      size: "quarter",
+      style: {
+        position: "absolute",
+        left: 48,
+        top: 48,
+        width: 240,
+        height: 120,
+      },
       name: "Photo Slot",
     },
   },
@@ -281,8 +308,8 @@ export const imageMechanismVerifications = {
     assertPaint({ initial, roundtrip }) {
       assert.equal(initial.pages.length, 2);
       assert.equal(roundtrip.pages.length, 2);
-      assert.deepEqual(initial.pages[0]?.diagnostics, []);
-      assert.deepEqual(roundtrip.pages[0]?.diagnostics, []);
+      assert.deepEqual(initial.pages[0]?.errors, []);
+      assert.deepEqual(roundtrip.pages[0]?.errors, []);
       assert.ok(roundtrip.pages[0]?.png instanceof Uint8Array);
       assert.ok(roundtrip.pages[1]?.png instanceof Uint8Array);
     },
@@ -315,7 +342,7 @@ export const imageMechanismVerifications = {
     assertPaint({ initial, roundtrip }) {
       for (const preview of [initial, roundtrip]) {
         assert.equal(preview.pages.length, 1);
-        assert.deepEqual(preview.pages[0]?.diagnostics, []);
+        assert.deepEqual(preview.pages[0]?.errors, []);
         assert.ok(preview.pages[0]?.png instanceof Uint8Array);
       }
     },

@@ -26,7 +26,6 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -57,10 +56,13 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
           },
           createElement(Shape, {
             id: "dummy-ignored-for-bg-check",
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 10,
+              height: 10,
+            },
           }),
         ),
       ),
@@ -101,7 +103,7 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
       const blankPage = result.pages[0]!;
       assert.equal(blankPage.id, "blank");
       assert.equal(blankPage.page, 1);
-      assert.deepEqual(blankPage.diagnostics, []);
+      assert.deepEqual(blankPage.errors, []);
       assert.ok(blankPage.png !== undefined);
       const blankPng = PNG.sync.read(Buffer.from(blankPage.png));
       assert.equal(blankPng.width, 320);
@@ -111,7 +113,7 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
       const solidPage = result.pages[1]!;
       assert.equal(solidPage.id, "solid");
       assert.equal(solidPage.page, 2);
-      assert.deepEqual(solidPage.diagnostics, []);
+      assert.deepEqual(solidPage.errors, []);
       assert.ok(solidPage.png !== undefined);
       const solidPng = PNG.sync.read(Buffer.from(solidPage.png));
       assert.deepEqual(
@@ -141,16 +143,15 @@ describe("Slice 1: core bound slide preview & slideBackgroundCapability", () => 
     const result = await previewDoc(doc);
     const validation = await validatePptx(result.pptx);
     assert.deepEqual(validation.errors, []);
-    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.deepEqual(result.pages[0]?.errors, []);
     assert.ok(result.pages[0]?.png !== undefined);
     assert.match(result.pages[0]?.svg ?? "", /<linearGradient/u);
 
     assert.equal(result.pages[1]?.png, undefined);
-    assert.equal(result.pages[1]?.diagnostics.length, 1);
-    assert.equal(result.pages[1]?.diagnostics[0]?.severity, "error");
-    assert.equal(result.pages[1]?.diagnostics[0]?.page, 2);
+    assert.equal(result.pages[1]?.errors.length, 1);
+    assert.equal(result.pages[1]?.errors[0]?.code, "preview-corrupt-image");
     assert.equal(
-      result.pages[1]?.diagnostics[0]?.path,
+      result.pages[1]?.errors[0]?.path,
       "deck/slide[corrupt]/background",
     );
     assert.ok(result.pages[2]?.png !== undefined);

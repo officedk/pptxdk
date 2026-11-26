@@ -104,11 +104,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
         { id: "default-white" },
         createElement(Shape, {
           id: "center-rect",
-          x: 190,
-          y: 85,
-          width: 100,
-          height: 100,
-          fill: "#0F172A",
+          style: {
+            position: "absolute",
+            left: 190,
+            top: 85,
+            width: 100,
+            height: 100,
+            background: "#0F172A",
+          },
         }),
       ),
       createElement(
@@ -117,11 +120,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
         createElement(Shape, {
           id: "center-oval",
           geometry: "ellipse",
-          x: 160,
-          y: 75,
-          width: 160,
-          height: 120,
-          fill: "#FFFFFF",
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 75,
+            width: 160,
+            height: 120,
+            background: "#FFFFFF",
+          },
         }),
       ),
       createElement(
@@ -133,11 +139,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "amber-card",
-          x: 120,
-          y: 75,
-          width: 240,
-          height: 120,
-          fill: "cardAccent",
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 75,
+            width: 240,
+            height: 120,
+            background: "cardAccent",
+          },
         }),
       ),
       createElement(
@@ -153,11 +162,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
         },
         createElement(Shape, {
           id: "grad-badge",
-          x: 190,
-          y: 105,
-          width: 100,
-          height: 60,
-          fill: "#FFFFFF",
+          style: {
+            position: "absolute",
+            left: 190,
+            top: 105,
+            width: 100,
+            height: 60,
+            background: "#FFFFFF",
+          },
         }),
       ),
       createElement(Slide, {
@@ -190,11 +202,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
       slide({ id: "default-white" }).append(
         shape({
           id: "center-rect",
-          x: 190,
-          y: 85,
-          width: 100,
-          height: 100,
-          fill: "#0F172A",
+          style: {
+            position: "absolute",
+            left: 190,
+            top: 85,
+            width: 100,
+            height: 100,
+            background: "#0F172A",
+          },
         }),
       ),
       slide({
@@ -204,11 +219,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
         shape({
           id: "center-oval",
           geometry: "ellipse",
-          x: 160,
-          y: 75,
-          width: 160,
-          height: 120,
-          fill: "#FFFFFF",
+          style: {
+            position: "absolute",
+            left: 160,
+            top: 75,
+            width: 160,
+            height: 120,
+            background: "#FFFFFF",
+          },
         }),
       ),
       slide({
@@ -218,11 +236,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "amber-card",
-          x: 120,
-          y: 75,
-          width: 240,
-          height: 120,
-          fill: "cardAccent",
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 75,
+            width: 240,
+            height: 120,
+            background: "cardAccent",
+          },
         }),
       ),
       slide({
@@ -236,11 +257,14 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
       }).append(
         shape({
           id: "grad-badge",
-          x: 190,
-          y: 105,
-          width: 100,
-          height: 60,
-          fill: "#FFFFFF",
+          style: {
+            position: "absolute",
+            left: 190,
+            top: 105,
+            width: 100,
+            height: 60,
+            background: "#FFFFFF",
+          },
         }),
       ),
       slide({
@@ -267,7 +291,7 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
     assert.equal(validation.slides[7]?.background?.type, "image", author);
 
     for (const page of preview.pages) {
-      assert.deepEqual(page.diagnostics, [], `${author}: ${page.id}`);
+      assert.deepEqual(page.errors, [], `${author}: ${page.id}`);
       assert.ok(page.png !== undefined, `${author}: ${page.id}`);
     }
 
@@ -338,11 +362,14 @@ export const slideBackgroundRejectionScenario: CapabilityScenario = {
         { id: "solid-ok", background: "#065F46" },
         createElement(Shape, {
           id: "white-card",
-          x: 140,
-          y: 75,
-          width: 200,
-          height: 120,
-          fill: "#FFFFFF",
+          style: {
+            position: "absolute",
+            left: 140,
+            top: 75,
+            width: 200,
+            height: 120,
+            background: "#FFFFFF",
+          },
         }),
       ),
     );
@@ -364,11 +391,14 @@ export const slideBackgroundRejectionScenario: CapabilityScenario = {
       slide({ id: "solid-ok", background: "#065F46" }).append(
         shape({
           id: "white-card",
-          x: 140,
-          y: 75,
-          width: 200,
-          height: 120,
-          fill: "#FFFFFF",
+          style: {
+            position: "absolute",
+            left: 140,
+            top: 75,
+            width: 200,
+            height: 120,
+            background: "#FFFFFF",
+          },
         }),
       ),
     );
@@ -389,14 +419,20 @@ export const slideBackgroundRejectionScenario: CapabilityScenario = {
       const page = preview.pages[idx]!;
       assert.equal(page.png, undefined, `${author}:${id}`);
       assert.equal(page.svg, undefined, `${author}:${id}`);
+      assert.equal(page.errors.length, 1, `${author}:${id}`);
       assert.equal(
-        page.diagnostics[0]?.path,
+        page.errors[0]?.code,
+        "preview-corrupt-image",
+        `${author}:${id}`,
+      );
+      assert.equal(
+        page.errors[0]?.path,
         `deck/slide[${id}]/background`,
         `${author}:${id}`,
       );
-      assert.match(page.diagnostics[0]?.message ?? "", /decode/i);
+      assert.match(page.errors[0]?.message ?? "", /decode/i);
     }
     assert.ok(preview.pages[3]?.png !== undefined, author);
-    assert.deepEqual(preview.pages[3]?.diagnostics, [], author);
+    assert.deepEqual(preview.pages[3]?.errors, [], author);
   },
 };

@@ -30,7 +30,6 @@ function previewDocWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(document);
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -83,15 +82,16 @@ describe("Text capability acceptance", () => {
             Text,
             {
               id: "headline",
-              x: 24,
-              y: 24,
-              width: 200,
               style: {
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 200,
                 fontFamily: jostFont,
                 fontSize: 20,
                 color: "#1E293B",
                 padding: 8,
-                backgroundColor: "#F1F5F9",
+                background: "#F1F5F9",
               },
             },
             "Initial title",
@@ -102,16 +102,14 @@ describe("Text capability acceptance", () => {
 
     const previewDocument = previewDocWith(documentCapabilities);
     const first = await previewDocument(expanded);
-    assert.deepEqual(first.pages[0]?.diagnostics, []);
+    assert.deepEqual(first.pages[0]?.errors, []);
     assert.deepEqual((await validatePptx(first.pptx)).errors, []);
     const firstPng = first.pages[0].png!.slice();
     const firstSvg = first.pages[0].svg!;
     const firstPptx = first.pptx.slice();
     const firstReportSnapshot = JSON.stringify(first.report);
-    const firstHeight = first.query
-      .getSlide("handoff")
-      .get("headline")
-      .observe().box!.height;
+    const firstHeight = first.resolution.slide("handoff").get("headline")
+      .box!.height;
 
     const headline = expanded.query
       .get("handoff")
@@ -123,16 +121,14 @@ describe("Text capability acceptance", () => {
     headline.style({ color: "#059669" });
 
     const second = await previewDocument(expanded);
-    assert.deepEqual(second.pages[0]?.diagnostics, []);
+    assert.deepEqual(second.pages[0]?.errors, []);
     assert.deepEqual((await validatePptx(second.pptx)).errors, []);
     assert.equal(
-      second.query.getSlide("handoff").get("headline").observe().text,
+      second.resolution.slide("handoff").get("headline").text,
       "Updated longer headline wrapping across multiple lines",
     );
-    const secondHeight = second.query
-      .getSlide("handoff")
-      .get("headline")
-      .observe().box!.height;
+    const secondHeight = second.resolution.slide("handoff").get("headline")
+      .box!.height;
     assert.ok(secondHeight > firstHeight);
     expect(second.pages[0]?.svg).toContain('fill="#059669"');
     assert.notDeepEqual(second.pages[0]?.png, firstPng);
@@ -143,7 +139,7 @@ describe("Text capability acceptance", () => {
     assert.deepEqual(first.pptx, firstPptx);
     assert.equal(JSON.stringify(first.report), firstReportSnapshot);
     assert.equal(
-      first.query.getSlide("handoff").get("headline").observe().text,
+      first.resolution.slide("handoff").get("headline").text,
       "Initial title",
     );
   });

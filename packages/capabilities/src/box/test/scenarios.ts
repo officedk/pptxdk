@@ -169,17 +169,13 @@ export const boxPositiveScenario: CapabilityScenario = {
                   display: "flex",
                   flexDirection: "column",
                   gap: 10,
-                  backgroundColor: "#EFF6FF",
-                  borderColor: "#2563EB",
-                  borderWidth: 2,
-                  borderStyle: "solid",
+                  background: "#EFF6FF",
+                  border: { color: "#2563EB", width: 2, style: "solid" },
                 },
               },
               createElement(Shape, {
                 id: "primary-badge",
-                width: 56,
-                height: 28,
-                fill: "#1D4ED8",
+                style: { width: 56, height: 28, background: "#1D4ED8" },
               }),
               createElement(
                 Text,
@@ -206,19 +202,15 @@ export const boxPositiveScenario: CapabilityScenario = {
                   display: "flex",
                   flexDirection: "column",
                   gap: 10,
-                  backgroundColor: "#FEF3C7",
-                  borderColor: "#D97706",
-                  borderWidth: 2,
-                  borderStyle: "solid",
+                  background: "#FEF3C7",
+                  border: { color: "#D97706", width: 2, style: "solid" },
                   opacity: 0.9,
                   rotate: 3,
                 },
               },
               createElement(Shape, {
                 id: "accent-badge",
-                width: 56,
-                height: 28,
-                fill: "#0F766E",
+                style: { width: 56, height: 28, background: "#0F766E" },
               }),
               createElement(
                 Text,
@@ -270,17 +262,13 @@ export const boxPositiveScenario: CapabilityScenario = {
                 gridTemplateColumns: "120px 1fr",
                 gap: 16,
                 padding: 16,
-                backgroundColor: "surface",
-                borderColor: "#10B981",
-                borderWidth: 2,
-                borderStyle: "solid",
+                background: "surface",
+                border: { color: "#10B981", width: 2, style: "solid" },
               },
             },
             createElement(Shape, {
               id: "grid-swatch",
-              width: 120,
-              height: 72,
-              fill: "accentInk",
+              style: { width: 120, height: 72, background: "accentInk" },
             }),
             createElement(
               Text,
@@ -302,8 +290,7 @@ export const boxPositiveScenario: CapabilityScenario = {
               style: {
                 width: 320,
                 padding: 12,
-                borderColor: "#64748B",
-                borderWidth: 2,
+                border: { color: "#64748B", width: 2 },
               },
             },
             createElement(
@@ -314,9 +301,7 @@ export const boxPositiveScenario: CapabilityScenario = {
               },
               createElement(Shape, {
                 id: "coral-chip",
-                width: 90,
-                height: 36,
-                fill: "#F97316",
+                style: { width: 90, height: 36, background: "#F97316" },
               }),
               createElement(
                 Text,
@@ -356,10 +341,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "linear-rounded-dashed",
             style: {
               height: 90,
-              backgroundImage: linearGradient(90, "surface", "accentInk"),
-              borderColor: "#0F172A",
-              borderWidth: 2,
-              borderStyle: "dashed",
+              background: linearGradient(90, "surface", "accentInk"),
+              border: { color: "#0F172A", width: 2, style: "dashed" },
               borderRadius: 14,
             },
           }),
@@ -367,10 +350,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "radial-dotted",
             style: {
               height: 90,
-              backgroundImage: radialGradient("#FEF3C7", "#1E3A8A"),
-              borderColor: "#F59E0B",
-              borderWidth: 2,
-              borderStyle: "dotted",
+              background: radialGradient("#FEF3C7", "#1E3A8A"),
+              border: { color: "#F59E0B", width: 2, style: "dotted" },
               borderRadius: 10,
             },
           }),
@@ -378,9 +359,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "image-png-fill",
             style: {
               height: 90,
-              backgroundImage: { image: sampleFillPng },
-              borderColor: "#0F172A",
-              borderWidth: 2,
+              background: { image: sampleFillPng },
+              border: { color: "#0F172A", width: 2 },
               borderRadius: 12,
               opacity: 0.9,
             },
@@ -389,7 +369,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "image-gif-fill",
             style: {
               height: 90,
-              backgroundImage: { image: sampleFillGif },
+              background: { image: sampleFillGif },
               borderRadius: 8,
             },
           }),
@@ -397,9 +377,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "rotated-shadow",
             style: {
               height: 90,
-              backgroundColor: "#E2E8F0",
-              borderColor: "#334155",
-              borderWidth: 1.5,
+              background: "#E2E8F0",
+              border: { color: "#334155", width: 1.5 },
               borderRadius: 8,
               rotate: 15,
               boxShadow: {
@@ -414,7 +393,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "soft-edge-box",
             style: {
               height: 90,
-              backgroundColor: "#0EA5E9",
+              background: "#0EA5E9",
               softEdge: 10,
             },
           }),
@@ -436,9 +415,8 @@ export const boxPositiveScenario: CapabilityScenario = {
               flexDirection: "column",
               gap: 16,
               padding: 12,
-              backgroundColor: "#FFFFFF",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              background: "#FFFFFF",
+              border: { color: "#CBD5E1", width: 1 },
               borderRadius: 10,
             },
           },
@@ -458,15 +436,17 @@ export const boxPositiveScenario: CapabilityScenario = {
               createElement(Shape, {
                 id: `line-${arrowType}`,
                 geometry: "line",
-                width: 240,
-                height: 2,
-                flipH: idx % 2 === 1,
                 style: {
-                  borderColor: "#0F172A",
-                  borderWidth: 3,
-                  borderStyle: arrowType === "arrow" ? "dashed" : "solid",
-                  startArrow: arrowType,
-                  endArrow: arrowType,
+                  width: 240,
+                  height: 2,
+                  flipH: idx % 2 === 1,
+                  border: {
+                    color: "#0F172A",
+                    width: 3,
+                    style: arrowType === "arrow" ? "dashed" : "solid",
+                    startArrow: arrowType,
+                    endArrow: arrowType,
+                  },
                 },
               }),
               createElement(Shape, {
@@ -475,13 +455,15 @@ export const boxPositiveScenario: CapabilityScenario = {
                   viewBox: [180, 22],
                   fill: false,
                 }),
-                width: 180,
-                height: 22,
                 style: {
-                  borderColor: "#2563EB",
-                  borderWidth: 2.5,
-                  startArrow: arrowType,
-                  endArrow: arrowType,
+                  width: 180,
+                  height: 22,
+                  border: {
+                    color: "#2563EB",
+                    width: 2.5,
+                    startArrow: arrowType,
+                    endArrow: arrowType,
+                  },
                 },
               }),
             ),
@@ -530,17 +512,13 @@ export const boxPositiveScenario: CapabilityScenario = {
                 display: "flex",
                 flexDirection: "column",
                 gap: 10,
-                backgroundColor: "#EFF6FF",
-                borderColor: "#2563EB",
-                borderWidth: 2,
-                borderStyle: "solid",
+                background: "#EFF6FF",
+                border: { color: "#2563EB", width: 2, style: "solid" },
               },
             }).append(
               shape({
                 id: "primary-badge",
-                width: 56,
-                height: 28,
-                fill: "#1D4ED8",
+                style: { width: 56, height: 28, background: "#1D4ED8" },
               }),
               text("容器布局 Shared Box Layout with automatic wrapping", {
                 id: "primary-copy",
@@ -561,19 +539,15 @@ export const boxPositiveScenario: CapabilityScenario = {
                 display: "flex",
                 flexDirection: "column",
                 gap: 10,
-                backgroundColor: "#FEF3C7",
-                borderColor: "#D97706",
-                borderWidth: 2,
-                borderStyle: "solid",
+                background: "#FEF3C7",
+                border: { color: "#D97706", width: 2, style: "solid" },
                 opacity: 0.9,
                 rotate: 3,
               },
             }).append(
               shape({
                 id: "accent-badge",
-                width: 56,
-                height: 28,
-                fill: "#0F766E",
+                style: { width: 56, height: 28, background: "#0F766E" },
               }),
               text(
                 "Click to inspect theme scope & grid layout inside nested Box",
@@ -618,17 +592,13 @@ export const boxPositiveScenario: CapabilityScenario = {
               gridTemplateColumns: "120px 1fr",
               gap: 16,
               padding: 16,
-              backgroundColor: "surface",
-              borderColor: "#10B981",
-              borderWidth: 2,
-              borderStyle: "solid",
+              background: "surface",
+              border: { color: "#10B981", width: 2, style: "solid" },
             },
           }).append(
             shape({
               id: "grid-swatch",
-              width: 120,
-              height: 72,
-              fill: "accentInk",
+              style: { width: 120, height: 72, background: "accentInk" },
             }),
             text(
               "ThemeScope overrides surface fill, accentInk color, and headingFont inside nested Grid Box.",
@@ -647,8 +617,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             style: {
               width: 320,
               padding: 12,
-              borderColor: "#64748B",
-              borderWidth: 2,
+              border: { color: "#64748B", width: 2 },
             },
           }).append(
             box({
@@ -657,9 +626,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             }).append(
               shape({
                 id: "coral-chip",
-                width: 90,
-                height: 36,
-                fill: "#F97316",
+                style: { width: 90, height: 36, background: "#F97316" },
               }),
               text("Border-only outer Box", {
                 id: "hollow-caption",
@@ -691,10 +658,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "linear-rounded-dashed",
             style: {
               height: 90,
-              backgroundImage: linearGradient(90, "surface", "accentInk"),
-              borderColor: "#0F172A",
-              borderWidth: 2,
-              borderStyle: "dashed",
+              background: linearGradient(90, "surface", "accentInk"),
+              border: { color: "#0F172A", width: 2, style: "dashed" },
               borderRadius: 14,
             },
           }),
@@ -702,10 +667,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "radial-dotted",
             style: {
               height: 90,
-              backgroundImage: radialGradient("#FEF3C7", "#1E3A8A"),
-              borderColor: "#F59E0B",
-              borderWidth: 2,
-              borderStyle: "dotted",
+              background: radialGradient("#FEF3C7", "#1E3A8A"),
+              border: { color: "#F59E0B", width: 2, style: "dotted" },
               borderRadius: 10,
             },
           }),
@@ -713,9 +676,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "image-png-fill",
             style: {
               height: 90,
-              backgroundImage: { image: sampleFillPng },
-              borderColor: "#0F172A",
-              borderWidth: 2,
+              background: { image: sampleFillPng },
+              border: { color: "#0F172A", width: 2 },
               borderRadius: 12,
               opacity: 0.9,
             },
@@ -724,7 +686,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "image-gif-fill",
             style: {
               height: 90,
-              backgroundImage: { image: sampleFillGif },
+              background: { image: sampleFillGif },
               borderRadius: 8,
             },
           }),
@@ -732,9 +694,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "rotated-shadow",
             style: {
               height: 90,
-              backgroundColor: "#E2E8F0",
-              borderColor: "#334155",
-              borderWidth: 1.5,
+              background: "#E2E8F0",
+              border: { color: "#334155", width: 1.5 },
               borderRadius: 8,
               rotate: 15,
               boxShadow: {
@@ -749,7 +710,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "soft-edge-box",
             style: {
               height: 90,
-              backgroundColor: "#0EA5E9",
+              background: "#0EA5E9",
               softEdge: 10,
             },
           }),
@@ -767,9 +728,8 @@ export const boxPositiveScenario: CapabilityScenario = {
             flexDirection: "column",
             gap: 16,
             padding: 12,
-            backgroundColor: "#FFFFFF",
-            borderColor: "#CBD5E1",
-            borderWidth: 1,
+            background: "#FFFFFF",
+            border: { color: "#CBD5E1", width: 1 },
             borderRadius: 10,
           },
         }).append(
@@ -786,15 +746,17 @@ export const boxPositiveScenario: CapabilityScenario = {
               shape({
                 id: `line-${arrowType}`,
                 geometry: "line",
-                width: 240,
-                height: 2,
-                flipH: idx % 2 === 1,
                 style: {
-                  borderColor: "#0F172A",
-                  borderWidth: 3,
-                  borderStyle: arrowType === "arrow" ? "dashed" : "solid",
-                  startArrow: arrowType,
-                  endArrow: arrowType,
+                  width: 240,
+                  height: 2,
+                  flipH: idx % 2 === 1,
+                  border: {
+                    color: "#0F172A",
+                    width: 3,
+                    style: arrowType === "arrow" ? "dashed" : "solid",
+                    startArrow: arrowType,
+                    endArrow: arrowType,
+                  },
                 },
               }),
               shape({
@@ -803,13 +765,15 @@ export const boxPositiveScenario: CapabilityScenario = {
                   viewBox: [180, 22],
                   fill: false,
                 }),
-                width: 180,
-                height: 22,
                 style: {
-                  borderColor: "#2563EB",
-                  borderWidth: 2.5,
-                  startArrow: arrowType,
-                  endArrow: arrowType,
+                  width: 180,
+                  height: 22,
+                  border: {
+                    color: "#2563EB",
+                    width: 2.5,
+                    startArrow: arrowType,
+                    endArrow: arrowType,
+                  },
                 },
               }),
             ),
@@ -825,7 +789,7 @@ export const boxPositiveScenario: CapabilityScenario = {
     const page3 = preview.pages[2]!;
     const page4 = preview.pages[3]!;
     for (const page of [page1, page2, page3, page4]) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
     }
 
@@ -839,17 +803,14 @@ export const boxPositiveScenario: CapabilityScenario = {
       false,
     );
     assert.equal(page1.nodes.length, 6);
-    const shellObserved = resolution.query
-      .getSlide("box-nesting-and-styles")
-      .get("shell")
-      .observe();
+    const shellObserved = resolution
+      .slide("box-nesting-and-styles")
+      .get("shell");
     assert.ok(shellObserved.box !== undefined);
     assert.equal(shellObserved.objects.length, 6);
     const accentCard = page1.nodes.find((n) => n.authorId === "card-accent")!;
     assert.equal(accentCard.link, "slide:box-theme-and-wrapping");
-    assert.ok(
-      (accentCard.screenBox?.height ?? 0) > (accentCard.box?.height ?? 0),
-    );
+    assert.ok((accentCard.bounds?.height ?? 0) > (accentCard.box?.height ?? 0));
 
     // PPTX independent verification: link and rotation written on visible Box only.
     assert.equal(validation.slides[0]?.objects.length, 6);
@@ -964,7 +925,7 @@ export const boxRejectionScenario: CapabilityScenario = {
           style: {
             width: 140,
             height: 70,
-            backgroundImage: { image: corruptPngBytes },
+            background: { image: corruptPngBytes },
           },
         }),
       ),
@@ -976,7 +937,7 @@ export const boxRejectionScenario: CapabilityScenario = {
           style: {
             width: 140,
             height: 70,
-            backgroundImage: { image: corruptJpegBytes },
+            background: { image: corruptJpegBytes },
           },
         }),
       ),
@@ -988,7 +949,7 @@ export const boxRejectionScenario: CapabilityScenario = {
           style: {
             width: 140,
             height: 70,
-            backgroundImage: { image: corruptGifBytes },
+            background: { image: corruptGifBytes },
           },
         }),
       ),
@@ -1006,16 +967,13 @@ export const boxRejectionScenario: CapabilityScenario = {
               width: 240,
               height: 100,
               padding: 16,
-              backgroundColor: "#ECFDF5",
-              borderColor: "#10B981",
-              borderWidth: 2,
+              background: "#ECFDF5",
+              border: { color: "#10B981", width: 2 },
             },
           },
           createElement(Shape, {
             id: "ok-dot",
-            width: 60,
-            height: 60,
-            fill: "#065F46",
+            style: { width: 60, height: 60, background: "#065F46" },
           }),
         ),
       ),
@@ -1029,7 +987,7 @@ export const boxRejectionScenario: CapabilityScenario = {
           style: {
             width: 140,
             height: 70,
-            backgroundImage: { image: corruptPngBytes },
+            background: { image: corruptPngBytes },
           },
         }),
       ),
@@ -1039,7 +997,7 @@ export const boxRejectionScenario: CapabilityScenario = {
           style: {
             width: 140,
             height: 70,
-            backgroundImage: { image: corruptJpegBytes },
+            background: { image: corruptJpegBytes },
           },
         }),
       ),
@@ -1049,7 +1007,7 @@ export const boxRejectionScenario: CapabilityScenario = {
           style: {
             width: 140,
             height: 70,
-            backgroundImage: { image: corruptGifBytes },
+            background: { image: corruptGifBytes },
           },
         }),
       ),
@@ -1063,16 +1021,13 @@ export const boxRejectionScenario: CapabilityScenario = {
             width: 240,
             height: 100,
             padding: 16,
-            backgroundColor: "#ECFDF5",
-            borderColor: "#10B981",
-            borderWidth: 2,
+            background: "#ECFDF5",
+            border: { color: "#10B981", width: 2 },
           },
         }).append(
           shape({
             id: "ok-dot",
-            width: 60,
-            height: 60,
-            fill: "#065F46",
+            style: { width: 60, height: 60, background: "#065F46" },
           }),
         ),
       ),
@@ -1088,13 +1043,11 @@ export const boxRejectionScenario: CapabilityScenario = {
       const page = preview.pages[idx]!;
       assert.equal(page.png, undefined);
       assert.equal(page.svg, undefined);
-      assert.match(
-        page.diagnostics[0]?.path ?? "",
-        new RegExp(`box\\[${boxId}\\]`),
-      );
-      assert.match(page.diagnostics[0]?.message ?? "", /decode/i);
+      assert.equal(page.errors[0]?.code, "preview-corrupt-image");
+      assert.match(page.errors[0]?.path ?? "", new RegExp(`box\\[${boxId}\\]`));
+      assert.match(page.errors[0]?.message ?? "", /decode/i);
     }
     assert.ok(preview.pages[3]?.png !== undefined);
-    assert.deepEqual(preview.pages[3]?.diagnostics, []);
+    assert.deepEqual(preview.pages[3]?.errors, []);
   },
 };

@@ -80,11 +80,15 @@ describe("font codegen", () => {
           ],
           {
             id: "font-sample",
-            x: 40,
-            y: 40,
-            width: 800,
-            height: 200,
-            style: { fontFamily: jostPrimary, fontSize: 18 },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 800,
+              height: 200,
+              fontFamily: jostPrimary,
+              fontSize: 18,
+            },
           },
         ),
       ),
@@ -138,11 +142,15 @@ describe("font codegen", () => {
       slide({ id: "plain-font" }).append(
         text("System family", {
           id: "t1",
-          x: 40,
-          y: 40,
-          width: 300,
-          height: 60,
-          style: { fontFamily: "Calibri", fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 300,
+            height: 60,
+            fontFamily: "Calibri",
+            fontSize: 16,
+          },
         }),
       ),
     );

@@ -6,8 +6,8 @@ import {
   createMotionScopeHandle,
   emit,
   fade,
+  motionSchedule,
   transitions,
-  type MotionObservation,
 } from "@officedk/pptxdk";
 import { createResolver } from "@officedk/pptxdk/build";
 import {
@@ -78,7 +78,7 @@ function plainDeck() {
           width: 760,
           height: 180,
           padding: 12,
-          backgroundColor: "#FFFFFF",
+          background: "#FFFFFF",
         },
       }).append(
         text(
@@ -88,60 +88,76 @@ function plainDeck() {
           ),
           {
             id: "headline",
-            x: 12,
-            y: 12,
-            width: 720,
-            height: 48,
-            style: { fontSize: 24 },
+            style: {
+              position: "absolute",
+              left: 12,
+              top: 12,
+              width: 720,
+              height: 48,
+              fontSize: 24,
+            },
           },
         ),
-        shape({
+        shape("Native panel", {
           id: "panel",
-          x: 12,
-          y: 72,
-          width: 240,
-          height: 80,
-          text: "Native panel",
-          fill: "#2F6F8F",
+          style: {
+            position: "absolute",
+            left: 12,
+            top: 72,
+            width: 240,
+            height: 80,
+            background: "#2F6F8F",
+          },
         }),
       ),
       image({
         id: "logo",
         src: png,
-        x: 800,
-        y: 20,
-        width: 100,
-        height: 80,
         fit: "cover",
+        style: {
+          position: "absolute",
+          left: 800,
+          top: 20,
+          width: 100,
+          height: 80,
+        },
       }),
       group({ id: "badge" }).append(
-        shape({
+        shape("Badge", {
           id: "badge-shape",
-          x: 800,
-          y: 120,
-          width: 100,
-          height: 60,
-          text: "Badge",
-          fill: "accent1",
+          style: {
+            position: "absolute",
+            left: 800,
+            top: 120,
+            width: 100,
+            height: 60,
+            background: "accent1",
+          },
         }),
       ),
       table({
         id: "metrics",
-        x: 20,
-        y: 220,
-        width: 420,
         columns: [140, "1fr"],
-        style: { fontSize: 14 },
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 220,
+          width: 420,
+          fontSize: 14,
+        },
       }).append(
         row({ style: { height: 28 } }).append(cell("Metric"), cell("Value")),
         row({ style: { height: 28 } }).append(cell("North"), cell("12")),
       ),
       chart({
         id: "revenue",
-        x: 480,
-        y: 220,
-        width: 400,
-        height: 220,
+        style: {
+          position: "absolute",
+          left: 480,
+          top: 220,
+          width: 400,
+          height: 220,
+        },
         groups: [
           {
             kind: "column",
@@ -156,52 +172,67 @@ function plainDeck() {
       step({ n: 1 }).append(
         shape({
           id: "fade-in",
-          x: 20,
-          y: 460,
-          width: 120,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 460,
+            width: 120,
+            height: 40,
+          },
           enter: fade({ duration: 200 }),
         }),
         motionScope(lead, { publishEnd: ready }).append(
           shape({
             id: "scope-lead",
-            x: 160,
-            y: 460,
-            width: 120,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 160,
+              top: 460,
+              width: 120,
+              height: 40,
+            },
             enter: fade({ duration: 100 }),
           }),
         ),
         motionScope(follower, { startAt: after(ready, 20) }).append(
           shape({
             id: "scope-follow",
-            x: 300,
-            y: 460,
-            width: 120,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 300,
+              top: 460,
+              width: 120,
+              height: 40,
+            },
             enter: fade({ duration: 80 }),
           }),
         ),
       ),
-      shape({
+      shape("Details", {
         id: "next",
-        x: 440,
-        y: 460,
-        width: 120,
-        height: 40,
-        text: "Details",
-        fill: "accent1",
+        style: {
+          position: "absolute",
+          left: 440,
+          top: 460,
+          width: 120,
+          height: 40,
+          background: "accent1",
+        },
         link: { id: "details" },
       }),
     ),
     slide({ id: "details", transition: transitions.fade() }).append(
       text("Details", {
         id: "details-title",
-        x: 20,
-        y: 20,
-        width: 400,
-        height: 48,
-        style: { fontSize: 24, color: "ink" },
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 20,
+          width: 400,
+          height: 48,
+          fontSize: 24,
+          color: "ink",
+        },
       }),
     ),
   );
@@ -227,16 +258,19 @@ function ReactDeck() {
             width: 760,
             height: 180,
             padding: 12,
-            backgroundColor: "#FFFFFF",
+            background: "#FFFFFF",
           }}
         >
           <Text
             id="headline"
-            x={12}
-            y={12}
-            width={720}
-            height={48}
-            style={{ fontSize: 24 }}
+            style={{
+              position: "absolute",
+              left: 12,
+              top: 12,
+              width: 720,
+              height: 48,
+              fontSize: 24,
+            }}
           >
             <P>
               <Span style={{ fontWeight: "bold" }}>Same </Span>
@@ -245,41 +279,55 @@ function ReactDeck() {
           </Text>
           <Shape
             id="panel"
-            x={12}
-            y={72}
-            width={240}
-            height={80}
-            text="Native panel"
-            fill="#2F6F8F"
-          />
+            style={{
+              position: "absolute",
+              left: 12,
+              top: 72,
+              width: 240,
+              height: 80,
+              background: "#2F6F8F",
+            }}
+          >
+            Native panel
+          </Shape>
         </Box>
         <Image
           id="logo"
           src={png}
-          x={800}
-          y={20}
-          width={100}
-          height={80}
           fit="cover"
+          style={{
+            position: "absolute",
+            left: 800,
+            top: 20,
+            width: 100,
+            height: 80,
+          }}
         />
         <Group id="badge">
           <Shape
             id="badge-shape"
-            x={800}
-            y={120}
-            width={100}
-            height={60}
-            text="Badge"
-            fill="accent1"
-          />
+            style={{
+              position: "absolute",
+              left: 800,
+              top: 120,
+              width: 100,
+              height: 60,
+              background: "accent1",
+            }}
+          >
+            Badge
+          </Shape>
         </Group>
         <Table
           id="metrics"
-          x={20}
-          y={220}
-          width={420}
           columns={[140, "1fr"]}
-          style={{ fontSize: 14 }}
+          style={{
+            position: "absolute",
+            left: 20,
+            top: 220,
+            width: 420,
+            fontSize: 14,
+          }}
         >
           <Row style={{ height: 28 }}>
             <Cell>Metric</Cell>
@@ -292,10 +340,13 @@ function ReactDeck() {
         </Table>
         <Chart
           id="revenue"
-          x={480}
-          y={220}
-          width={400}
-          height={220}
+          style={{
+            position: "absolute",
+            left: 480,
+            top: 220,
+            width: 400,
+            height: 220,
+          }}
           groups={[
             {
               kind: "column",
@@ -310,52 +361,69 @@ function ReactDeck() {
         <Step n={1}>
           <Shape
             id="fade-in"
-            x={20}
-            y={460}
-            width={120}
-            height={40}
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 460,
+              width: 120,
+              height: 40,
+            }}
             enter={fade({ duration: 200 })}
           />
           <MotionScope scope={lead} publishEnd={lead.cue("ready")}>
             <Shape
               id="scope-lead"
-              x={160}
-              y={460}
-              width={120}
-              height={40}
+              style={{
+                position: "absolute",
+                left: 160,
+                top: 460,
+                width: 120,
+                height: 40,
+              }}
               enter={fade({ duration: 100 })}
             />
           </MotionScope>
           <MotionScope scope={follower} startAt={after(lead.cue("ready"), 20)}>
             <Shape
               id="scope-follow"
-              x={300}
-              y={460}
-              width={120}
-              height={40}
+              style={{
+                position: "absolute",
+                left: 300,
+                top: 460,
+                width: 120,
+                height: 40,
+              }}
               enter={fade({ duration: 80 })}
             />
           </MotionScope>
         </Step>
         <Shape
           id="next"
-          x={440}
-          y={460}
-          width={120}
-          height={40}
-          text="Details"
-          fill="accent1"
+          style={{
+            position: "absolute",
+            left: 440,
+            top: 460,
+            width: 120,
+            height: 40,
+            background: "accent1",
+          }}
           link={{ id: "details" }}
-        />
+        >
+          Details
+        </Shape>
       </Slide>
       <Slide id="details" transition={transitions.fade()}>
         <Text
           id="details-title"
-          x={20}
-          y={20}
-          width={400}
-          height={48}
-          style={{ fontSize: 24, color: "ink" }}
+          style={{
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 48,
+            fontSize: 24,
+            color: "ink",
+          }}
         >
           Details
         </Text>
@@ -369,12 +437,12 @@ function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {
 }
 
 function motionProjection(result: Awaited<ReturnType<typeof build>>) {
-  return result.report.slides.map(({ capabilities }) => {
-    const motion = capabilities?.["motion"] as MotionObservation | undefined;
+  return result.slides.map((slideLocator) => {
+    const motion = motionSchedule(slideLocator);
     return motion === undefined
       ? undefined
       : {
-          steps: motion.steps.map(({ trigger, number, effects }) => ({
+          steps: motion.steps.map(({ trigger, number, effects, scopes }) => ({
             trigger,
             number,
             effects: effects.map(
@@ -386,16 +454,13 @@ function motionProjection(result: Awaited<ReturnType<typeof build>>) {
                 durationMs,
               }),
             ),
-          })),
-          scopes: motion.scopes?.map(
-            ({ mode, delayMs, startMs, endMs, completion }) => ({
+            scopes: scopes.map(({ mode, delayMs, start, end }) => ({
               mode,
               delayMs,
-              startMs,
-              endMs,
-              completion,
-            }),
-          ),
+              start: start.state === "known" ? start.ms : start.state,
+              end: end.state === "known" ? end.ms : end.state,
+            })),
+          })),
         };
   });
 }
@@ -429,15 +494,10 @@ describe("generation closure", () => {
       motionProjection(reactResult),
     );
     assert.deepEqual(
-      plainResult.report.diagnostics,
-      reactResult.report.diagnostics,
+      plainResult.report.dimensions,
+      reactResult.report.dimensions,
     );
-    assert.equal(
-      plainResult.report.diagnostics.some(
-        ({ severity }) => severity === "error",
-      ),
-      false,
-    );
+    assert.deepEqual(plainResult.report.fonts, reactResult.report.fonts);
 
     const [plainFile, reactFile] = await Promise.all([
       validatePptx(plainResult.pptx),
@@ -512,10 +572,13 @@ describe("generation closure", () => {
               slide({ id: "trimmed" }).append(
                 text("not registered", {
                   id: "plain-text",
-                  x: 0,
-                  y: 0,
-                  width: 160,
-                  height: 32,
+                  style: {
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 160,
+                    height: 32,
+                  },
                 }),
               ),
             ),
@@ -529,7 +592,16 @@ describe("generation closure", () => {
     const reactFailure = await expandDocument(
       <Deck width={240} height={160}>
         <Slide id="trimmed">
-          <Text id="plain-text" x={0} y={0} width={160} height={32}>
+          <Text
+            id="plain-text"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 160,
+              height: 32,
+            }}
+          >
             not registered
           </Text>
         </Slide>

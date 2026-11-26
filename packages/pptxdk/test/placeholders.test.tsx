@@ -74,20 +74,30 @@ const sectionLayout = defineSlideLayout({
   placeholders: {
     title: {
       type: "title",
-      x: 64,
-      y: 48,
-      width: 832,
-      height: 72,
-      style: { fontFamily: jostFont, fontSize: "32pt", color: "#0F172A" },
+      style: {
+        position: "absolute",
+        left: 64,
+        top: 48,
+        width: 832,
+        height: 72,
+        fontFamily: jostFont,
+        fontSize: "32pt",
+        color: "#0F172A",
+      },
     },
     body: {
       type: "body",
       idx: 1,
-      x: 64,
-      y: 148,
-      width: 832,
-      height: 300,
-      style: { fontFamily: jostFont, fontSize: "18pt", color: "#334155" },
+      style: {
+        position: "absolute",
+        left: 64,
+        top: 148,
+        width: 832,
+        height: 300,
+        fontFamily: jostFont,
+        fontSize: "18pt",
+        color: "#334155",
+      },
     },
   },
 });
@@ -99,19 +109,26 @@ const heroPictureLayout = defineSlideLayout({
   placeholders: {
     title: {
       type: "title",
-      x: 40,
-      y: 32,
-      width: 400,
-      height: 64,
-      style: { fontFamily: jostFont, fontSize: "24pt" },
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 32,
+        width: 400,
+        height: 64,
+        fontFamily: jostFont,
+        fontSize: "24pt",
+      },
     },
     hero: {
       type: "pic",
       idx: 1,
-      x: 480,
-      y: 40,
-      width: 400,
-      height: 360,
+      style: {
+        position: "absolute",
+        left: 480,
+        top: 40,
+        width: 400,
+        height: 360,
+      },
     },
   },
 });
@@ -121,24 +138,50 @@ const contentMatrixLayout = defineSlideLayout({
   name: "Content Matrix",
   type: "cust",
   placeholders: {
-    picSlot: { type: "pic", idx: 10, x: 40, y: 40, width: 200, height: 140 },
-    tableSlot: { type: "tbl", idx: 11, x: 260, y: 40, width: 300, height: 140 },
+    picSlot: {
+      type: "pic",
+      idx: 10,
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 40,
+        width: 200,
+        height: 140,
+      },
+    },
+    tableSlot: {
+      type: "tbl",
+      idx: 11,
+      style: {
+        position: "absolute",
+        left: 260,
+        top: 40,
+        width: 300,
+        height: 140,
+      },
+    },
     chartSlot: {
       type: "chart",
       idx: 12,
-      x: 580,
-      y: 40,
-      width: 320,
-      height: 180,
+      style: {
+        position: "absolute",
+        left: 580,
+        top: 40,
+        width: 320,
+        height: 180,
+      },
     },
     genericSlot: {
       type: "obj",
       explicitType: false,
       idx: 13,
-      x: 40,
-      y: 220,
-      width: 400,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 220,
+        width: 400,
+        height: 220,
+      },
     },
   },
 });
@@ -181,11 +224,16 @@ describe("typed text placeholders and style inheritance", () => {
         <SectionSlide id="s1" heading="Q3 Overview" summary="Revenue grew 22%">
           <Text
             id="free-note"
-            x={64}
-            y={470}
-            width={400}
-            height={32}
-            style={{ fontFamily: jostFont, fontSize: "12pt", color: "#64748B" }}
+            style={{
+              position: "absolute",
+              left: 64,
+              top: 470,
+              width: 400,
+              height: 32,
+              fontFamily: jostFont,
+              fontSize: "12pt",
+              color: "#64748B",
+            }}
           >
             Free canvas note
           </Text>
@@ -215,11 +263,16 @@ describe("typed text placeholders and style inheritance", () => {
     }).append(
       text("Free canvas note", {
         id: "free-note",
-        x: 64,
-        y: 470,
-        width: 400,
-        height: 32,
-        style: { fontFamily: jostFont, fontSize: "12pt", color: "#64748B" },
+        style: {
+          position: "absolute",
+          left: 64,
+          top: 470,
+          width: 400,
+          height: 32,
+          fontFamily: jostFont,
+          fontSize: "12pt",
+          color: "#64748B",
+        },
       }),
     );
 
@@ -254,8 +307,10 @@ describe("typed text placeholders and style inheritance", () => {
     assert.deepEqual(jsxBuilt.report, vanillaBuilt.report);
 
     const jsxPreview = await preview(jsxTree);
-    assert.deepEqual(jsxPreview.pages[0]?.diagnostics, []);
-    assert.deepEqual(jsxPreview.pages[1]?.diagnostics, []);
+    assert.deepEqual(jsxPreview.pages[0]?.errors, []);
+    assert.deepEqual(jsxPreview.pages[0]?.placeholders, []);
+    assert.deepEqual(jsxPreview.pages[1]?.errors, []);
+    assert.deepEqual(jsxPreview.pages[1]?.placeholders, []);
 
     const validated = await validatePptx(vanillaBuilt.pptx);
     assert.deepEqual(validated.errors, []);
@@ -417,11 +472,16 @@ describe("typed text placeholders and style inheritance", () => {
       placeholders: {
         title: {
           type: "title",
-          x: 64,
-          y: 48,
-          width: 480,
-          height: 64,
-          style: { fontFamily: jostFont, fontSize: "32pt", color: "#1E293B" },
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 48,
+            width: 480,
+            height: 64,
+            fontFamily: jostFont,
+            fontSize: "32pt",
+            color: "#1E293B",
+          },
         },
       },
     });
@@ -438,11 +498,16 @@ describe("typed text placeholders and style inheritance", () => {
         >
           <Text
             id="free-32"
-            x={64}
-            y={140}
-            width={400}
-            height={56}
-            style={{ fontFamily: jostFont, fontSize: "32pt", color: "#475569" }}
+            style={{
+              position: "absolute",
+              left: 64,
+              top: 140,
+              width: 400,
+              height: 56,
+              fontFamily: jostFont,
+              fontSize: "32pt",
+              color: "#475569",
+            }}
           >
             Free 32pt
           </Text>
@@ -472,11 +537,16 @@ describe("typed text placeholders and style inheritance", () => {
       }).append(
         text("Free 32pt", {
           id: "free-32",
-          x: 64,
-          y: 140,
-          width: 400,
-          height: 56,
-          style: { fontFamily: jostFont, fontSize: "32pt", color: "#475569" },
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 140,
+            width: 400,
+            height: 56,
+            fontFamily: jostFont,
+            fontSize: "32pt",
+            color: "#475569",
+          },
         }),
       ),
       slide({
@@ -569,7 +639,7 @@ describe("typed text placeholders and style inheritance", () => {
     const s1Title = importedSlides[0]!.placeholder("title") as TextNode;
     const s2Title = importedSlides[1]!.placeholder("title") as TextNode;
     s2Title.style({ fontSize: undefined });
-    s1Title.set({ width: 560 });
+    s1Title.style({ width: 560 });
 
     const clearedEmit = emit(resolve(imported.document));
     const clearedZip = unzipSync(clearedEmit.pptx);
@@ -599,10 +669,13 @@ describe("typed text placeholders and style inheritance", () => {
         body: {
           type: "body",
           idx: 1,
-          x: 64,
-          y: 140,
-          width: 832,
-          height: 300,
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 140,
+            width: 832,
+            height: 300,
+          },
         },
       },
     });
@@ -619,10 +692,13 @@ describe("typed text placeholders and style inheritance", () => {
           placeholders={{
             title: {
               type: "title",
-              x: 64,
-              y: 40,
-              width: 832,
-              height: 64,
+              style: {
+                position: "absolute",
+                left: 64,
+                top: 40,
+                width: 832,
+                height: 64,
+              },
             },
           }}
           textStyles={{
@@ -661,7 +737,16 @@ describe("typed text placeholders and style inheritance", () => {
             ],
           }}
         >
-          <Text id="free-child" x={64} y={460} width={400} height={36}>
+          <Text
+            id="free-child"
+            style={{
+              position: "absolute",
+              left: 64,
+              top: 460,
+              width: 400,
+              height: 36,
+            }}
+          >
             Free inherits Slide.style
           </Text>
         </Slide>
@@ -802,8 +887,7 @@ describe("typed text placeholders and style inheritance", () => {
             </Slide>
           </Deck>,
         ),
-      (error: unknown) =>
-        hasDiagnosticCode(error, "placeholder-inside-container"),
+      (error: unknown) => hasDiagnosticCode(error, "invalid-structure"),
     );
 
     await assert.rejects(
@@ -817,8 +901,7 @@ describe("typed text placeholders and style inheritance", () => {
             ),
           ),
         ),
-      (error: unknown) =>
-        hasDiagnosticCode(error, "duplicate-slide-placeholder"),
+      (error: unknown) => hasDiagnosticCode(error, "duplicate-id"),
     );
 
     await assert.rejects(
@@ -831,7 +914,7 @@ describe("typed text placeholders and style inheritance", () => {
             ),
           ),
         ),
-      (error: unknown) => hasDiagnosticCode(error, "unknown-slide-placeholder"),
+      (error: unknown) => hasDiagnosticCode(error, "broken-reference"),
     );
 
     await assert.rejects(
@@ -843,8 +926,7 @@ describe("typed text placeholders and style inheritance", () => {
             ),
           ),
         ),
-      (error: unknown) =>
-        hasDiagnosticCode(error, "placeholder-requires-layout"),
+      (error: unknown) => hasDiagnosticCode(error, "invalid-structure"),
     );
 
     await assert.rejects(
@@ -859,8 +941,7 @@ describe("typed text placeholders and style inheritance", () => {
             ),
           ),
         ),
-      (error: unknown) =>
-        hasDiagnosticCode(error, "incompatible-placeholder-content"),
+      (error: unknown) => hasDiagnosticCode(error, "invalid-structure"),
     );
 
     await assert.rejects(
@@ -875,8 +956,7 @@ describe("typed text placeholders and style inheritance", () => {
             </Slide>
           </Deck>,
         ),
-      (error: unknown) =>
-        hasDiagnosticCode(error, "incompatible-placeholder-content"),
+      (error: unknown) => hasDiagnosticCode(error, "invalid-structure"),
     );
   });
 
@@ -1073,7 +1153,9 @@ describe("typed text placeholders and style inheritance", () => {
       (child): child is SlideContainer =>
         child instanceof SlideContainer && child.kind === "slide",
     )[0]!;
-    importedS1.placeholder(reimportedPicKey)?.set({ x: 55 });
+    importedS1
+      .placeholder(reimportedPicKey)
+      ?.style({ position: "absolute", left: 55 });
     const overriddenEmit = emit(resolve(reimported.document));
     const overriddenValidated = await validatePptx(overriddenEmit.pptx);
     assert.deepEqual(overriddenValidated.errors, []);
@@ -1158,19 +1240,29 @@ describe("typed text placeholders and style inheritance", () => {
       placeholders: {
         title: {
           type: "title",
-          x: 48,
-          y: 64,
-          width: 544,
-          height: 56,
-          style: { fontFamily: jostFont, fontSize: "32pt", color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 64,
+            width: 544,
+            height: 56,
+            fontFamily: jostFont,
+            fontSize: "32pt",
+            color: "#0F172A",
+          },
         },
         body: {
           type: "body",
-          x: 48,
-          y: 136,
-          width: 544,
-          height: 140,
-          style: { fontFamily: jostFont, fontSize: "14pt", color: "#334155" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 136,
+            width: 544,
+            height: 140,
+            fontFamily: jostFont,
+            fontSize: "14pt",
+            color: "#334155",
+          },
         },
       },
     });
@@ -1222,17 +1314,17 @@ describe("typed text placeholders and style inheritance", () => {
       placeholders: {
         title: {
           type: "title",
-          x: 64,
-          y: 48,
-          width: 400,
-          height: 80,
           style: {
+            position: "absolute",
+            left: 64,
+            top: 48,
+            width: 400,
+            height: 80,
             fontFamily: jostFont,
             fontSize: "24pt",
             color: "#FFFFFF",
-            backgroundColor: "#DC2626",
-            borderColor: "#1E293B",
-            borderWidth: 2,
+            background: "#DC2626",
+            border: { color: "#1E293B", width: 2 },
             borderRadius: 12,
             rotate: 8,
           },
@@ -1240,12 +1332,13 @@ describe("typed text placeholders and style inheritance", () => {
         badge: {
           type: "body",
           idx: 1,
-          x: 520,
-          y: 48,
-          width: 120,
-          height: 80,
           style: {
-            backgroundImage: { image: tinyPng },
+            position: "absolute",
+            left: 520,
+            top: 48,
+            width: 120,
+            height: 80,
+            background: { image: tinyPng },
           },
         },
       },
@@ -1259,17 +1352,17 @@ describe("typed text placeholders and style inheritance", () => {
       placeholders: {
         title: {
           type: "title",
-          x: 64,
-          y: 48,
-          width: 400,
-          height: 80,
           style: {
+            position: "absolute",
+            left: 64,
+            top: 48,
+            width: 400,
+            height: 80,
             fontFamily: jostFont,
             fontSize: "24pt",
             color: "#FFFFFF",
-            backgroundColor: "#DC2626",
-            borderColor: "#1E293B",
-            borderWidth: 2,
+            background: "#DC2626",
+            border: { color: "#1E293B", width: 2 },
             rotate: 8,
           },
         },
@@ -1291,9 +1384,7 @@ describe("typed text placeholders and style inheritance", () => {
           id="slide-local-bg"
           layout={usedVisualLayout}
           placeholders={{
-            title: (
-              <Text style={{ backgroundColor: "#2563EB" }}>Local Fill</Text>
-            ),
+            title: <Text style={{ background: "#2563EB" }}>Local Fill</Text>,
           }}
         />
       </Deck>,
@@ -1357,15 +1448,22 @@ describe("typed text placeholders and style inheritance", () => {
     const importedIdlePhs = imported.document.masters[0]!.layouts[0]!.props[
       "placeholders"
     ] as PlaceholderMap;
-    assert.equal(importedIdlePhs["title"]?.style?.backgroundColor, "#DC2626");
-    assert.equal(importedIdlePhs["title"]?.style?.borderColor, "#1E293B");
-    assert.equal(importedIdlePhs["title"]?.style?.borderWidth, 2);
+    assert.equal(importedIdlePhs["title"]?.style?.background, "#DC2626");
+    const titleBorder = importedIdlePhs["title"]?.style?.border;
+    assert.ok(typeof titleBorder === "object" && titleBorder !== null);
+    assert.deepEqual(
+      { ...titleBorder },
+      {
+        color: "#1E293B",
+        width: 2,
+      },
+    );
     assert.equal(importedIdlePhs["title"]?.style?.rotate, 8);
     assert.ok(
       Math.abs((importedIdlePhs["title"]?.style?.borderRadius ?? 0) - 12) <
         0.05,
     );
-    assert.ok(importedIdlePhs["body"]?.style?.backgroundImage !== undefined);
+    assert.ok(importedIdlePhs["body"]?.style?.background !== undefined);
 
     const rebuilt = await build(imported.document, { embedFonts: "full" });
     const rebuiltZip = unzipSync(rebuilt.pptx);
@@ -1402,12 +1500,16 @@ describe("typed text placeholders and style inheritance", () => {
       placeholders: {
         title: {
           type: "title",
-          x: 64,
-          y: 48,
-          width: 360,
-          height: 80,
-          flipH: true,
-          style: { fontFamily: jostFont, rotate: 8 },
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 48,
+            width: 360,
+            height: 80,
+            fontFamily: jostFont,
+            flipH: true,
+            rotate: 8,
+          },
         },
       },
     });
@@ -1418,7 +1520,7 @@ describe("typed text placeholders and style inheritance", () => {
           <SlideLayout layout={layout} />
         </SlideMaster>
         <Slide id="s1" layout={layout}>
-          <Text placeholder="title" width={500}>
+          <Text placeholder="title" style={{ width: 500 }}>
             Hi
           </Text>
         </Slide>
@@ -1439,7 +1541,7 @@ describe("typed text placeholders and style inheritance", () => {
     assert.ok(imported.document instanceof DeckContainer);
     const importedLayout = imported.document.masters[0]!.layouts[0]!;
     const importedPhs = importedLayout.props["placeholders"] as PlaceholderMap;
-    assert.equal(importedPhs["title"]?.flipH, true);
+    assert.equal(importedPhs["title"]?.style?.flipH, true);
     assert.equal(importedPhs["title"]?.style?.rotate, 8);
 
     const importedSlide = imported.document.children.find(
@@ -1493,10 +1595,13 @@ describe("typed text placeholders and style inheritance", () => {
       placeholders: {
         title: {
           type: "title",
-          x: 64,
-          y: 48,
-          width: 400,
-          height: 80,
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 48,
+            width: 400,
+            height: 80,
+          },
         },
       },
     });

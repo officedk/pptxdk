@@ -9,12 +9,16 @@ export function SourceDeck() {
         <Shape
           id="source-shape"
           name={sourceLabel}
-          x={8}
-          y={8}
-          width={80}
-          height={32}
-          text={sourceLabel}
-        />
+          style={{
+            position: "absolute",
+            left: 8,
+            top: 8,
+            width: 80,
+            height: 32,
+          }}
+        >
+          {sourceLabel}
+        </Shape>
       </Slide>
     </Deck>
   );
@@ -24,7 +28,16 @@ export function OverflowDeck() {
   return (
     <Deck width={120} height={96}>
       <Slide id="overflow">
-        <Shape id="overflow-shape" x={100} y={8} width={40} height={32} />
+        <Shape
+          id="overflow-shape"
+          style={{
+            position: "absolute",
+            left: 100,
+            top: 8,
+            width: 40,
+            height: 32,
+          }}
+        />
       </Slide>
     </Deck>
   );

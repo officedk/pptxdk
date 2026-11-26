@@ -15,21 +15,23 @@ import {
   BuildError,
   CodegenError,
   ImportError,
+  buildDiagnosticSchema,
   codegen,
   codegenDiagnosticSchema,
   codegenTargetSchema,
   fatalImportIssueSchema,
   fontEmbeddingModeSchema,
   importDiagnosticSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   targetNameSchema,
   targets,
-  type BuildDiagnostic,
   type CodegenFileContent,
   type FatalImportIssue,
   type ImportDiagnostic,
   type ImportLocation,
   type ImportResult,
-  type LegacyReportDiagnostic,
+  type PreviewPlaceholder,
   type Target,
 } from "@officedk/pptxdk";
 import {
@@ -82,23 +84,19 @@ const { version: cliVersion } = z
     JSON.parse(readFileSync(findPackageJSON("./", import.meta.url)!, "utf8")),
   );
 
-const diagnosticItemSchema = z.object({
-  path: z.string(),
-  code: z.string(),
-  message: z.string(),
-});
-
 const previewPageItemSchema = z.object({
   page: previewPageNumberSchema,
   id: z.string(),
   output: z.string(),
 });
 
-const previewDiagnosticItemSchema = z.object({
-  page: previewPageNumberSchema,
-  path: z.string(),
-  message: z.string(),
-});
+const previewErrorWithPageSchema = z.discriminatedUnion("code", [
+  previewErrorSchema.options[0].extend({ page: previewPageNumberSchema }),
+  previewErrorSchema.options[1].extend({ page: previewPageNumberSchema }),
+  previewErrorSchema.options[2].extend({ page: previewPageNumberSchema }),
+  previewErrorSchema.options[3].extend({ page: previewPageNumberSchema }),
+  previewErrorSchema.options[4].extend({ page: previewPageNumberSchema }),
+]);
 
 export const buildInputSchema = z.object({
   entry: z.string().min(1),
@@ -181,14 +179,13 @@ export type CodegenInput = z.infer<typeof codegenInputSchema>;
 export const builtSchema = z.object({
   output: z.string(),
   slides: z.number().int().nonnegative(),
-  warnings: z.array(diagnosticItemSchema),
 });
 export type BuiltOutput = z.infer<typeof builtSchema>;
 
 export const previewedSchema = z.object({
   outputDir: z.string(),
   pages: z.array(previewPageItemSchema),
-  warnings: z.array(diagnosticItemSchema),
+  placeholders: z.array(previewPlaceholderSchema),
 });
 export type PreviewedOutput = z.infer<typeof previewedSchema>;
 
@@ -218,14 +215,14 @@ const sourceLoadFailedSchema = z.object({
 });
 
 const buildFailedSchema = z.object({
-  diagnostics: z.array(diagnosticItemSchema),
+  diagnostics: z.array(buildDiagnosticSchema),
 });
 
 const previewFailedSchema = z.object({
   outputDir: z.string(),
   pages: z.array(previewPageItemSchema),
-  warnings: z.array(diagnosticItemSchema),
-  diagnostics: z.array(previewDiagnosticItemSchema),
+  placeholders: z.array(previewPlaceholderSchema),
+  errors: z.array(previewErrorWithPageSchema),
 });
 
 const inputReadFailedSchema = z.object({
@@ -276,20 +273,6 @@ function isCancelledError(error: unknown, signal?: AbortSignal): boolean {
     errnoCode(error) === "ABORT_ERR" ||
     (error instanceof Error && error.name === "AbortError")
   );
-}
-
-function extractWarnings(diagnostics: readonly LegacyReportDiagnostic[]) {
-  return diagnostics
-    .filter((diagnostic) => diagnostic.severity === "warning")
-    .map(({ path, code, message }) => ({ path, code, message }));
-}
-
-function toBuildFailureDiagnostics(diagnostics: readonly BuildDiagnostic[]) {
-  return diagnostics.map(({ path, code, message }) => ({
-    path,
-    code,
-    message,
-  }));
 }
 
 /**
@@ -373,12 +356,11 @@ async function validateOutputDir(
   }
 }
 
-function formatBuildWarningLines(
-  warnings: readonly z.infer<typeof diagnosticItemSchema>[],
+function formatPreviewPlaceholderLines(
+  placeholders: readonly PreviewPlaceholder[],
 ): string[] {
-  return warnings.map(
-    (warning) =>
-      `Warning ${warning.path} [${warning.code}]: ${warning.message}`,
+  return placeholders.map(
+    (placeholder) => `  Placeholder ${placeholder.path}: ${placeholder.url}`,
   );
 }
 
@@ -398,7 +380,7 @@ function presentBuildFailed({
       "Build failed:",
       ...diagnostics.map(
         (diagnostic) =>
-          `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
+          `  ${diagnostic.path}${diagnostic.field ? ` (${diagnostic.field})` : ""} [${diagnostic.code}]: ${diagnostic.message}`,
       ),
     ]),
   );
@@ -676,7 +658,7 @@ const buildCommand = define.command("build")({
           }
           if (error instanceof BuildError) {
             return outcome.failure.buildFailed({
-              diagnostics: toBuildFailureDiagnostics(error.diagnostics),
+              diagnostics: [...error.diagnostics],
             });
           }
           if (error instanceof SourceLoadError) {
@@ -702,7 +684,6 @@ const buildCommand = define.command("build")({
         return outcome.data.built({
           output,
           slides: result.report.slides.length,
-          warnings: extractWarnings(result.report.diagnostics),
         });
       },
     });
@@ -713,10 +694,9 @@ const buildCommand = define.command("build")({
         text: buildDeck.text({
           description: "Human-readable text output",
           success: {
-            built: ({ output, slides, warnings }) =>
+            built: ({ output, slides }) =>
               text.lines(
                 toContractTextLines([
-                  ...formatBuildWarningLines(warnings),
                   `Built deck: ${output}`,
                   `Slides: ${slides}`,
                 ]),
@@ -863,7 +843,7 @@ const previewCommand = define.command("preview")({
           }
           if (error instanceof BuildError) {
             return outcome.failure.buildFailed({
-              diagnostics: toBuildFailureDiagnostics(error.diagnostics),
+              diagnostics: [...error.diagnostics],
             });
           }
           if (
@@ -883,38 +863,35 @@ const previewCommand = define.command("preview")({
           throw error;
         }
 
-        const warnings = extractWarnings(result.report.diagnostics);
         // Base zero-padding width on total slides in the resolved deck rather than painted pages.
         const padWidth = Math.max(
           2,
           String(result.report.slides.length).length,
         );
         const writtenPages: z.infer<typeof previewPageItemSchema>[] = [];
-        const failedDiagnostics: z.infer<typeof previewDiagnosticItemSchema>[] =
-          [];
+        const placeholders: PreviewPlaceholder[] = [];
+        const failedErrors: z.infer<typeof previewErrorWithPageSchema>[] = [];
 
         for (const pageResult of result.pages) {
           if (dependencies.signal?.aborted) {
             return outcome.failure.cancelled({});
           }
 
-          const errors = pageResult.diagnostics.filter(
-            (diagnostic) => diagnostic.severity === "error",
-          );
-          if (errors.length > 0 || pageResult.png === undefined) {
-            if (errors.length > 0) {
-              failedDiagnostics.push(
-                ...errors.map(({ page, path, message }) => ({
-                  page,
-                  path,
-                  message,
+          if (pageResult.errors.length > 0 || pageResult.png === undefined) {
+            if (pageResult.errors.length > 0) {
+              failedErrors.push(
+                ...pageResult.errors.map((error) => ({
+                  ...error,
+                  page: pageResult.page,
                 })),
               );
             } else {
-              failedDiagnostics.push({
+              failedErrors.push({
+                code: "preview-unsupported-capability",
                 page: pageResult.page,
                 path: `deck/slide[${pageResult.id}]`,
                 message: "Preview did not produce a PNG image",
+                capability: "preview",
               });
             }
             continue;
@@ -941,21 +918,22 @@ const previewCommand = define.command("preview")({
             id: pageResult.id,
             output: pageOutput,
           });
+          placeholders.push(...pageResult.placeholders);
         }
 
-        if (failedDiagnostics.length > 0) {
+        if (failedErrors.length > 0) {
           return outcome.failure.previewFailed({
             outputDir,
             pages: writtenPages,
-            warnings,
-            diagnostics: failedDiagnostics,
+            placeholders,
+            errors: failedErrors,
           });
         }
 
         return outcome.data.previewed({
           outputDir,
           pages: writtenPages,
-          warnings,
+          placeholders,
         });
       },
     });
@@ -966,15 +944,20 @@ const previewCommand = define.command("preview")({
         text: previewDeck.text({
           description: "Human-readable text output",
           success: {
-            previewed: ({ outputDir, pages, warnings }) =>
+            previewed: ({ outputDir, pages, placeholders }) =>
               text.lines(
                 toContractTextLines([
-                  ...formatBuildWarningLines(warnings),
                   `Previewed ${pages.length} page(s) in ${outputDir}`,
                   ...pages.map(
                     (page) =>
                       `  Page ${page.page} (${page.id}): ${page.output}`,
                   ),
+                  ...(placeholders.length > 0
+                    ? [
+                        "Placeholders:",
+                        ...formatPreviewPlaceholderLines(placeholders),
+                      ]
+                    : []),
                 ]),
               ),
           },
@@ -993,14 +976,13 @@ const previewCommand = define.command("preview")({
               ),
             sourceLoadFailed: presentSourceLoadFailed,
             buildFailed: presentBuildFailed,
-            previewFailed: ({ pages, warnings, diagnostics }) =>
+            previewFailed: ({ pages, placeholders, errors }) =>
               text.lines(
                 toContractTextLines([
-                  ...formatBuildWarningLines(warnings),
                   "Preview failed:",
-                  ...diagnostics.map(
-                    (diagnostic) =>
-                      `  Page ${diagnostic.page} ${diagnostic.path}: ${diagnostic.message}`,
+                  ...errors.map(
+                    (error) =>
+                      `  Page ${error.page} ${error.path} [${error.code}]: ${error.message}`,
                   ),
                   ...(pages.length > 0
                     ? [
@@ -1009,6 +991,12 @@ const previewCommand = define.command("preview")({
                           (page) =>
                             `  Page ${page.page} (${page.id}): ${page.output}`,
                         ),
+                      ]
+                    : []),
+                  ...(placeholders.length > 0
+                    ? [
+                        "Placeholders:",
+                        ...formatPreviewPlaceholderLines(placeholders),
                       ]
                     : []),
                 ]),
@@ -1309,7 +1297,7 @@ const codegenCommand = define.command("codegen")({
                   "Source generation failed:",
                   ...diagnostics.map(
                     (diagnostic) =>
-                      `  ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
+                      `  ${diagnostic.path}${"field" in diagnostic && diagnostic.field !== undefined ? ` (${diagnostic.field})` : ""} [${diagnostic.code}]: ${diagnostic.message}`,
                   ),
                 ]),
               ),

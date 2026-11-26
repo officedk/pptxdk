@@ -140,31 +140,27 @@ const doc = deck({ width: 240, height: 120, theme }).append(
           id: "plain",
           morphKey: hero,
           geometry: preset("roundRect", { adj: 20000 }),
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
-          style: { backgroundImage: linearGradient(90, "#0F766E", "#14B8A6") },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+            background: linearGradient(90, "#0F766E", "#14B8A6"),
+          },
           enter: fade({ duration: 150 }),
         }),
       ),
     ),
-    shape({
+    shape("Shape text", {
       id: "labeled",
       name: "labeled",
-      x: 24,
-      y: 0,
-      width: 100,
-      height: 32,
-      text: "Shape text",
+      style: { position: "absolute", left: 24, top: 0, width: 100, height: 32 },
     }),
     shape({
       id: "rich",
       name: "rich",
-      x: 24,
-      y: 40,
-      width: 120,
-      height: 32,
+      style: { position: "absolute", left: 24, top: 40, width: 120, height: 32 },
     }).content(paragraph(span("Rich shape"))),
   ),
   slide({ id: "trimmed-vanilla-next", transition: transitions.morph({ fallback: transitions.fade() }) }).append(
@@ -172,11 +168,14 @@ const doc = deck({ width: 240, height: 120, theme }).append(
       id: "plain-next",
       morphKey: hero,
       geometry: preset("roundRect", { adj: 20000 }),
-      x: 20,
-      y: 10,
-      width: 40,
-      height: 40,
-      fill: "#0F766E",
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 10,
+        width: 40,
+        height: 40,
+        background: "#0F766E",
+      },
     }),
   ),
 );
@@ -277,27 +276,34 @@ const tree = createElement(
           id: "plain",
           morphKey: hero,
           geometry: preset("roundRect", { adj: 20000 }),
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
-          style: { backgroundImage: linearGradient(90, "#0F766E", "#14B8A6") },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+            background: linearGradient(90, "#0F766E", "#14B8A6"),
+          },
           enter: fade({ duration: 150 }),
         }),
       ),
     ),
-    createElement(Shape, {
-      id: "labeled",
-      name: "labeled",
-      x: 24,
-      y: 0,
-      width: 100,
-      height: 32,
-      text: "React shape text",
-    }),
     createElement(
       Shape,
-      { id: "rich", name: "rich", x: 24, y: 40, width: 120, height: 32 },
+      {
+        id: "labeled",
+        name: "labeled",
+        style: { position: "absolute", left: 24, top: 0, width: 100, height: 32 },
+      },
+      "React shape text",
+    ),
+    createElement(
+      Shape,
+      {
+        id: "rich",
+        name: "rich",
+        style: { position: "absolute", left: 24, top: 40, width: 120, height: 32 },
+      },
       createElement(P, null, createElement(Span, null, "Rich react shape")),
     ),
   ),
@@ -308,11 +314,14 @@ const tree = createElement(
       id: "plain-next",
       morphKey: hero,
       geometry: preset("roundRect", { adj: 20000 }),
-      x: 20,
-      y: 10,
-      width: 40,
-      height: 40,
-      fill: "#0F766E",
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 10,
+        width: 40,
+        height: 40,
+        background: "#0F766E",
+      },
     }),
   ),
 );
@@ -344,7 +353,16 @@ process.stdout.write(JSON.stringify(texts));
   it("diagnoses missing independent Text declared inside composed components and vanilla documents, reuses one Resolution for emit and paint, and keeps default build intact", async () => {
     function NestedText() {
       return (
-        <Text id="missing-text" x={0} y={0} width={100} height={32}>
+        <Text
+          id="missing-text"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 32,
+          }}
+        >
           not available
         </Text>
       );
@@ -381,10 +399,13 @@ process.stdout.write(JSON.stringify(texts));
           slide({ id: "nested" }).append(
             text("not available", {
               id: "missing-text",
-              x: 0,
-              y: 0,
-              width: 100,
-              height: 32,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 32,
+              },
             }),
           ),
         ),
@@ -403,7 +424,17 @@ process.stdout.write(JSON.stringify(texts));
     const sharedDoc = (
       <Deck width={320} height={180} theme={testTheme()}>
         <Slide id="shared" transition={transitions.fade()}>
-          <Shape id="card" x={24} y={24} width={200} height={60} fill="#E2E8F0">
+          <Shape
+            id="card"
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 200,
+              height: 60,
+              background: "#E2E8F0",
+            }}
+          >
             <P>
               <Span>Shared snapshot</Span>
             </P>
@@ -425,14 +456,24 @@ process.stdout.write(JSON.stringify(texts));
       "Shared snapshot",
     );
     assert.equal(painted.pages.length, 1);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[0]?.placeholders, []);
     const png = PNG.sync.read(Buffer.from(painted.pages[0].png!));
     assert.ok(png.width > 0 && png.height > 0);
 
     const fullResult = await buildDefault(
       <Deck width={320} height={180}>
         <Slide id="full">
-          <Text id="heading" x={24} y={24} width={200} height={40}>
+          <Text
+            id="heading"
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 200,
+              height: 40,
+            }}
+          >
             Full default build
           </Text>
         </Slide>
@@ -496,11 +537,39 @@ process.stdout.write(JSON.stringify(texts));
       type: "obj",
       preserve: true,
       footerPlaceholders: {
-        footer: { x: 40, y: 480, width: 320, height: 28, text: "Footer" },
+        footer: {
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 480,
+            width: 320,
+            height: 28,
+          },
+          text: "Footer",
+        },
       },
       placeholders: {
-        title: { type: "title", x: 40, y: 32, width: 560, height: 48 },
-        body: { type: "obj", idx: 1, x: 40, y: 96, width: 560, height: 320 },
+        title: {
+          type: "title",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 32,
+            width: 560,
+            height: 48,
+          },
+        },
+        body: {
+          type: "obj",
+          idx: 1,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 96,
+            width: 560,
+            height: 320,
+          },
+        },
       },
     });
 
@@ -576,7 +645,15 @@ process.stdout.write(JSON.stringify(texts));
               <SlideLayout layout={blankLayout} />
             </SlideMaster>
             <Slide id="s1" layout={blankLayout}>
-              <Text x={40} y={40} width={200} height={40}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 40,
+                  top: 40,
+                  width: 200,
+                  height: 40,
+                }}
+              >
                 Hello
               </Text>
             </Slide>
@@ -594,7 +671,16 @@ process.stdout.write(JSON.stringify(texts));
           <Deck width={960} height={540}>
             <Section name="Intro">
               <Slide id="s1">
-                <Shape x={40} y={40} width={100} height={60} fill="#2563EB" />
+                <Shape
+                  style={{
+                    position: "absolute",
+                    left: 40,
+                    top: 40,
+                    width: 100,
+                    height: 60,
+                    background: "#2563EB",
+                  }}
+                />
               </Slide>
             </Section>
           </Deck>,
@@ -639,7 +725,8 @@ process.stdout.write(JSON.stringify(texts));
 
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 1);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[0]?.placeholders, []);
     assert.match(
       painted.pages[0]?.svg ?? "",
       /<rect width="100%" height="100%" fill="#1E293B"\/>/u,
@@ -711,7 +798,8 @@ process.stdout.write(JSON.stringify(texts));
     for (const [pageIndex, spec] of expected.entries()) {
       const page = painted.pages[pageIndex];
       assert.ok(page);
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
+      assert.deepEqual(page.placeholders, []);
       assert.match(
         page.svg ?? "",
         new RegExp(

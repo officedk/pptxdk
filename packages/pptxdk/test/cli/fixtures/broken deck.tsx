@@ -4,7 +4,16 @@ export default function BrokenDeck() {
   return (
     <Deck>
       <Slide id="broken">
-        <Shape id="broken-shape" x={0} y={0} width={0} height={20} />
+        <Shape
+          id="broken-shape"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: -20,
+            height: 20,
+          }}
+        />
       </Slide>
     </Deck>
   );
@@ -16,15 +25,27 @@ export function UnselectedPageBrokenDeck() {
       <Slide id="valid-selected">
         <Shape
           id="ok-shape"
-          x={20}
-          y={20}
-          width={120}
-          height={60}
-          fill="#2563EB"
+          style={{
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 120,
+            height: 60,
+            background: "#2563EB",
+          }}
         />
       </Slide>
       <Slide id="broken-unselected">
-        <Shape id="broken-unselected-shape" x={0} y={0} width={0} height={20} />
+        <Shape
+          id="broken-unselected-shape"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: -20,
+            height: 20,
+          }}
+        />
       </Slide>
     </Deck>
   );

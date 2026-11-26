@@ -55,11 +55,12 @@ describe("pptxdk import -> edit -> resolve/preview/emit/build roundtrip", () => 
             {
               id: "title",
               name: "Title Box",
-              x: 40,
-              y: 36,
-              width: 360,
-              height: 60,
               style: {
+                position: "absolute",
+                left: 40,
+                top: 36,
+                width: 360,
+                height: 60,
                 fontFamily: "Jost*",
                 fontSize: "24pt",
                 color: "#0F172A",
@@ -101,7 +102,8 @@ describe("pptxdk import -> edit -> resolve/preview/emit/build roundtrip", () => 
     const rebuilt = await build(imported.document);
 
     assert.equal(painted.pages.length, 1);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[0]?.placeholders, []);
     assert.ok(painted.pages[0]?.png instanceof Uint8Array);
     const png = PNG.sync.read(Buffer.from(painted.pages[0].png));
     assert.equal(png.width, 640);
@@ -138,7 +140,17 @@ describe("pptxdk import -> edit -> resolve/preview/emit/build roundtrip", () => 
           { id: "trimmed" },
           createElement(
             Text,
-            { id: "t1", name: "Label", x: 16, y: 16, width: 200, height: 40 },
+            {
+              id: "t1",
+              name: "Label",
+              style: {
+                position: "absolute",
+                left: 16,
+                top: 16,
+                width: 200,
+                height: 40,
+              },
+            },
             "Selective Import",
           ),
         ),
@@ -205,7 +217,17 @@ process.stdout.write("ok");
           { id: "file-slide" },
           createElement(
             Text,
-            { id: "msg", name: "Msg", x: 10, y: 10, width: 150, height: 32 },
+            {
+              id: "msg",
+              name: "Msg",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 150,
+                height: 32,
+              },
+            },
             "From File",
           ),
         ),
@@ -257,7 +279,16 @@ process.stdout.write("ok");
           { id: "closure" },
           createElement(
             Text,
-            { id: "t1", x: 10, y: 10, width: 150, height: 32 },
+            {
+              id: "t1",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 150,
+                height: 32,
+              },
+            },
             "Closure check",
           ),
         ),
@@ -313,7 +344,17 @@ process.stdout.write("ok");
           { id: "s1" },
           createElement(
             Text,
-            { id: "t1", name: "Box", x: 20, y: 20, width: 200, height: 40 },
+            {
+              id: "t1",
+              name: "Box",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 200,
+                height: 40,
+              },
+            },
             "Keep text",
           ),
         ),

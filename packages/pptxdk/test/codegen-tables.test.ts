@@ -72,15 +72,27 @@ const tablePlaceholderLayout = defineSlideLayout({
   id: "tbl-layout",
   name: "Table Layout",
   placeholders: {
-    title: { type: "title", x: 32, y: 20, width: 576, height: 40 },
+    title: {
+      type: "title",
+      style: {
+        position: "absolute",
+        left: 32,
+        top: 20,
+        width: 576,
+        height: 40,
+      },
+    },
     tbl: {
       type: "tbl",
       explicitType: true,
       idx: 1,
-      x: 32,
-      y: 76,
-      width: 576,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 32,
+        top: 76,
+        width: 576,
+        height: 220,
+      },
     },
   },
 });
@@ -99,15 +111,20 @@ function createTableAcceptanceVanillaDeck() {
       table({
         id: "pricing-table",
         name: "PricingTable",
-        x: 32,
-        y: 36,
-        width: 576,
         columns: [130, "auto", "1fr"],
-        style: { fontFamily: jostFont, fontSize: 15, color: "#0F172A" },
+        style: {
+          position: "absolute",
+          left: 32,
+          top: 36,
+          width: 576,
+          fontFamily: jostFont,
+          fontSize: 15,
+          color: "#0F172A",
+        },
       }).append(
         row({
           id: "header",
-          style: { height: 46, backgroundColor: "#1E293B", color: "#FFFFFF" },
+          style: { height: 46, background: "#1E293B", color: "#FFFFFF" },
         }).append(
           cell(paragraph("Q1 Plan Overview", { style: { align: "center" } }), {
             id: "title-span",
@@ -115,9 +132,7 @@ function createTableAcceptanceVanillaDeck() {
             style: {
               fontWeight: "bold",
               padding: [6, 10],
-              borderColor: "#0F172A",
-              borderWidth: 2,
-              borderStyle: "solid",
+              border: { color: "#0F172A", width: 2, style: "solid" },
             },
           }),
           cell(
@@ -128,38 +143,32 @@ function createTableAcceptanceVanillaDeck() {
               id: "page-badge",
               style: {
                 fontFamily: notoFont,
-                backgroundColor: "#334155",
+                background: "#334155",
                 color: "#E2E8F0",
                 padding: [6, 10],
-                borderColor: "#0F172A",
-                borderWidth: 2,
-                borderStyle: "dashed",
+                border: { color: "#0F172A", width: 2, style: "dashed" },
               },
             },
           ),
         ),
-        row({ id: "tier-pro", style: { backgroundColor: "#FFFFFF" } }).append(
+        row({ id: "tier-pro", style: { background: "#FFFFFF" } }).append(
           cell(paragraph("Pro\nTier", { style: { align: "center" } }), {
             id: "tier-name",
             rowSpan: 2,
             style: {
-              backgroundColor: "#EFF6FF",
+              background: "#EFF6FF",
               color: "#1D4ED8",
               fontWeight: "bold",
               verticalAlign: "middle",
               padding: [6, 10],
-              borderColor: "#3B82F6",
-              borderWidth: 2,
-              borderStyle: "solid",
+              border: { color: "#3B82F6", width: 2, style: "solid" },
             },
           }),
           cell("Auto Width", {
             id: "pro-metric",
             style: {
               padding: [6, 10],
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
-              borderStyle: "dotted",
+              border: { color: "#CBD5E1", width: 1, style: "dotted" },
             },
           }),
           cell(
@@ -175,33 +184,30 @@ function createTableAcceptanceVanillaDeck() {
             {
               id: "pro-price",
               style: {
-                backgroundColor: "#F1F5F9",
+                background: "#F1F5F9",
                 verticalAlign: "bottom",
                 padding: [6, 10],
-                borderColor: "#CBD5E1",
-                borderWidth: 1,
+                border: { color: "#CBD5E1", width: 1 },
               },
             },
           ),
         ),
-        row({ id: "tier-notes", style: { backgroundColor: "#FFFFFF" } }).append(
+        row({ id: "tier-notes", style: { background: "#FFFFFF" } }).append(
           cell("Summary", {
             id: "notes-label",
             style: {
               padding: [6, 10],
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              border: { color: "#CBD5E1", width: 1 },
             },
           }),
           cell("Includes SSO & audit", {
             id: "notes-detail",
             style: {
-              backgroundColor: "#FEF3C7",
+              background: "#FEF3C7",
               color: "#92400E",
               verticalAlign: "top",
               padding: [6, 10],
-              borderColor: "#D97706",
-              borderWidth: 1,
+              border: { color: "#D97706", width: 1 },
             },
           }),
         ),
@@ -210,38 +216,46 @@ function createTableAcceptanceVanillaDeck() {
     slide({ id: "narrow-wrapping" }).append(
       table({
         id: "wide-table",
-        x: 28,
-        y: 44,
         columns: [270],
-        style: { fontFamily: jostFont, fontSize: 15, color: "#065F46" },
+        style: {
+          position: "absolute",
+          left: 28,
+          top: 44,
+          fontFamily: jostFont,
+          fontSize: 15,
+          color: "#065F46",
+        },
       }).append(
         row({ id: "wide-row" }).append(
           cell(wrappingCopy, {
             id: "wide-cell",
             style: {
               padding: [10, 12],
-              backgroundColor: "#ECFDF5",
-              borderColor: "#10B981",
-              borderWidth: 2,
+              background: "#ECFDF5",
+              border: { color: "#10B981", width: 2 },
             },
           }),
         ),
       ),
       table({
         id: "narrow-table",
-        x: 332,
-        y: 44,
         columns: [130],
-        style: { fontFamily: jostFont, fontSize: 15, color: "#991B1B" },
+        style: {
+          position: "absolute",
+          left: 332,
+          top: 44,
+          fontFamily: jostFont,
+          fontSize: 15,
+          color: "#991B1B",
+        },
       }).append(
         row({ id: "narrow-row" }).append(
           cell(wrappingCopy, {
             id: "narrow-cell",
             style: {
               padding: [10, 12],
-              backgroundColor: "#FEF2F2",
-              borderColor: "#EF4444",
-              borderWidth: 2,
+              background: "#FEF2F2",
+              border: { color: "#EF4444", width: 2 },
             },
           }),
         ),
@@ -260,7 +274,7 @@ function createTableAcceptanceVanillaDeck() {
         style: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
       }).append(
         row({
-          style: { height: 36, backgroundColor: "#E2E8F0" },
+          style: { height: 36, background: "#E2E8F0" },
         }).append(cell("Region"), cell("Notes")),
         row({ style: { height: 36 } }).append(
           cell("EMEA"),
@@ -289,11 +303,16 @@ async function createTableAcceptanceReactDeck() {
           {
             id: "pricing-table",
             name: "PricingTable",
-            x: 32,
-            y: 36,
-            width: 576,
             columns: [130, "auto", "1fr"],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 36,
+              width: 576,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#0F172A",
+            },
           },
           createElement(
             Row,
@@ -301,7 +320,7 @@ async function createTableAcceptanceReactDeck() {
               id: "header",
               style: {
                 height: 46,
-                backgroundColor: "#1E293B",
+                background: "#1E293B",
                 color: "#FFFFFF",
               },
             },
@@ -313,9 +332,7 @@ async function createTableAcceptanceReactDeck() {
                 style: {
                   fontWeight: "bold",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
-                  borderStyle: "solid",
+                  border: { color: "#0F172A", width: 2, style: "solid" },
                 },
               },
               createElement(
@@ -330,12 +347,10 @@ async function createTableAcceptanceReactDeck() {
                 id: "page-badge",
                 style: {
                   fontFamily: notoFont,
-                  backgroundColor: "#334155",
+                  background: "#334155",
                   color: "#E2E8F0",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  border: { color: "#0F172A", width: 2, style: "dashed" },
                 },
               },
               createElement(
@@ -349,21 +364,19 @@ async function createTableAcceptanceReactDeck() {
           ),
           createElement(
             Row,
-            { id: "tier-pro", style: { backgroundColor: "#FFFFFF" } },
+            { id: "tier-pro", style: { background: "#FFFFFF" } },
             createElement(
               Cell,
               {
                 id: "tier-name",
                 rowSpan: 2,
                 style: {
-                  backgroundColor: "#EFF6FF",
+                  background: "#EFF6FF",
                   color: "#1D4ED8",
                   fontWeight: "bold",
                   verticalAlign: "middle",
                   padding: [6, 10],
-                  borderColor: "#3B82F6",
-                  borderWidth: 2,
-                  borderStyle: "solid",
+                  border: { color: "#3B82F6", width: 2, style: "solid" },
                 },
               },
               createElement(P, { style: { align: "center" } }, "Pro\nTier"),
@@ -374,9 +387,7 @@ async function createTableAcceptanceReactDeck() {
                 id: "pro-metric",
                 style: {
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
-                  borderStyle: "dotted",
+                  border: { color: "#CBD5E1", width: 1, style: "dotted" },
                 },
               },
               "Auto Width",
@@ -386,11 +397,10 @@ async function createTableAcceptanceReactDeck() {
               {
                 id: "pro-price",
                 style: {
-                  backgroundColor: "#F1F5F9",
+                  background: "#F1F5F9",
                   verticalAlign: "bottom",
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
               createElement(
@@ -407,15 +417,14 @@ async function createTableAcceptanceReactDeck() {
           ),
           createElement(
             Row,
-            { id: "tier-notes", style: { backgroundColor: "#FFFFFF" } },
+            { id: "tier-notes", style: { background: "#FFFFFF" } },
             createElement(
               Cell,
               {
                 id: "notes-label",
                 style: {
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
               "Summary",
@@ -425,12 +434,11 @@ async function createTableAcceptanceReactDeck() {
               {
                 id: "notes-detail",
                 style: {
-                  backgroundColor: "#FEF3C7",
+                  background: "#FEF3C7",
                   color: "#92400E",
                   verticalAlign: "top",
                   padding: [6, 10],
-                  borderColor: "#D97706",
-                  borderWidth: 1,
+                  border: { color: "#D97706", width: 1 },
                 },
               },
               "Includes SSO & audit",
@@ -445,10 +453,15 @@ async function createTableAcceptanceReactDeck() {
           Table,
           {
             id: "wide-table",
-            x: 28,
-            y: 44,
             columns: [270],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#065F46" },
+            style: {
+              position: "absolute",
+              left: 28,
+              top: 44,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#065F46",
+            },
           },
           createElement(
             Row,
@@ -459,9 +472,8 @@ async function createTableAcceptanceReactDeck() {
                 id: "wide-cell",
                 style: {
                   padding: [10, 12],
-                  backgroundColor: "#ECFDF5",
-                  borderColor: "#10B981",
-                  borderWidth: 2,
+                  background: "#ECFDF5",
+                  border: { color: "#10B981", width: 2 },
                 },
               },
               wrappingCopy,
@@ -472,10 +484,15 @@ async function createTableAcceptanceReactDeck() {
           Table,
           {
             id: "narrow-table",
-            x: 332,
-            y: 44,
             columns: [130],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#991B1B" },
+            style: {
+              position: "absolute",
+              left: 332,
+              top: 44,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#991B1B",
+            },
           },
           createElement(
             Row,
@@ -486,9 +503,8 @@ async function createTableAcceptanceReactDeck() {
                 id: "narrow-cell",
                 style: {
                   padding: [10, 12],
-                  backgroundColor: "#FEF2F2",
-                  borderColor: "#EF4444",
-                  borderWidth: 2,
+                  background: "#FEF2F2",
+                  border: { color: "#EF4444", width: 2 },
                 },
               },
               wrappingCopy,
@@ -518,7 +534,7 @@ async function createTableAcceptanceReactDeck() {
           },
           createElement(
             Row,
-            { style: { height: 36, backgroundColor: "#E2E8F0" } },
+            { style: { height: 36, background: "#E2E8F0" } },
             createElement(Cell, null, "Region"),
             createElement(Cell, null, "Notes"),
           ),
@@ -540,10 +556,6 @@ describe("pptxdk native table codegen acceptance", () => {
     const reactDoc = await createTableAcceptanceReactDeck();
 
     const initialBuilt = await build(vanillaDoc, { embedFonts: "full" });
-    assert.deepEqual(
-      initialBuilt.report.diagnostics.filter((d) => d.severity === "error"),
-      [],
-    );
     const bytesCopy = new Uint8Array(initialBuilt.pptx);
     const imported = importPptx(bytesCopy);
     bytesCopy.fill(0);
@@ -585,9 +597,9 @@ describe("pptxdk native table codegen acceptance", () => {
       assert.equal(painted.pages.length, 3, `${item.label} preview page count`);
       for (const [pageIndex, page] of painted.pages.entries()) {
         assert.deepEqual(
-          page.diagnostics,
+          page.errors,
           [],
-          `${item.label} preview page ${pageIndex + 1} diagnostics`,
+          `${item.label} preview page ${pageIndex + 1} errors`,
         );
         assert.ok(page.png instanceof Uint8Array);
       }
@@ -762,7 +774,7 @@ describe("pptxdk native table codegen acceptance", () => {
       const updated = source
         .replace("Auto Width", "Much Wider Auto Column Label")
         .replace(/(id:\s*"pricing-table"[\s\S]*?)width:\s*576/u, "$1width: 660")
-        .replace(/(id="pricing-table"[\s\S]*?)width=\{576\}/u, "$1width={660}");
+        .replace(/(id="pricing-table"[\s\S]*?)width:\s*576/u, "$1width: 660");
       assert.notEqual(updated, source, `${label} edit applied`);
       return {
         label,
@@ -782,7 +794,7 @@ describe("pptxdk native table codegen acceptance", () => {
       const { file } = await rebuildGeneratedSourceRelocated(item.result);
       const painted = await previewGeneratedSourceRelocated(item.result);
       assert.deepEqual(file.errors, [], item.label);
-      assert.deepEqual(painted.pages[0]?.diagnostics, [], item.label);
+      assert.deepEqual(painted.pages[0]?.errors, [], item.label);
 
       const tbl = file.slides[0]!.objects[0]!.table!;
       assert.equal(tbl.columnWidthsEmu[0], 130 * emuPerPx, item.label);
@@ -802,10 +814,15 @@ describe("pptxdk native table codegen acceptance", () => {
         table({
           id: "rect-merge",
           name: "MergeGrid",
-          x: 24,
-          y: 28,
           columns: [110, 110, 140],
-          style: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 28,
+            fontFamily: jostFont,
+            fontSize: 14,
+            color: "#0F172A",
+          },
         }).append(
           row({ id: "r0", style: { height: 34 } }).append(
             cell("2x2 Anchor", {
@@ -813,20 +830,19 @@ describe("pptxdk native table codegen acceptance", () => {
               colSpan: 2,
               rowSpan: 2,
               style: {
-                backgroundColor: "#DBEAFE",
-                borderColor: "#2563EB",
-                borderWidth: 2,
+                background: "#DBEAFE",
+                border: { color: "#2563EB", width: 2 },
               },
             }),
             cell("TopRight", {
               id: "tr",
-              style: { backgroundColor: "#F1F5F9" },
+              style: { background: "#F1F5F9" },
             }),
           ),
           row({ id: "r1", style: { height: 34 } }).append(
             cell("MidRight", {
               id: "mr",
-              style: { backgroundColor: "#FEF3C7" },
+              style: { background: "#FEF3C7" },
             }),
           ),
           row({ id: "r2", style: { height: 34 } }).append(
@@ -888,7 +904,7 @@ describe("pptxdk native table codegen acceptance", () => {
       );
       const painted = await previewGeneratedSourceRelocated(item.result);
       assert.deepEqual(file.errors, [], item.label);
-      assert.deepEqual(painted.pages[0]?.diagnostics, [], item.label);
+      assert.deepEqual(painted.pages[0]?.errors, [], item.label);
       const tbl = file.slides[0]!.objects[0]!.table!;
       assert.deepEqual(tbl.merges, [
         { row: 0, column: 0, rowSpan: 2, colSpan: 2 },
@@ -910,7 +926,7 @@ describe("pptxdk native table codegen acceptance", () => {
         await rebuildGeneratedSourceRelocated(item.result);
       const painted = await previewGeneratedSourceRelocated(item.result);
       assert.deepEqual(file.errors, [], item.label);
-      assert.deepEqual(painted.pages[0]?.diagnostics, [], item.label);
+      assert.deepEqual(painted.pages[0]?.errors, [], item.label);
       const tbl = file.slides[0]!.objects[0]!.table!;
       assert.deepEqual(tbl.merges, [
         { row: 0, column: 0, rowSpan: 2, colSpan: 2 },

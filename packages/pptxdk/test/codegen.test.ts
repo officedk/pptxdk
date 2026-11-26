@@ -43,11 +43,16 @@ function createSampleVanillaDeck() {
       slide({ id: "cover" }).append(
         text("Quarterly Review", {
           id: "cover-title",
-          x: 64,
-          y: 80,
-          width: 600,
-          height: 60,
-          style: { fontSize: 28, fontWeight: "bold", color: "#111827" },
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 80,
+            width: 600,
+            height: 60,
+            fontSize: 28,
+            fontWeight: "bold",
+            color: "#111827",
+          },
         }),
       ),
     ),
@@ -66,20 +71,26 @@ function createSampleVanillaDeck() {
           ],
           {
             id: "summary-body",
-            x: 64,
-            y: 100,
-            width: 640,
-            height: 140,
+            style: {
+              position: "absolute",
+              left: 64,
+              top: 100,
+              width: 640,
+              height: 140,
+            },
           },
         ),
       ),
       slide({ id: "closing" }).append(
         text("Thank you", {
           id: "closing-note",
-          x: 64,
-          y: 220,
-          width: 480,
-          height: 52,
+          style: {
+            position: "absolute",
+            left: 64,
+            top: 220,
+            width: 480,
+            height: 52,
+          },
         }),
       ),
     ),
@@ -101,11 +112,16 @@ async function createSampleReactDeck() {
             Text,
             {
               id: "cover-title",
-              x: 64,
-              y: 80,
-              width: 600,
-              height: 60,
-              style: { fontSize: 28, fontWeight: "bold", color: "#111827" },
+              style: {
+                position: "absolute",
+                left: 64,
+                top: 80,
+                width: 600,
+                height: 60,
+                fontSize: 28,
+                fontWeight: "bold",
+                color: "#111827",
+              },
             },
             "Quarterly Review",
           ),
@@ -121,10 +137,13 @@ async function createSampleReactDeck() {
             Text,
             {
               id: "summary-body",
-              x: 64,
-              y: 100,
-              width: 640,
-              height: 140,
+              style: {
+                position: "absolute",
+                left: 64,
+                top: 100,
+                width: 640,
+                height: 140,
+              },
             },
             createElement(
               P,
@@ -146,10 +165,13 @@ async function createSampleReactDeck() {
             Text,
             {
               id: "closing-note",
-              x: 64,
-              y: 220,
-              width: 480,
-              height: 52,
+              style: {
+                position: "absolute",
+                left: 64,
+                top: 220,
+                width: 480,
+                height: 52,
+              },
             },
             "Thank you",
           ),
@@ -204,12 +226,6 @@ process.stdout.write("ok");
     const reactInput = await createSampleReactDeck();
 
     const originalBuilt = await build(vanillaInput);
-    assert.deepEqual(
-      originalBuilt.report.diagnostics.filter(
-        (diagnostic) => diagnostic.severity === "error",
-      ),
-      [],
-    );
     const importedResult = importPptx(originalBuilt.pptx);
     assert.deepEqual(importedResult.report.diagnostics, []);
 
@@ -282,10 +298,13 @@ process.stdout.write("ok");
         slide({ id: "s-chart" }).append(
           chart({
             id: "sales-chart",
-            x: 60,
-            y: 80,
-            width: 400,
-            height: 240,
+            style: {
+              position: "absolute",
+              left: 60,
+              top: 80,
+              width: 400,
+              height: 240,
+            },
             groups: [
               {
                 kind: "column",
@@ -327,12 +346,15 @@ process.stdout.write("ok");
 
     const invalidNumberDeck = deck({ width: 960, height: 540 }).append(
       slide({ id: "s-bad" }).append(
-        text("Bad x", {
+        text("Bad left", {
           id: "bad-text",
-          x: Number.NaN,
-          y: 20,
-          width: 200,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: Number.NaN,
+            top: 20,
+            width: 200,
+            height: 40,
+          },
         }),
       ),
     );
@@ -342,7 +364,8 @@ process.stdout.write("ok");
       (error: unknown) =>
         error instanceof CodegenError &&
         error.diagnostics[0]?.code === "unexpressible-value" &&
-        error.diagnostics[0]?.path === "deck/slide[s-bad]/text[bad-text]@x",
+        error.diagnostics[0]?.path ===
+          "deck/slide[s-bad]/text[bad-text]@style.left",
     );
   });
 
@@ -360,13 +383,15 @@ process.stdout.write("ok");
           layout: escLayout,
           footer: "Path C:\\Temp &copy; 2026",
         }).append(
-          shape({
+          shape("C:\\Users\\Alice &lt;tag&gt; &amp; Co.", {
             id: "sh-esc",
-            x: 10,
-            y: 10,
-            width: 160,
-            height: 50,
-            text: "C:\\Users\\Alice &lt;tag&gt; &amp; Co.",
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 160,
+              height: 50,
+            },
           }),
         ),
       ),

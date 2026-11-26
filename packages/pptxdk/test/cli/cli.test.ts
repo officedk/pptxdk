@@ -191,7 +191,7 @@ describe("pptxdk CLI build", () => {
           built: {
             exitCode: 0,
             outputSchema: {
-              required: ["output", "slides", "warnings"],
+              required: ["output", "slides"],
             },
           },
         },
@@ -260,7 +260,7 @@ describe("pptxdk CLI build", () => {
       );
       expect(namedStructured.code).toBe(0);
       expect(namedStructured.stderr).toBe("");
-      expect(JSON.parse(namedStructured.stdout)).toMatchObject({
+      expect(JSON.parse(namedStructured.stdout)).toEqual({
         schemaVersion: "3",
         command: "build",
         outputMode: "structured",
@@ -269,12 +269,6 @@ describe("pptxdk CLI build", () => {
         data: {
           output: namedStructuredOut,
           slides: 1,
-          warnings: [
-            {
-              path: "deck/slide[overflow]/shape[overflow-shape]",
-              code: "overflow",
-            },
-          ],
         },
       });
 
@@ -285,7 +279,7 @@ describe("pptxdk CLI build", () => {
       expect(overflowFile.slides).toHaveLength(1);
       expect(overflowFile.slides[0]?.objects).toHaveLength(1);
 
-      const textWarning = await runInMemory(
+      const textOverflow = await runInMemory(
         [
           "build",
           source,
@@ -298,12 +292,10 @@ describe("pptxdk CLI build", () => {
         ],
         directory,
       );
-      expect(textWarning.code).toBe(0);
-      expect(textWarning.stdout).toContain(
-        "Warning deck/slide[overflow]/shape[overflow-shape] [overflow]:",
-      );
-      expect(textWarning.stdout).toContain("Built deck:");
-      expect(textWarning.stdout).toContain("Slides: 1");
+      expect(textOverflow.code).toBe(0);
+      expect(textOverflow.stdout).not.toContain("Warning");
+      expect(textOverflow.stdout).toContain("Built deck:");
+      expect(textOverflow.stdout).toContain("Slides: 1");
 
       const baselineOut = join(directory, "baseline.pptx");
       const baseline = runNode(
@@ -563,7 +555,7 @@ describe("pptxdk CLI build", () => {
       expect(textBuildFailure.stdout).toBe("");
       expect(textBuildFailure.stderr).toContain("Build failed:");
       expect(textBuildFailure.stderr).toContain(
-        "deck/slide[broken]/shape[broken-shape] [invalid-coordinate]:",
+        "deck/slide[broken]/shape[broken-shape] (style.width) [invalid-style]:",
       );
       expect(existsSync(brokenOut)).toBe(false);
 
@@ -590,7 +582,8 @@ describe("pptxdk CLI build", () => {
           diagnostics: [
             {
               path: "deck/slide[broken]/shape[broken-shape]",
-              code: "invalid-coordinate",
+              field: "style.width",
+              code: "invalid-style",
               message: expect.any(String),
             },
           ],
@@ -951,7 +944,7 @@ describe("pptxdk CLI preview", () => {
           previewed: {
             exitCode: 0,
             outputSchema: {
-              required: ["outputDir", "pages", "warnings"],
+              required: ["outputDir", "pages", "placeholders"],
             },
           },
         },
@@ -1040,7 +1033,7 @@ describe("pptxdk CLI preview", () => {
               output: join(customOutDir, "page-01.png"),
             },
           ],
-          warnings: [],
+          placeholders: [],
         },
       });
       expect(await readdir(customOutDir)).toEqual(["page-01.png"]);
@@ -1167,7 +1160,7 @@ describe("pptxdk CLI preview", () => {
               output: join(specialDir, "page-02.png"),
             },
           ],
-          warnings: [],
+          placeholders: [],
         },
       });
       expect((await readdir(specialDir)).toSorted()).toEqual([
@@ -1254,17 +1247,13 @@ describe("pptxdk CLI preview", () => {
               output: join(outDir, "page-03.png"),
             },
           ],
-          warnings: [
+          placeholders: [],
+          errors: [
             {
-              path: "deck/slide[warn-ok]/shape[overflow-shape]",
-              code: "overflow",
-              message: expect.any(String),
-            },
-          ],
-          diagnostics: [
-            {
+              code: "preview-corrupt-image",
               page: 2,
               path: "deck/slide[bad-image]/image[corrupt-img]",
+              format: "png",
               message: expect.stringContaining("PNG"),
             },
           ],
@@ -1296,12 +1285,10 @@ describe("pptxdk CLI preview", () => {
       );
       expect(textResult.code).toBe(1);
       expect(textResult.stdout).toBe("");
-      expect(textResult.stderr).toContain(
-        "Warning deck/slide[warn-ok]/shape[overflow-shape] [overflow]:",
-      );
+      expect(textResult.stderr).not.toContain("Warning");
       expect(textResult.stderr).toContain("Preview failed:");
       expect(textResult.stderr).toContain(
-        "Page 2 deck/slide[bad-image]/image[corrupt-img]:",
+        "Page 2 deck/slide[bad-image]/image[corrupt-img] [preview-corrupt-image]:",
       );
       expect(textResult.stderr).toContain("Written pages:");
       expect(textResult.stderr).toContain(
@@ -1465,7 +1452,8 @@ describe("pptxdk CLI preview", () => {
           diagnostics: [
             {
               path: "deck/slide[broken]/shape[broken-shape]",
-              code: "invalid-coordinate",
+              field: "style.width",
+              code: "invalid-style",
               message: expect.any(String),
             },
           ],
@@ -1711,7 +1699,7 @@ describe("pptxdk CLI preview", () => {
             { page: 4, id: "six-4", output: join(outDir, "page-04.png") },
             { page: 5, id: "six-5", output: join(outDir, "page-05.png") },
           ],
-          warnings: [],
+          placeholders: [],
         },
       });
       expect((await readdir(outDir)).toSorted()).toEqual([
@@ -1893,7 +1881,7 @@ describe("pptxdk CLI preview", () => {
               output: join(outDir, "page-003.png"),
             },
           ],
-          warnings: [],
+          placeholders: [],
         },
       });
 
@@ -2061,7 +2049,8 @@ describe("pptxdk CLI preview", () => {
           diagnostics: [
             {
               path: "deck/slide[broken-unselected]/shape[broken-unselected-shape]",
-              code: "invalid-coordinate",
+              field: "style.width",
+              code: "invalid-style",
               message: expect.any(String),
             },
           ],
@@ -2092,7 +2081,7 @@ describe("pptxdk CLI preview", () => {
       expect(textResult.stdout).toBe("");
       expect(textResult.stderr).toContain("Build failed:");
       expect(textResult.stderr).toContain(
-        "deck/slide[broken-unselected]/shape[broken-unselected-shape] [invalid-coordinate]:",
+        "deck/slide[broken-unselected]/shape[broken-unselected-shape] (style.width) [invalid-style]:",
       );
       expect(await readdir(existingOutDir)).toEqual(["keep.txt"]);
       expect(await readFile(join(existingOutDir, "keep.txt"))).toEqual(
@@ -2193,6 +2182,196 @@ process.stdout.write("ok");
       );
       expect(child.code).toBe(0);
       expect(child.stdout).toBe("ok");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("reports external image placeholders in previewed output and handles missing vs substitute font previews", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk preview-fonts "));
+    try {
+      const source = fixture("preview deck.tsx");
+      const extOutDir = join(directory, "external-placeholders");
+      const extStructured = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "ExternalPlaceholderDeck",
+          "-o",
+          extOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(extStructured.code).toBe(0);
+      expect(extStructured.stderr).toBe("");
+      expect(JSON.parse(extStructured.stdout)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "data",
+        variant: "previewed",
+        data: {
+          outputDir: extOutDir,
+          pages: [
+            {
+              page: 1,
+              id: "external-slide",
+              output: join(extOutDir, "page-01.png"),
+            },
+          ],
+          placeholders: [
+            {
+              id: "hero-external",
+              path: "deck/slide[external-slide]/image[hero-external]",
+              url: "https://cdn.example.com/cli-hero.png",
+            },
+          ],
+        },
+      });
+
+      const extText = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "ExternalPlaceholderDeck",
+          "-o",
+          join(directory, "external-text"),
+        ],
+        directory,
+      );
+      expect(extText.code).toBe(0);
+      expect(extText.stdout).toContain(
+        "Placeholder deck/slide[external-slide]/image[hero-external]: https://cdn.example.com/cli-hero.png",
+      );
+
+      // Fixed-region unembedded font builds PPTX cleanly, then fails preview on the text slide while rendering blank sibling.
+      const builtUnembedded = join(directory, "unembedded.pptx");
+      const buildUnembedded = await runInMemory(
+        [
+          "build",
+          source,
+          "-e",
+          "UnembeddedFontPreviewDeck",
+          "-o",
+          builtUnembedded,
+        ],
+        directory,
+      );
+      expect(buildUnembedded.code).toBe(0);
+
+      const missingFontOutDir = join(directory, "missing-font-preview");
+      const missingFontStructured = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "UnembeddedFontPreviewDeck",
+          "-o",
+          missingFontOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(missingFontStructured.code).toBe(1);
+      expect(missingFontStructured.stdout).toBe("");
+      expect(JSON.parse(missingFontStructured.stderr)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "failure",
+        variant: "previewFailed",
+        data: {
+          outputDir: missingFontOutDir,
+          pages: [
+            {
+              page: 2,
+              id: "blank-sibling",
+              output: join(missingFontOutDir, "page-02.png"),
+            },
+          ],
+          placeholders: [],
+          errors: [
+            {
+              code: "preview-missing-font",
+              page: 1,
+              path: "deck/slide[font-missing-page]/text[unbundled-label]",
+              font: {
+                family: "Unbundled Sans",
+                weight: 400,
+                style: "normal",
+              },
+              message: expect.any(String),
+            },
+          ],
+        },
+      });
+      expect(await readdir(missingFontOutDir)).toEqual(["page-02.png"]);
+
+      const missingFontText = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "UnembeddedFontPreviewDeck",
+          "-o",
+          join(directory, "missing-font-text"),
+        ],
+        directory,
+      );
+      expect(missingFontText.code).toBe(1);
+      expect(missingFontText.stderr).toContain(
+        "Page 1 deck/slide[font-missing-page]/text[unbundled-label] [preview-missing-font]:",
+      );
+
+      // Providing substitute font bytes renders all pages cleanly.
+      const subFontOutDir = join(directory, "substitute-font-preview");
+      const subFontResult = await runInMemory(
+        [
+          "preview",
+          source,
+          "-e",
+          "SubstituteFontPreviewDeck",
+          "-o",
+          subFontOutDir,
+          "--output",
+          "structured",
+        ],
+        directory,
+      );
+      expect(subFontResult.code).toBe(0);
+      expect(subFontResult.stderr).toBe("");
+      expect(JSON.parse(subFontResult.stdout)).toEqual({
+        schemaVersion: "3",
+        command: "preview",
+        outputMode: "structured",
+        kind: "data",
+        variant: "previewed",
+        data: {
+          outputDir: subFontOutDir,
+          pages: [
+            {
+              page: 1,
+              id: "font-missing-page",
+              output: join(subFontOutDir, "page-01.png"),
+            },
+            {
+              page: 2,
+              id: "blank-sibling",
+              output: join(subFontOutDir, "page-02.png"),
+            },
+          ],
+          placeholders: [],
+        },
+      });
+      expect((await readdir(subFontOutDir)).toSorted()).toEqual([
+        "page-01.png",
+        "page-02.png",
+      ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -2491,20 +2670,28 @@ describe("pptxdk CLI codegen", () => {
         slide({ id: "asset-slide" }).append(
           text("CLI Asset Heading", {
             id: "asset-heading",
-            x: 20,
-            y: 16,
-            width: 240,
-            height: 40,
-            style: { fontFamily: jostFont, fontSize: 18, color: "#1E293B" },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 16,
+              width: 240,
+              height: 40,
+              fontFamily: jostFont,
+              fontSize: 18,
+              color: "#1E293B",
+            },
           }),
           image({
             id: "hero-image",
-            x: 20,
-            y: 72,
-            width: 80,
-            height: 60,
             src: pngBytes,
             alt: "Red pixel",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 72,
+              width: 80,
+              height: 60,
+            },
           }),
         ),
       );
@@ -2720,10 +2907,13 @@ describe("pptxdk CLI codegen", () => {
           slide({ id: "partial-slide" }).append(
             text("Retained Healthy Text", {
               id: "healthy-text",
-              x: 16,
-              y: 16,
-              width: 180,
-              height: 40,
+              style: {
+                position: "absolute",
+                left: 16,
+                top: 16,
+                width: 180,
+                height: 40,
+              },
             }),
           ),
         ),

@@ -51,10 +51,13 @@ describe("slide navigation", () => {
             ? createElement(Text, {
                 id: "open-details",
                 link: { id: "details" },
-                x: 0,
-                y: 0,
-                width: 120,
-                height: 48,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 120,
+                  height: 48,
+                },
                 children: "查看详情",
               })
             : null,
@@ -100,11 +103,14 @@ describe("slide navigation", () => {
             createElement(
               Text,
               {
-                x: 20,
-                y: 30,
-                width: 420,
-                height: 60,
-                style: { fontWeight: "bold" },
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 30,
+                  width: 420,
+                  height: 60,
+                  fontWeight: "bold",
+                },
               },
               createElement(
                 P,
@@ -131,7 +137,15 @@ describe("slide navigation", () => {
             },
             createElement(
               Text,
-              { x: 20, y: 30, width: 420, height: 60 },
+              {
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 30,
+                  width: 420,
+                  height: 60,
+                },
+              },
               "第 ",
               createElement(SlideNumber, {}),
             ),
@@ -177,7 +191,11 @@ describe("slide navigation", () => {
         { key: id, id },
         createElement(
           Table,
-          { id: `number-${id}`, x: 10, y: 10, columns: [160] },
+          {
+            id: `number-${id}`,
+            columns: [160],
+            style: { position: "absolute", left: 10, top: 10 },
+          },
           createElement(
             Row,
             { style: { height: 32 } },
@@ -230,19 +248,25 @@ describe("slide navigation", () => {
             id: "shape-url",
             name: "shape-url",
             link: { url: "https://example.org/path?q=1" },
-            x: 0,
-            y: 0,
-            width: 40,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 40,
+              height: 30,
+            },
           }),
           createElement(Text, {
             id: "text-link",
             name: "text-link",
             link: { id: "target" },
-            x: 50,
-            y: 0,
-            width: 80,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 50,
+              top: 0,
+              width: 80,
+              height: 30,
+            },
             children: "go",
           }),
           createElement(Image, {
@@ -250,20 +274,26 @@ describe("slide navigation", () => {
             name: "image-link",
             link: { id: "target" },
             src: pixelPng,
-            x: 140,
-            y: 0,
-            width: 40,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 140,
+              top: 0,
+              width: 40,
+              height: 30,
+            },
           }),
           createElement(
             Group,
             { id: "group-home", name: "group-home", link: { action: "home" } },
             createElement(Shape, {
               id: "group-member",
-              x: 200,
-              y: 0,
-              width: 40,
-              height: 30,
+              style: {
+                position: "absolute",
+                left: 200,
+                top: 0,
+                width: 40,
+                height: 30,
+              },
             }),
           ),
           createElement(Box, {
@@ -275,7 +305,7 @@ describe("slide navigation", () => {
               top: 50,
               width: 80,
               height: 30,
-              backgroundColor: "#ffffff",
+              background: "#ffffff",
             },
           }),
           createElement(
@@ -296,10 +326,13 @@ describe("slide navigation", () => {
             id: "chart-link",
             name: "chart-link",
             link: { id: "target" },
-            x: 0,
-            y: 100,
-            width: 100,
-            height: 80,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 100,
+              width: 100,
+              height: 80,
+            },
             groups: [
               {
                 kind: "line",
@@ -346,10 +379,13 @@ describe("slide navigation", () => {
           id: "source-shape",
           link: { id: "morph-target" },
           morphKey: hero,
-          x: 0,
-          y: 0,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 40,
+            height: 30,
+          },
         }),
       ),
       createElement(Slide, { id: "hidden-intermediate", hidden: true }),
@@ -362,10 +398,13 @@ describe("slide navigation", () => {
         createElement(Shape, {
           id: "target-shape",
           morphKey: hero,
-          x: 80,
-          y: 0,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 0,
+            width: 40,
+            height: 30,
+          },
         }),
       ),
     );
@@ -381,10 +420,13 @@ describe("slide navigation", () => {
         createElement(Shape, {
           link: { id: "morph-target" },
           morphKey: hero,
-          x: 0,
-          y: 0,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 40,
+            height: 30,
+          },
         }),
       ),
       createElement(Slide, { id: "middle" }),
@@ -397,10 +439,13 @@ describe("slide navigation", () => {
         createElement(Image, {
           morphKey: hero,
           src: pixelPng,
-          x: 80,
-          y: 0,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 0,
+            width: 40,
+            height: 30,
+          },
         }),
       ),
     );
@@ -425,10 +470,13 @@ describe("slide navigation", () => {
         { id: "source" },
         createElement(Text, {
           link: { id: "missing" },
-          x: 0,
-          y: 0,
-          width: 80,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 80,
+            height: 30,
+          },
           children: "missing",
         }),
       ),
@@ -448,7 +496,7 @@ describe("slide navigation", () => {
     );
     await assert.rejects(build(duplicateIds), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "duplicate-author-id");
+      assert.equal(error.diagnostics[0]?.code, "duplicate-id");
       return true;
     });
 
@@ -462,17 +510,20 @@ describe("slide navigation", () => {
           Box,
           { link: { action: "home" } },
           createElement(Shape, {
-            x: 0,
-            y: 0,
-            width: 40,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 40,
+              height: 30,
+            },
           }),
         ),
       ),
     );
     await assert.rejects(build(transparentBox), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "link-needs-object");
+      assert.equal(error.diagnostics[0]?.code, "invalid-structure");
       return true;
     });
   });
@@ -487,18 +538,24 @@ describe("slide navigation", () => {
           { id: "first", name: "Section" },
           createElement(Shape, {
             id: "shape-jump",
-            x: 20,
-            y: 20,
-            width: 100,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 100,
+              height: 40,
+            },
             link: { id: "second" },
           }),
           createElement(Text, {
             id: "text-jump",
-            x: 20,
-            y: 70,
-            width: 120,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 70,
+              width: 120,
+              height: 40,
+            },
             link: { id: "second" },
             children: "Go to Section 2",
           }),
@@ -507,18 +564,24 @@ describe("slide navigation", () => {
             { id: "group-jump", link: { id: "second" } },
             createElement(Shape, {
               id: "group-child",
-              x: 160,
-              y: 20,
-              width: 60,
-              height: 40,
+              style: {
+                position: "absolute",
+                left: 160,
+                top: 20,
+                width: 60,
+                height: 40,
+              },
             }),
           ),
           createElement(Chart, {
             id: "chart-jump",
-            x: 20,
-            y: 130,
-            width: 160,
-            height: 100,
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 130,
+              width: 160,
+              height: 100,
+            },
             link: { id: "second" },
             groups: [
               {

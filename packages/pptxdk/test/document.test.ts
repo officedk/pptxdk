@@ -55,10 +55,13 @@ describe("public document authoring entry", () => {
     } satisfies ChartSeries;
     const node = chart({
       id: "getter-series",
-      x: 0,
-      y: 0,
-      width: 400,
-      height: 260,
+      style: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: 400,
+        height: 260,
+      },
       groups: [
         {
           kind: "column",
@@ -73,10 +76,13 @@ describe("public document authoring entry", () => {
     } satisfies ChartSeries;
     const dataNode = chart({
       id: "data-series",
-      x: 480,
-      y: 0,
-      width: 400,
-      height: 260,
+      style: {
+        position: "absolute",
+        left: 480,
+        top: 0,
+        width: 400,
+        height: 260,
+      },
       groups: [
         {
           kind: "column",
@@ -96,9 +102,15 @@ describe("public document authoring entry", () => {
     const firstFile = await validatePptx(result.pptx);
     const firstPptx = new Uint8Array(result.pptx);
     const firstReport = structuredClone(result.report);
-    const firstQuery = structuredClone(
-      result.query.getSlide("getter-values").get("getter-series").observe(),
-    );
+    const firstLocator = result.slide("getter-values").get("getter-series");
+    const firstQuery = structuredClone({
+      id: firstLocator.id,
+      kind: firstLocator.kind,
+      path: firstLocator.path,
+      box: firstLocator.box,
+      bounds: firstLocator.bounds,
+      objects: firstLocator.objects,
+    });
 
     assert.equal(reads, 1);
     assert.equal(trendlineTypeReads, 1);
@@ -155,8 +167,16 @@ describe("public document authoring entry", () => {
     );
     assert.deepEqual(result.pptx, firstPptx);
     assert.deepEqual(result.report, firstReport);
+    const currentLocator = result.slide("getter-values").get("getter-series");
     assert.deepEqual(
-      result.query.getSlide("getter-values").get("getter-series").observe(),
+      {
+        id: currentLocator.id,
+        kind: currentLocator.kind,
+        path: currentLocator.path,
+        box: currentLocator.box,
+        bounds: currentLocator.bounds,
+        objects: currentLocator.objects,
+      },
       firstQuery,
     );
   });
@@ -165,6 +185,11 @@ describe("public document authoring entry", () => {
     let getterReads = 0;
     let sourceColor = "#AA0000";
     const getterStyle = {
+      position: "absolute" as const,
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 40,
       get color() {
         getterReads += 1;
         return sourceColor;
@@ -172,6 +197,11 @@ describe("public document authoring entry", () => {
       fontSize: 18,
     };
     class StyleConfig {
+      position = "absolute" as const;
+      left = 0;
+      top = 50;
+      width = 300;
+      height = 40;
       color = "#00AA00";
       fontSize = 18;
     }
@@ -180,18 +210,10 @@ describe("public document authoring entry", () => {
       slide({ id: "style-values" }).append(
         text("Getter style", {
           id: "getter-style",
-          x: 0,
-          y: 0,
-          width: 300,
-          height: 40,
           style: getterStyle,
         }),
         text("Class style", {
           id: "class-style",
-          x: 0,
-          y: 50,
-          width: 300,
-          height: 40,
           style: classStyle,
         }),
       ),
@@ -216,11 +238,14 @@ describe("public document authoring entry", () => {
   it("accepts record-shaped class props as rich-text factory configuration", async () => {
     class TextOptions {
       id = "class-props";
-      x = 0;
-      y = 0;
-      width = 300;
-      height = 40;
-      style = { color: "#AA0000" };
+      style = {
+        position: "absolute" as const,
+        left: 0,
+        top: 0,
+        width: 300,
+        height: 40,
+        color: "#AA0000",
+      };
     }
 
     const document = deck({ width: 480, height: 320 }).append(
@@ -228,11 +253,14 @@ describe("public document authoring entry", () => {
         text("Hello", new TextOptions()),
         text("Hello", {
           id: "plain-props",
-          x: 0,
-          y: 50,
-          width: 300,
-          height: 40,
-          style: { color: "#AA0000" },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 50,
+            width: 300,
+            height: 40,
+            color: "#AA0000",
+          },
         }),
       ),
     );
@@ -253,16 +281,18 @@ describe("public document authoring entry", () => {
   });
 
   it("creates common nodes, builds them through the formal build, and keeps old build results immutable", async () => {
-    const title = text("Initial title").set({
-      x: 0,
-      y: 0,
+    const title = text("Initial title").style({
+      position: "absolute",
+      left: 0,
+      top: 0,
       width: 720,
       height: 40,
     });
     assert.equal(title.style({ fontSize: 28, color: "#123456" }), title);
-    const body = text("Body copy").set({
-      x: 0,
-      y: 0,
+    const body = text("Body copy").style({
+      position: "absolute",
+      left: 0,
+      top: 0,
       width: 720,
       height: 32,
     });
@@ -305,12 +335,12 @@ describe("public document authoring entry", () => {
 
   it("enforces single parents, explicit same-document moves, removal, and document ownership", async () => {
     const first = box({ id: "first" }).style({
-      backgroundColor: "#FFFFFF",
+      background: "#FFFFFF",
       width: 120,
       height: 40,
     });
     const second = box({ id: "second" }).style({
-      backgroundColor: "#FFFFFF",
+      background: "#FFFFFF",
       width: 120,
       height: 40,
     });
@@ -337,7 +367,7 @@ describe("public document authoring entry", () => {
     slideA.append(first);
 
     const moved = box({ id: "moved" }).style({
-      backgroundColor: "#FFFFFF",
+      background: "#FFFFFF",
       width: 80,
       height: 30,
     });
@@ -396,7 +426,7 @@ describe("public document authoring entry", () => {
       stops,
     };
     const boxStyle = {
-      backgroundImage: gradient,
+      background: gradient,
       width: 600,
       height: 200,
       color: "#C00000",
@@ -456,7 +486,7 @@ describe("public document authoring entry", () => {
         { color: "#DDCCBB", position: 1 },
       ],
     };
-    parent.style({ backgroundImage: replacement });
+    parent.style({ background: replacement });
     const replaced = slideXml(await build(document));
     assert.match(replaced, /BBCCDD/u);
     assert.doesNotMatch(replaced, /AA0000/u);
@@ -496,9 +526,10 @@ describe("public document authoring entry", () => {
 
   it("isolates author style objects at creation and update like the React cleanup handoff", async () => {
     const creationStyle = { color: "#FF0000" };
-    const title = text("Owned input", { style: creationStyle }).set({
-      x: 0,
-      y: 0,
+    const title = text("Owned input", { style: creationStyle }).style({
+      position: "absolute",
+      left: 0,
+      top: 0,
       width: 200,
       height: 40,
     });
@@ -552,7 +583,7 @@ describe("public document authoring entry", () => {
     title.content("Third revision");
     assert.match(slideXml(second), /much longer/u);
     assert.doesNotMatch(slideXml(second), /Third revision/u);
-    assert.equal(first.query.getSlide("timing").observation.id, "timing");
+    assert.equal(first.slide("timing").id, "timing");
 
     const controller = new AbortController();
     const reason = new Error("caller cancelled");
@@ -574,17 +605,18 @@ describe("public document authoring entry", () => {
     const scope = createMorphScope();
     const hero = scope.handle("hero");
     const morphStyle = {
-      backgroundColor: "#FFFFFF",
+      background: "#FFFFFF",
       width: 80,
       height: 30,
     };
     const numbered = text(
       paragraph("One"),
       paragraph([span("Two").style({ color: "#C00000" }), slideNumber()]),
-    ).set({ x: 0, y: 0, width: 400, height: 80 });
-    const footer = text("Page ", slideNumber()).set({
-      x: 0,
-      y: 100,
+    ).style({ position: "absolute", left: 0, top: 0, width: 400, height: 80 });
+    const footer = text("Page ", slideNumber()).style({
+      position: "absolute",
+      left: 0,
+      top: 100,
       width: 200,
       height: 24,
     });
@@ -656,44 +688,61 @@ const document = entry
           .append(
             entry
               .text("No React")
-              .set({ x: 8, y: 8, width: 320, height: 40 }),
+              .style({
+                position: "absolute",
+                left: 8,
+                top: 8,
+                width: 320,
+                height: 40,
+              }),
           ),
-        entry.shape({
+        entry.shape("Shape", {
           id: "pure-shape",
           geometry: "hexagon",
-          x: 8,
-          y: 140,
-          width: 120,
-          height: 60,
-          text: "Shape",
-          style: { backgroundColor: "#336699" },
+          style: {
+            position: "absolute",
+            left: 8,
+            top: 140,
+            width: 120,
+            height: 60,
+            background: "#336699",
+          },
         }),
         entry.image({
           id: "pure-image",
           src: png,
-          x: 140,
-          y: 140,
-          width: 80,
-          height: 60,
           fit: "cover",
+          style: {
+            position: "absolute",
+            left: 140,
+            top: 140,
+            width: 80,
+            height: 60,
+          },
         }),
         entry.group({ id: "pure-group" }).append(
           entry.shape({
             id: "pure-group-shape",
-            x: 240,
-            y: 140,
-            width: 60,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 240,
+              top: 140,
+              width: 60,
+              height: 40,
+            },
           }),
         ),
         entry
           .table({
             id: "pure-table",
-            x: 8,
-            y: 220,
-            width: 240,
             columns: [80, "1fr"],
-            style: { fontSize: 12 },
+            style: {
+              position: "absolute",
+              left: 8,
+              top: 220,
+              width: 240,
+              fontSize: 12,
+            },
           })
           .append(
             entry
@@ -702,10 +751,13 @@ const document = entry
           ),
         entry.chart({
   id: "pure-chart",
-  x: 260,
-  y: 220,
-  width: 240,
-  height: 140,
+  style: {
+    position: "absolute",
+    left: 260,
+    top: 220,
+    width: 240,
+    height: 140,
+  },
   groups: [{
     kind: "column",
     data: { kind: "shared-categories", categories: ["Q1"] },

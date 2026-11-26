@@ -115,11 +115,15 @@ describe("public React handoff", () => {
         Text,
         {
           id: "handoff-title",
-          x: 0,
-          y: 0,
-          width: 640,
-          height: 48,
-          style: { fontSize: 24, color: "#123456" },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 48,
+            fontSize: 24,
+            color: "#123456",
+          },
         },
         heading,
       );
@@ -160,10 +164,13 @@ describe("public React handoff", () => {
   it("edits JSX shape rich text through the same node contract as the command factory", async () => {
     const props = {
       id: "handoff-shape",
-      x: 20,
-      y: 24,
-      width: 320,
-      height: 96,
+      style: {
+        position: "absolute" as const,
+        left: 20,
+        top: 24,
+        width: 320,
+        height: 96,
+      },
     };
     const expanded = await expandDocument(
       reactDeck(
@@ -206,7 +213,11 @@ describe("public React handoff", () => {
       reactDeck([
         createElement(
           Table,
-          { id: "handoff-table", width: 240, columns: [120, 120] },
+          {
+            id: "handoff-table",
+            columns: [120, 120],
+            style: { width: 240 },
+          },
           createElement(
             Row,
             { style: { height: 30 } },
@@ -216,10 +227,13 @@ describe("public React handoff", () => {
         ),
         createElement(Chart, {
           id: "handoff-chart",
-          x: 0,
-          y: 40,
-          width: 240,
-          height: 160,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 40,
+            width: 240,
+            height: 160,
+          },
           groups: [
             {
               kind: "column",
@@ -310,7 +324,15 @@ describe("public React handoff", () => {
       );
       return createElement(
         Text,
-        { x: 0, y: 0, width: 640, height: 48 },
+        {
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 48,
+          },
+        },
         "Cleanup failure",
       );
     }
@@ -319,7 +341,7 @@ describe("public React handoff", () => {
       expandDocument(reactDeck(createElement(CleanupFailure))),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "react-render");
+        assert.equal(error.diagnostics[0]?.code, "render-failed");
         assert.match(error.message, /layout cleanup failure/u);
         return true;
       },
@@ -340,11 +362,14 @@ describe("public React handoff", () => {
         Text,
         {
           id: "cleanup-style",
-          x: 0,
-          y: 0,
-          width: 640,
-          height: 48,
-          style,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 48,
+            ...style,
+          },
         },
         "Owned input",
       );
@@ -379,14 +404,16 @@ describe("public React handoff", () => {
         Text,
         {
           ...(step === 0 ? { id: "changing-style" } : {}),
-          x: 0,
-          y: 0,
-          width: 640,
-          height: 48,
-          style:
-            step === 0
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 48,
+            ...(step === 0
               ? { color: "#FF0000", fontSize: 32 }
-              : { color: "#0000FF" },
+              : { color: "#0000FF" }),
+          },
         },
         "Complete props",
       );
@@ -407,7 +434,16 @@ describe("public React handoff", () => {
     function StaticContent() {
       return createElement(
         Text,
-        { id: "repeat", x: 0, y: 0, width: 640, height: 48 },
+        {
+          id: "repeat",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 640,
+            height: 48,
+          },
+        },
         "Original",
       );
     }
@@ -475,7 +511,10 @@ describe("public React handoff", () => {
                   },
                   createElement(
                     Shape,
-                    { id: "hero-shape", width: 120, height: 48 },
+                    {
+                      id: "hero-shape",
+                      style: { width: 120, height: 48 },
+                    },
                     "Boxed",
                   ),
                 ),
@@ -483,7 +522,16 @@ describe("public React handoff", () => {
             ),
             createElement(
               Text,
-              { id: "title", x: 20, y: 100, width: 240, height: 40 },
+              {
+                id: "title",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 100,
+                  width: 240,
+                  height: 40,
+                },
+              },
               createElement(
                 P,
                 null,
@@ -494,25 +542,35 @@ describe("public React handoff", () => {
             createElement(Image, {
               id: "logo",
               src: png1x1,
-              x: 280,
-              y: 20,
-              width: 32,
-              height: 32,
+              style: {
+                position: "absolute",
+                left: 280,
+                top: 20,
+                width: 32,
+                height: 32,
+              },
             }),
             createElement(
               Group,
               { id: "pair" },
               createElement(Shape, {
                 id: "in-group",
-                x: 280,
-                y: 80,
-                width: 80,
-                height: 40,
+                style: {
+                  position: "absolute",
+                  left: 280,
+                  top: 80,
+                  width: 80,
+                  height: 40,
+                },
               }),
             ),
             createElement(
               Table,
-              { id: "grid", x: 20, y: 160, columns: [100] },
+              {
+                id: "grid",
+                columns: [100],
+                style: { position: "absolute", left: 20, top: 160 },
+              },
               createElement(
                 Row,
                 { style: { height: 32 } },
@@ -521,10 +579,13 @@ describe("public React handoff", () => {
             ),
             createElement(Chart, {
               id: "sales-chart",
-              x: 400,
-              y: 20,
-              width: 240,
-              height: 160,
+              style: {
+                position: "absolute",
+                left: 400,
+                top: 20,
+                width: 240,
+                height: 160,
+              },
               groups: chartData,
             }),
             createElement(Notes, null, createElement(P, null, "Speaker note")),
@@ -542,41 +603,60 @@ describe("public React handoff", () => {
                 id: "container",
                 style: { width: 200, height: 60 },
               }).append(
-                shape({
+                shape("Boxed", {
                   id: "hero-shape",
-                  width: 120,
-                  height: 48,
-                }).content("Boxed"),
+                  style: { width: 120, height: 48 },
+                }),
               ),
             ),
           ),
           text([paragraph([span("Page "), slideNumber()])], {
             id: "title",
-            x: 20,
-            y: 100,
-            width: 240,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 100,
+              width: 240,
+              height: 40,
+            },
           }),
           image({
             id: "logo",
             src: png1x1,
-            x: 280,
-            y: 20,
-            width: 32,
-            height: 32,
+            style: {
+              position: "absolute",
+              left: 280,
+              top: 20,
+              width: 32,
+              height: 32,
+            },
           }),
           group({ id: "pair" }).append(
-            shape({ id: "in-group", x: 280, y: 80, width: 80, height: 40 }),
+            shape({
+              id: "in-group",
+              style: {
+                position: "absolute",
+                left: 280,
+                top: 80,
+                width: 80,
+                height: 40,
+              },
+            }),
           ),
-          table({ id: "grid", x: 20, y: 160, columns: [100] }).append(
-            row({ style: { height: 32 } }).append(cell("Cell")),
-          ),
+          table({
+            id: "grid",
+            columns: [100],
+            style: { position: "absolute", left: 20, top: 160 },
+          }).append(row({ style: { height: 32 } }).append(cell("Cell"))),
           chart({
             id: "sales-chart",
-            x: 400,
-            y: 20,
-            width: 240,
-            height: 160,
+            style: {
+              position: "absolute",
+              left: 400,
+              top: 20,
+              width: 240,
+              height: 160,
+            },
             groups: chartData,
           }),
           notes(paragraph("Speaker note")),
@@ -648,7 +728,16 @@ describe("public React handoff", () => {
 
     const badDoc = deck({ width: 480, height: 270 }).append(
       slide({ id: "diag" }).append(
-        shape({ id: "invalid-shape", x: 0, y: 0, width: -10, height: 20 }),
+        shape({
+          id: "invalid-shape",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: -10,
+            height: 20,
+          },
+        }),
       ),
     );
     assert.throws(

@@ -55,20 +55,28 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           { id: "cover", background: "#EEEEEE" },
           createElement(Shape, {
             id: "card",
-            x: 20,
-            y: 20,
-            width: 120,
-            height: 60,
-            fill: "#336699",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 120,
+              height: 60,
+              background: "#336699",
+            },
           }),
           createElement(
             Text,
             {
               id: "caption",
-              x: 20,
-              y: 96,
-              width: 160,
-              style: { fontFamily: jostFont, fontSize: 18, color: "#111827" },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 96,
+                width: 160,
+                fontFamily: jostFont,
+                fontSize: 18,
+                color: "#111827",
+              },
             },
             "Shared preview",
           ),
@@ -80,18 +88,26 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
         slide({ id: "cover", background: "#EEEEEE" }).append(
           shape({
             id: "card",
-            x: 20,
-            y: 20,
-            width: 120,
-            height: 60,
-            fill: "#336699",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 120,
+              height: 60,
+              background: "#336699",
+            },
           }),
           text("Shared preview", {
             id: "caption",
-            x: 20,
-            y: 96,
-            width: 160,
-            style: { fontFamily: jostFont, fontSize: 18, color: "#111827" },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 96,
+              width: 160,
+              fontFamily: jostFont,
+              fontSize: 18,
+              color: "#111827",
+            },
           }),
         ),
       ),
@@ -100,8 +116,10 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     assert.equal(jsxResult.pages.length, 1);
     assert.equal(docResult.pages.length, 1);
     assert.deepEqual(jsxResult.report, docResult.report);
-    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
-    assert.deepEqual(docResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(jsxResult.pages[0]?.errors, []);
+    assert.deepEqual(docResult.pages[0]?.errors, []);
+    assert.deepEqual(jsxResult.pages[0]?.placeholders, []);
+    assert.deepEqual(docResult.pages[0]?.placeholders, []);
     expect(jsxResult.pages[0]?.svg).toContain("<path");
     assert.deepEqual(jsxResult.pages[0]?.png, docResult.pages[0]?.png);
   });
@@ -112,22 +130,28 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
         group({ id: "g-unselected" }).append(
           shape({
             id: "s-unselected",
-            x: 10,
-            y: 10,
-            width: 80,
-            height: 40,
-            fill: "#334155",
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 80,
+              height: 40,
+              background: "#334155",
+            },
           }),
         ),
       ),
       slide({ id: "selected", background: "#123456" }).append(
         shape({
           id: "s",
-          x: 10,
-          y: 10,
-          width: 80,
-          height: 40,
-          fill: "#FFFFFF",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 80,
+            height: 40,
+            background: "#FFFFFF",
+          },
         }),
       ),
     );
@@ -137,7 +161,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       selectedOnly.pages.map((p) => p.id),
       ["selected"],
     );
-    assert.deepEqual(selectedOnly.pages[0]?.diagnostics, []);
+    assert.deepEqual(selectedOnly.pages[0]?.errors, []);
     assert.ok(selectedOnly.pages[0]?.png !== undefined);
     assert.equal(selectedOnly.report.slides.length, 2);
 
@@ -177,7 +201,16 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     // Full-deck formal build validation still catches build errors on unselected pages.
     const invalidUnselected = deck({ width: 320, height: 180 }).append(
       slide({ id: "broken-unselected" }).append(
-        shape({ id: "bad-x", x: Number.NaN, y: 0, width: 50, height: 50 }),
+        shape({
+          id: "bad-x",
+          style: {
+            position: "absolute",
+            left: Number.NaN,
+            top: 0,
+            width: 50,
+            height: 50,
+          },
+        }),
       ),
       slide({ id: "valid-selected" }),
     );
@@ -200,11 +233,15 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       slide({ id: "ok-table" }).append(
         table({
           id: "tb1",
-          x: 10,
-          y: 10,
-          width: 120,
           columns: [120],
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 120,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
         }).append(
           row({ style: { height: 30 } }).append(cell("Migrated table")),
         ),
@@ -213,22 +250,29 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
         group({ id: "g1" }).append(
           shape({
             id: "m1",
-            x: 10,
-            y: 10,
-            width: 40,
-            height: 40,
-            fill: "#FF0000",
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 40,
+              height: 40,
+              background: "#FF0000",
+            },
           }),
         ),
       ),
       slide({ id: "with-missing-glyph" }).append(
         text("汉", {
           id: "t1",
-          x: 10,
-          y: 10,
-          width: 200,
-          height: 60,
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 200,
+            height: 60,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
         }),
       ),
       slide({ id: "ok-box" }).append(
@@ -238,25 +282,31 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             width: 120,
             height: 60,
             padding: 8,
-            backgroundColor: "#E2E8F0",
+            background: "#E2E8F0",
           },
         }).append(
           shape({
             id: "ok",
-            width: 60,
-            height: 40,
-            fill: "#00AA00",
+            style: {
+              width: 60,
+              height: 40,
+              background: "#00AA00",
+            },
           }),
         ),
       ),
       slide({ id: "ok-column-chart" }).append(
         chart({
           id: "col1",
-          x: 10,
-          y: 10,
-          width: 280,
-          height: 150,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 280,
+            height: 150,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -269,18 +319,18 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     );
     const result = await previewDocument(doc);
     expect(result.pages[0]?.png).toBeDefined();
-    expect(result.pages[0]?.diagnostics).toEqual([]);
+    expect(result.pages[0]?.errors).toEqual([]);
     expect(result.pages[1]?.png).toBeDefined();
-    expect(result.pages[1]?.diagnostics).toEqual([]);
+    expect(result.pages[1]?.errors).toEqual([]);
     expect(result.pages[2]?.png).toBeUndefined();
     expect(result.pages[2]?.svg).toBeUndefined();
-    expect(result.pages[2]?.diagnostics[0]?.severity).toBe("error");
-    expect(result.pages[2]?.diagnostics[0]?.message).toMatch(/visible glyph/i);
-    expect(result.pages[2]?.diagnostics[0]?.path).toContain("text[t1]");
+    expect(result.pages[2]?.errors[0]?.code).toBe("preview-missing-glyph");
+    expect(result.pages[2]?.errors[0]?.message).toMatch(/visible glyph/i);
+    expect(result.pages[2]?.errors[0]?.path).toContain("text[t1]");
     expect(result.pages[3]?.png).toBeDefined();
-    expect(result.pages[3]?.diagnostics).toEqual([]);
+    expect(result.pages[3]?.errors).toEqual([]);
     expect(result.pages[4]?.png).toBeDefined();
-    expect(result.pages[4]?.diagnostics).toEqual([]);
+    expect(result.pages[4]?.errors).toEqual([]);
 
     const jsxResult = await previewJsx(
       createElement(
@@ -294,11 +344,14 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             { id: "g1", style: { rotate: 90 } },
             createElement(Shape, {
               id: "m1",
-              x: 10,
-              y: 10,
-              width: 60,
-              height: 20,
-              fill: "#FF0000",
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 60,
+                height: 20,
+                background: "#FF0000",
+              },
             }),
           ),
         ),
@@ -308,23 +361,25 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
           createElement(
             Box,
             { id: "jb1", style: { width: 80, height: 40, padding: 4 } },
-            createElement(Shape, { width: 40, height: 20, fill: "#0000FF" }),
+            createElement(Shape, {
+              style: { width: 40, height: 20, background: "#0000FF" },
+            }),
           ),
         ),
       ),
     );
     expect(jsxResult.pages[0]?.png).toBeDefined();
-    expect(jsxResult.pages[0]?.diagnostics).toEqual([]);
+    expect(jsxResult.pages[0]?.errors).toEqual([]);
     const rotatedGroupNode = jsxResult.pages[0]?.nodes.find(
       (node) => node.authorId === "g1",
     );
-    expect(rotatedGroupNode?.screenBox?.width).toBeCloseTo(20);
-    expect(rotatedGroupNode?.screenBox?.height).toBeCloseTo(60);
+    expect(rotatedGroupNode?.bounds?.width).toBeCloseTo(20);
+    expect(rotatedGroupNode?.bounds?.height).toBeCloseTo(60);
     expect(jsxResult.pages[1]?.png).toBeDefined();
-    expect(jsxResult.pages[1]?.diagnostics).toEqual([]);
+    expect(jsxResult.pages[1]?.errors).toEqual([]);
   });
 
-  it("computes exact screen corners and screenBox for rotated groups, offset children, rotated/flipped members, and nested groups", async () => {
+  it("computes exact screen corners and bounds for rotated groups, offset children, rotated/flipped members, and nested groups", async () => {
     const result = await previewJsx(
       createElement(
         Deck,
@@ -337,20 +392,26 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             { id: "outer-group", style: { rotate: 90 } },
             createElement(Shape, {
               id: "offset-rect",
-              x: 100,
-              y: 100,
-              width: 60,
-              height: 20,
-              fill: "#2563EB",
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 100,
+                width: 60,
+                height: 20,
+                background: "#2563EB",
+              },
             }),
             createElement(Shape, {
               id: "rotated-child",
-              x: 180,
-              y: 120,
-              width: 40,
-              height: 40,
-              fill: "#16A34A",
-              style: { rotate: 45 },
+              style: {
+                position: "absolute",
+                left: 180,
+                top: 120,
+                width: 40,
+                height: 40,
+                background: "#16A34A",
+                rotate: 45,
+              },
             }),
           ),
         ),
@@ -365,20 +426,26 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
               { id: "child-group", style: { rotate: 90 } },
               createElement(Shape, {
                 id: "leaf-rect",
-                x: 100,
-                y: 100,
-                width: 60,
-                height: 20,
-                fill: "#DC2626",
+                style: {
+                  position: "absolute",
+                  left: 100,
+                  top: 100,
+                  width: 60,
+                  height: 20,
+                  background: "#DC2626",
+                },
               }),
             ),
             createElement(Shape, {
               id: "anchor-rect",
-              x: 200,
-              y: 140,
-              width: 20,
-              height: 20,
-              fill: "#0EA5E9",
+              style: {
+                position: "absolute",
+                left: 200,
+                top: 140,
+                width: 20,
+                height: 20,
+                background: "#0EA5E9",
+              },
             }),
           ),
         ),
@@ -390,21 +457,27 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
             { id: "angled-group", style: { rotate: 30 } },
             createElement(Shape, {
               id: "flipped-child",
-              x: 100,
-              y: 80,
-              width: 80,
-              height: 40,
-              flipH: true,
-              fill: "#9333EA",
-              style: { rotate: 60 },
+              style: {
+                position: "absolute",
+                left: 100,
+                top: 80,
+                width: 80,
+                height: 40,
+                flipH: true,
+                background: "#9333EA",
+                rotate: 60,
+              },
             }),
             createElement(Shape, {
               id: "second-member",
-              x: 220,
-              y: 120,
-              width: 40,
-              height: 40,
-              fill: "#F59E0B",
+              style: {
+                position: "absolute",
+                left: 220,
+                top: 120,
+                width: 40,
+                height: 40,
+                background: "#F59E0B",
+              },
             }),
           ),
         ),
@@ -422,7 +495,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       });
     };
 
-    const assertScreenBoxClose = (
+    const assertBoundsClose = (
       actual:
         | {
             readonly x: number;
@@ -447,7 +520,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
 
     // Page 1: 90° rotated group [100..220, 100..160] (center 160, 130)
     const p1 = result.pages[0]!;
-    assert.deepEqual(p1.diagnostics, []);
+    assert.deepEqual(p1.errors, []);
     assert.ok(p1.png !== undefined);
 
     const outerGroup = p1.nodes.find((n) => n.authorId === "outer-group");
@@ -457,7 +530,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       { x: 130, y: 190 },
       { x: 130, y: 70 },
     ]);
-    assertScreenBoxClose(outerGroup?.screenBox, {
+    assertBoundsClose(outerGroup?.bounds, {
       x: 130,
       y: 70,
       width: 60,
@@ -471,7 +544,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       { x: 170, y: 130 },
       { x: 170, y: 70 },
     ]);
-    assertScreenBoxClose(offsetRect?.screenBox, {
+    assertBoundsClose(offsetRect?.bounds, {
       x: 170,
       y: 70,
       width: 20,
@@ -486,7 +559,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       { x: 150 - halfDiag, y: 170 },
       { x: 150, y: 170 - halfDiag },
     ]);
-    assertScreenBoxClose(rotatedChild?.screenBox, {
+    assertBoundsClose(rotatedChild?.bounds, {
       x: 150 - halfDiag,
       y: 170 - halfDiag,
       width: 2 * halfDiag,
@@ -495,7 +568,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
 
     // Page 2: nested 90° groups with distinct centers ((130, 110) inside (160, 130))
     const p2 = result.pages[1]!;
-    assert.deepEqual(p2.diagnostics, []);
+    assert.deepEqual(p2.errors, []);
     assert.ok(p2.png !== undefined);
 
     const childGroup = p2.nodes.find((n) => n.authorId === "child-group");
@@ -508,13 +581,13 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
     ];
     const expectedNestedBox = { x: 150, y: 90, width: 60, height: 20 };
     assertCornersClose(childGroup?.corners, expectedNestedCorners);
-    assertScreenBoxClose(childGroup?.screenBox, expectedNestedBox);
+    assertBoundsClose(childGroup?.bounds, expectedNestedBox);
     assertCornersClose(leafRect?.corners, expectedNestedCorners);
-    assertScreenBoxClose(leafRect?.screenBox, expectedNestedBox);
+    assertBoundsClose(leafRect?.bounds, expectedNestedBox);
 
     // Page 3: 30° group [100..260, 80..160] (center 180, 120) with flipH + 60° child [100..180, 80..120] (center 140, 100)
     const p3 = result.pages[2]!;
-    assert.deepEqual(p3.diagnostics, []);
+    assert.deepEqual(p3.errors, []);
     assert.ok(p3.png !== undefined);
 
     const flippedChild = p3.nodes.find((n) => n.authorId === "flipped-child");
@@ -533,7 +606,7 @@ describe("Slice 3: formal static preview public entrypoints and runtime isolatio
       { x: childCenterX - 20, y: childCenterY - 40 },
       { x: childCenterX - 20, y: childCenterY + 40 },
     ]);
-    assertScreenBoxClose(flippedChild?.screenBox, {
+    assertBoundsClose(flippedChild?.bounds, {
       x: childCenterX - 20,
       y: childCenterY - 40,
       width: 40,
@@ -576,9 +649,9 @@ const result = await build(
     createElement(
       Slide,
       { id: "s1" },
-      createElement(Shape, { x: 10, y: 10, width: 40, height: 40 }),
-      createElement(Image, { x: 60, y: 10, width: 40, height: 40, src: pngBytes, fit: "cover" }),
-      createElement(Image, { x: 110, y: 10, width: 40, height: 40, src: jpegBytes, crop: { left: 0.2 }, flipH: true, style: { rotate: 15, opacity: 0.8 } }),
+      createElement(Shape, { style: { position: "absolute", left: 10, top: 10, width: 40, height: 40 } }),
+      createElement(Image, { style: { position: "absolute", left: 60, top: 10, width: 40, height: 40 }, src: pngBytes, fit: "cover" }),
+      createElement(Image, { style: { position: "absolute", left: 110, top: 10, width: 40, height: 40, flipH: true, rotate: 15, opacity: 0.8 }, src: jpegBytes, crop: { left: 0.2 } }),
     ),
   ),
 );
@@ -622,9 +695,9 @@ const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 const result = await build(
   deck({ width: 320, height: 180 }).append(
     slide({ id: "s1" }).append(
-      shape({ x: 10, y: 10, width: 40, height: 40 }),
-      image({ x: 60, y: 10, width: 40, height: 40, src: pngBytes, fit: "contain" }),
-      image({ x: 110, y: 10, width: 40, height: 40, src: jpegBytes, flipV: true, style: { rotate: 30 } }),
+      shape({ style: { position: "absolute", left: 10, top: 10, width: 40, height: 40 } }),
+      image({ style: { position: "absolute", left: 60, top: 10, width: 40, height: 40 }, src: pngBytes, fit: "contain" }),
+      image({ style: { position: "absolute", left: 110, top: 10, width: 40, height: 40, flipV: true, rotate: 30 }, src: jpegBytes }),
     ),
   ),
 );
@@ -669,8 +742,8 @@ const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 const d = createDeckNode({ width: 320, height: 180 });
 const s = createSlideNode({ id: "s1" });
 s.append(
-  createImageNode({ x: 10, y: 10, width: 80, height: 40, src: pngBytes, fit: "contain" }),
-  createImageNode({ x: 100, y: 10, width: 80, height: 40, src: jpegBytes, crop: { top: 0.25 }, flipH: true }),
+  createImageNode({ style: { position: "absolute", left: 10, top: 10, width: 80, height: 40 }, src: pngBytes, fit: "contain" }),
+  createImageNode({ style: { position: "absolute", left: 100, top: 10, width: 80, height: 40, flipH: true }, src: jpegBytes, crop: { top: 0.25 } }),
 );
 d.append(s);
 
@@ -709,7 +782,7 @@ const { preview } = await import("@officedk/pptxdk/preview");
 const result = await preview(
   deck({ width: 320, height: 180 }).append(
     slide({ id: "s1", background: "#112233" }).append(
-      shape({ x: 10, y: 10, width: 40, height: 40, fill: "#FF0000" }),
+      shape({ style: { position: "absolute", left: 10, top: 10, width: 40, height: 40, background: "#FF0000" } }),
     ),
   ),
 );
@@ -748,7 +821,7 @@ const result = await preview(
     createElement(
       Slide,
       { id: "s1" },
-      createElement(Shape, { x: 10, y: 10, width: 40, height: 40, fill: "#2563EB" }),
+      createElement(Shape, { style: { position: "absolute", left: 10, top: 10, width: 40, height: 40, background: "#2563EB" } }),
     ),
   ),
 );

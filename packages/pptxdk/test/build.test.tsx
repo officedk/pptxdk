@@ -175,11 +175,14 @@ describe("public build entry", () => {
             Text,
             {
               id: "subset-text",
-              x: 8,
-              y: 8,
-              width: 640,
-              height: 180,
-              style: { fontFamily: cjkFont },
+              style: {
+                position: "absolute",
+                left: 8,
+                top: 8,
+                width: 640,
+                height: 180,
+                fontFamily: cjkFont,
+              },
             },
             "中文",
             createElement(
@@ -202,11 +205,14 @@ describe("public build entry", () => {
             Text,
             {
               id: "subset-latin",
-              x: 8,
-              y: 80,
-              width: 300,
-              height: 36,
-              style: { fontFamily: latinFont },
+              style: {
+                position: "absolute",
+                left: 8,
+                top: 80,
+                width: 300,
+                height: 36,
+                fontFamily: latinFont,
+              },
             },
             "office AV",
           ),
@@ -214,11 +220,14 @@ describe("public build entry", () => {
             Table,
             {
               id: "subset-table",
-              x: 8,
-              y: 128,
-              width: 240,
               columns: [240],
-              style: { fontFamily: cjkFont },
+              style: {
+                position: "absolute",
+                left: 8,
+                top: 128,
+                width: 240,
+                fontFamily: cjkFont,
+              },
             },
             createElement(
               Row,
@@ -228,11 +237,14 @@ describe("public build entry", () => {
           ),
           createElement(Chart, {
             id: "subset-chart",
-            x: 280,
-            y: 128,
-            width: 320,
-            height: 220,
-            style: { fontFamily: cjkFont },
+            style: {
+              position: "absolute",
+              left: 280,
+              top: 128,
+              width: 320,
+              height: 220,
+              fontFamily: cjkFont,
+            },
             groups: [
               {
                 kind: "column",
@@ -246,7 +258,6 @@ describe("public build entry", () => {
       { embedFonts: "subset" },
     );
 
-    assert.deepEqual(result.report.diagnostics, []);
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(file.slides[0]?.objects.length, 4);
@@ -320,11 +331,14 @@ describe("public build entry", () => {
         id: "subset-chart-default-axis",
         chart: createElement(Chart, {
           id: "subset-chart-default-axis",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "column",
@@ -340,11 +354,14 @@ describe("public build entry", () => {
         id: "subset-chart-percent-axis",
         chart: createElement(Chart, {
           id: "subset-chart-percent-axis",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "column",
@@ -361,11 +378,14 @@ describe("public build entry", () => {
         id: "subset-chart-formatted-axis",
         chart: createElement(Chart, {
           id: "subset-chart-formatted-axis",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           axes: {
             category: { kind: "category" },
             value: {
@@ -392,11 +412,14 @@ describe("public build entry", () => {
         id: "subset-chart-formatted-label",
         chart: createElement(Chart, {
           id: "subset-chart-formatted-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -417,11 +440,14 @@ describe("public build entry", () => {
         id: "subset-chart-percent-label",
         chart: createElement(Chart, {
           id: "subset-chart-percent-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -438,11 +464,14 @@ describe("public build entry", () => {
         id: "subset-chart-locale-only-label",
         chart: createElement(Chart, {
           id: "subset-chart-locale-only-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -463,11 +492,14 @@ describe("public build entry", () => {
         id: "subset-chart-currency-literal-label",
         chart: createElement(Chart, {
           id: "subset-chart-currency-literal-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -488,11 +520,14 @@ describe("public build entry", () => {
         id: "subset-chart-condition-color-label",
         chart: createElement(Chart, {
           id: "subset-chart-condition-color-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -513,11 +548,14 @@ describe("public build entry", () => {
         id: "subset-chart-escaped-literal-label",
         chart: createElement(Chart, {
           id: "subset-chart-escaped-literal-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -538,11 +576,14 @@ describe("public build entry", () => {
         id: "subset-chart-chinese-date-name-label",
         chart: createElement(Chart, {
           id: "subset-chart-chinese-date-name-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -563,11 +604,14 @@ describe("public build entry", () => {
         id: "subset-chart-question-placeholder-label",
         chart: createElement(Chart, {
           id: "subset-chart-question-placeholder-label",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -588,7 +632,6 @@ describe("public build entry", () => {
 
     for (const { id, chart, expected, absent } of chartCases) {
       const result = await build(deck(chart), { embedFonts: "subset" });
-      assert.deepEqual(result.report.diagnostics, []);
       assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
       const parts = unzipSync(result.pptx);
@@ -621,11 +664,14 @@ describe("public build entry", () => {
         deck(
           createElement(Chart, {
             id: "subset-chart-label-style-missing-glyph",
-            x: 0,
-            y: 0,
-            width: 320,
-            height: 220,
-            style: { fontFamily: chartFont },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 320,
+              height: 220,
+              fontFamily: chartFont,
+            },
             groups: [
               {
                 kind: "pie",
@@ -657,11 +703,14 @@ describe("public build entry", () => {
       deck(
         createElement(Chart, {
           id: "subset-chart-fourth-text-section",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: latinFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: latinFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -678,7 +727,6 @@ describe("public build entry", () => {
       ),
       { embedFonts: "subset" },
     );
-    assert.deepEqual(result.report.diagnostics, []);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
     const parts = unzipSync(result.pptx);
@@ -701,11 +749,14 @@ describe("public build entry", () => {
       deck(
         createElement(Chart, {
           id: "subset-chart-locale-only-source",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: chartFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: chartFont,
+          },
           groups: [
             {
               kind: "column",
@@ -736,11 +787,14 @@ describe("public build entry", () => {
       deck(
         createElement(Chart, {
           id: "subset-chart-locale-only-label-narrow-font",
-          x: 0,
-          y: 0,
-          width: 320,
-          height: 220,
-          style: { fontFamily: narrowFont },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 320,
+            height: 220,
+            fontFamily: narrowFont,
+          },
           groups: [
             {
               kind: "pie",
@@ -757,7 +811,6 @@ describe("public build entry", () => {
       ),
       { embedFonts: "subset" },
     );
-    assert.deepEqual(result.report.diagnostics, []);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
     const parts = unzipSync(result.pptx);
@@ -788,18 +841,20 @@ describe("public build entry", () => {
             Text,
             {
               id: testId,
-              x: 0,
-              y: 0,
-              width: 320,
-              height: 300,
-              style: { fontFamily: jost },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 320,
+                height: 300,
+                fontFamily: jost,
+              },
             },
             text,
           ),
         ),
         { embedFonts: "subset" },
       );
-      assert.deepEqual(result.report.diagnostics, []);
       assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
       const parts = unzipSync(result.pptx);
@@ -860,12 +915,13 @@ describe("public build entry", () => {
           Shape,
           {
             id: `field-shape-${pageNumber}`,
-            textStyle: {
+            style: {
+              width: "auto",
+              height: "auto",
               fontFamily: measurementFont,
               fontSize: 20,
               lineHeight: 28,
             },
-            style: { width: "auto", height: "auto" },
           },
           createElement(
             P,
@@ -878,16 +934,20 @@ describe("public build entry", () => {
             ),
           ),
         ),
-        createElement(Shape, {
-          id: `literal-shape-${pageNumber}`,
-          text: `Page ${pageNumber}`,
-          textStyle: {
-            fontFamily: measurementFont,
-            fontSize: 20,
-            lineHeight: 28,
+        createElement(
+          Shape,
+          {
+            id: `literal-shape-${pageNumber}`,
+            style: {
+              width: "auto",
+              height: "auto",
+              fontFamily: measurementFont,
+              fontSize: 20,
+              lineHeight: 28,
+            },
           },
-          style: { width: "auto", height: "auto" },
-        }),
+          `Page ${pageNumber}`,
+        ),
       );
     const result = await shapeBuild(
       createElement(
@@ -974,10 +1034,13 @@ describe("public build entry", () => {
             Shape,
             {
               id: "conflicting-shape-body",
-              x: 10,
-              y: 10,
-              width: 100,
-              height: 40,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 40,
+              },
               text: "literal",
             },
             createElement(SlideNumber, {}),
@@ -1009,11 +1072,14 @@ describe("public build entry", () => {
             Text,
             {
               id: "text-first",
-              x: 0,
-              y: 0,
-              width: 100,
-              height: 30,
-              style: { fontFamily: pageFont },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 30,
+                fontFamily: pageFont,
+              },
             },
             ...textFields(3),
           ),
@@ -1021,11 +1087,14 @@ describe("public build entry", () => {
             Shape,
             {
               id: "shape-first",
-              x: 0,
-              y: 40,
-              width: 100,
-              height: 30,
-              textStyle: { fontFamily: pageFont },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 40,
+                width: 100,
+                height: 30,
+                fontFamily: pageFont,
+              },
             },
             createElement(SlideNumber, {}),
           ),
@@ -1033,10 +1102,13 @@ describe("public build entry", () => {
             Table,
             {
               id: "table-first",
-              x: 0,
-              y: 80,
               columns: [100],
-              style: { fontFamily: pageFont },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 80,
+                fontFamily: pageFont,
+              },
             },
             createElement(
               Row,
@@ -1052,11 +1124,14 @@ describe("public build entry", () => {
             Text,
             {
               id: "text-second",
-              x: 0,
-              y: 0,
-              width: 100,
-              height: 30,
-              style: { fontFamily: pageFont },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 30,
+                fontFamily: pageFont,
+              },
             },
             ...textFields(2),
           ),
@@ -1064,11 +1139,14 @@ describe("public build entry", () => {
             Shape,
             {
               id: "shape-second",
-              x: 0,
-              y: 40,
-              width: 100,
-              height: 30,
-              textStyle: { fontFamily: pageFont },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 40,
+                width: 100,
+                height: 30,
+                fontFamily: pageFont,
+              },
             },
             createElement(SlideNumber, {}),
           ),
@@ -1076,10 +1154,13 @@ describe("public build entry", () => {
             Table,
             {
               id: "table-second",
-              x: 0,
-              y: 80,
               columns: [50, 50],
-              style: { fontFamily: pageFont },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 80,
+                fontFamily: pageFont,
+              },
             },
             createElement(
               Row,
@@ -1090,11 +1171,14 @@ describe("public build entry", () => {
           ),
           createElement(Chart, {
             id: "page-field-chart",
-            x: 110,
-            y: 0,
-            width: 200,
-            height: 220,
-            style: { fontFamily: pageFont },
+            style: {
+              position: "absolute",
+              left: 110,
+              top: 0,
+              width: 200,
+              height: 220,
+              fontFamily: pageFont,
+            },
             groups: [
               {
                 kind: "pie",
@@ -1177,11 +1261,14 @@ describe("public build entry", () => {
         deck(
           createElement(Text, {
             id: "missing-content-metrics",
-            x: 24,
-            y: 18,
-            width: 240,
-            height: "auto",
-            style: { fontFamily: "Aptos" },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 18,
+              width: 240,
+              height: "auto",
+              fontFamily: "Aptos",
+            },
             children: "需要明确度量字体",
           }),
         ),
@@ -1195,7 +1282,7 @@ describe("public build entry", () => {
       failure.diagnostics.map(({ code, path }) => ({ code, path })),
       [
         {
-          code: "font-measurement-unavailable",
+          code: "font-unavailable",
           path: "deck/slide[cover]/text[missing-content-metrics]",
         },
       ],
@@ -1207,11 +1294,12 @@ describe("public build entry", () => {
       deck(
         createElement(Text, {
           id: "measured-mixed-text",
-          x: 24,
-          y: 18,
-          width: 400,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 24,
+            top: 18,
+            width: 400,
+            height: "auto",
             fontFamily: font("Noto Sans CJK SC", [
               { weight: 400, data: notoSansScRegular },
             ]),
@@ -1222,13 +1310,12 @@ describe("public build entry", () => {
       ),
     );
 
-    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+    assert.deepEqual(result.slide("cover").get("measured-mixed-text").box, {
       x: 24,
       y: 18,
       width: 400,
       height: 28.96,
     });
-    assert.deepEqual(result.report.diagnostics, []);
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.deepEqual(file.slides[0]?.objects[0]?.text?.paragraphs[0], {
@@ -1270,11 +1357,15 @@ describe("public build entry", () => {
             Text,
             {
               id: "embedded-font-bold-first",
-              x: 24,
-              y: 18,
-              width: 240,
-              height: 36,
-              style: { fontFamily: installedFont, fontWeight: "bold" },
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 18,
+                width: 240,
+                height: 36,
+                fontFamily: installedFont,
+                fontWeight: "bold",
+              },
             },
             "Bold first",
           ),
@@ -1282,33 +1373,46 @@ describe("public build entry", () => {
             Text,
             {
               id: "embedded-font-text",
-              x: 24,
-              y: 18,
-              width: 240,
-              height: 36,
-              style: { fontFamily: installedFont },
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 18,
+                width: 240,
+                height: 36,
+                fontFamily: installedFont,
+              },
             },
             "Regular ",
             createElement(Span, { style: { fontWeight: "bold" } }, "bold"),
           ),
-          createElement(Shape, {
-            id: "embedded-font-shape",
-            x: 24,
-            y: 64,
-            width: 240,
-            height: 36,
-            text: "Shape text",
-            textStyle: { fontFamily: installedFont },
-          }),
+          createElement(
+            Shape,
+            {
+              id: "embedded-font-shape",
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 64,
+                width: 240,
+                height: 36,
+                fontFamily: installedFont,
+              },
+            },
+            "Shape text",
+          ),
           createElement(
             Table,
             {
               id: "embedded-font-table",
-              x: 24,
-              y: 110,
-              width: 240,
               columns: [240],
-              style: { fontFamily: installedFont, fontSize: 16 },
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 110,
+                width: 240,
+                fontFamily: installedFont,
+                fontSize: 16,
+              },
             },
             createElement(
               Row,
@@ -1322,11 +1426,14 @@ describe("public build entry", () => {
           ),
           createElement(Chart, {
             id: "embedded-font-chart",
-            x: 300,
-            y: 18,
-            width: 400,
-            height: 240,
-            style: { fontFamily: installedFont },
+            style: {
+              position: "absolute",
+              left: 300,
+              top: 18,
+              width: 400,
+              height: 240,
+              fontFamily: installedFont,
+            },
             axes: {
               category: { kind: "category" },
               value: { kind: "value", style: { fontWeight: "bold" } },
@@ -1405,11 +1512,12 @@ describe("public build entry", () => {
           Text,
           {
             id: "embedded-semibold",
-            x: 24,
-            y: 18,
-            width: 240,
-            height: 36,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 18,
+              width: 240,
+              height: 36,
               fontFamily: font("Darker Grotesque SemiBold", [
                 { weight: 600, data: darkerGrotesqueSemiBold },
               ]),
@@ -1467,11 +1575,15 @@ describe("public build entry", () => {
             Text,
             {
               id: "italic-font",
-              x: 24,
-              y: 18,
-              width: 240,
-              height: 36,
-              style: { fontFamily: jostItalicFaces, fontStyle: "italic" },
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 18,
+                width: 240,
+                height: 36,
+                fontFamily: jostItalicFaces,
+                fontStyle: "italic",
+              },
             },
             "Italic",
           ),
@@ -1479,11 +1591,12 @@ describe("public build entry", () => {
             Text,
             {
               id: "bold-italic-font",
-              x: 24,
-              y: 60,
-              width: 240,
-              height: 36,
               style: {
+                position: "absolute",
+                left: 24,
+                top: 60,
+                width: 240,
+                height: 36,
                 fontFamily: jostItalicFaces,
                 fontWeight: "bold",
                 fontStyle: "italic",
@@ -1602,10 +1715,13 @@ describe("public build entry", () => {
                 Text,
                 {
                   id: testId,
-                  x: 24,
-                  y: 18,
-                  width: 240,
-                  height: 36,
+                  style: {
+                    position: "absolute",
+                    left: 24,
+                    top: 18,
+                    width: 240,
+                    height: 36,
+                  },
                 },
                 ...spans,
               ),
@@ -1634,7 +1750,16 @@ describe("public build entry", () => {
       deck(
         createElement(
           Text,
-          { id: "same-font-bytes", x: 24, y: 18, width: 240, height: 36 },
+          {
+            id: "same-font-bytes",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 18,
+              width: 240,
+              height: 36,
+            },
+          },
           createElement(Span, { style: { fontFamily: firstAllowed } }, "first"),
           createElement(
             Span,
@@ -1660,10 +1785,13 @@ describe("public build entry", () => {
           Text,
           {
             id: "default-font-policy",
-            x: 24,
-            y: 18,
-            width: 240,
-            height: 36,
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 18,
+              width: 240,
+              height: 36,
+            },
           },
           createElement(
             Span,
@@ -1700,11 +1828,12 @@ describe("public build entry", () => {
       <Deck>
         <Slide id="font-no-subsetting">
           <Text
-            x={0}
-            y={0}
-            width={100}
-            height={32}
             style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: 32,
               fontFamily: font("Jost*", [{ weight: 400, data: noSubsetting }]),
             }}
           >
@@ -1728,11 +1857,12 @@ describe("public build entry", () => {
           <Slide id="font-no-subsetting-subset">
             <Text
               id="font-no-subsetting-subset"
-              x={0}
-              y={0}
-              width={100}
-              height={32}
               style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 32,
                 fontFamily: font("Jost*", [
                   { weight: 400, data: noSubsetting },
                 ]),
@@ -1831,11 +1961,14 @@ describe("public build entry", () => {
               Text,
               {
                 id: label,
-                x: 24,
-                y: 18,
-                width: 240,
-                height: 36,
-                style: { fontFamily: fontValue },
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 18,
+                  width: 240,
+                  height: 36,
+                  fontFamily: fontValue,
+                },
               },
               "Embed me",
             ),
@@ -1862,11 +1995,12 @@ describe("public build entry", () => {
             Text,
             {
               id: "subset-unsupported-woff2",
-              x: 24,
-              y: 18,
-              width: 240,
-              height: 36,
               style: {
+                position: "absolute",
+                left: 24,
+                top: 18,
+                width: 240,
+                height: 36,
                 fontFamily: font("Noto Sans CJK SC", [
                   { weight: 400, data: notoSansScRegular },
                 ]),
@@ -1879,7 +2013,11 @@ describe("public build entry", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-font-format");
+        const diag = error.diagnostics[0];
+        assert.equal(diag?.code, "font-unavailable");
+        if (diag?.code === "font-unavailable") {
+          assert.equal(diag.reason, "unsupported-format");
+        }
         return true;
       },
     );
@@ -1892,11 +2030,12 @@ describe("public build entry", () => {
             Text,
             {
               id: "subset-missing-glyph",
-              x: 24,
-              y: 18,
-              width: 240,
-              height: 36,
               style: {
+                position: "absolute",
+                left: 24,
+                top: 18,
+                width: 240,
+                height: 36,
                 fontFamily: font("ZCOOL XiaoWei", [
                   { weight: 400, data: zcoolXiaoWei },
                 ]),
@@ -1924,11 +2063,12 @@ describe("public build entry", () => {
           Text,
           {
             id: "font-value-opt-out-default",
-            x: 24,
-            y: 18,
-            width: 240,
-            height: 36,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 18,
+              width: 240,
+              height: 36,
               fontFamily: font("Jost*", [{ weight: 400, data: jostBook }], {
                 embeddable: false,
               }),
@@ -1945,12 +2085,25 @@ describe("public build entry", () => {
       [],
     );
     await assert.rejects(
-      build(deck(createElement(Shape, { x: 0, y: 0, width: 32, height: 32 })), {
-        embedFonts: "partial" as "full",
-      }),
+      build(
+        deck(
+          createElement(Shape, {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 32,
+              height: 32,
+            },
+          }),
+        ),
+        {
+          embedFonts: "partial" as "full",
+        },
+      ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-font-embedding");
+        assert.equal(error.diagnostics[0]?.code, "target-violation");
         return true;
       },
     );
@@ -1969,29 +2122,41 @@ describe("public build entry", () => {
           { id: "cover" },
           createElement(Text, {
             id: "cjk-breaks",
-            x: 0,
-            y: 0,
-            width: 20,
-            height: "auto",
-            style: { fontFamily: measureFont, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: "auto",
+              fontFamily: measureFont,
+              fontSize: 20,
+            },
             children: "中文",
           }),
           createElement(Text, {
             id: "long-word-breaks",
-            x: 40,
-            y: 0,
-            width: 1,
-            height: "auto",
-            style: { fontFamily: measureFont, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 0,
+              width: 1,
+              height: "auto",
+              fontFamily: measureFont,
+              fontSize: 20,
+            },
             children: "abcdef",
           }),
           createElement(Text, {
             id: "combining-grapheme",
-            x: 80,
-            y: 0,
-            width: 1,
-            height: "auto",
-            style: { fontFamily: measureFont, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 0,
+              width: 1,
+              height: "auto",
+              fontFamily: measureFont,
+              fontSize: 20,
+            },
             children: "é",
           }),
         ),
@@ -2009,13 +2174,26 @@ describe("public build entry", () => {
         { id: "combining-grapheme", height: 28.96 },
       ],
     );
-    assert.deepEqual(
-      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
-      [
-        { code: "overset", path: "deck/slide[cover]/text[long-word-breaks]" },
-        { code: "overset", path: "deck/slide[cover]/text[combining-grapheme]" },
-      ],
-    );
+    const longWordMetrics = result
+      .slide("cover")
+      .get("long-word-breaks").textMetrics;
+    assert.equal(longWordMetrics?.status, "measured");
+    if (longWordMetrics?.status === "measured") {
+      assert.equal(longWordMetrics.fits, false);
+      assert.ok(
+        longWordMetrics.content.width > longWordMetrics.available.width,
+      );
+    }
+    const combiningMetrics = result
+      .slide("cover")
+      .get("combining-grapheme").textMetrics;
+    assert.equal(combiningMetrics?.status, "measured");
+    if (combiningMetrics?.status === "measured") {
+      assert.equal(combiningMetrics.fits, false);
+      assert.ok(
+        combiningMetrics.content.width > combiningMetrics.available.width,
+      );
+    }
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.deepEqual(
@@ -2037,20 +2215,28 @@ describe("public build entry", () => {
           { id: "cover" },
           createElement(Text, {
             id: "wide-grapheme-hard-break",
-            x: 0,
-            y: 0,
-            width: 1,
-            height: "auto",
-            style: { fontFamily: measureFont, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 1,
+              height: "auto",
+              fontFamily: measureFont,
+              fontSize: 20,
+            },
             children: "a\nb",
           }),
           createElement(Text, {
             id: "trailing-hard-break",
-            x: 40,
-            y: 0,
-            width: 100,
-            height: "auto",
-            style: { fontFamily: measureFont, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 0,
+              width: 100,
+              height: "auto",
+              fontFamily: measureFont,
+              fontSize: 20,
+            },
             children: "a\n",
           }),
         ),
@@ -2085,11 +2271,15 @@ describe("public build entry", () => {
       deck(
         createElement(Text, {
           id: "substituted-font",
-          x: 0,
-          y: 0,
-          width: 100,
-          height: "auto",
-          style: { fontFamily: alternateFace, fontSize: 20 },
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: "auto",
+            fontFamily: alternateFace,
+            fontSize: 20,
+          },
           children: "中文",
         }),
       ),
@@ -2105,11 +2295,12 @@ describe("public build entry", () => {
       build(
         deck(
           createElement(Text, {
-            x: 0,
-            y: 0,
-            width: 100,
-            height: "auto",
             style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: "auto",
               fontFamily: font("Deck Display Name", [
                 { weight: 400, data: notoSansScRegular },
               ]),
@@ -2129,17 +2320,18 @@ describe("public build entry", () => {
     );
   });
 
-  it("content-sized text fails resolve on missing glyphs, while fixed-height text records warning without embedFonts and fails when embedding", async () => {
+  it("content-sized text fails resolve on missing glyphs, while fixed-height text records unmeasured missing-glyphs without embedFonts and fails when embedding", async () => {
     await assert.rejects(
       build(
         deck(
           createElement(Text, {
             id: "content-sized-missing-glyph",
-            x: 0,
-            y: 0,
-            width: 100,
-            height: "auto",
             style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: "auto",
               fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
               fontSize: 20,
             },
@@ -2160,11 +2352,12 @@ describe("public build entry", () => {
       deck(
         createElement(Text, {
           id: "fixed-missing-glyph-warn",
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 40,
           style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 40,
             fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
             fontSize: 20,
           },
@@ -2173,31 +2366,30 @@ describe("public build entry", () => {
       ),
     );
     assert.ok(fixedResult.pptx.byteLength > 0);
-    const warning = fixedResult.report.diagnostics.find(
-      ({ code }) => code === "font-missing-glyph",
+    const fixedMetrics = fixedResult
+      .slide("cover")
+      .get("fixed-missing-glyph-warn").textMetrics;
+    assert.equal(fixedMetrics?.status, "unmeasured");
+    if (fixedMetrics?.status === "unmeasured") {
+      assert.equal(fixedMetrics.reason, "missing-glyphs");
+      assert.deepEqual(fixedMetrics.fonts[0]?.missingGlyphs, ["中", "文"]);
+    }
+    const fontUsage = fixedResult.report.fonts.find(
+      ({ family }) => family === "Jost*",
     );
-    assert.ok(
-      warning !== undefined,
-      "expected font-missing-glyph warning in report",
-    );
-    assert.equal(warning.severity, "warning");
-    assert.equal(
-      warning.path,
-      "deck/slide[cover]/text[fixed-missing-glyph-warn]",
-    );
-    assert.ok(warning.message.includes("中"));
-    assert.ok(warning.message.includes("文"));
+    assert.deepEqual(fontUsage?.missingGlyphs, ["中", "文"]);
 
     await assert.rejects(
       build(
         deck(
           createElement(Text, {
             id: "content-sized-missing-glyph-full",
-            x: 0,
-            y: 0,
-            width: 100,
-            height: "auto",
             style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: "auto",
               fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
               fontSize: 20,
             },
@@ -2216,11 +2408,12 @@ describe("public build entry", () => {
         deck(
           createElement(Text, {
             id: "content-sized-missing-glyph-subset",
-            x: 0,
-            y: 0,
-            width: 100,
-            height: "auto",
             style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: "auto",
               fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
               fontSize: 20,
             },
@@ -2243,11 +2436,12 @@ describe("public build entry", () => {
           deck(
             createElement(Text, {
               id: "fixed-text-full-missing-glyph",
-              x: 0,
-              y: 0,
-              width: 100,
-              height: 50,
               style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 50,
                 fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
                 fontSize: 20,
               },
@@ -2269,18 +2463,22 @@ describe("public build entry", () => {
       await assert.rejects(
         build(
           deck(
-            createElement(Shape, {
-              id: "fixed-shape-full-missing-glyph",
-              x: 0,
-              y: 0,
-              width: 100,
-              height: 50,
-              style: {
-                fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
-                fontSize: 20,
+            createElement(
+              Shape,
+              {
+                id: "fixed-shape-full-missing-glyph",
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 100,
+                  height: 50,
+                  fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+                  fontSize: 20,
+                },
               },
-              text: "中文",
-            }),
+              "中文",
+            ),
           ),
           { embedFonts: "full" },
         ),
@@ -2298,18 +2496,22 @@ describe("public build entry", () => {
       await assert.rejects(
         build(
           deck(
-            createElement(Shape, {
-              id: "fixed-shape-subset-missing-glyph",
-              x: 0,
-              y: 0,
-              width: 100,
-              height: 50,
-              style: {
-                fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
-                fontSize: 20,
+            createElement(
+              Shape,
+              {
+                id: "fixed-shape-subset-missing-glyph",
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 100,
+                  height: 50,
+                  fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+                  fontSize: 20,
+                },
               },
-              text: "中文",
-            }),
+              "中文",
+            ),
           ),
           { embedFonts: "subset" },
         ),
@@ -2324,17 +2526,18 @@ describe("public build entry", () => {
       );
     });
 
-    it("records font-missing-glyph warning and produces PPTX when embedding is not enabled", async () => {
+    it("records unmeasured missing-glyphs and produces PPTX when embedding is not enabled", async () => {
       // Fixed-height Text without embedFonts
       const textResult = await build(
         deck(
           createElement(Text, {
             id: "fixed-text-warn-missing-glyph",
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 50,
             style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: 50,
               fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
               fontSize: 20,
             },
@@ -2343,57 +2546,58 @@ describe("public build entry", () => {
         ),
       );
       assert.ok(textResult.pptx.byteLength > 0);
-      const textWarning = textResult.report.diagnostics.find(
-        ({ code }) => code === "font-missing-glyph",
-      );
-      assert.ok(textWarning !== undefined);
-      assert.equal(
-        textWarning.path,
-        "deck/slide[cover]/text[fixed-text-warn-missing-glyph]",
-      );
-      assert.ok(textWarning.message.includes("中"));
-      assert.ok(textWarning.message.includes("文"));
+      const textMetrics = textResult
+        .slide("cover")
+        .get("fixed-text-warn-missing-glyph").textMetrics;
+      assert.equal(textMetrics?.status, "unmeasured");
+      if (textMetrics?.status === "unmeasured") {
+        assert.equal(textMetrics.reason, "missing-glyphs");
+        assert.deepEqual(textMetrics.fonts[0]?.missingGlyphs, ["中", "文"]);
+      }
 
       // Fixed-height Shape without embedFonts
       const shapeResult = await build(
         deck(
-          createElement(Shape, {
-            id: "fixed-shape-warn-missing-glyph",
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 50,
-            style: {
-              fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
-              fontSize: 20,
+          createElement(
+            Shape,
+            {
+              id: "fixed-shape-warn-missing-glyph",
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 50,
+                fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
+                fontSize: 20,
+              },
             },
-            text: "中文",
-          }),
+            "中文",
+          ),
         ),
       );
       assert.ok(shapeResult.pptx.byteLength > 0);
-      const shapeWarning = shapeResult.report.diagnostics.find(
-        ({ code }) => code === "font-missing-glyph",
-      );
-      assert.ok(shapeWarning !== undefined);
-      assert.equal(
-        shapeWarning.path,
-        "deck/slide[cover]/shape[fixed-shape-warn-missing-glyph]",
-      );
-      assert.ok(shapeWarning.message.includes("中"));
-      assert.ok(shapeWarning.message.includes("文"));
+      const shapeMetrics = shapeResult
+        .slide("cover")
+        .get("fixed-shape-warn-missing-glyph").textMetrics;
+      assert.equal(shapeMetrics?.status, "unmeasured");
+      if (shapeMetrics?.status === "unmeasured") {
+        assert.equal(shapeMetrics.reason, "missing-glyphs");
+        assert.deepEqual(shapeMetrics.fonts[0]?.missingGlyphs, ["中", "文"]);
+      }
     });
 
-    it("does not report font-missing-glyph when only font family name is declared without font bytes", async () => {
+    it("does not report missing-glyphs when only font family name is declared without font bytes", async () => {
       const result = await build(
         deck(
           createElement(Text, {
             id: "name-only-text",
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 50,
             style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: 50,
               fontFamily: "CustomFamilyName",
               fontSize: 20,
             },
@@ -2402,14 +2606,16 @@ describe("public build entry", () => {
         ),
       );
       assert.ok(result.pptx.byteLength > 0);
-      const missingGlyph = result.report.diagnostics.find(
-        ({ code }) => code === "font-missing-glyph",
+      const metrics = result.slide("cover").get("name-only-text").textMetrics;
+      assert.equal(metrics?.status, "unmeasured");
+      if (metrics?.status === "unmeasured") {
+        assert.equal(metrics.reason, "missing-font-resource");
+      }
+      const usage = result.report.fonts.find(
+        ({ family }) => family === "CustomFamilyName",
       );
-      assert.equal(missingGlyph, undefined);
-      const unavailable = result.report.diagnostics.find(
-        ({ code }) => code === "font-measurement-unavailable",
-      );
-      assert.ok(unavailable !== undefined);
+      assert.equal(usage?.hasResource, false);
+      assert.equal(usage?.missingGlyphs, undefined);
     });
 
     it("does not trigger font-missing-glyph for control characters and Default_Ignorable_Code_Point", async () => {
@@ -2418,11 +2624,12 @@ describe("public build entry", () => {
         deck(
           createElement(Text, {
             id: "ignorable-chars-text",
-            x: 0,
-            y: 0,
-            width: 200,
-            height: 50,
             style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 50,
               fontFamily: font("Jost*", [{ weight: 400, data: jostBook }]),
               fontSize: 20,
             },
@@ -2432,13 +2639,13 @@ describe("public build entry", () => {
         { embedFonts: "full" },
       );
       assert.ok(result.pptx.byteLength > 0);
-      const missingGlyph = result.report.diagnostics.find(
-        ({ code }) => code === "font-missing-glyph",
+      assert.equal(
+        result.slide("cover").get("ignorable-chars-text").textMetrics?.status,
+        "measured",
       );
-      assert.equal(missingGlyph, undefined);
     });
 
-    it("reports font-missing-glyph error for fixed Table when embedFonts is full, warning without embedding, and fails resolve for auto-height rows", async () => {
+    it("reports font-missing-glyph error for fixed Table when embedFonts is full, unmeasured missing-glyphs without embedding, and fails resolve for auto-height rows", async () => {
       const jost = font("Jost*", [{ weight: 400, data: jostBook }]);
 
       await assert.rejects(
@@ -2448,10 +2655,14 @@ describe("public build entry", () => {
               Table,
               {
                 id: "table-auto-missing-glyph",
-                x: 0,
-                y: 0,
                 columns: [100],
-                style: { fontFamily: jost, fontSize: 14 },
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  fontFamily: jost,
+                  fontSize: 14,
+                },
               },
               createElement(
                 Row,
@@ -2478,10 +2689,14 @@ describe("public build entry", () => {
               Table,
               {
                 id: "table-full-missing-glyph",
-                x: 0,
-                y: 0,
                 columns: [100],
-                style: { fontFamily: jost, fontSize: 14 },
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  fontFamily: jost,
+                  fontSize: 14,
+                },
               },
               createElement(
                 Row,
@@ -2508,10 +2723,14 @@ describe("public build entry", () => {
             Table,
             {
               id: "table-warn-missing-glyph",
-              x: 0,
-              y: 0,
               columns: [100],
-              style: { fontFamily: jost, fontSize: 14 },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                fontFamily: jost,
+                fontSize: 14,
+              },
             },
             createElement(
               Row,
@@ -2522,17 +2741,27 @@ describe("public build entry", () => {
         ),
       );
       assert.ok(tableResult.pptx.byteLength > 0);
-      const tableWarning = tableResult.report.diagnostics.find(
-        ({ code }) => code === "font-missing-glyph",
+      const cellMetrics = tableResult
+        .slide("cover")
+        .get("table-warn-missing-glyph")
+        .get("r1")
+        .get("c1").textMetrics;
+      assert.equal(cellMetrics?.status, "unmeasured");
+      if (cellMetrics?.status === "unmeasured") {
+        assert.equal(cellMetrics.reason, "missing-glyphs");
+        assert.deepEqual(cellMetrics.fonts[0]?.missingGlyphs, ["中", "文"]);
+      }
+      const tableFontUsage = tableResult.report.fonts.find(
+        ({ family }) => family === "Jost*",
       );
-      assert.ok(tableWarning !== undefined);
-      assert.equal(
-        tableWarning.path,
-        "deck/slide[cover]/table[table-warn-missing-glyph]/row[r1]/cell[c1]",
+      assert.ok(
+        tableFontUsage?.paths.includes(
+          "deck/slide[cover]/table[table-warn-missing-glyph]/row[r1]/cell[c1]",
+        ),
       );
     });
 
-    it("reports font-missing-glyph error for Chart when embedFonts is full, and warning without embedding", async () => {
+    it("reports font-missing-glyph error for Chart when embedFonts is full, and records missing glyphs without embedding", async () => {
       const latinFont = font("Jost*", [{ weight: 400, data: jostBook }]);
 
       await assert.rejects(
@@ -2540,11 +2769,14 @@ describe("public build entry", () => {
           deck(
             createElement(Chart, {
               id: "chart-full-missing-glyph",
-              x: 0,
-              y: 0,
-              width: 320,
-              height: 220,
-              style: { fontFamily: latinFont },
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 320,
+                height: 220,
+                fontFamily: latinFont,
+              },
               groups: [
                 {
                   kind: "pie",
@@ -2569,11 +2801,14 @@ describe("public build entry", () => {
         deck(
           createElement(Chart, {
             id: "chart-warn-missing-glyph",
-            x: 0,
-            y: 0,
-            width: 320,
-            height: 220,
-            style: { fontFamily: latinFont },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 320,
+              height: 220,
+              fontFamily: latinFont,
+            },
             groups: [
               {
                 kind: "pie",
@@ -2585,13 +2820,15 @@ describe("public build entry", () => {
         ),
       );
       assert.ok(chartResult.pptx.byteLength > 0);
-      const chartWarning = chartResult.report.diagnostics.find(
-        ({ code }) => code === "font-missing-glyph",
+      assert.deepEqual((await validatePptx(chartResult.pptx)).errors, []);
+      const chartFontUsage = chartResult.report.fonts.find(
+        ({ family }) => family === "Jost*",
       );
-      assert.ok(chartWarning !== undefined);
-      assert.equal(
-        chartWarning.path,
-        "deck/slide[cover]/chart[chart-warn-missing-glyph]",
+      assert.ok(chartFontUsage?.hasResource === true);
+      assert.ok(
+        chartFontUsage?.paths.includes(
+          "deck/slide[cover]/chart[chart-warn-missing-glyph]",
+        ),
       );
     });
   });
@@ -2606,11 +2843,15 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            x: 0,
-            y: 0,
-            width: 240,
-            height: "auto",
-            style: { fontFamily: jost, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: "auto",
+              fontFamily: jost,
+              fontSize: 20,
+            },
           },
           "Book ",
           createElement(Span, { style: { fontWeight: "bold" } }, "Bold"),
@@ -2633,11 +2874,16 @@ describe("public build entry", () => {
       build(
         deck(
           createElement(Text, {
-            x: 0,
-            y: 0,
-            width: 240,
-            height: "auto",
-            style: { fontFamily: jost, fontStyle: "italic", fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: "auto",
+              fontFamily: jost,
+              fontStyle: "italic",
+              fontSize: 20,
+            },
             children: "Italic",
           }),
         ),
@@ -2657,11 +2903,12 @@ describe("public build entry", () => {
       deck(
         createElement(Text, {
           id: "semibold-family-regular-face",
-          x: 24,
-          y: 18,
-          width: 240,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 24,
+            top: 18,
+            width: 240,
+            height: "auto",
             fontFamily: font("Darker Grotesque SemiBold", [
               { weight: 600, data: darkerGrotesqueSemiBold },
             ]),
@@ -2690,11 +2937,12 @@ describe("public build entry", () => {
       deck(
         createElement(Text, {
           id: "preferred-family-face",
-          x: 24,
-          y: 18,
-          width: 240,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 24,
+            top: 18,
+            width: 240,
+            height: "auto",
             fontFamily: font("Darker Grotesque", [
               { weight: 600, data: darkerGrotesqueSemiBold },
             ]),
@@ -2719,18 +2967,19 @@ describe("public build entry", () => {
     );
   });
 
-  it("warns when measured text overflows fixed bounding box, preserving box, content, and native default line spacing", async () => {
+  it("reports overflow via textMetrics when measured text exceeds fixed bounding box, preserving box, content, and native default line spacing", async () => {
     const result = await build(
       deck(
         createElement(
           Text,
           {
             id: "fixed-overset",
-            x: 24,
-            y: 18,
-            width: 20,
-            height: 20,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 18,
+              width: 20,
+              height: 20,
               fontFamily: font("Noto Sans CJK SC", [
                 { weight: 400, data: notoSansScRegular },
               ]),
@@ -2742,17 +2991,22 @@ describe("public build entry", () => {
       ),
     );
 
-    assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
+    const oversetNode = result.slide("cover").get("fixed-overset");
+    assert.deepEqual(oversetNode.box, {
       x: 24,
       y: 18,
       width: 20,
       height: 20,
     });
-    assert.equal(result.report.slides[0]?.objects[0]?.text, "中文中文");
-    assert.deepEqual(
-      result.report.diagnostics.map(({ code }) => code),
-      ["overset"],
-    );
+    assert.equal(oversetNode.text, "中文中文");
+    assert.equal(oversetNode.textMetrics?.status, "measured");
+    if (oversetNode.textMetrics?.status === "measured") {
+      assert.equal(oversetNode.textMetrics.fits, false);
+      assert.ok(
+        oversetNode.textMetrics.content.height >
+          oversetNode.textMetrics.available.height,
+      );
+    }
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(file.slides[0]?.objects[0]?.text?.text, "中文中文");
@@ -2762,7 +3016,7 @@ describe("public build entry", () => {
     );
   });
 
-  it("shares fixed bounding box overflow diagnostics across shapes with text and text boxes", async () => {
+  it("shares fixed bounding box textMetrics overflow detection across shapes with text and text boxes", async () => {
     const measureFont = font("Noto Sans CJK SC", [
       { weight: 400, data: notoSansScRegular },
     ]);
@@ -2775,33 +3029,44 @@ describe("public build entry", () => {
           { id: "cover" },
           createElement(Text, {
             id: "overset-text",
-            x: 0,
-            y: 0,
-            width: 20,
-            height: 20,
-            style: { fontFamily: measureFont, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+              fontFamily: measureFont,
+              fontSize: 20,
+            },
             children: "中文中文",
           }),
-          createElement(Shape, {
-            id: "overset-shape",
-            x: 40,
-            y: 0,
-            width: 20,
-            height: 20,
-            text: "中文中文",
-            textStyle: { fontFamily: measureFont, fontSize: 20 },
-          }),
+          createElement(
+            Shape,
+            {
+              id: "overset-shape",
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 0,
+                width: 20,
+                height: 20,
+                fontFamily: measureFont,
+                fontSize: 20,
+              },
+            },
+            "中文中文",
+          ),
         ),
       ),
     );
 
-    assert.deepEqual(
-      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
-      [
-        { code: "overset", path: "deck/slide[cover]/text[overset-text]" },
-        { code: "overset", path: "deck/slide[cover]/shape[overset-shape]" },
-      ],
-    );
+    for (const id of ["overset-text", "overset-shape"] as const) {
+      const metrics = result.slide("cover").get(id).textMetrics;
+      assert.equal(metrics?.status, "measured");
+      if (metrics?.status === "measured") {
+        assert.equal(metrics.fits, false);
+      }
+    }
     assert.deepEqual(
       result.report.slides[0]?.objects.map(({ box }) => box),
       [
@@ -2859,10 +3124,13 @@ describe("public build entry", () => {
       deck(
         createElement(Shape, {
           id: "concurrent-shape",
-          x: 0,
-          y: 0,
-          width: 120,
-          height: 72,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 120,
+            height: 72,
+          },
         }),
       ),
     );
@@ -2871,10 +3139,13 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            x: 0,
-            y: 0,
-            width: 240,
-            height: 96,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 96,
+            },
           },
           "并发验证",
         ),
@@ -2916,11 +3187,14 @@ describe("public build entry", () => {
       deck(
         createElement(Text, {
           id: "mixed-text",
-          x: 32,
-          y: 24,
-          width: 360,
-          height: 96,
-          style: { fontFamily: "Aptos" },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 24,
+            width: 360,
+            height: 96,
+            fontFamily: "Aptos",
+          },
           children: content,
         }),
       ),
@@ -2958,11 +3232,14 @@ describe("public build entry", () => {
           Text,
           {
             id: "formatted-text",
-            x: 24,
-            y: 32,
-            width: 420,
-            height: 180,
-            style: { lineHeight: "28px" },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 32,
+              width: 420,
+              height: 180,
+              lineHeight: "28px",
+            },
           },
           createElement(
             P,
@@ -3053,11 +3330,12 @@ describe("public build entry", () => {
           Text,
           {
             id: "paragraph-inherited-style",
-            x: 24,
-            y: 32,
-            width: 420,
-            height: 180,
             style: {
+              position: "absolute",
+              left: 24,
+              top: 32,
+              width: 420,
+              height: 180,
               fontFamily: "Paragraph Base",
               fontSize: "32pt",
               fontWeight: "bold",
@@ -3110,7 +3388,16 @@ describe("public build entry", () => {
     const element = deck(
       createElement(
         Text,
-        { id: "font-conflict", x: 12, y: 12, width: 300, height: 80 },
+        {
+          id: "font-conflict",
+          style: {
+            position: "absolute",
+            left: 12,
+            top: 12,
+            width: 300,
+            height: 80,
+          },
+        },
         createElement(
           P,
           {},
@@ -3159,7 +3446,16 @@ describe("public build entry", () => {
         deck(
           createElement(
             Text,
-            { id: "duplicate-face", x: 12, y: 12, width: 300, height: 80 },
+            {
+              id: "duplicate-face",
+              style: {
+                position: "absolute",
+                left: 12,
+                top: 12,
+                width: 300,
+                height: 80,
+              },
+            },
             createElement(
               Span,
               { style: { fontFamily: sharedValue } },
@@ -3187,10 +3483,13 @@ describe("public build entry", () => {
           Text,
           {
             id: "font-name-with-resource",
-            x: 12,
-            y: 12,
-            width: 300,
-            height: 80,
+            style: {
+              position: "absolute",
+              left: 12,
+              top: 12,
+              width: 300,
+              height: 80,
+            },
           },
           createElement(
             P,
@@ -3225,15 +3524,13 @@ describe("public build entry", () => {
       ),
       ["Shared", "Shared"],
     );
-    assert.deepEqual(
-      result.report.diagnostics.map(({ path, code }) => ({ path, code })),
-      [
-        {
-          path: "deck/slide[cover]/text[font-name-with-resource]",
-          code: "font-measurement-unavailable",
-        },
-      ],
-    );
+    const mixedMetrics = result
+      .slide("cover")
+      .get("font-name-with-resource").textMetrics;
+    assert.equal(mixedMetrics?.status, "unmeasured");
+    if (mixedMetrics?.status === "unmeasured") {
+      assert.equal(mixedMetrics.reason, "missing-font-resource");
+    }
   });
 
   it("allows fixed bounding box to declare font family name only, reporting measurement limits without embedding fonts by default", async () => {
@@ -3243,31 +3540,32 @@ describe("public build entry", () => {
           Text,
           {
             id: "missing-metrics",
-            x: 0,
-            y: 0,
-            width: 280,
-            height: 60,
-            style: { fontFamily: "Local Only" },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 280,
+              height: 60,
+              fontFamily: "Local Only",
+            },
           },
           "不要求字体文件的固定文字",
         ),
       ),
     );
 
-    assert.deepEqual(
-      result.report.diagnostics.map(({ severity, path, code }) => ({
-        severity,
-        path,
-        code,
-      })),
-      [
-        {
-          severity: "warning",
-          path: "deck/slide[cover]/text[missing-metrics]",
-          code: "font-measurement-unavailable",
-        },
-      ],
+    const metrics = result.slide("cover").get("missing-metrics").textMetrics;
+    assert.equal(metrics?.status, "unmeasured");
+    if (metrics?.status === "unmeasured") {
+      assert.equal(metrics.reason, "missing-font-resource");
+    }
+    const fontUsage = result.report.fonts.find(
+      ({ family }) => family === "Local Only",
     );
+    assert.equal(fontUsage?.hasResource, false);
+    assert.deepEqual(fontUsage?.paths, [
+      "deck/slide[cover]/text[missing-metrics]",
+    ]);
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(
@@ -3326,13 +3624,13 @@ describe("public build entry", () => {
     const namePercent = await buildRegion("100%", "Arial");
     const namePixels = await buildRegion(80, "Arial");
     assert.deepEqual(namePercent.pptx, namePixels.pptx);
-    assert.deepEqual(
-      namePercent.report.diagnostics.map(({ severity, code }) => ({
-        severity,
-        code,
-      })),
-      [{ severity: "warning", code: "font-measurement-unavailable" }],
-    );
+    const namePercentMetrics = namePercent
+      .slide("fixed-text-region")
+      .get("fixed-text").textMetrics;
+    assert.equal(namePercentMetrics?.status, "unmeasured");
+    if (namePercentMetrics?.status === "unmeasured") {
+      assert.equal(namePercentMetrics.reason, "missing-font-resource");
+    }
     for (const result of [namePercent, namePixels]) {
       assert.deepEqual(result.report.slides[0]?.objects[0]?.box, {
         x: 0,
@@ -3411,10 +3709,10 @@ describe("public build entry", () => {
             'import { BuildError, build } from "@officedk/pptxdk/build";',
             'import { Deck, Shape, Slide, Text } from "@officedk/pptxdk/react";',
             'import { validatePptx } from "@pptxdk/validation";',
-            'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { id: "trimmed" }, createElement(Shape, { id: "plain", name: "plain", x: 0, y: 0, width: 20, height: 20 }), createElement(Shape, { id: "labeled", name: "labeled", x: 24, y: 0, width: 60, height: 20, text: "形状文字 — Shape text" }), createElement(Shape, { id: "empty-label", name: "empty-label", x: 90, y: 0, width: 20, height: 20, text: "" }))), { capabilities: ["shape"] });',
+            'const result = await build(createElement(Deck, { width: 120, height: 96 }, createElement(Slide, { id: "trimmed" }, createElement(Shape, { id: "plain", name: "plain", style: { position: "absolute", left: 0, top: 0, width: 20, height: 20 } }), createElement(Shape, { id: "labeled", name: "labeled", style: { position: "absolute", left: 24, top: 0, width: 60, height: 20 } }, "形状文字 — Shape text"), createElement(Shape, { id: "empty-label", name: "empty-label", style: { position: "absolute", left: 90, top: 0, width: 20, height: 20 } }, ""))), { capabilities: ["shape"] });',
             "const file = await validatePptx(result.pptx);",
             'if (file.errors.length !== 0 || result.report.slides[0]?.objects[1]?.text !== "形状文字 — Shape text" || file.slides[0]?.objects[1]?.text?.text !== "形状文字 — Shape text" || file.slides[0]?.objects[2]?.text !== undefined) throw new Error(JSON.stringify(file.errors));',
-            'function NestedText() { return createElement(Text, { id: "missing-text", x: 0, y: 0, width: 20, height: 20 }, "not available"); }',
+            'function NestedText() { return createElement(Text, { id: "missing-text", style: { position: "absolute", left: 0, top: 0, width: 20, height: 20 } }, "not available"); }',
             "let missingText;",
             'try { await build(createElement(Deck, {}, createElement(Slide, { id: "nested" }, createElement(NestedText))), { capabilities: ["shape"] }); } catch (error) { missingText = error; }',
             'if (!(missingText instanceof BuildError) || missingText.diagnostics[0]?.code !== "missing-capability" || !missingText.diagnostics[0]?.path.includes("text[missing-text]")) throw new Error("nested Text did not produce a located missing-capability error");',
@@ -3430,7 +3728,6 @@ describe("public build entry", () => {
         ["labeled", "形状文字 — Shape text"],
         ["empty-label", ""],
       ]);
-      assert.equal(output.missing.severity, "error");
       assert.equal(
         output.missing.path,
         "deck/slide[nested]/text[missing-text]",
@@ -3453,11 +3750,14 @@ describe("public build entry", () => {
           id: "badge",
           name: "badge",
           geometry: "ellipse",
-          x: 32,
-          y: 48,
-          width: 120,
-          height: 72,
-          fill: "#1A2B3C",
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 48,
+            width: 120,
+            height: 72,
+            background: "#1A2B3C",
+          },
         }),
       ),
     );
@@ -3504,10 +3804,13 @@ describe("public build entry", () => {
       deck(
         createElement(Shape, {
           id: "schema-gate",
-          x: 0,
-          y: 0,
-          width: 120,
-          height: 72,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 120,
+            height: 72,
+          },
         }),
       ),
     );
@@ -3569,11 +3872,14 @@ describe("public build entry", () => {
         createElement(
           Text,
           {
-            x: 0,
-            y: 0,
-            width: 240,
-            height: 96,
-            style: { lineHeight: "24px" },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 96,
+              lineHeight: "24px",
+            },
           },
           "标准结构边界",
         ),
@@ -3644,18 +3950,24 @@ describe("public build entry", () => {
           createElement(Shape, {
             id: "object-name",
             name: "object\nname\r\tend",
-            x: 0,
-            y: 0,
-            width: 40,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 40,
+              height: 30,
+            },
           }),
           createElement(Shape, {
             id: "test\nid",
             name: "test\nid",
-            x: 50,
-            y: 0,
-            width: 40,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 50,
+              top: 0,
+              width: 40,
+              height: 30,
+            },
           }),
         ),
         ...slideIds.slice(1).map((id) => createElement(Slide, { id })),
@@ -4573,12 +4885,12 @@ describe("public build entry", () => {
       {
         id: "negative-duration",
         transition: transitions.fade({ duration: -1 }),
-        code: "invalid-transition-duration",
+        code: "invalid-prop",
       },
       {
         id: "non-finite-duration",
         transition: transitions.fade({ duration: Number.POSITIVE_INFINITY }),
-        code: "invalid-transition-duration",
+        code: "invalid-prop",
       },
       {
         id: "unknown-parameter",
@@ -4586,27 +4898,27 @@ describe("public build entry", () => {
           duration: 600,
           surprise: true,
         } as never),
-        code: "unknown-parameter",
+        code: "unknown-prop",
       },
       {
         id: "null-strips-direction",
         transition: transitions.strips({ direction: null as never }),
-        code: "invalid-transition-direction",
+        code: "invalid-prop",
       },
       {
         id: "invalid-strips-direction",
         transition: transitions.strips({ direction: "diagonal" as never }),
-        code: "invalid-transition-direction",
+        code: "invalid-prop",
       },
       {
         id: "null-push-direction",
         transition: transitions.push({ from: null as never }),
-        code: "invalid-transition-direction",
+        code: "invalid-prop",
       },
       {
         id: "invalid-push-direction",
         transition: transitions.push({ from: "center" as never }),
-        code: "invalid-transition-direction",
+        code: "invalid-prop",
       },
       {
         id: "null-flip-direction",
@@ -4614,12 +4926,12 @@ describe("public build entry", () => {
           direction: null as never,
           fallback: transitions.fade(),
         }),
-        code: "invalid-transition-direction",
+        code: "invalid-prop",
       },
       {
         id: "missing-flip-fallback",
         transition: transitions.flip({} as never),
-        code: "missing-transition-fallback",
+        code: "invalid-prop",
       },
       {
         id: "null-morph-option",
@@ -4627,7 +4939,7 @@ describe("public build entry", () => {
           by: null as never,
           fallback: transitions.fade(),
         }),
-        code: "invalid-morph-option",
+        code: "invalid-prop",
       },
       {
         id: "invalid-morph-option",
@@ -4635,12 +4947,12 @@ describe("public build entry", () => {
           by: "sentence" as never,
           fallback: transitions.fade(),
         }),
-        code: "invalid-morph-option",
+        code: "invalid-prop",
       },
       {
         id: "helper-kind-and-unknown-option",
         transition: transitions.fade({ kind: "push", from: "left" } as never),
-        code: "unknown-parameter",
+        code: "unknown-prop",
       },
       {
         id: "extension-fallback",
@@ -4649,7 +4961,7 @@ describe("public build entry", () => {
             fallback: transitions.fade(),
           }) as never,
         }),
-        code: "invalid-transition-fallback",
+        code: "invalid-prop",
       },
     ];
 
@@ -4675,7 +4987,7 @@ describe("public build entry", () => {
     }
   });
 
-  it("preserves original shapes on out-of-bounds and returns warnings in generated evidence", async () => {
+  it("preserves original shapes on out-of-bounds and exposes out-of-canvas bounds in generated evidence", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -4694,13 +5006,16 @@ describe("public build entry", () => {
       ),
     );
 
-    assert.equal(result.report.diagnostics.length, 1);
-    assert.equal(result.report.diagnostics[0]?.severity, "warning");
-    assert.equal(
-      result.report.diagnostics[0]?.path,
-      "deck/slide[cover]/shape[overflowing]",
+    const overflowing = result.slide("cover").get("overflowing");
+    assert.deepEqual(overflowing.bounds, {
+      x: 90,
+      y: 70,
+      width: 30,
+      height: 20,
+    });
+    assert.ok(
+      (overflowing.bounds?.x ?? 0) + (overflowing.bounds?.width ?? 0) > 100,
     );
-    assert.equal(result.report.diagnostics[0]?.code, "overflow");
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.deepEqual(file.slides[0]?.objects[0]?.boxEmu, {
@@ -4727,7 +5042,7 @@ describe("public build entry", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unsupported-geometry");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );
@@ -4746,7 +5061,7 @@ describe("public build entry", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-coordinate");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );

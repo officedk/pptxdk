@@ -5,7 +5,11 @@ import * as pptxdkMain from "@officedk/pptxdk";
 import {
   BuildError,
   authorIdSchema,
+  backgroundValueSchema,
+  borderValueSchema,
   build,
+  buildDiagnosticSchema,
+  codegenDiagnosticSchema,
   createMorphScope,
   deckPropsSchema,
   defineTheme,
@@ -15,6 +19,9 @@ import {
   layoutStyleSchema,
   linkTargetSchema,
   paddingStyleSchema,
+  placeholderSizeSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   resolve,
   sectionPropsSchema,
   slideBackgroundSchema,
@@ -77,6 +84,40 @@ function ScopedMotion({
 
 describe("core author Zod schemas & dual-entry parity", () => {
   it("exposes Zod schemas across @pptxdk/core public subpaths (., ./capability, ./document, ./theme)", () => {
+    for (const key of [
+      "backgroundValueSchema",
+      "borderValueSchema",
+      "placeholderSizeSchema",
+      "buildDiagnosticSchema",
+      "previewErrorSchema",
+      "previewPlaceholderSchema",
+    ] as const) {
+      assert.ok(key in coreMain, `@pptxdk/core must export ${key}`);
+      assert.ok(
+        key in coreCapability,
+        `@pptxdk/core/capability must export ${key}`,
+      );
+      assert.ok(key in pptxdkMain, `@officedk/pptxdk must export ${key}`);
+    }
+    assert.ok(
+      "placeholderSizeSchema" in coreDocument,
+      "@pptxdk/core/document must export placeholderSizeSchema",
+    );
+    for (const key of [
+      "buildDiagnosticSchema",
+      "previewErrorSchema",
+      "previewPlaceholderSchema",
+    ] as const) {
+      assert.ok(
+        key in pptxdkBuild,
+        `@officedk/pptxdk/build must export ${key}`,
+      );
+    }
+    assert.ok(
+      "codegenDiagnosticSchema" in pptxdkMain,
+      "@officedk/pptxdk must export codegenDiagnosticSchema",
+    );
+
     for (const key of [
       "authorIdSchema",
       "deckPropsSchema",
@@ -146,6 +187,47 @@ describe("core author Zod schemas & dual-entry parity", () => {
       action: "home",
     });
     assert.equal(slideBackgroundSchema.parse("#112233"), "#112233");
+    assert.equal(backgroundValueSchema.parse("none"), "none");
+    assert.deepEqual(
+      borderValueSchema.parse({ color: "#112233", width: 2, style: "dashed" }),
+      { color: "#112233", width: 2, style: "dashed" },
+    );
+    assert.equal(placeholderSizeSchema.parse("half"), "half");
+    assert.equal(
+      buildDiagnosticSchema.parse({
+        code: "invalid-style",
+        path: "deck/slide[s1]/text[t1]",
+        message: "invalid fontSize",
+        field: "style.fontSize",
+      }).code,
+      "invalid-style",
+    );
+    assert.equal(
+      previewErrorSchema.parse({
+        code: "preview-missing-font",
+        path: "deck/slide[s1]/text[t1]",
+        message: "missing font",
+        font: { family: "Jost", weight: 400, style: "normal" },
+      }).code,
+      "preview-missing-font",
+    );
+    assert.equal(
+      previewPlaceholderSchema.parse({
+        id: "hero-img",
+        path: "deck/slide[s1]/image[hero-img]",
+        url: "https://example.test/hero.png",
+      }).url,
+      "https://example.test/hero.png",
+    );
+    assert.equal(
+      codegenDiagnosticSchema.parse({
+        code: "unsupported-declaration",
+        path: "deck/slide[s1]",
+        message: "unsupported",
+        declaration: "custom",
+      }).code,
+      "unsupported-declaration",
+    );
     assert.equal(
       themeInputSchema.parse({ colors: { ink: "dk1" } }).colors?.["ink"],
       "dk1",
@@ -213,10 +295,13 @@ describe("core author Zod schemas & dual-entry parity", () => {
             <Text
               id="back"
               link={{ action: "home" }}
-              x={40}
-              y={40}
-              width={200}
-              height={40}
+              style={{
+                position: "absolute",
+                left: 40,
+                top: 40,
+                width: 200,
+                height: 40,
+              }}
             >
               Home
             </Text>
@@ -280,10 +365,13 @@ describe("core author Zod schemas & dual-entry parity", () => {
           text("Home", {
             id: "back",
             link: { action: "home" },
-            x: 40,
-            y: 40,
-            width: 200,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 200,
+              height: 40,
+            },
           }),
         ),
       ),
@@ -310,7 +398,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
     }[] = [
       {
         label: "invalid Deck dimension",
-        expectedCode: "invalid-dimension",
+        expectedCode: "invalid-prop",
         expectedPath: "deck",
         jsx: () => (
           <Deck width={10}>
@@ -321,7 +409,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "unknown Deck parameter",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         expectedPath: "deck",
         jsx: () => (
           <Deck {...({ unknownProp: 1 } as Record<string, unknown>)}>
@@ -333,7 +421,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "invalid Section name",
-        expectedCode: "invalid-section-name",
+        expectedCode: "invalid-prop",
         expectedPath: "deck/section[1]",
         jsx: () => (
           <Deck>
@@ -347,7 +435,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "invalid Slide author id",
-        expectedCode: "invalid-author-id",
+        expectedCode: "invalid-prop",
         expectedPath: "deck/slide[1]",
         jsx: () => (
           <Deck>
@@ -358,7 +446,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "Slide zIndex rejected",
-        expectedCode: "unsupported-layout-style",
+        expectedCode: "invalid-style",
         expectedPath: "deck/slide[s1]",
         jsx: () => (
           <Deck>
@@ -370,7 +458,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "invalid Text fontSize",
-        expectedCode: "invalid-font-size",
+        expectedCode: "invalid-style",
         expectedPath: "deck/slide[s1]/text[t1]",
         jsx: () => (
           <Deck>
@@ -390,7 +478,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "invalid layout enum value",
-        expectedCode: "unsupported-layout-value",
+        expectedCode: "invalid-style",
         expectedPath: "deck/slide[s1]/box[b1]",
         jsx: () => (
           <Deck>
@@ -408,7 +496,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "invalid local theme scope",
-        expectedCode: "invalid-theme-scope",
+        expectedCode: "invalid-prop",
         expectedPath: "deck/slide[s1]/box[b1]",
         jsx: () => (
           <Deck>
@@ -426,7 +514,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
       },
       {
         label: "invalid LinkTarget",
-        expectedCode: "invalid-link",
+        expectedCode: "invalid-prop",
         expectedPath: "deck/slide[s1]/text[t1]",
         jsx: () => (
           <Deck>

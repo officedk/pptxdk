@@ -83,7 +83,7 @@ function SidebarScene() {
           height: 540,
           padding: 32,
           gap: 24,
-          backgroundColor: "lt2",
+          background: "lt2",
         }}
       >
         <Box
@@ -94,7 +94,7 @@ function SidebarScene() {
             width: 240,
             gap: 12,
             padding: 20,
-            backgroundColor: "dk1",
+            background: "dk1",
           }}
         >
           <Text
@@ -164,7 +164,7 @@ function SidebarScene() {
               display: "flex",
               alignItems: "center",
               padding: [0, 12],
-              backgroundColor: "accent1",
+              background: "accent1",
               borderRadius: 6,
             }}
           >
@@ -245,7 +245,7 @@ function HeroScene() {
             alignItems: "flex-start",
             gap: 10,
             padding: 32,
-            backgroundColor: "#0B1220",
+            background: "#0B1220",
             opacity: 0.72,
             zIndex: 1,
           }}
@@ -293,7 +293,7 @@ function HeroScene() {
             id="hero-cta"
             style={{
               alignSelf: "flex-start",
-              backgroundColor: "accent2",
+              background: "accent2",
               padding: [8, 16],
               borderRadius: 12,
             }}
@@ -327,11 +327,11 @@ function FeatureCard({ id }: { readonly id: string }) {
         flexWrap: "wrap",
         gap: 12,
         padding: 16,
-        backgroundColor: "lt1",
+        background: "lt1",
         borderRadius: 12,
       }}
     >
-      <Image id="thumb" src={heroImage} width={120} height={80} />
+      <Image id="thumb" src={heroImage} style={{ width: 120, height: 80 }} />
       <Box
         id="copy"
         style={{
@@ -384,7 +384,7 @@ function ReflowScene() {
           height: 540,
           padding: 32,
           gap: 24,
-          backgroundColor: "lt2",
+          background: "lt2",
         }}
       >
         <Box
@@ -457,7 +457,7 @@ function authorSidebarScene() {
         height: 540,
         padding: 32,
         gap: 24,
-        backgroundColor: "lt2",
+        background: "lt2",
       },
     }).append(
       authorBox({
@@ -468,7 +468,7 @@ function authorSidebarScene() {
           width: 240,
           gap: 12,
           padding: 20,
-          backgroundColor: "dk1",
+          background: "dk1",
         },
       }).append(
         authorText("Northwind", {
@@ -530,7 +530,7 @@ function authorSidebarScene() {
             display: "flex",
             alignItems: "center",
             padding: [0, 12],
-            backgroundColor: "accent1",
+            background: "accent1",
             borderRadius: 6,
           },
         }).append(
@@ -605,7 +605,7 @@ function authorHeroScene() {
           alignItems: "flex-start",
           gap: 10,
           padding: 32,
-          backgroundColor: "#0B1220",
+          background: "#0B1220",
           opacity: 0.72,
           zIndex: 1,
         },
@@ -647,7 +647,7 @@ function authorHeroScene() {
           id: "hero-cta",
           style: {
             alignSelf: "flex-start",
-            backgroundColor: "accent2",
+            background: "accent2",
             padding: [8, 16],
             borderRadius: 12,
           },
@@ -677,11 +677,15 @@ function authorFeatureCard(id: string) {
       flexWrap: "wrap",
       gap: 12,
       padding: 16,
-      backgroundColor: "lt1",
+      background: "lt1",
       borderRadius: 12,
     },
   }).append(
-    authorImage({ id: "thumb", src: heroImage, width: 120, height: 80 }),
+    authorImage({
+      id: "thumb",
+      src: heroImage,
+      style: { width: 120, height: 80 },
+    }),
     authorBox({
       id: "copy",
       style: {
@@ -728,7 +732,7 @@ function authorReflowScene() {
         height: 540,
         padding: 32,
         gap: 24,
-        backgroundColor: "lt2",
+        background: "lt2",
       },
     }).append(
       authorBox({
@@ -824,8 +828,6 @@ describe("mixed layout, layering, and component reflow", () => {
     const reactResult = await build(<MixedDeck />);
     const documentResult = await build(authorMixedDeck());
 
-    assert.deepEqual(reactResult.report.diagnostics, []);
-    assert.deepEqual(documentResult.report.diagnostics, []);
     assert.deepEqual(resultSummary(documentResult), resultSummary(reactResult));
 
     const sidebar = reactResult.report.slides[0];
@@ -1024,31 +1026,28 @@ describe("mixed layout, layering, and component reflow", () => {
       </Deck>,
     );
 
-    assert.deepEqual(
-      result.report.diagnostics.map(({ path, code }) => ({ path, code })),
-      [
-        {
-          path: "deck/slide[mixed-overset]/text[overset-copy]",
-          code: "overset",
-        },
-        {
-          path: "deck/slide[mixed-overflow]/text[off-canvas-copy]",
-          code: "overflow",
-        },
-      ],
-    );
-    assert.deepEqual(objectBox(result, 0, "overset-copy"), {
+    const oversetNode = result.slide("mixed-overset").get("overset-copy");
+    assert.equal(oversetNode.textMetrics?.status, "measured");
+    assert.equal(oversetNode.textMetrics.fits, false);
+    assert.equal(oversetNode.textMetrics.available.height, 40);
+    assert.ok(oversetNode.textMetrics.content.height > 40);
+    assert.deepEqual(oversetNode.box, {
       x: 0,
       y: 0,
       width: 240,
       height: 40,
     });
-    assert.deepEqual(objectBox(result, 1, "off-canvas-copy"), {
+
+    const offCanvasNode = result.slide("mixed-overflow").get("off-canvas-copy");
+    assert.deepEqual(offCanvasNode.box, {
       x: 900,
       y: 500,
       width: 200,
       height: 60,
     });
+    assert.ok(offCanvasNode.bounds !== undefined);
+    assert.ok(offCanvasNode.bounds.x + offCanvasNode.bounds.width > 960);
+    assert.ok(offCanvasNode.bounds.y + offCanvasNode.bounds.height > 540);
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -1108,7 +1107,7 @@ describe("mixed layout, layering, and component reflow", () => {
             <Box
               id="cta"
               style={{
-                backgroundColor: "accent2",
+                background: "accent2",
                 padding: [8, 16],
                 borderRadius: 12,
               }}
@@ -1119,16 +1118,16 @@ describe("mixed layout, layering, and component reflow", () => {
             </Box>
             <Box
               id="after-cta"
-              style={{ width: 20, height: 10, backgroundColor: "accent1" }}
+              style={{ width: 20, height: 10, background: "accent1" }}
             />
-            <Box id="narrow" style={{ width: 60, backgroundColor: "lt1" }}>
+            <Box id="narrow" style={{ width: 60, background: "lt1" }}>
               <Text id="narrow-label" style={labelStyle}>
                 {label}
               </Text>
             </Box>
             <Box
               id="after-narrow"
-              style={{ width: 20, height: 10, backgroundColor: "accent1" }}
+              style={{ width: 20, height: 10, background: "accent1" }}
             />
             <Text
               id="overset-label"
@@ -1147,7 +1146,7 @@ describe("mixed layout, layering, and component reflow", () => {
             authorBox({
               id: "cta",
               style: {
-                backgroundColor: "accent2",
+                background: "accent2",
                 padding: [8, 16],
                 borderRadius: 12,
               },
@@ -1156,17 +1155,17 @@ describe("mixed layout, layering, and component reflow", () => {
             ),
             authorBox({
               id: "after-cta",
-              style: { width: 20, height: 10, backgroundColor: "accent1" },
+              style: { width: 20, height: 10, background: "accent1" },
             }),
             authorBox({
               id: "narrow",
-              style: { width: 60, backgroundColor: "lt1" },
+              style: { width: 60, background: "lt1" },
             }).append(
               authorText(label, { id: "narrow-label", style: labelStyle }),
             ),
             authorBox({
               id: "after-narrow",
-              style: { width: 20, height: 10, backgroundColor: "accent1" },
+              style: { width: 20, height: 10, background: "accent1" },
             }),
             authorText(label, {
               id: "overset-label",
@@ -1191,16 +1190,20 @@ describe("mixed layout, layering, and component reflow", () => {
       ["react", reactResult],
       ["document", documentResult],
     ] as const) {
-      assert.deepEqual(
-        result.report.diagnostics.map(({ code, path }) => ({ code, path })),
-        [
-          {
-            code: "overset",
-            path: "deck/slide[intrinsic-precision]/box[column]/text[overset-label]",
-          },
-        ],
-        entry,
-      );
+      const column = result.slide("intrinsic-precision").get("column");
+      const ctaMetrics = column.get("cta").get("cta-label").textMetrics;
+      assert.equal(ctaMetrics?.status, "measured", entry);
+      assert.equal(ctaMetrics.fits, true, entry);
+      const narrowMetrics = column
+        .get("narrow")
+        .get("narrow-label").textMetrics;
+      assert.equal(narrowMetrics?.status, "measured", entry);
+      assert.equal(narrowMetrics.fits, true, entry);
+      const oversetMetrics = column.get("overset-label").textMetrics;
+      assert.equal(oversetMetrics?.status, "measured", entry);
+      assert.equal(oversetMetrics?.fits, false, entry);
+      assert.equal(oversetMetrics?.available.height, 10, entry);
+      assert.ok((oversetMetrics?.content.height ?? 0) > 10, entry);
       const file = await validatePptx(result.pptx);
       assert.deepEqual(file.errors, [], entry);
       const objectIds = new Map(
@@ -1273,7 +1276,7 @@ describe("mixed layout, layering, and component reflow", () => {
               style={{
                 width: memberWidth,
                 height: 20,
-                backgroundColor: "accent1",
+                background: "accent1",
               }}
             />
           </Group>
@@ -1284,7 +1287,7 @@ describe("mixed layout, layering, and component reflow", () => {
                 style={{
                   width: memberWidth,
                   height: 20,
-                  backgroundColor: "accent2",
+                  background: "accent2",
                 }}
               />
             </Group>
@@ -1295,7 +1298,7 @@ describe("mixed layout, layering, and component reflow", () => {
               style={{
                 width: memberWidth,
                 height: 20,
-                backgroundColor: "accent3",
+                background: "accent3",
               }}
             />
           </Group>
@@ -1311,7 +1314,7 @@ describe("mixed layout, layering, and component reflow", () => {
               style: {
                 width: memberWidth,
                 height: 20,
-                backgroundColor: "accent1",
+                background: "accent1",
               },
             }),
           ),
@@ -1322,7 +1325,7 @@ describe("mixed layout, layering, and component reflow", () => {
                 style: {
                   width: memberWidth,
                   height: 20,
-                  backgroundColor: "accent2",
+                  background: "accent2",
                 },
               }),
             ),
@@ -1336,7 +1339,7 @@ describe("mixed layout, layering, and component reflow", () => {
               style: {
                 width: memberWidth,
                 height: 20,
-                backgroundColor: "accent3",
+                background: "accent3",
               },
             }),
           ),
@@ -1348,7 +1351,6 @@ describe("mixed layout, layering, and component reflow", () => {
       ["react", reactResult],
       ["document", documentResult],
     ] as const) {
-      assert.deepEqual(result.report.diagnostics, [], entry);
       const file = await validatePptx(result.pptx);
       assert.deepEqual(file.errors, [], entry);
       const reportIds = new Map<string, number>();
@@ -1454,7 +1456,7 @@ describe("mixed layout, layering, and component reflow", () => {
                 Open report
               </Text>
             ))}
-            <Box id="narrow" style={{ width: 60, backgroundColor: "lt1" }}>
+            <Box id="narrow" style={{ width: 60, background: "lt1" }}>
               <Text id="fs-narrow" style={{ ...textStyle, fontSize: "9.74pt" }}>
                 Open report
               </Text>
@@ -1484,7 +1486,7 @@ describe("mixed layout, layering, and component reflow", () => {
             ),
             authorBox({
               id: "narrow",
-              style: { width: 60, backgroundColor: "lt1" },
+              style: { width: 60, background: "lt1" },
             }).append(
               authorText("Open report", {
                 id: "fs-narrow",
@@ -1500,7 +1502,6 @@ describe("mixed layout, layering, and component reflow", () => {
       ["react", reactResult],
       ["document", documentResult],
     ] as const) {
-      assert.deepEqual(result.report.diagnostics, [], entry);
       const file = await validatePptx(result.pptx);
       assert.deepEqual(file.errors, [], entry);
       const objectIds = new Map(

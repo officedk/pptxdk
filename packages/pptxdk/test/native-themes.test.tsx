@@ -72,21 +72,29 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
       slide({ id: "s1", layout: layoutA }).append(
         text("Master 1 text", {
           id: "t1",
-          x: 40,
-          y: 40,
-          width: 300,
-          height: 40,
-          style: { color: "accent1", fontFamily: "minor" },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 300,
+            height: 40,
+            color: "accent1",
+            fontFamily: "minor",
+          },
         }),
       ),
       slide({ id: "s2", layout: layoutB }).append(
         text("Master 2 text", {
           id: "t2",
-          x: 40,
-          y: 40,
-          width: 300,
-          height: 40,
-          style: { color: "accent1", fontFamily: "minor" },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 300,
+            height: 40,
+            color: "accent1",
+            fontFamily: "minor",
+          },
         }),
       ),
     );
@@ -143,21 +151,27 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
       slide({ id: "s1", layout: layoutA }).append(
         text("A", {
           id: "t1",
-          x: 40,
-          y: 40,
-          width: 200,
-          height: 40,
-          style: { color: "accent1" },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 200,
+            height: 40,
+            color: "accent1",
+          },
         }),
       ),
       slide({ id: "s2", layout: layoutB }).append(
         text("B", {
           id: "t2",
-          x: 40,
-          y: 40,
-          width: 200,
-          height: 40,
-          style: { color: "accent1" },
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 200,
+            height: 40,
+            color: "accent1",
+          },
         }),
       ),
     );
@@ -234,21 +248,27 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
         <Slide id="s-master-map" layout={layoutDefault}>
           <Text
             id="t-tx1"
-            x={40}
-            y={40}
-            width={300}
-            height={40}
-            style={{ color: "tx1" }}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 300,
+              height: 40,
+              color: "tx1",
+            }}
           >
             Uses master tx1 (= lt1)
           </Text>
           <Text
             id="t-lt2"
-            x={40}
-            y={90}
-            width={300}
-            height={40}
-            style={{ color: "lt2" }}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 90,
+              width: 300,
+              height: 40,
+              color: "lt2",
+            }}
           >
             Direct lt2
           </Text>
@@ -260,21 +280,27 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
         >
           <Text
             id="t-ovr-tx1"
-            x={40}
-            y={40}
-            width={300}
-            height={40}
-            style={{ color: "tx1" }}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 300,
+              height: 40,
+              color: "tx1",
+            }}
           >
             Layout overridden tx1 (= accent2 from layout themeOverride)
           </Text>
           <Text
             id="t-ovr-acc1"
-            x={40}
-            y={90}
-            width={300}
-            height={40}
-            style={{ color: "accent1" }}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 90,
+              width: 300,
+              height: 40,
+              color: "accent1",
+            }}
           >
             Slide themeOverride accent1
           </Text>
@@ -335,24 +361,50 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
         <Slide id="s1" layout={layoutA}>
           <Shape
             id="bg-s1"
-            x={0}
-            y={0}
-            width={640}
-            height={360}
-            fill="accent1"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 640,
+              height: 360,
+              background: "accent1",
+            }}
           />
-          <Shape id="fg-s1" x={40} y={40} width={120} height={40} fill="tx1" />
+          <Shape
+            id="fg-s1"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 120,
+              height: 40,
+              background: "tx1",
+            }}
+          />
         </Slide>
         <Slide id="s2" layout={layoutB}>
           <Shape
             id="bg-s2"
-            x={0}
-            y={0}
-            width={640}
-            height={360}
-            fill="accent1"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 640,
+              height: 360,
+              background: "accent1",
+            }}
           />
-          <Shape id="fg-s2" x={40} y={40} width={120} height={40} fill="tx1" />
+          <Shape
+            id="fg-s2"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 120,
+              height: 40,
+              background: "tx1",
+            }}
+          />
         </Slide>
       </Deck>,
     );
@@ -405,21 +457,27 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
         <Slide id="s1" layout={layoutA}>
           <Shape
             id="bg-i1"
-            x={0}
-            y={0}
-            width={640}
-            height={360}
-            fill="accent1"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 640,
+              height: 360,
+              background: "accent1",
+            }}
           />
         </Slide>
         <Slide id="s2" layout={layoutB}>
           <Shape
             id="bg-i2"
-            x={0}
-            y={0}
-            width={640}
-            height={360}
-            fill="accent1"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 640,
+              height: 360,
+              background: "accent1",
+            }}
           />
         </Slide>
       </Deck>,
@@ -528,10 +586,13 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
       placeholders: {
         title: {
           type: "title",
-          x: 40,
-          y: 40,
-          width: 480,
-          height: 80,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 480,
+            height: 80,
+          },
         },
       },
     });
@@ -603,7 +664,8 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
         </Slide>
       </Deck>,
     );
-    assert.deepEqual(initialPainted.pages[0]?.diagnostics, []);
+    assert.deepEqual(initialPainted.pages[0]?.errors, []);
+    assert.deepEqual(initialPainted.pages[0]?.placeholders, []);
     assert.ok(
       initialPainted.pages[0]?.svg?.includes("#F8FAFC"),
       "Expected initial dark layout inherited title color to resolve through colorMapOverride to lt1 (#F8FAFC)",
@@ -634,7 +696,8 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
     assert.deepEqual(reemittedValidated.errors, []);
 
     const painted = await preview(imported.document);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[0]?.placeholders, []);
     assert.ok(
       painted.pages[0]?.svg?.includes("#F8FAFC"),
       "Expected dark layout inherited title color to resolve through colorMapOverride to lt1 (#F8FAFC)",

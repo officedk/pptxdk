@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { font, build, spin, type MotionObservation } from "@officedk/pptxdk";
+import {
+  font,
+  build,
+  motionSchedule,
+  spin,
+  type MotionObservation,
+} from "@officedk/pptxdk";
 import {
   Deck,
   Cell,
@@ -62,10 +68,13 @@ function FrozenMotionDeck() {
         { scope },
         createElement(Shape, {
           id: "moving-shape",
-          x: 0,
-          y: 0,
-          width: 20,
-          height: 20,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 20,
+            height: 20,
+          },
           emphasis: spin({ duration: 100, easing: { accelerate: 0.2 } }),
         }),
       ),
@@ -84,11 +93,20 @@ function ContentQueryDeck() {
         Box,
         {
           id: "sales-card",
-          style: { width: 200, height: 100, backgroundColor: "#FFFFFF" },
+          style: { width: 200, height: 100, background: "#FFFFFF" },
         },
         createElement(
           Text,
-          { id: "sales-title", x: 12, y: 16, width: 160, height: 32 },
+          {
+            id: "sales-title",
+            style: {
+              position: "absolute",
+              left: 12,
+              top: 16,
+              width: 160,
+              height: 32,
+            },
+          },
           "Quarterly sales",
         ),
       ),
@@ -111,23 +129,44 @@ function PartQueryDeck() {
         },
         createElement(
           Text,
-          { id: "title", x: 0, y: 0, width: 100, height: 20 },
+          {
+            id: "title",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: 20,
+            },
+          },
           "First sales",
         ),
         createElement(
           Text,
           {
             id: "featured-title",
-            x: 0,
-            y: 24,
-            width: 100,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 24,
+              width: 100,
+              height: 20,
+            },
           },
           "Nested feature",
         ),
         createElement(
           Text,
-          { id: "first-match", x: 0, y: 48, width: 100, height: 20 },
+          {
+            id: "first-match",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 48,
+              width: 100,
+              height: 20,
+            },
+          },
           "First match",
         ),
       ),
@@ -139,12 +178,30 @@ function PartQueryDeck() {
         },
         createElement(
           Text,
-          { id: "title", x: 0, y: 0, width: 100, height: 20 },
+          {
+            id: "title",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: 20,
+            },
+          },
           "Second sales",
         ),
         createElement(
           Text,
-          { id: "second-match", x: 0, y: 24, width: 100, height: 20 },
+          {
+            id: "second-match",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 24,
+              width: 100,
+              height: 20,
+            },
+          },
           "Second match",
         ),
       ),
@@ -162,17 +219,23 @@ function ResourceQueryDeck() {
       createElement(Image, {
         id: "cover-image",
         src: png,
-        x: 0,
-        y: 0,
-        width: 120,
-        height: 80,
+        style: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 120,
+          height: 80,
+        },
       }),
       createElement(Chart, {
         id: "sales-chart",
-        x: 130,
-        y: 0,
-        width: 160,
-        height: 120,
+        style: {
+          position: "absolute",
+          left: 130,
+          top: 0,
+          width: 160,
+          height: 120,
+        },
         groups: [
           {
             kind: "column",
@@ -196,11 +259,14 @@ function FontResourceQueryDeck() {
         Text,
         {
           id: "fonted-text",
-          x: 8,
-          y: 8,
-          width: 240,
-          height: 36,
-          style: { fontFamily: jost },
+          style: {
+            position: "absolute",
+            left: 8,
+            top: 8,
+            width: 240,
+            height: 36,
+            fontFamily: jost,
+          },
         },
         "Regular ",
         createElement(Span, { style: { fontWeight: "bold" } }, "Bold"),
@@ -220,11 +286,14 @@ function MissingFontResourceQueryDeck() {
         Text,
         {
           id: "font-name-only-text",
-          x: 8,
-          y: 8,
-          width: 240,
-          height: 36,
-          style: { fontFamily: "Aptos" },
+          style: {
+            position: "absolute",
+            left: 8,
+            top: 8,
+            width: 240,
+            height: 36,
+            fontFamily: "Aptos",
+          },
         },
         "No embedded face",
       ),
@@ -243,10 +312,14 @@ function TablePartQueryDeck() {
         Table,
         {
           id: "forecast-table",
-          x: 16,
-          y: 16,
           columns: [80, 80],
-          style: { fontFamily: "Aptos", fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            fontFamily: "Aptos",
+            fontSize: 12,
+          },
         },
         createElement(
           Row,
@@ -277,11 +350,14 @@ function GroupQueryDeck() {
             { id: "group-box", style: { width: 80, height: 50 } },
             createElement(Shape, {
               id: "group-member",
-              x: 0,
-              y: 0,
-              width: 20,
-              height: 20,
-              fill: "#336699",
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 20,
+                height: 20,
+                background: "#336699",
+              },
             }),
           ),
         ),
@@ -293,6 +369,9 @@ function GroupQueryDeck() {
 describe("read-only build query", () => {
   it("freezes already shallowly frozen motion scopes and their members", async () => {
     const result = await build(createElement(FrozenMotionDeck));
+    assert.equal(result.slides.length, 1);
+    const schedule = motionSchedule(result.slide("frozen-motion"));
+    assert.equal(schedule?.steps.length, 1);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
     ] as MotionObservation;
@@ -316,25 +395,26 @@ describe("read-only build query", () => {
 
   it("locates content in the current build by author id and observes only its objects and text body", async () => {
     const result = await build(createElement(ContentQueryDeck));
-    const slide = result.query.getSlide("content-query");
+    const slide = result.slide("content-query");
     const card = slide.get("sales-card");
     const title = card.get("sales-title");
 
-    assert.equal(result.query.evidence, "generation");
+    assert.equal(result.report.evidence, "generation");
     assert.equal(slide.id, "content-query");
     assert.deepEqual(
-      card.observe().objects.map(({ kind }) => kind),
+      card.objects.map(({ kind }) => kind),
       ["shape", "text"],
     );
-    assert.equal(title.observe().text, "Quarterly sales");
-    assert.equal(title.observe().objects[0]?.authorId, "sales-title");
+    assert.equal(title.text, "Quarterly sales");
+    assert.equal(title.id, "sales-title");
+    assert.equal(title.objects[0]?.authorId, "sales-title");
   });
 
   it("associates image and chart resources with located objects and verifies file bytes from the same build", async () => {
     const result = await build(createElement(ResourceQueryDeck));
-    const slide = result.query.getSlide("resource-query");
-    const image = slide.get("cover-image").observe();
-    const chart = slide.get("sales-chart").observe();
+    const slide = result.slide("resource-query");
+    const image = slide.get("cover-image");
+    const chart = slide.get("sales-chart");
     const imageResource = image.resources?.[0];
 
     assert.equal(imageResource?.contentType, "image/png");
@@ -378,10 +458,8 @@ describe("read-only build query", () => {
     const defaultResult = await build(createElement(FontResourceQueryDeck));
     const defaultParts = unzipSync(defaultResult.pptx);
     assert.equal(
-      defaultResult.query
-        .getSlide("font-resource-query")
-        .get("fonted-text")
-        .observe().resources?.length ?? 0,
+      defaultResult.slide("font-resource-query").get("fonted-text").resources
+        ?.length ?? 0,
       0,
     );
     assert.deepEqual(
@@ -393,10 +471,9 @@ describe("read-only build query", () => {
       createElement(MissingFontResourceQueryDeck),
     );
     assert.equal(
-      missingResult.query
-        .getSlide("missing-font-resource-query")
-        .get("font-name-only-text")
-        .observe().resources?.length ?? 0,
+      missingResult
+        .slide("missing-font-resource-query")
+        .get("font-name-only-text").resources?.length ?? 0,
       0,
     );
 
@@ -404,8 +481,8 @@ describe("read-only build query", () => {
       const result = await build(createElement(FontResourceQueryDeck), {
         embedFonts,
       });
-      const slide = result.query.getSlide("font-resource-query");
-      const text = slide.get("fonted-text").observe();
+      const slide = result.slide("font-resource-query");
+      const text = slide.get("fonted-text");
       const resources = text.resources ?? [];
       const parts = unzipSync(result.pptx);
       const presentation = strFromU8(parts["ppt/presentation.xml"]!);
@@ -463,16 +540,13 @@ describe("read-only build query", () => {
 
   it("keeps anonymous layers transparent and stops at each named author scope", async () => {
     const result = await build(createElement(PartQueryDeck));
-    const slide = result.query.getSlide("part-query");
+    const slide = result.slide("part-query");
     const first = slide.get("sales-first");
     const second = slide.get("sales-second");
 
-    assert.equal(first.get("title").observe().text, "First sales");
-    assert.equal(second.get("title").observe().text, "Second sales");
-    assert.equal(
-      first.observe().text,
-      "First sales\nNested feature\nFirst match",
-    );
+    assert.equal(first.get("title").text, "First sales");
+    assert.equal(second.get("title").text, "Second sales");
+    assert.equal(first.text, "First sales\nNested feature\nFirst match");
     assert.deepEqual(slide.getAll("title"), []);
     assert.throws(() => slide.get("title"), { code: "missing-match" });
     assert.throws(() => first.get("missing"), { code: "missing-match" });
@@ -480,43 +554,38 @@ describe("read-only build query", () => {
 
   it("locates cell text body and final geometry from table owner without forging native objects", async () => {
     const result = await build(createElement(TablePartQueryDeck));
-    const table = result.query
-      .getSlide("table-part-query")
-      .get("forecast-table");
+    const table = result.slide("table-part-query").get("forecast-table");
     const row = table.get("first-row");
     const metric = row.get("metric");
     const value = row.get("value");
 
-    assert.equal(row.observe().text, "Bookings\t17");
+    assert.equal(row.text, "Bookings\t17");
     assert.equal(row.children().length, 2);
-    assert.equal(metric.observe().text, "Bookings");
-    assert.deepEqual(metric.observe().box, {
+    assert.equal(metric.text, "Bookings");
+    assert.deepEqual(metric.box, {
       x: 16,
       y: 16,
       width: 80,
       height: 24,
     });
-    assert.equal(value.observe().text, "17");
-    assert.deepEqual(row.observe().objects, []);
-    assert.equal(table.observe().objects[0]?.kind, "table");
+    assert.equal(value.text, "17");
+    assert.deepEqual(row.objects, []);
+    assert.equal(table.objects[0]?.kind, "table");
   });
 
   it("traverses along Box layout and Group member hierarchies and deduplicates native objects", async () => {
     const result = await build(createElement(GroupQueryDeck));
-    const host = result.query.getSlide("group-query").get("group-host");
+    const host = result.slide("group-query").get("group-host");
     const group = host.children()[0];
     const groupBox = group?.children()[0];
 
     assert.ok(group);
     assert.ok(groupBox);
-    assert.equal(group.observe().objects[0]?.kind, "group");
-    assert.equal(
-      groupBox.get("group-member").observe().objects[0]?.kind,
-      "shape",
-    );
-    assert.equal(groupBox.observe().box?.width, 80);
+    assert.equal(group.objects[0]?.kind, "group");
+    assert.equal(groupBox.get("group-member").objects[0]?.kind, "shape");
+    assert.equal(groupBox.box?.width, 80);
     assert.deepEqual(
-      group.observe().objects.map(({ kind }) => kind),
+      group.objects.map(({ kind }) => kind),
       ["group", "shape"],
     );
     assert.equal(group.descendants().length, 2);

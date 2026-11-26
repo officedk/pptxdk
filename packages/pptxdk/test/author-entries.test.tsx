@@ -12,6 +12,7 @@ import {
   CommonContainer,
   defineTheme,
   font,
+  RichTextContainer,
   transitions,
   type Transition,
 } from "@officedk/pptxdk";
@@ -58,17 +59,30 @@ describe("public author entrypoints", () => {
     const document = await expandDocument(
       <Deck width={960} height={540} theme={testTheme()}>
         <Slide {...slideProps}>
-          <Text id="heading" x={48} y={48} width={400} height={48}>
+          <Text
+            id="heading"
+            style={{
+              position: "absolute",
+              left: 48,
+              top: 48,
+              width: 400,
+              height: 48,
+            }}
+          >
             Initial title
           </Text>
           <Shape
             id="badge"
-            x={48}
-            y={120}
-            width={160}
-            height={48}
-            text="JSX badge"
-          />
+            style={{
+              position: "absolute",
+              left: 48,
+              top: 120,
+              width: 160,
+              height: 48,
+            }}
+          >
+            JSX badge
+          </Shape>
         </Slide>
       </Deck>,
     );
@@ -80,18 +94,23 @@ describe("public author entrypoints", () => {
     );
     document.query
       .get("intro")
-      .getNode("badge")
-      .set({ text: "Edited badge" })
-      .style({ backgroundColor: "#2563EB" });
+      .getAs(
+        "badge",
+        (node): node is RichTextContainer => node instanceof RichTextContainer,
+      )
+      .content("Edited badge")
+      .style({ background: "#2563EB" });
 
     introSlide.append(
-      shape({
+      shape("Added by vanilla", {
         id: "vanilla-box",
-        x: 240,
-        y: 120,
-        width: 220,
-        height: 48,
-        text: "Added by vanilla",
+        style: {
+          position: "absolute",
+          left: 240,
+          top: 120,
+          width: 220,
+          height: 48,
+        },
       }),
     );
 
@@ -99,16 +118,19 @@ describe("public author entrypoints", () => {
       slide({ id: "follow-up" }).append(
         text("Second slide from vanilla", {
           id: "follow-up-title",
-          x: 48,
-          y: 48,
-          width: 480,
-          height: 48,
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 480,
+            height: 48,
+          },
         }),
       ),
     );
 
     const result = await build(document);
-    assert.deepEqual(result.report.diagnostics, []);
+    assert.equal(result.slides.length, 2);
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -128,13 +150,15 @@ describe("public author entrypoints", () => {
     const directVanilla = await build(
       deck({ width: 960, height: 540, theme: testTheme() }).append(
         slide({ id: "only-vanilla" }).append(
-          shape({
+          shape("Pure vanilla", {
             id: "v-shape",
-            x: 40,
-            y: 40,
-            width: 200,
-            height: 60,
-            text: "Pure vanilla",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 200,
+              height: 60,
+            },
           }),
         ),
       ),
@@ -148,12 +172,16 @@ describe("public author entrypoints", () => {
         <Slide id="only-jsx">
           <Shape
             id="j-shape"
-            x={40}
-            y={40}
-            width={200}
-            height={60}
-            text="Pure JSX"
-          />
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 200,
+              height: 60,
+            }}
+          >
+            Pure JSX
+          </Shape>
         </Slide>
       </Deck>,
     );
@@ -218,7 +246,10 @@ import { Deck, Shape, Slide, type ShapeProps, type SlideProps } from "@officedk/
 import { deck, shape, slide, type SlideNode } from "@officedk/pptxdk/vanilla";
 
 const slideProps: SlideProps = { id: "cover", transition: transitions.fade() };
-const shapeProps: ShapeProps = { id: "box", x: 10, y: 20, width: 200, height: 100 };
+const shapeProps: ShapeProps = {
+  id: "box",
+  style: { position: "absolute", left: 10, top: 20, width: 200, height: 100 },
+};
 
 export const validDeck = (
   <Deck width={960} height={540}>
@@ -229,7 +260,7 @@ export const validDeck = (
 );
 
 const vanillaSlide: SlideNode = slide({ id: "v-cover", transition: transitions.fade() }).append(
-  shape({ id: "v-box", x: 10, y: 20, width: 200, height: 100 }),
+  shape({ id: "v-box", style: { position: "absolute", left: 10, top: 20, width: 200, height: 100 } }),
 );
 export const validVanilla = deck({ width: 960, height: 540 }).append(vanillaSlide);
 `);
@@ -245,7 +276,7 @@ import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
 export const missingIdDeck = (
   <Deck width={960} height={540}>
     <Slide>
-      <Shape x={10} y={20} width={200} height={100} />
+      <Shape style={{ position: "absolute", left: 10, top: 20, width: 200, height: 100 }} />
     </Slide>
   </Deck>
 );
@@ -262,7 +293,7 @@ import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
 export const stringWidthDeck = (
   <Deck width={960} height={540}>
     <Slide id="cover">
-      <Shape x={10} y={20} width="200" height={100} />
+      <Shape style={{ position: "absolute", left: 10, top: 20, width: "200", height: 100 }} />
     </Slide>
   </Deck>
 );
@@ -279,7 +310,16 @@ export const stringWidthDeck = (
         <Deck width={960} height={540} theme={testTheme()}>
           <Slide id="outer">
             <Slide id="nested">
-              <Shape id="inner" x={10} y={10} width={100} height={40} />
+              <Shape
+                id="inner"
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 100,
+                  height: 40,
+                }}
+              />
             </Slide>
           </Slide>
         </Deck>,
@@ -335,8 +375,14 @@ const { build, transitions } = await import("@officedk/pptxdk");
 const { deck, shape, slide, text } = await import("@officedk/pptxdk/vanilla");
 const doc = deck({ width: 960, height: 540 }).append(
   slide({ id: "s1", transition: transitions.fade() }).append(
-    shape({ id: "sh1", x: 20, y: 20, width: 120, height: 60, text: "Shape" }),
-    text("Hello", { id: "t1", x: 20, y: 100, width: 120, height: 40 }),
+    shape("Shape", {
+      id: "sh1",
+      style: { position: "absolute", left: 20, top: 20, width: 120, height: 60 },
+    }),
+    text("Hello", {
+      id: "t1",
+      style: { position: "absolute", left: 20, top: 100, width: 120, height: 40 },
+    }),
   ),
 );
 const result = await build(doc);
@@ -382,7 +428,14 @@ const result = await build(
     createElement(
       Slide,
       { id: "jsx-s1" },
-      createElement(Shape, { id: "jsx-sh1", x: 20, y: 20, width: 120, height: 60, text: "JSX" }),
+      createElement(
+        Shape,
+        {
+          id: "jsx-sh1",
+          style: { position: "absolute", left: 20, top: 20, width: 120, height: 60 },
+        },
+        "JSX",
+      ),
     ),
   ),
 );

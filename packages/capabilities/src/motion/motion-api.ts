@@ -158,6 +158,8 @@ export type MotionScopeDeclaration = {
   readonly startAt?: MotionTiming;
   readonly publishStart?: MotionMoment;
   readonly publishEnd?: MotionMoment;
+  /** Internal parallel grouping scope for explicit-motion containers; omitted from public scope observations. */
+  readonly implicit?: true;
 };
 
 export type MotionScopeProps = MotionScopeAuthorProps & {
@@ -490,6 +492,7 @@ type LocalContainerValue = {
   readonly type: "container";
   readonly enabled: boolean;
   readonly defaultEnter?: readonly NormalizedEffect[];
+  readonly groupsAsParallelUnit?: true;
 };
 
 export type ResolvedMotionEffect = {
@@ -1195,11 +1198,21 @@ export function motionAnnotations(
 export function motionContainerAnnotations(
   props: Readonly<Record<string, unknown>>,
   target: MotionTarget | undefined,
-  options: { readonly propagatesDefaultEnter?: boolean } = {},
+  options: {
+    readonly propagatesDefaultEnter?: boolean;
+    readonly groupsAsParallelUnit?: boolean;
+  } = {},
 ): readonly CapabilityAnnotation[] {
   validateMotionFlag(props["motion"]);
   const enabled = props["motion"] !== false;
   const propagatesDefaultEnter = options.propagatesDefaultEnter === true;
+  const hasExplicitMotion =
+    enabled &&
+    (props["enter"] !== undefined ||
+      props["emphasis"] !== undefined ||
+      props["motion"] === true);
+  const groupsAsParallelUnit =
+    options.groupsAsParallelUnit === true && hasExplicitMotion;
   let defaultEnter: readonly NormalizedEffect[] | undefined;
   if (enabled && propagatesDefaultEnter && props["enter"] !== undefined) {
     defaultEnter = Object.freeze(
@@ -1209,7 +1222,7 @@ export function motionContainerAnnotations(
     );
   }
   const annotations: CapabilityAnnotation[] = [];
-  if (!enabled || defaultEnter !== undefined) {
+  if (!enabled || defaultEnter !== undefined || groupsAsParallelUnit) {
     annotations.push({
       capability: "motion",
       optional: true,
@@ -1217,6 +1230,9 @@ export function motionContainerAnnotations(
         type: "container",
         enabled,
         ...(defaultEnter === undefined ? {} : { defaultEnter }),
+        ...(groupsAsParallelUnit
+          ? { groupsAsParallelUnit: true as const }
+          : {}),
       } satisfies LocalContainerValue),
       resolveContributions: resolveMotionContributions,
     });
@@ -1342,6 +1358,37 @@ export function resolveMotionContributions(
         | undefined;
       const enabled =
         childFrame.enabled && (container === undefined || container.enabled);
+      // Group explicit-motion containers (e.g., Box with enter/motion) inside an outer MotionScope
+      // as a single parallel unit before emitting the container's own background shape and children.
+      if (
+        container?.groupsAsParallelUnit === true &&
+        enabled &&
+        childFrame.scopes.length > 0
+      ) {
+        const parent = childFrame.scopes.at(-1);
+        const implicitScope: MotionScopeDeclaration = Object.freeze({
+          identity: createMotionIdentity("scope"),
+          ...(parent === undefined ? {} : { parent: parent.identity }),
+          ...(childFrame.step === undefined ? {} : { step: childFrame.step }),
+          mode: "parallel",
+          delay: 0,
+          implicit: true,
+        });
+        resolved.push(
+          Object.freeze({
+            ...containerContribution!,
+            optional: true,
+            value: Object.freeze({
+              type: "scope" as const,
+              scope: implicitScope,
+            }),
+          }),
+        );
+        childFrame = {
+          ...childFrame,
+          scopes: Object.freeze([...childFrame.scopes, implicitScope]),
+        };
+      }
       if (localContribution !== undefined && enabled) {
         const local = localContribution.value as LocalMotionValue;
         const inherited = local.enterDeclared

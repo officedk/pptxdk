@@ -61,7 +61,7 @@ export const motionTiming = {
 } as const;
 
 export const theme = defineTheme({
-  name: "晶圆青金 · 超算系统图谱",
+  name: "DeepSeek Systems",
   colors: {
     dk1: colors.ink,
     lt1: colors.surface,

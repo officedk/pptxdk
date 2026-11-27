@@ -31,7 +31,7 @@ export const colors = {
 } as const;
 
 export const theme = defineTheme({
-  name: "蓝晒图谱",
+  name: "Generative AI History",
   colors: {
     dk1: colors.indigo,
     lt1: colors.paperBright,

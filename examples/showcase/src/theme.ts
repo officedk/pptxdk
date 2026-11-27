@@ -41,7 +41,7 @@ export const motion = {
 } as const;
 
 export const theme = defineTheme({
-  name: "Violet editorial",
+  name: "Showcase",
   colors,
   fonts: { major: jost, minor: jost, medium: jostMedium, chart: jost },
 });

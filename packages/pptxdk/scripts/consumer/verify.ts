@@ -102,8 +102,16 @@ const hook = registerHooks({
   },
 });
 const { default: document } = await import("./deck.ts");
-const { PreviewPageRangeError, build, codegen, importPptx, isTheme, preview } =
-  await import("@officedk/pptxdk");
+const {
+  BuildError,
+  CapabilityError,
+  PreviewPageRangeError,
+  build,
+  codegen,
+  importPptx,
+  isTheme,
+  preview,
+} = await import("@officedk/pptxdk");
 const { selectCapabilities } = await import("@officedk/pptxdk/build");
 assert.equal(typeof selectCapabilities, "function");
 assert.equal(typeof PreviewPageRangeError, "function");
@@ -189,7 +197,13 @@ for (const expectedText of [
 
 // Verify expandFragment returns frozen ownerless CommonNode[] from the packed tarball.
 const { Fragment, createElement } = await import("react");
-const { Text, expandFragment } = await import("@officedk/pptxdk/react");
+const {
+  Box,
+  Deck,
+  Slide: ReactSlide,
+  Text,
+  expandFragment,
+} = await import("@officedk/pptxdk/react");
 const fragmentNodes = await expandFragment(
   createElement(
     Fragment,
@@ -207,7 +221,7 @@ assert.equal(
 );
 
 // Verify omitted-metadata FontFace infers a non-hundred usWeightClass (350) and roundtrips through importPptx.
-const { deck, defineTheme, font, shape, slide } =
+const { box, darker, deck, defineTheme, font, lighter, shape, slide } =
   await import("@officedk/pptxdk/vanilla");
 const jost350Bytes = patchTtfWeightClass(
   new Uint8Array(await readFile(new URL("./Jost.ttf", import.meta.url))),
@@ -255,3 +269,131 @@ const generatedSource350 = generated350.files[generated350.entry];
 assert.equal(typeof generatedSource350, "string");
 assert.match(generatedSource350 as string, /weight:\s*350\b/u);
 assert.match(generatedSource350 as string, /fontWeight:\s*350\b/u);
+
+// Verify closed OOXML theme normalization, Slide themeOverride + lighter/darker roundtrip,
+// and runtime rejection of invalid theme definitions, removed container theme props, and invalid style colors.
+const jost400Family = font("Jost*", [
+  {
+    data: new Uint8Array(
+      await readFile(new URL("./Jost.ttf", import.meta.url)),
+    ),
+  },
+]);
+const normalizedTheme = defineTheme({
+  name: "Normalized Consumer",
+  colors: { accent1: "#abc", accent2: " #1a2b3c " as never },
+  fonts: { major: jost400Family, minor: jost400Family },
+});
+assert.equal(normalizedTheme.colors.accent1, "#AABBCC");
+assert.equal(normalizedTheme.colors.accent2, "#1A2B3C");
+
+const overrideRoundtripDeck = deck({
+  width: 640,
+  height: 360,
+  theme: normalizedTheme,
+}).append(
+  slide({
+    id: "override-slide",
+    themeOverride: {
+      colors: { accent1: "#c00" },
+      fonts: { major: jost400Family, minor: jost400Family },
+    },
+  }).append(
+    shape("Theme override roundtrip", {
+      id: "override-shape",
+      style: {
+        position: "absolute",
+        left: 24,
+        top: 24,
+        width: 240,
+        height: 48,
+        background: lighter("accent2", 0.85),
+        color: darker("accent1", 0.25),
+        fontFamily: "major",
+      },
+    }),
+  ),
+);
+const overrideBuilt = await build(overrideRoundtripDeck, {
+  embedFonts: "subset",
+});
+const { document: importedOverride, report: overrideImportReport } = importPptx(
+  overrideBuilt.pptx,
+);
+assert.deepEqual(overrideImportReport.diagnostics, []);
+const importedOverrideSlide = importedOverride.children.find(
+  (child) =>
+    typeof child === "object" && child !== null && child.type === "slide",
+);
+assert(
+  typeof importedOverrideSlide === "object" &&
+    importedOverrideSlide !== null &&
+    "props" in importedOverrideSlide,
+);
+const importedSlideOverride = importedOverrideSlide.props["themeOverride"] as
+  | { readonly colors?: { readonly accent1?: string } }
+  | undefined;
+assert.equal(importedSlideOverride?.colors?.accent1, "#CC0000");
+const overrideVanilla = codegen(importedOverride, { target: "vanilla" });
+const overrideVanillaSource = overrideVanilla.files[overrideVanilla.entry];
+assert.equal(typeof overrideVanillaSource, "string");
+assert.match(overrideVanillaSource as string, /#AABBCC/u);
+assert.match(overrideVanillaSource as string, /#1A2B3C/u);
+assert.match(overrideVanillaSource as string, /#CC0000/u);
+assert.match(overrideVanillaSource as string, /lighter\(/u);
+assert.match(overrideVanillaSource as string, /darker\(/u);
+
+for (const invalidTheme of [
+  { colors: { accent1: "#11223380" } },
+  { fonts: { major: "major" } },
+  { fonts: { minor: "minor" } },
+  { fonts: { major: "+mj-lt" } },
+  { colors: { followHlink: "#112233" } },
+]) {
+  assert.throws(
+    () => defineTheme(invalidTheme as never),
+    (error: unknown) =>
+      error instanceof CapabilityError && error.code === "invalid-theme",
+  );
+}
+
+await assert.rejects(
+  build(
+    createElement(
+      Deck,
+      null,
+      createElement(
+        ReactSlide,
+        { id: "bad-react-box" },
+        createElement(Box, { theme: {} } as never),
+      ),
+    ),
+  ),
+  (error: unknown) =>
+    error instanceof BuildError &&
+    error.diagnostics[0]?.code === "unknown-prop",
+);
+
+await assert.rejects(
+  build(
+    deck().append(
+      slide({ id: "bad-vanilla-box" }).append(box({ theme: {} } as never)),
+    ),
+  ),
+  (error: unknown) =>
+    error instanceof BuildError &&
+    error.diagnostics[0]?.code === "unknown-prop",
+);
+
+await assert.rejects(
+  build(
+    deck().append(
+      slide({ id: "bad-style-color" }).append(
+        shape("Bad color", { style: { color: "tileAccent" as never } }),
+      ),
+    ),
+  ),
+  (error: unknown) =>
+    error instanceof BuildError &&
+    error.diagnostics[0]?.code === "invalid-style",
+);

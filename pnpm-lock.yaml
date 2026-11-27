@@ -164,6 +164,9 @@ settings:
 
 catalogs:
   default:
+    '@boringparts/cli-contract':
+      specifier: 0.7.0
+      version: 0.7.0
     '@changesets/cli':
       specifier: 3.0.3
       version: 3.0.3
@@ -191,9 +194,6 @@ catalogs:
     '@xmldom/xmldom':
       specifier: ^0.9.12
       version: 0.9.12
-    '@ykdz/cli-contract':
-      specifier: 0.7.0
-      version: 0.7.0
     esbuild:
       specifier: ^0.28.2
       version: 0.28.2
@@ -639,6 +639,9 @@ importers:
 
   packages/pptxdk:
     dependencies:
+      '@boringparts/cli-contract':
+        specifier: 'catalog:'
+        version: 0.7.0
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
@@ -654,9 +657,6 @@ importers:
       '@xmldom/xmldom':
         specifier: 'catalog:'
         version: 0.9.12
-      '@ykdz/cli-contract':
-        specifier: 'catalog:'
-        version: 0.7.0
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
@@ -873,6 +873,10 @@ importers:
         version: typescript@7.0.2
 
 packages:
+
+  '@boringparts/cli-contract@0.7.0':
+    resolution: {integrity: sha512-ZOvdqHGKY0DHIigEOhqswWxma+Fz7fowsIg4ci4mF1Ier6NmWbVpGDATtPfPbMs75wQukejml/zCCX2ujxhFRg==}
+    engines: {node: '>=24.0.0'}
 
   '@changesets/apply-release-plan@8.1.1':
     resolution: {integrity: sha512-nk2Hbq3M9NeHMdaIRBDvawKrQJzXB9sGyBUE5yWnIKtvdcNCPj75zBekJYr0gTT2ecJH3eFeTrc8eisPImcv0Q==}
@@ -1789,10 +1793,6 @@ packages:
     resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
     engines: {node: '>=14.6'}
 
-  '@ykdz/cli-contract@0.7.0':
-    resolution: {integrity: sha512-GXeDBtkSTZ/AoKKvfqZVAWmZ5ENZ0NhD+oDsumMm6poFXvI7N0DGkHzJijwKm4Jk/hKdYvW3cI+rXN+m4XWjYw==}
-    engines: {node: ^26.13.0}
-
   '@yuku-toolchain/darwin-arm64@0.28.1':
     resolution: {integrity: sha512-xMtZUwiGvJH90ogLjRrnG5+YEhinKti8qMPF18bd5z0ahSoaHWyBoe16evT7cSUxid0JEaZvh6H3daDPwDw4+g==}
     cpu: [arm64]
@@ -2358,6 +2358,10 @@ packages:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
+
+  '@boringparts/cli-contract@0.7.0':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
 
   '@changesets/apply-release-plan@8.1.1':
     dependencies:
@@ -2943,10 +2947,6 @@ snapshots:
   '@vitest/spy@5.0.5': {}
 
   '@xmldom/xmldom@0.9.12': {}
-
-  '@ykdz/cli-contract@0.7.0':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
 
   '@yuku-toolchain/darwin-arm64@0.28.1':
     optional: true

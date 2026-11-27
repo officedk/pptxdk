@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { nodeCliOutput } from "@ykdz/cli-contract/node";
+import { nodeCliOutput } from "@boringparts/cli-contract/node";
 
 import { runCli } from "./cli-commands.ts";
 

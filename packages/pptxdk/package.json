@@ -68,12 +68,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@boringparts/cli-contract": "catalog:",
     "@resvg/resvg-js": "catalog:",
     "@types/fontkit": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@xmldom/xmldom": "catalog:",
-    "@ykdz/cli-contract": "catalog:",
     "esbuild": "catalog:",
     "fflate": "catalog:",
     "fontkit": "catalog:",

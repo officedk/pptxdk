@@ -60,7 +60,6 @@ import {
   type SlideCapabilityModule,
   type SlideEmitContext,
   type SlideResolveContext,
-  type ThemeScope,
 } from "@pptxdk/core/capability";
 import { createDeckNode, createSlideNode } from "@pptxdk/core/document";
 import { hostNodeCreator } from "@pptxdk/core/host";
@@ -1091,13 +1090,12 @@ describe("bound object capability contract", () => {
     );
   });
 
-  it("coordinates generic non-Box BoundContainerCollaboration modules for layout, scoped theme, baseline, overflow, and native objects", async () => {
+  it("coordinates generic non-Box BoundContainerCollaboration modules for layout, container style, baseline, overflow, and native objects", async () => {
     type PanelProps = {
       readonly id?: string;
       readonly filled?: boolean;
       readonly link?: LinkTarget;
       readonly morphKey?: MorphKey;
-      readonly theme?: ThemeScope;
       readonly style?: Record<string, unknown>;
     };
     const createPanelNode = (props: PanelProps) =>
@@ -1129,7 +1127,7 @@ describe("bound object capability contract", () => {
         });
         const emitsObject = input.props["filled"] === true;
         const derivedTheme = context.theme.with(
-          input.props["theme"] as ThemeScope | undefined,
+          undefined,
           textStyleFrom(input.props["style"]),
         );
         const container: BoundContainerCollaboration = {
@@ -1180,17 +1178,12 @@ describe("bound object capability contract", () => {
     const panelMorph = createMorphScope().handle("panel-morph");
     const panelBuild = runJsxModules([customPanelModule, shapeCapability]);
     const valid = await panelBuild(
-      <Deck
-        width={400}
-        height={240}
-        theme={{ colors: { panelAccent: "#111111" } }}
-      >
+      <Deck width={400} height={240} theme={{ colors: { accent1: "#2563EB" } }}>
         <Slide id="panel-slide">
           <CustomPanel
             id="outer-panel"
             filled
             morphKey={panelMorph}
-            theme={{ colors: { panelAccent: "#2563EB" } }}
             style={{
               display: "flex",
               flexDirection: "row",
@@ -1198,6 +1191,7 @@ describe("bound object capability contract", () => {
               width: 300,
               padding: 10,
               gap: 12,
+              color: "#2563EB",
               fontFamily: notoFont,
               fontSize: 18,
             }}
@@ -1214,7 +1208,7 @@ describe("bound object capability contract", () => {
                 id="panel-shape-a"
                 style={{
                   width: 100,
-                  background: "panelAccent",
+                  background: "accent1",
                   verticalAlign: "top",
                   padding: 4,
                 }}
@@ -1595,9 +1589,9 @@ describe("bound object capability contract", () => {
   it("migrates groupCapability to BoundObjectCapabilityModule", async () => {
     const trimmedBuild = runJsxModules([groupCapability, shapeCapability]);
     const result = await trimmedBuild(
-      <Deck width={960} height={540} theme={{ colors: { ink: "#111111" } }}>
+      <Deck width={960} height={540} theme={{ colors: { accent1: "#2563EB" } }}>
         <Slide id="group-bound-slide">
-          <Group id="loose-group" theme={{ colors: { ink: "#2563EB" } }}>
+          <Group id="loose-group">
             <Shape
               id="m1"
               style={{
@@ -1606,7 +1600,7 @@ describe("bound object capability contract", () => {
                 top: 20,
                 width: 50,
                 height: 30,
-                background: "ink",
+                background: "accent1",
               }}
             />
             <Shape
@@ -1668,7 +1662,6 @@ describe("bound object capability contract", () => {
       readonly name?: string;
       readonly morphKey?: MorphKey;
       readonly link?: LinkTarget;
-      readonly theme?: ThemeScope;
       readonly style?: Record<string, unknown>;
     };
     const createClusterNode = (props: ClusterProps) =>
@@ -1699,7 +1692,7 @@ describe("bound object capability contract", () => {
           path: context.path,
         });
         const derivedTheme = context.theme.with(
-          input.props["theme"] as ThemeScope | undefined,
+          undefined,
           textStyleFrom(input.props["style"]),
         );
         const morphKey = input.props["morphKey"] as MorphKey | undefined;
@@ -1783,12 +1776,9 @@ describe("bound object capability contract", () => {
       shapeCapability,
     ]);
     const valid = await clusterBuild(
-      <Deck width={400} height={240} theme={{ colors: { tone: "#111111" } }}>
+      <Deck width={400} height={240}>
         <Slide id="cluster-slide">
-          <CustomCluster
-            id="loose-cluster"
-            theme={{ colors: { tone: "#DC2626" } }}
-          >
+          <CustomCluster id="loose-cluster" style={{ color: "#DC2626" }}>
             <Shape
               id="c1"
               style={{
@@ -1797,9 +1787,11 @@ describe("bound object capability contract", () => {
                 top: 25,
                 width: 40,
                 height: 30,
-                background: "tone",
+                background: "#F8FAFC",
               }}
-            />
+            >
+              C1
+            </Shape>
             <Shape
               id="c2"
               style={{

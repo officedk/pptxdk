@@ -841,4 +841,362 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
       "#2563EB",
     );
   });
+
+  it("roundtrips master, layout, and slide footer placeholder letterSpacing (including empty-text endParaRPr slots) with zero unconsumed-xml diagnostics", async () => {
+    const layoutWithFooterLetterSpacing = defineSlideLayout({
+      id: "footer-ls-layout",
+      name: "Footer LetterSpacing Layout",
+      type: "obj",
+      preserve: true,
+      footerPlaceholders: {
+        footer: {
+          text: "Layout Footer",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 316,
+            width: 240,
+            height: 24,
+            fontFamily: jostFont,
+            fontSize: 12,
+            color: "#334155",
+            letterSpacing: 2.4,
+          },
+        },
+      },
+    });
+
+    const sourceDoc = deck({ width: 640, height: 360 }).append(
+      slideMaster({
+        id: "m-footer-ls",
+        name: "Footer LetterSpacing Master",
+        preserve: true,
+        footerPlaceholders: {
+          dateTime: {
+            text: "2026-11-27",
+            style: {
+              position: "absolute",
+              left: 36,
+              top: 316,
+              width: 150,
+              height: 24,
+              fontFamily: jostFont,
+              fontSize: 12,
+              color: "#475569",
+              letterSpacing: 2,
+            },
+          },
+          footer: {
+            style: {
+              position: "absolute",
+              left: 200,
+              top: 316,
+              width: 240,
+              height: 24,
+              fontFamily: jostFont,
+              fontSize: 12,
+              color: "#475569",
+              letterSpacing: -1.2,
+            },
+          },
+          slideNumber: {
+            style: {
+              position: "absolute",
+              left: 490,
+              top: 316,
+              width: 110,
+              height: 24,
+              fontFamily: jostFont,
+              fontSize: 12,
+              color: "#0F172A",
+              letterSpacing: 0.8,
+            },
+          },
+        },
+      }).append(slideLayout(layoutWithFooterLetterSpacing)),
+      slide({
+        id: "s-footer-inherited",
+        layout: layoutWithFooterLetterSpacing,
+      }),
+      slide({
+        id: "s-footer-override",
+        layout: layoutWithFooterLetterSpacing,
+        dateTime: {
+          text: "Q4 2026",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 12,
+            color: "#0F172A",
+            letterSpacing: 1.6,
+          },
+        },
+        footer: {
+          // Empty text emits <a:pPr><a:defRPr> and <a:endParaRPr> without <a:r>.
+          text: "",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 12,
+            color: "#0F172A",
+            letterSpacing: -1.2,
+          },
+        },
+        slideNumber: {
+          style: {
+            fontFamily: jostFont,
+            fontSize: 12,
+            color: "#0F172A",
+            letterSpacing: 3.2,
+          },
+        },
+      }),
+    );
+
+    const emitted = emit(resolveDocument(sourceDoc), { embedFonts: "subset" });
+    const imported = importDocument(emitted.pptx);
+
+    assert.deepEqual(imported.report.diagnostics, []);
+    assert.ok(imported.document instanceof DeckContainer);
+
+    const masterPlaceholders = imported.document.masters[0]?.props[
+      "placeholders"
+    ] as
+      | Record<string, { listStyles?: Record<number, Record<string, unknown>> }>
+      | undefined;
+    assert.equal(
+      masterPlaceholders?.["dt"]?.listStyles?.[1]?.["letterSpacing"],
+      2,
+    );
+
+    const layoutPlaceholders = imported.document.masters[0]?.layouts[0]?.props[
+      "placeholders"
+    ] as
+      | Record<string, { listStyles?: Record<number, Record<string, unknown>> }>
+      | undefined;
+    assert.equal(
+      layoutPlaceholders?.["ftr"]?.listStyles?.[1]?.["letterSpacing"],
+      2.4,
+    );
+
+    const importedSlides = collectSlides(imported.document);
+    const inheritedSlide = importedSlides[0]!;
+    assert.equal(
+      (inheritedSlide.props["dateTime"] as { style?: Record<string, unknown> })
+        ?.style?.["letterSpacing"],
+      2,
+    );
+    assert.equal(
+      (inheritedSlide.props["footer"] as { style?: Record<string, unknown> })
+        ?.style?.["letterSpacing"],
+      2.4,
+    );
+    assert.equal(
+      (
+        inheritedSlide.props["slideNumber"] as {
+          style?: Record<string, unknown>;
+        }
+      )?.style?.["letterSpacing"],
+      0.8,
+    );
+
+    const overrideSlide = importedSlides[1]!;
+    assert.equal(
+      (overrideSlide.props["dateTime"] as { style?: Record<string, unknown> })
+        ?.style?.["letterSpacing"],
+      1.6,
+    );
+    assert.equal(
+      (overrideSlide.props["footer"] as { style?: Record<string, unknown> })
+        ?.style?.["letterSpacing"],
+      -1.2,
+    );
+    assert.equal(
+      (
+        overrideSlide.props["slideNumber"] as {
+          style?: Record<string, unknown>;
+        }
+      )?.style?.["letterSpacing"],
+      3.2,
+    );
+
+    const rebuilt = emit(resolveDocument(imported.document), {
+      embedFonts: "subset",
+    });
+    const validated = await validatePptx(rebuilt.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const reimported = importDocument(rebuilt.pptx);
+    assert.deepEqual(reimported.report.diagnostics, []);
+  });
+
+  it("isolates invalid and out-of-range @spc on footer placeholders with invalid-xml-value while preserving sibling attributes and slide content", async () => {
+    const cleanLayout = defineSlideLayout({
+      id: "footer-invalid-spc-layout",
+      name: "Footer Invalid Spc Layout",
+      type: "blank",
+      preserve: true,
+    });
+    const sourceDoc = deck({ width: 640, height: 360 }).append(
+      slideMaster({
+        id: "m-invalid-spc",
+        name: "Invalid Spc Master",
+        preserve: true,
+      }).append(slideLayout(cleanLayout)),
+      slide({
+        id: "s-invalid-spc-1",
+        layout: cleanLayout,
+        dateTime: {
+          text: "2026-11-27",
+          style: {
+            fontFamily: jostFullFamilyFont,
+            fontSize: 14,
+            fontWeight: "bold",
+            fontStyle: "italic",
+            color: "#1D4ED8",
+            letterSpacing: 2,
+          },
+        },
+        footer: {
+          text: "Healthy Footer",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 12,
+            color: "#0F172A",
+            letterSpacing: 1.6,
+          },
+        },
+        slideNumber: {
+          style: {
+            fontFamily: jostFont,
+            fontSize: 12,
+            color: "#0F172A",
+            letterSpacing: 0.8,
+          },
+        },
+      }).append(
+        shape({
+          id: "healthy-shape",
+          name: "Healthy Sibling Shape",
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 160,
+            height: 60,
+            background: "#10B981",
+          },
+        }),
+      ),
+      slide({
+        id: "s-invalid-spc-2",
+        layout: cleanLayout,
+        footer: {
+          text: "",
+          style: {
+            fontFamily: jostFont,
+            fontSize: 12,
+            color: "#334155",
+            letterSpacing: -1.2,
+          },
+        },
+      }),
+    );
+
+    const basePptx = emit(resolveDocument(sourceDoc)).pptx;
+    const entries = unzipSync(basePptx);
+    const slide1Xml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    const mutatedSlide1Xml = slide1Xml
+      .replace('spc="150"', 'spc="12.5"')
+      .replace('spc="60"', 'spc="400001"');
+    assert.notEqual(mutatedSlide1Xml, slide1Xml);
+    entries["ppt/slides/slide1.xml"] = strToU8(mutatedSlide1Xml);
+
+    const slide2Xml = strFromU8(entries["ppt/slides/slide2.xml"]!);
+    // Strip pPr/defRPr so empty-paragraph endParaRPr is the sole run style source, and set out-of-range spc.
+    const mutatedSlide2Xml = slide2Xml
+      .replace(/<a:pPr>.*?<\/a:pPr>/u, "")
+      .replace('spc="-90"', 'spc="-400001"');
+    assert.notEqual(mutatedSlide2Xml, slide2Xml);
+    entries["ppt/slides/slide2.xml"] = strToU8(mutatedSlide2Xml);
+
+    const mutatedBytes = new Uint8Array(zipSync(entries));
+    const imported = importDocument(mutatedBytes);
+    mutatedBytes.fill(0);
+
+    assert.equal(imported.report.diagnostics.length, 3);
+    const [diagDt, diagSldNum, diagS2Ftr] = imported.report.diagnostics;
+    assert.deepEqual(
+      {
+        code: diagDt?.code,
+        category: diagDt?.category,
+        disposition: diagDt?.disposition,
+        attributeOrElement:
+          diagDt?.code === "invalid-xml-value"
+            ? diagDt.attributeOrElement
+            : undefined,
+        rawValue:
+          diagDt?.code === "invalid-xml-value" ? diagDt.rawValue : undefined,
+        part: diagDt?.location.part,
+        slideIndex: diagDt?.location.slideIndex,
+      },
+      {
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        attributeOrElement: "@spc",
+        rawValue: "12.5",
+        part: "ppt/slides/slide1.xml",
+        slideIndex: 0,
+      },
+    );
+    assert.ok(diagDt?.location.xpath?.endsWith("/a:rPr/@spc"));
+
+    assert.equal(diagSldNum?.code, "invalid-xml-value");
+    assert.equal(diagSldNum?.location.slideIndex, 0);
+    if (diagSldNum?.code === "invalid-xml-value") {
+      assert.equal(diagSldNum.attributeOrElement, "@spc");
+      assert.equal(diagSldNum.rawValue, "400001");
+    }
+    assert.ok(diagSldNum?.location.xpath?.endsWith("/a:fld/a:rPr/@spc"));
+
+    assert.equal(diagS2Ftr?.code, "invalid-xml-value");
+    assert.equal(diagS2Ftr?.location.slideIndex, 1);
+    if (diagS2Ftr?.code === "invalid-xml-value") {
+      assert.equal(diagS2Ftr.attributeOrElement, "@spc");
+      assert.equal(diagS2Ftr.rawValue, "-400001");
+    }
+    assert.ok(diagS2Ftr?.location.xpath?.endsWith("/a:endParaRPr/@spc"));
+
+    const importedSlides = collectSlides(imported.document);
+    const dtStyle = (
+      importedSlides[0]?.props["dateTime"] as {
+        style?: Record<string, unknown>;
+      }
+    )?.style;
+    assert.equal(dtStyle?.["letterSpacing"], undefined);
+    assert.equal(dtStyle?.["fontSize"], "10.5pt");
+    assert.equal(dtStyle?.["fontWeight"], "bold");
+    assert.equal(dtStyle?.["fontStyle"], "italic");
+    assert.equal(dtStyle?.["color"], "#1D4ED8");
+    assert.equal(dtStyle?.["fontFamily"], "Jost*");
+
+    const ftrStyle = (
+      importedSlides[0]?.props["footer"] as { style?: Record<string, unknown> }
+    )?.style;
+    assert.equal(ftrStyle?.["letterSpacing"], 1.6);
+
+    const s2FtrStyle = (
+      importedSlides[1]?.props["footer"] as { style?: Record<string, unknown> }
+    )?.style;
+    assert.equal(s2FtrStyle?.["letterSpacing"], undefined);
+    assert.equal(s2FtrStyle?.["fontSize"], "9pt");
+    assert.equal(s2FtrStyle?.["color"], "#334155");
+
+    const rebuilt = emit(resolveDocument(imported.document));
+    const validated = await validatePptx(rebuilt.pptx);
+    assert.deepEqual(validated.errors, []);
+    assert.equal(
+      validated.slides[0]?.objects[0]?.name,
+      "Healthy Sibling Shape",
+    );
+  });
 });

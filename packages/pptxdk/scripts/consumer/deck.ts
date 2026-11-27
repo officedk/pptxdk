@@ -60,7 +60,7 @@ export default deck({
         groups: [
           {
             kind: "column",
-            data: { kind: "shared-categories", categories: ["Apr", "May"] },
+            data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
             series: [{ name: "Revenue", values: [120, 150] }],
           },
         ],

@@ -7,31 +7,9 @@ import {
   defineFailureScenarios,
   runCliScenario,
 } from "@boringparts/cli-contract/testing";
-import { build } from "@officedk/pptxdk";
+import { CodegenError, build } from "@officedk/pptxdk";
 import { deck, shape, slide } from "@officedk/pptxdk/vanilla";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-
-const mockState = vi.hoisted(() => ({ throwCodegenError: false }));
-
-vi.mock("@officedk/pptxdk", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@officedk/pptxdk")>();
-  return {
-    ...actual,
-    codegen: (...args: Parameters<typeof actual.codegen>) => {
-      if (mockState.throwCodegenError) {
-        throw new actual.CodegenError([
-          {
-            path: "deck/slide[s1]/shape[unsupported]",
-            code: "unsupported-declaration",
-            declaration: "shape",
-            message: "Cannot serialize custom declaration node",
-          },
-        ]);
-      }
-      return actual.codegen(...args);
-    },
-  };
-});
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { cliContract } from "../../src/cli-commands.ts";
 
@@ -81,7 +59,6 @@ describe("pptxdk CLI contract scenarios", () => {
   });
 
   afterAll(async () => {
-    mockState.throwCodegenError = false;
     if (stageDir.length > 0) {
       await rm(stageDir, { recursive: true, force: true });
     }
@@ -295,7 +272,19 @@ describe("pptxdk CLI contract scenarios", () => {
             "--out-dir",
             join(stageDir, "never-codegen-fail"),
           ],
-          dependencies: { cwd: stageDir },
+          dependencies: {
+            cwd: stageDir,
+            codegen: () => {
+              throw new CodegenError([
+                {
+                  path: "deck/slide[s1]/shape[unsupported]",
+                  code: "unsupported-declaration",
+                  declaration: "shape",
+                  message: "Cannot serialize custom declaration node",
+                },
+              ]);
+            },
+          },
         },
         writeFailed: {
           argv: [
@@ -330,23 +319,17 @@ describe("pptxdk CLI contract scenarios", () => {
 
     for (const [command, variants] of Object.entries(failureScenarios)) {
       for (const [variant, scenario] of Object.entries(variants)) {
-        mockState.throwCodegenError =
-          command === "codegen" && variant === "codegenFailed";
-        try {
-          const observation = await runCliScenario(cliContract, scenario);
-          expect(observation.stdout).toBe("");
-          expect(observation.stderr.length).toBeGreaterThan(0);
-          expect(observation.termination.exitCode).toBe(
-            expectedExitCode(variant),
-          );
-          expect(observation.termination.kind).toBe("applicationResult");
-          if (observation.termination.kind === "applicationResult") {
-            expect(observation.termination.result.kind).toBe("failure");
-            expect(observation.termination.result.command).toBe(command);
-            expect(observation.termination.result.variant).toBe(variant);
-          }
-        } finally {
-          mockState.throwCodegenError = false;
+        const observation = await runCliScenario(cliContract, scenario);
+        expect(observation.stdout).toBe("");
+        expect(observation.stderr.length).toBeGreaterThan(0);
+        expect(observation.termination.exitCode).toBe(
+          expectedExitCode(variant),
+        );
+        expect(observation.termination.kind).toBe("applicationResult");
+        if (observation.termination.kind === "applicationResult") {
+          expect(observation.termination.result.kind).toBe("failure");
+          expect(observation.termination.result.command).toBe(command);
+          expect(observation.termination.result.variant).toBe(variant);
         }
       }
     }

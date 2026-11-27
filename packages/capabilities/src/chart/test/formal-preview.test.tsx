@@ -6,9 +6,10 @@ import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { chartCapability } from "@pptxdk/capabilities/chart";
 import { Chart } from "@pptxdk/capabilities/chart-elements";
 import { chart, deck, font, slide } from "@pptxdk/capabilities/document";
-import { type CapabilityModule, CommonNode } from "@pptxdk/core";
+import { type CapabilityModule, CommonNode, defineTheme } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
+import { createImporter } from "@pptxdk/import";
 import { paint } from "@pptxdk/preview";
 import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
@@ -1908,5 +1909,119 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     expect(chartXml).toContain('<c:y val="0.1375"/>');
     expect(chartXml).toContain('<c:w val="0.732143"/>');
     expect(chartXml).toContain('<c:h val="0.65625"/>');
+  });
+
+  it("previews subset-embedded roundtrip chart without synthetic probe glyph errors", async () => {
+    const resolveWith = createResolver(documentCapabilities);
+    const importPptx = createImporter(documentCapabilities);
+    const doc = deck({
+      width: 640,
+      height: 360,
+      theme: defineTheme({
+        name: "SubsetChart",
+        fonts: { major: jostFont, minor: jostFont },
+      }),
+    }).append(
+      slide({ id: "subset-roundtrip", background: "#FFFFFF" }).append(
+        chart({
+          id: "subset-q",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 592,
+            height: 312,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
+          groups: [
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2"],
+              },
+              series: [{ name: "S1", values: [12, 18] }],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const emitted = emit(resolveWith(doc), { embedFonts: "subset" });
+    assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
+
+    const imported = importPptx(new Uint8Array(emitted.pptx));
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const previewed = paint(resolveWith(imported.document));
+    const page = previewed.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.ok(page.png !== undefined);
+  });
+
+  it("treats explicit numeric and pt value-axis lineHeight as fixed length rather than a multiplier", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const buildWithLineHeight = (lineHeight: number | `${number}pt`) =>
+      previewDoc(
+        deck({ width: 320, height: 220 }).append(
+          slide({ id: "lh-slide", background: "#FFFFFF" }).append(
+            chart({
+              id: "lh-chart",
+              style: {
+                position: "absolute",
+                left: 16,
+                top: 16,
+                width: 150,
+                height: 180,
+                fontFamily: jostFont,
+                fontSize: 13,
+              },
+              axes: {
+                category: { kind: "category" },
+                value: {
+                  kind: "value",
+                  min: 0,
+                  max: 20,
+                  majorUnit: 10,
+                  numberFormat: "0.00000000",
+                  style: { fontSize: 13, lineHeight },
+                },
+              },
+              groups: [
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+                  series: [{ name: "S1", values: [10, 20] }],
+                },
+              ],
+            }),
+          ),
+        ),
+      );
+
+    const pxResult = await buildWithLineHeight(20);
+    const ptResult = await buildWithLineHeight("15pt");
+
+    for (const result of [pxResult, ptResult]) {
+      const page = result.pages[0]!;
+      assert.deepEqual(page.errors, []);
+      assert.ok(page.png !== undefined);
+      assert.ok(page.svg !== undefined);
+
+      const clipHeights = [
+        ...page.svg.matchAll(
+          /<clipPath id="rp-chart-clip-\d+-\d+-(\d+)"[^>]*><rect[^>]*height="([^"]+)"\/>/gu,
+        ),
+      ]
+        .filter((m) => Number(m[1]) >= 3)
+        .map((m) => Number(m[2]));
+      assert.ok(clipHeights.length > 0);
+      for (const h of clipHeights) {
+        expect(h).toBeGreaterThanOrEqual(20);
+        expect(h).toBeLessThanOrEqual(24);
+      }
+    }
+    assert.deepEqual(pxResult.pages[0]?.png, ptResult.pages[0]?.png);
   });
 });

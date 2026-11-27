@@ -24,6 +24,11 @@ const rawNotesDeclarationPropsSchema = z
   })
   .readonly();
 
+/** Allowed declaration prop keys for `Notes` / `notes()`, derived from `rawNotesDeclarationPropsSchema`. */
+export const notesAllowedPropKeys: ReadonlySet<string> = new Set(
+  Object.keys(rawNotesDeclarationPropsSchema.unwrap().shape),
+);
+
 /** Pure-data Zod v4 contract for page-affiliated speaker notes declarations (`Notes` / `notes()`). */
 export const notesDeclarationPropsSchema: z.ZodType<NotesDeclarationProps> =
   rawNotesDeclarationPropsSchema satisfies z.ZodType<

@@ -11,6 +11,7 @@ import { transformSync, type Loader } from "esbuild";
 import type { ComponentType, ReactNode } from "react";
 import { z } from "zod";
 
+import { resolveDocumentInput } from "./compose.ts";
 import {
   BuildError,
   ImportError,
@@ -20,6 +21,8 @@ import {
   importPptx,
   previewErrorSchema,
   previewPlaceholderSchema,
+  resolve,
+  resolveOptionsSchema,
   type BuildDiagnostic,
   type BuildOptions,
   type BuildResult,
@@ -30,6 +33,8 @@ import {
   type ImportResult,
   type PreviewError,
   type PreviewPlaceholder,
+  type Resolution,
+  type ResolveOptions,
 } from "./index.ts";
 import type { PreviewOptions, PreviewResult } from "./preview.ts";
 
@@ -65,6 +70,17 @@ export type PreviewFromSourceOptions = z.infer<
   typeof previewFromSourceOptionsSchema
 >;
 
+export const resolveFromSourceOptionsSchema = resolveOptionsSchema
+  .unwrap()
+  .extend({
+    /** Use the named export of the entry module as the deck; defaults to "default". */
+    exportName: exportNameSchema.optional(),
+  })
+  .readonly();
+export type ResolveFromSourceOptions = z.infer<
+  typeof resolveFromSourceOptionsSchema
+>;
+
 export type {
   BuildDiagnostic,
   BuildOptions,
@@ -78,12 +94,15 @@ export type {
   PreviewOptions,
   PreviewPlaceholder,
   PreviewResult,
+  Resolution,
+  ResolveOptions,
 };
 export {
   ImportError,
   buildDiagnosticSchema,
   previewErrorSchema,
   previewPlaceholderSchema,
+  resolveOptionsSchema,
 };
 
 /**
@@ -368,6 +387,82 @@ export async function previewFromSource(
   try {
     const deck = await loadDeck(url, exportName, previewOptions.signal);
     return await preview(deck, previewOptions);
+  } finally {
+    hooks.deregister();
+  }
+}
+
+/**
+ * Run a read-only resolve from a Node.js local ESM source entry. Shares source loading, export selection,
+ * and cancellation semantics with `buildFromSource` and `previewFromSource`, without emitting PPTX or PNGs.
+ * The return value is identical to `resolve`.
+ */
+export async function resolveFromSource(
+  entry: string | URL,
+  options: ResolveFromSourceOptions = {},
+): Promise<Resolution> {
+  const url = sourceUrl(entry);
+  const parsed = resolveFromSourceOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    if (
+      typeof options !== "object" ||
+      options === null ||
+      Array.isArray(options)
+    ) {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve",
+          "invalid-options",
+          "Resolve options must be an object",
+        ),
+      ]);
+    }
+    const issue = parsed.error.issues[0];
+    if (issue?.path.length === 0 && issue.code === "unrecognized_keys") {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve",
+          "unknown-parameter",
+          `Resolve options contain unknown parameter ${issue.keys[0]}`,
+          { prop: String(issue.keys[0]), scope: "options" },
+        ),
+      ]);
+    }
+    if (issue?.path[0] === "signal") {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve.signal",
+          "invalid-options",
+          "Resolve options signal must be an AbortSignal",
+          { field: "signal" },
+        ),
+      ]);
+    }
+    if (issue?.path[0] === "exportName") {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve.exportName",
+          "invalid-options",
+          "exportName must be a non-empty string",
+          { field: "exportName" },
+        ),
+      ]);
+    }
+    throw new BuildError([
+      toBuildDiagnostic(
+        "resolve",
+        "invalid-options",
+        "Resolve options must be an object",
+      ),
+    ]);
+  }
+  const { exportName = "default", ...resolveOptions } = parsed.data;
+  if (resolveOptions.signal?.aborted) throw resolveOptions.signal.reason;
+
+  const hooks = registerSourceLoader();
+  try {
+    const deck = await loadDeck(url, exportName, resolveOptions.signal);
+    return await resolveDocumentInput(resolve, deck, resolveOptions);
   } finally {
     hooks.deregister();
   }

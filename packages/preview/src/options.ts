@@ -1,4 +1,5 @@
 import {
+  PreviewPageRangeError,
   previewErrorSchema,
   previewPlaceholderSchema,
   type PreviewError,
@@ -6,7 +7,7 @@ import {
 } from "@pptxdk/core/build";
 import { z } from "zod";
 
-export { previewErrorSchema, previewPlaceholderSchema };
+export { PreviewPageRangeError, previewErrorSchema, previewPlaceholderSchema };
 export type { PreviewError, PreviewPlaceholder };
 
 export const previewPageNumberSchema = z.int().positive();
@@ -47,19 +48,6 @@ export const screenGeometrySchema = z
   })
   .readonly();
 export type ScreenGeometry = z.infer<typeof screenGeometrySchema>;
-
-/** Error thrown when requested preview page numbers exceed the resolved deck slide count. */
-export class PreviewPageRangeError extends RangeError {
-  readonly requestedPages: readonly number[];
-  readonly totalSlides: number;
-
-  constructor(requestedPages: readonly number[], totalSlides: number) {
-    super("Preview page number is outside the document");
-    this.name = "PreviewPageRangeError";
-    this.requestedPages = Object.freeze([...requestedPages]);
-    this.totalSlides = totalSlides;
-  }
-}
 
 /** Validates paint/preview options (`pages`, `signal`) via shared pure-data schemas. */
 export function validatePaintOptions(options: unknown = {}): PaintOptions {

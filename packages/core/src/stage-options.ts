@@ -305,3 +305,16 @@ export const previewPlaceholderSchema = z.strictObject({
   url: z.string(),
 });
 export type PreviewPlaceholder = z.infer<typeof previewPlaceholderSchema>;
+
+/** Error thrown when requested preview page numbers exceed the resolved deck slide count. */
+export class PreviewPageRangeError extends RangeError {
+  readonly requestedPages: readonly number[];
+  readonly totalSlides: number;
+
+  constructor(requestedPages: readonly number[], totalSlides: number) {
+    super("Preview page number is outside the document");
+    this.name = "PreviewPageRangeError";
+    this.requestedPages = Object.freeze([...requestedPages]);
+    this.totalSlides = totalSlides;
+  }
+}

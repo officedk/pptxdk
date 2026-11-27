@@ -634,4 +634,264 @@ describe("generation closure", () => {
     );
     assert.equal(plainDiagnostics[0]?.code, "missing-capability");
   });
+
+  it("groups explicit-motion Box cards identically across React JSX and Vanilla entries while keeping plain layout Boxes transparent", async () => {
+    const ReactCards = () => {
+      const stagger = useMotionScope();
+      const seq = useMotionScope();
+      const plainStagger = useMotionScope();
+      return (
+        <Deck width={640} height={360}>
+          <Slide id="stagger-cards">
+            <MotionScope scope={stagger} mode="stagger" each={120}>
+              <Box
+                id="card-1"
+                enter={fade({ duration: 400 })}
+                style={{
+                  width: 240,
+                  height: 100,
+                  background: "#1E293B",
+                  border: { color: "#38BDF8", width: 2 },
+                }}
+              >
+                <Shape
+                  id="card-1-badge"
+                  style={{ width: 24, height: 24, background: "#38BDF8" }}
+                />
+                <Text id="card-1-title" style={{ width: 160, height: 28 }}>
+                  Card One
+                </Text>
+              </Box>
+              <Box
+                id="card-2"
+                enter={fade({ duration: 400 })}
+                style={{
+                  width: 240,
+                  height: 100,
+                  background: "#1E293B",
+                  border: { color: "#38BDF8", width: 2 },
+                }}
+              >
+                <Shape
+                  id="card-2-badge"
+                  style={{ width: 24, height: 24, background: "#38BDF8" }}
+                />
+                <Text id="card-2-title" style={{ width: 160, height: 28 }}>
+                  Card Two
+                </Text>
+              </Box>
+            </MotionScope>
+          </Slide>
+          <Slide id="sequence-cards">
+            <MotionScope scope={seq} mode="sequence">
+              <Box
+                id="seq-1"
+                enter={fade({ duration: 300 })}
+                style={{ width: 240, height: 90, background: "#0F172A" }}
+              >
+                <Shape
+                  id="seq-1-badge"
+                  style={{ width: 20, height: 20, background: "#22C55E" }}
+                />
+              </Box>
+              <Box
+                id="seq-2"
+                enter={fade({ duration: 250 })}
+                style={{ width: 240, height: 90, background: "#0F172A" }}
+              >
+                <Shape
+                  id="seq-2-badge"
+                  style={{ width: 20, height: 20, background: "#22C55E" }}
+                />
+              </Box>
+            </MotionScope>
+          </Slide>
+          <Slide id="plain-layout-stagger">
+            <MotionScope scope={plainStagger} mode="stagger" each={100}>
+              <Box
+                id="plain-box"
+                style={{ width: 240, height: 100, background: "#1E293B" }}
+              >
+                <Shape
+                  id="plain-a"
+                  enter={fade({ duration: 200 })}
+                  style={{ width: 24, height: 24, background: "#38BDF8" }}
+                />
+                <Shape
+                  id="plain-b"
+                  enter={fade({ duration: 200 })}
+                  style={{ width: 24, height: 24, background: "#22C55E" }}
+                />
+              </Box>
+            </MotionScope>
+          </Slide>
+        </Deck>
+      );
+    };
+
+    const vanillaStagger = createMotionScopeHandle();
+    const vanillaSeq = createMotionScopeHandle();
+    const vanillaPlain = createMotionScopeHandle();
+    const vanillaDoc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "stagger-cards" }).append(
+        motionScope(vanillaStagger, {
+          mode: "stagger",
+          each: 120,
+        }).append(
+          box({
+            id: "card-1",
+            enter: fade({ duration: 400 }),
+            style: {
+              width: 240,
+              height: 100,
+              background: "#1E293B",
+              border: { color: "#38BDF8", width: 2 },
+            },
+          }).append(
+            shape({
+              id: "card-1-badge",
+              style: { width: 24, height: 24, background: "#38BDF8" },
+            }),
+            text("Card One", {
+              id: "card-1-title",
+              style: { width: 160, height: 28 },
+            }),
+          ),
+          box({
+            id: "card-2",
+            enter: fade({ duration: 400 }),
+            style: {
+              width: 240,
+              height: 100,
+              background: "#1E293B",
+              border: { color: "#38BDF8", width: 2 },
+            },
+          }).append(
+            shape({
+              id: "card-2-badge",
+              style: { width: 24, height: 24, background: "#38BDF8" },
+            }),
+            text("Card Two", {
+              id: "card-2-title",
+              style: { width: 160, height: 28 },
+            }),
+          ),
+        ),
+      ),
+      slide({ id: "sequence-cards" }).append(
+        motionScope(vanillaSeq, { mode: "sequence" }).append(
+          box({
+            id: "seq-1",
+            enter: fade({ duration: 300 }),
+            style: { width: 240, height: 90, background: "#0F172A" },
+          }).append(
+            shape({
+              id: "seq-1-badge",
+              style: { width: 20, height: 20, background: "#22C55E" },
+            }),
+          ),
+          box({
+            id: "seq-2",
+            enter: fade({ duration: 250 }),
+            style: { width: 240, height: 90, background: "#0F172A" },
+          }).append(
+            shape({
+              id: "seq-2-badge",
+              style: { width: 20, height: 20, background: "#22C55E" },
+            }),
+          ),
+        ),
+      ),
+      slide({ id: "plain-layout-stagger" }).append(
+        motionScope(vanillaPlain, {
+          mode: "stagger",
+          each: 100,
+        }).append(
+          box({
+            id: "plain-box",
+            style: { width: 240, height: 100, background: "#1E293B" },
+          }).append(
+            shape({
+              id: "plain-a",
+              enter: fade({ duration: 200 }),
+              style: { width: 24, height: 24, background: "#38BDF8" },
+            }),
+            shape({
+              id: "plain-b",
+              enter: fade({ duration: 200 }),
+              style: { width: 24, height: 24, background: "#22C55E" },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const reactResult = await build(<ReactCards />);
+    const vanillaResult = await build(vanillaDoc);
+
+    for (const [label, result] of [
+      ["react", reactResult],
+      ["vanilla", vanillaResult],
+    ] as const) {
+      const validation = await validatePptx(result.pptx);
+      assert.deepEqual(validation.errors, [], `${label} validation errors`);
+
+      const staggerSchedule = motionSchedule(result.slide("stagger-cards"));
+      assert.ok(staggerSchedule, `${label} stagger schedule`);
+      assert.deepEqual(
+        staggerSchedule.steps[0]?.effects.map(
+          ({ target, start, end, scopes }) => [
+            target.authorId,
+            start.state === "known" ? start.ms : undefined,
+            end.state === "known" ? end.ms : undefined,
+            scopes.map(({ id }) => id),
+          ],
+        ),
+        [
+          ["card-1", 0, 400, ["scope-1"]],
+          ["card-1-badge", 0, 400, ["scope-1"]],
+          ["card-1-title", 0, 400, ["scope-1"]],
+          ["card-2", 120, 520, ["scope-1"]],
+          ["card-2-badge", 120, 520, ["scope-1"]],
+          ["card-2-title", 120, 520, ["scope-1"]],
+        ],
+        `${label} stagger intervals`,
+      );
+      assert.equal(staggerSchedule.steps[0]?.scopes.length, 1);
+
+      const sequenceSchedule = motionSchedule(result.slide("sequence-cards"));
+      assert.ok(sequenceSchedule, `${label} sequence schedule`);
+      assert.deepEqual(
+        sequenceSchedule.steps[0]?.effects.map(({ target, start, end }) => [
+          target.authorId,
+          start.state === "known" ? start.ms : undefined,
+          end.state === "known" ? end.ms : undefined,
+        ]),
+        [
+          ["seq-1", 0, 300],
+          ["seq-1-badge", 0, 300],
+          ["seq-2", 300, 550],
+          ["seq-2-badge", 300, 550],
+        ],
+        `${label} sequence intervals`,
+      );
+
+      const plainSchedule = motionSchedule(
+        result.slide("plain-layout-stagger"),
+      );
+      assert.ok(plainSchedule, `${label} plain layout schedule`);
+      assert.deepEqual(
+        plainSchedule.steps[0]?.effects.map(({ target, start, end }) => [
+          target.authorId,
+          start.state === "known" ? start.ms : undefined,
+          end.state === "known" ? end.ms : undefined,
+        ]),
+        [
+          ["plain-a", 0, 200],
+          ["plain-b", 100, 300],
+        ],
+        `${label} plain layout intervals`,
+      );
+    }
+  });
 });

@@ -578,6 +578,7 @@ export function createImporter(
           registerDeferredSlideLink,
           layoutNodeByPartPath,
           clrMapByLayoutPartPath,
+          existingDiagnostics: diagnostics,
         });
         if (outcome.diagnostics !== undefined) {
           diagnostics.push(...outcome.diagnostics);
@@ -724,6 +725,7 @@ export function createImporter(
         layoutNodeByPartPath,
         clrMapByLayoutPartPath,
         slideNodeByPresentationSldId,
+        existingDiagnostics: diagnostics,
       });
       if (outcome.diagnostics !== undefined) {
         diagnostics.push(...outcome.diagnostics);

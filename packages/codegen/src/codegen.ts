@@ -978,9 +978,36 @@ export function createCodegen(
       const layoutDecls: string[] = [];
       const layoutExprsForMaster: string[] = [];
       for (const [layoutIndex, layoutNode] of masterLayouts.entries()) {
-        const layoutPath = `${masterPath}/${childPathLabel(layoutNode, layoutIndex)}`;
+        const rawLayoutPath = `${masterPath}/${childPathLabel(layoutNode, layoutIndex)}`;
+        const rawDef = layoutNode.props["layout"];
+        if (rawDef !== undefined && !isSlideLayoutDefinition(rawDef)) {
+          failAt(
+            `${rawLayoutPath}@layout`,
+            "unexpressible-value",
+            "SlideLayout.layout must be created by defineSlideLayout()",
+          );
+        }
+        const def = isSlideLayoutDefinition(rawDef) ? rawDef : undefined;
+        const effectiveLayoutProps: Record<string, unknown> = {
+          ...def?.props,
+        };
+        for (const [key, value] of Object.entries(layoutNode.props)) {
+          if (key === "layout" || !isDefined(value)) continue;
+          effectiveLayoutProps[key] = value;
+        }
+        const effectiveLayoutId =
+          typeof effectiveLayoutProps["id"] === "string"
+            ? effectiveLayoutProps["id"]
+            : undefined;
+        const layoutPath =
+          layoutNode.id !== undefined || effectiveLayoutId === undefined
+            ? rawLayoutPath
+            : `${masterPath}/slide-layout[${effectiveLayoutId}]`;
         const layoutRawName =
-          layoutNode.id ?? (layoutNode.props["name"] as string | undefined);
+          effectiveLayoutId ??
+          (typeof effectiveLayoutProps["name"] === "string"
+            ? effectiveLayoutProps["name"]
+            : undefined);
         const layoutIdent = allocator.allocate(
           toCamelCaseIdentifier(
             layoutRawName === undefined
@@ -991,17 +1018,13 @@ export function createCodegen(
           ),
         );
         layoutIdentByContainer.set(layoutNode, layoutIdent);
-        const def = layoutNode.props["layout"];
-        if (
-          isSlideLayoutDefinition(def) &&
-          layoutDefinitionCounts.get(def) === 1
-        ) {
+        if (def !== undefined && layoutDefinitionCounts.get(def) === 1) {
           layoutIdentByDefinition.set(def, layoutIdent);
         }
 
         const layoutSpecEntries: [string, unknown][] = [];
-        for (const [key, value] of Object.entries(layoutNode.props)) {
-          if (!isDefined(value) || key === "layout") continue;
+        for (const [key, value] of Object.entries(effectiveLayoutProps)) {
+          if (!isDefined(value)) continue;
           if (key === "themeOverride") {
             layoutSpecEntries.push([
               key,
@@ -1167,7 +1190,12 @@ export function createCodegen(
       currentSlideLayoutPlaceholders = isSlideLayoutDefinition(rawSlideLayout)
         ? rawSlideLayout.placeholders
         : rawSlideLayout instanceof SlideLayoutContainer
-          ? (rawSlideLayout.props["placeholders"] as PlaceholderMap | undefined)
+          ? ((rawSlideLayout.props["placeholders"] as
+              | PlaceholderMap
+              | undefined) ??
+            (isSlideLayoutDefinition(rawSlideLayout.props["layout"])
+              ? rawSlideLayout.props["layout"].placeholders
+              : undefined))
           : undefined;
 
       const childExprs: string[] = [];

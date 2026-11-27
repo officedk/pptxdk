@@ -953,4 +953,116 @@ describe("@pptxdk/codegen core contract", () => {
       );
     }
   });
+
+  it("preserves and validates SlideLayoutDefinition.props set via .set({ layout }) and rejects non-definition SlideLayout.layout", () => {
+    const placeholderCap = {
+      declaration: "placeholder",
+      codegen: defineObjectCodegen({
+        declarations: {
+          placeholder: {
+            emitVanilla: (node, ctx) =>
+              ctx.formatVanillaCall(ctx.useImport("placeholder"), [
+                ctx.formatProps(Object.entries(node.props)),
+              ]),
+            emitReact: (node, ctx) =>
+              ctx.formatJsxElement(
+                ctx.useImport("Placeholder"),
+                Object.entries(node.props),
+              ),
+          },
+        },
+      }),
+      bind() {
+        throw new Error("not used in codegen unit test");
+      },
+    } as unknown as RegisteredCapabilityModule;
+
+    const generate = createCodegen([placeholderCap]);
+    const dynDef = defineSlideLayout({
+      id: "dyn",
+      name: "Dyn",
+      themeOverride: {
+        colors: { accent1: "#def" },
+        fonts: { minor: "Georgia" },
+      },
+      placeholders: {
+        title: {
+          type: "title",
+          idx: 0,
+          size: "full",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 60,
+          },
+        },
+      },
+    });
+    const lNode = createSlideLayoutNode();
+    lNode.set({ layout: dynDef });
+
+    const doc = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideMasterNode({ id: "m1" }).append(lNode),
+      createSlideNode({ id: "s1", layout: lNode }).append(
+        new CommonNode("placeholder", "placeholder", {
+          id: "ph1",
+          placeholder: "title",
+          nativePlaceholder: { type: "title", idx: 0, size: "full" },
+        }),
+      ),
+    );
+
+    for (const target of ["vanilla", "react"] as const) {
+      const result = generate(doc, { target });
+      const source = result.files[result.entry] as string;
+      assert.match(source, /id:\s*"dyn"/u);
+      assert.match(source, /name:\s*"Dyn"/u);
+      assert.match(source, /"#DDEEFF"/u);
+      assert.match(source, /minor:\s*"Georgia"/u);
+      assert.doesNotMatch(source, /nativePlaceholder/u);
+    }
+
+    const invalidLayoutDef = {
+      ...dynDef,
+      props: {
+        ...dynDef.props,
+        themeOverride: { colors: { accent1: "#11223380" } },
+      },
+    } as never;
+    const badDefNode = createSlideLayoutNode();
+    badDefNode.set({ layout: invalidLayoutDef });
+    const badDefDoc = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideMasterNode({ id: "m1" }).append(badDefNode),
+      createSlideNode({ id: "s1" }),
+    );
+    assert.throws(
+      () => generate(badDefDoc, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "unexpressible-value" &&
+        error.diagnostics[0]?.field === "themeOverride.colors.accent1" &&
+        error.diagnostics[0]?.path.endsWith("@themeOverride.colors.accent1") &&
+        !("severity" in error.diagnostics[0]),
+    );
+
+    const nonDefLayoutDoc = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideMasterNode({ id: "m1" }).append(
+        createSlideLayoutNode({ layout: "not-a-layout" as never }),
+      ),
+      createSlideNode({ id: "s1" }),
+    );
+    assert.throws(
+      () => generate(nonDefLayoutDoc, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "unexpressible-value" &&
+        error.diagnostics[0]?.field === "layout" &&
+        /^deck\/slide-master\[m1\]\/slide-layout\[[^\]]+\]@layout$/u.test(
+          error.diagnostics[0]?.path ?? "",
+        ) &&
+        !("severity" in error.diagnostics[0]),
+    );
+  });
 });

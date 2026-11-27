@@ -71,6 +71,8 @@ type LayoutCascadeLookup = {
   readonly footerPlaceholders?: Readonly<Record<string, unknown>> | undefined;
 };
 
+const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
+
 function isPlainRecord(
   value: unknown,
 ): value is Readonly<Record<string, unknown>> {
@@ -1171,7 +1173,11 @@ export function readEmbeddedFontsIntoDeck(
       });
     }
 
-    if (faces.length > 0) {
+    if (
+      faces.length > 0 &&
+      record.typeface.trim() !== "" &&
+      !reservedThemeFontPattern.test(record.typeface.trim())
+    ) {
       const key = fontFamilyKey(record.typeface);
       fontsByKey.set(
         key,
@@ -1185,7 +1191,12 @@ export function readEmbeddedFontsIntoDeck(
     }
   }
 
-  const scheme = readPresentationThemeFontScheme(pkg);
+  const schemeDiagnostics: ImportDiagnostic[] = [
+    ...(context.existingDiagnostics ?? []),
+  ];
+  const previousDiagnosticsCount = schemeDiagnostics.length;
+  const scheme = readPresentationThemeFontScheme(pkg, schemeDiagnostics);
+  diagnostics.push(...schemeDiagnostics.slice(previousDiagnosticsCount));
   const attachFontsToThemeInput = (
     existing: ThemeInput | undefined,
   ): {

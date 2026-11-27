@@ -69,8 +69,15 @@ const presentationFontAttrSchema = z.object({
   saveSubsetFonts: ooxmlBoolSchema.optional(),
 });
 
+const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
+
+function isAllowedThemeFontTypeface(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed !== "" && !reservedThemeFontPattern.test(trimmed);
+}
+
 const embeddedFontTypefaceXmlSchema = z.object({
-  typeface: z.string().min(1),
+  typeface: z.string().min(1).refine(isAllowedThemeFontTypeface),
   pitchFamily: ooxmlIntSchema.optional(),
   charset: ooxmlIntSchema.optional(),
   panose: z.string().optional(),
@@ -81,7 +88,7 @@ const embeddedFontSlotRefXmlSchema = z.object({
 });
 
 const themeTypefaceXmlSchema = z.object({
-  typeface: z.string().min(1),
+  typeface: z.string().min(1).refine(isAllowedThemeFontTypeface),
 });
 
 function isTrueTypeSfntHeader(bytes: Uint8Array): boolean {
@@ -314,6 +321,7 @@ export function readEmbeddedFontList(
  */
 export function readPresentationThemeFontScheme(
   pkg: PptxPackage,
+  diagnostics?: ImportDiagnostic[],
 ): PresentationFontSchemeInfo | undefined {
   const masterRel = pkg.presentationRels.find(
     (rel) => rel.Type === REL_SLIDE_MASTER && rel.TargetMode !== "External",
@@ -346,33 +354,68 @@ export function readPresentationThemeFontScheme(
     return undefined;
   }
 
-  const themeCursor = XmlElementCursor.createRoot(themeEl, themePath);
+  const themeCursor = XmlElementCursor.createRoot(
+    themeEl,
+    themePath,
+    "/a:theme",
+  );
   const themeName = themeCursor.attr("name");
   const themeElements = themeCursor.child(A_NS, "themeElements");
   const fontScheme = themeElements?.child(A_NS, "fontScheme");
   if (fontScheme === undefined) return undefined;
 
-  const majorLatin = fontScheme
-    .child(A_NS, "majorFont")
-    ?.child(A_NS, "latin")
-    ?.attrsObject(["typeface"]);
-  const minorLatin = fontScheme
-    .child(A_NS, "minorFont")
-    ?.child(A_NS, "latin")
-    ?.attrsObject(["typeface"]);
+  const readFontSlotTypeface = (
+    latinCursor: XmlElementCursor | undefined,
+  ): string | undefined => {
+    const attrs = latinCursor?.attrsObject(["typeface"]);
+    const parsed = themeTypefaceXmlSchema.safeParse(attrs);
+    if (parsed.success) {
+      return parsed.data.typeface;
+    }
+    const rawTypeface = attrs?.["typeface"];
+    if (
+      diagnostics !== undefined &&
+      latinCursor !== undefined &&
+      rawTypeface !== undefined &&
+      rawTypeface.trim() !== "" &&
+      reservedThemeFontPattern.test(rawTypeface.trim())
+    ) {
+      const xpath = `${latinCursor.xpath}/@typeface`;
+      const duplicate = diagnostics.some(
+        (existing) =>
+          existing.code === "invalid-xml-value" &&
+          existing.location.part === themePath &&
+          existing.attributeOrElement === "a:latin/@typeface" &&
+          existing.rawValue === rawTypeface &&
+          (existing.location.xpath === undefined ||
+            existing.location.xpath === xpath),
+      );
+      if (!duplicate) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part: themePath, xpath },
+          attributeOrElement: "a:latin/@typeface",
+          rawValue: rawTypeface,
+        });
+      }
+    }
+    return undefined;
+  };
 
-  const parsedMajor = themeTypefaceXmlSchema.safeParse(majorLatin);
-  const parsedMinor = themeTypefaceXmlSchema.safeParse(minorLatin);
+  const majorTypeface = readFontSlotTypeface(
+    fontScheme.child(A_NS, "majorFont")?.child(A_NS, "latin"),
+  );
+  const minorTypeface = readFontSlotTypeface(
+    fontScheme.child(A_NS, "minorFont")?.child(A_NS, "latin"),
+  );
 
   return {
     ...(themeName !== undefined && themeName.trim() !== ""
       ? { themeName }
       : {}),
-    ...(parsedMajor.success
-      ? { majorTypeface: parsedMajor.data.typeface }
-      : {}),
-    ...(parsedMinor.success
-      ? { minorTypeface: parsedMinor.data.typeface }
-      : {}),
+    ...(majorTypeface === undefined ? {} : { majorTypeface }),
+    ...(minorTypeface === undefined ? {} : { minorTypeface }),
   };
 }

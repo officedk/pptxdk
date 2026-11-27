@@ -301,7 +301,7 @@ export const stringWidthDeck = (
     assert.notEqual(stringWidthResult.status, 0);
     assert.match(
       `${stringWidthResult.stdout}\n${stringWidthResult.stderr}`,
-      /width|string|number/u,
+      /width|string|number|LayoutLength/u,
     );
 
     let structuralError: unknown;

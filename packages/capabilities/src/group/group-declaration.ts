@@ -1,37 +1,76 @@
 import {
   authorIdSchema,
-  layoutStyleSchema,
+  layoutStyleShape,
   linkTargetSchema,
-  textStyleSchema,
+  textStyleShape,
   themeScopeSchema,
-  visualStyleSchema,
+  visualStyleShape,
+  type AuthorId,
+  type LayoutStyle,
+  type LinkTarget,
+  type TextStyle,
+  type ThemeScope,
+  type VisualStyle,
 } from "@pptxdk/core/capability";
 import { CommonContainer } from "@pptxdk/core/document";
 import { z } from "zod";
 
-import { motionPropsSchema } from "../motion/motion-schemas.ts";
+import {
+  motionPropsShape,
+  type MotionProps,
+} from "../motion/motion-schemas.ts";
 import { optionalNameSchema } from "../shared/identity.ts";
-import { morphKeySchema } from "../shared/morph-api.ts";
+import { morphKeySchema, type MorphKey } from "../shared/morph-api.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
+export type GroupStyle = LayoutStyle &
+  TextStyle &
+  Pick<VisualStyle, "rotate" | "flipH" | "flipV">;
 
 const groupStyleObjectSchema = z.strictObject({
-  ...layoutStyleSchema.unwrap().shape,
-  ...textStyleSchema.unwrap().shape,
-  rotate: visualStyleSchema.unwrap().shape.rotate,
-  flipH: visualStyleSchema.unwrap().shape.flipH,
-  flipV: visualStyleSchema.unwrap().shape.flipV,
+  ...layoutStyleShape,
+  ...textStyleShape,
+  rotate: visualStyleShape.rotate,
+  flipH: visualStyleShape.flipH,
+  flipV: visualStyleShape.flipV,
 });
 
-export const groupStyleSchema = groupStyleObjectSchema.readonly();
-export type GroupStyle = z.infer<typeof groupStyleSchema>;
+export const groupStyleKeys: readonly string[] = Object.keys(
+  groupStyleObjectSchema.shape,
+);
+export const groupTransformShape = {
+  rotate: visualStyleShape.rotate,
+  flipH: visualStyleShape.flipH,
+  flipV: visualStyleShape.flipV,
+};
+const rawGroupStyleSchema = groupStyleObjectSchema.readonly();
+export const groupStyleSchema: z.ZodType<GroupStyle> =
+  rawGroupStyleSchema satisfies z.ZodType<
+    AssertExact<GroupStyle, z.infer<typeof rawGroupStyleSchema>> extends true
+      ? GroupStyle
+      : never
+  >;
 
-const motionPropsShape = motionPropsSchema.unwrap().shape;
+/** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
+export type GroupDeclarationProps = MotionProps & {
+  readonly id?: AuthorId | undefined;
+  readonly name?: string | undefined;
+  readonly morphKey?: MorphKey | undefined;
+  readonly link?: LinkTarget | undefined;
+  readonly style?: GroupStyle | undefined;
+  readonly theme?: ThemeScope | undefined;
+};
 
 const groupDeclarationPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
   name: optionalNameSchema.optional(),
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
-  style: groupStyleSchema.optional(),
+  style: rawGroupStyleSchema.optional(),
   theme: themeScopeSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
@@ -42,11 +81,17 @@ export const groupDeclarationPropsKeys = Object.keys(
   groupDeclarationPropsObjectSchema.shape,
 );
 
-export const groupDeclarationPropsSchema =
+const rawGroupDeclarationPropsSchema =
   groupDeclarationPropsObjectSchema.readonly();
-
-/** Native Group preserves member relationships; style allows it to arrange as a layout child, with output bounds computed from the union of member geometries. */
-export type GroupDeclarationProps = z.infer<typeof groupDeclarationPropsSchema>;
+export const groupDeclarationPropsSchema: z.ZodType<GroupDeclarationProps> =
+  rawGroupDeclarationPropsSchema satisfies z.ZodType<
+    AssertExact<
+      GroupDeclarationProps,
+      z.infer<typeof rawGroupDeclarationPropsSchema>
+    > extends true
+      ? GroupDeclarationProps
+      : never
+  >;
 
 /** Creates the editable native group shared by the command factory and the Group JSX element. */
 export function createGroupNode(

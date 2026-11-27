@@ -10,6 +10,7 @@ import {
   type PlaceholderSize,
   type ResolvedFooter,
   type ResolvedFooterSlot,
+  type SealedCanvasMechanism,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
   type SlideEmitContext,
@@ -1063,7 +1064,10 @@ export const footerPlaceholderMechanism = defineCanvasMechanism({
 });
 
 /** Slide capability resolving, painting, emitting, and importing `dateTime`, `footer`, `slideNumber`, and master/layout `footerPlaceholders`. */
-export const footerPlaceholderCapability = {
+export const footerPlaceholderCapability: SlideCapabilityModule<
+  BoundSlideCapability,
+  readonly [SealedCanvasMechanism<"footer-placeholder">]
+> = {
   declaration: "footer-placeholder",
   slideProp: "footer",
   slideProps: ["footer", "dateTime", "slideNumber"],

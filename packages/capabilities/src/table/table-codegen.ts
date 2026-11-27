@@ -7,33 +7,28 @@ import {
   createRichTextCodegenHandler,
 } from "../text/text-codegen.ts";
 import {
-  cellDeclarationPropsSchema,
-  rowDeclarationPropsSchema,
+  cellAllowedParameters,
+  rowAllowedParameters,
   rowStyleKeys,
+  tableCellAllStyleKeys,
   tableCellStyleSchema,
   tableColumnSchema,
-  tableDeclarationPropsSchema,
+  tableDeclarationAllowedPropKeys,
   tableRowStyleSchema,
   tableStyleKeys,
   tableStyleSchema,
   tableTextStyleKeys,
 } from "./table-schemas.ts";
 
-const tableAllowedPropKeys = new Set(
-  Object.keys(tableDeclarationPropsSchema.unwrap().shape),
-);
-const rowAllowedPropKeys = new Set(
-  Object.keys(rowDeclarationPropsSchema.unwrap().shape),
-);
-const cellAllowedPropKeys = new Set(
-  Object.keys(cellDeclarationPropsSchema.unwrap().shape),
-);
+const tableAllowedPropKeys = new Set(tableDeclarationAllowedPropKeys);
+const rowAllowedPropKeys = new Set(rowAllowedParameters);
+const cellAllowedPropKeys = new Set(cellAllowedParameters);
 
 const tableCleanStyleKeys = new Set(tableStyleKeys);
 const rowCleanStyleKeys = new Set([...tableTextStyleKeys, ...rowStyleKeys]);
 const cellCleanStyleKeys = new Set([
   ...tableTextStyleKeys,
-  ...Object.keys(tableCellStyleSchema.unwrap().shape),
+  ...tableCellAllStyleKeys,
 ]);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

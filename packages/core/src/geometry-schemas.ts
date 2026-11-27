@@ -191,15 +191,66 @@ export const presetGeometryTuple = [
   "chartPlus",
 ] as const;
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
 export type PresetGeometryName = (typeof presetGeometryTuple)[number];
 
-export const presetGeometryNameSchema = z.enum(presetGeometryTuple);
+export type PresetGeometry = {
+  readonly type: "preset";
+  readonly name: PresetGeometryName;
+  /** Raw DrawingML adjust values indexed by guide name (adj, adj1, adj2, etc.). */
+  readonly adjust?: Readonly<Record<string, number>> | undefined;
+};
 
-export const geometryAdjustKeySchema = z
+export type PathCommand =
+  | { readonly op: "M"; readonly x: number; readonly y: number }
+  | { readonly op: "L"; readonly x: number; readonly y: number }
+  | {
+      readonly op: "C";
+      readonly x1: number;
+      readonly y1: number;
+      readonly x2: number;
+      readonly y2: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | {
+      readonly op: "Q";
+      readonly x1: number;
+      readonly y1: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly op: "Z" };
+
+export type GeometryPath = {
+  readonly commands: readonly PathCommand[];
+  readonly fill?: boolean | undefined;
+  readonly stroke?: boolean | undefined;
+};
+
+/** Custom geometry uses local coordinates and scales to the bounding box allocated by layout. */
+export type CustomGeometry = {
+  readonly type: "custom";
+  readonly width: number;
+  readonly height: number;
+  readonly paths: readonly GeometryPath[];
+};
+
+export type Geometry = PresetGeometryName | PresetGeometry | CustomGeometry;
+
+const rawPresetGeometryNameSchema = z.enum(presetGeometryTuple);
+export const presetGeometryNameSchema: z.ZodType<PresetGeometryName> =
+  rawPresetGeometryNameSchema;
+
+export const geometryAdjustKeySchema: z.ZodType<string> = z
   .string()
   .regex(/^adj(?:[1-9]\d*)?$/u, "Geometry adjust key must match adj or adjN");
 
-export const geometryAdjustSchema = z
+const rawGeometryAdjustSchema = z
   .record(
     geometryAdjustKeySchema,
     z
@@ -210,20 +261,30 @@ export const geometryAdjustSchema = z
       ),
   )
   .readonly();
+export const geometryAdjustSchema: z.ZodType<Readonly<Record<string, number>>> =
+  rawGeometryAdjustSchema;
 
-export const presetGeometrySchema = z
+const rawPresetGeometrySchema = z
   .strictObject({
     type: z.literal("preset"),
-    name: presetGeometryNameSchema,
+    name: rawPresetGeometryNameSchema,
     /** Raw DrawingML adjust values indexed by guide name (adj, adj1, adj2, etc.). */
-    adjust: geometryAdjustSchema.optional(),
+    adjust: rawGeometryAdjustSchema.optional(),
   })
   .readonly();
-export type PresetGeometry = z.infer<typeof presetGeometrySchema>;
+export const presetGeometrySchema: z.ZodType<PresetGeometry> =
+  rawPresetGeometrySchema satisfies z.ZodType<
+    AssertExact<
+      PresetGeometry,
+      z.infer<typeof rawPresetGeometrySchema>
+    > extends true
+      ? PresetGeometry
+      : never
+  >;
 
 const finiteCoordSchema = z.number().finite();
 
-export const pathCommandSchema = z.discriminatedUnion("op", [
+const rawPathCommandSchema = z.discriminatedUnion("op", [
   z
     .strictObject({
       op: z.literal("M"),
@@ -260,31 +321,56 @@ export const pathCommandSchema = z.discriminatedUnion("op", [
     .readonly(),
   z.strictObject({ op: z.literal("Z") }).readonly(),
 ]);
-export type PathCommand = z.infer<typeof pathCommandSchema>;
+export const pathCommandSchema: z.ZodType<PathCommand> =
+  rawPathCommandSchema satisfies z.ZodType<
+    AssertExact<PathCommand, z.infer<typeof rawPathCommandSchema>> extends true
+      ? PathCommand
+      : never
+  >;
 
-export const geometryPathSchema = z
+const rawGeometryPathSchema = z
   .strictObject({
-    commands: z.array(pathCommandSchema).min(1).readonly(),
+    commands: z.array(rawPathCommandSchema).min(1).readonly(),
     fill: z.boolean().optional(),
     stroke: z.boolean().optional(),
   })
   .readonly();
-export type GeometryPath = z.infer<typeof geometryPathSchema>;
+export const geometryPathSchema: z.ZodType<GeometryPath> =
+  rawGeometryPathSchema satisfies z.ZodType<
+    AssertExact<
+      GeometryPath,
+      z.infer<typeof rawGeometryPathSchema>
+    > extends true
+      ? GeometryPath
+      : never
+  >;
 
-/** Custom geometry uses local coordinates and scales to the bounding box allocated by layout. */
-export const customGeometrySchema = z
+const rawCustomGeometrySchema = z
   .strictObject({
     type: z.literal("custom"),
     width: z.number().finite().positive(),
     height: z.number().finite().positive(),
-    paths: z.array(geometryPathSchema).min(1).readonly(),
+    paths: z.array(rawGeometryPathSchema).min(1).readonly(),
   })
   .readonly();
-export type CustomGeometry = z.infer<typeof customGeometrySchema>;
+export const customGeometrySchema: z.ZodType<CustomGeometry> =
+  rawCustomGeometrySchema satisfies z.ZodType<
+    AssertExact<
+      CustomGeometry,
+      z.infer<typeof rawCustomGeometrySchema>
+    > extends true
+      ? CustomGeometry
+      : never
+  >;
 
-export const geometrySchema = z.union([
-  presetGeometryNameSchema,
-  presetGeometrySchema,
-  customGeometrySchema,
+const rawGeometrySchema = z.union([
+  rawPresetGeometryNameSchema,
+  rawPresetGeometrySchema,
+  rawCustomGeometrySchema,
 ]);
-export type Geometry = z.infer<typeof geometrySchema>;
+export const geometrySchema: z.ZodType<Geometry> =
+  rawGeometrySchema satisfies z.ZodType<
+    AssertExact<Geometry, z.infer<typeof rawGeometrySchema>> extends true
+      ? Geometry
+      : never
+  >;

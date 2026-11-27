@@ -1,10 +1,11 @@
 import {
   CapabilityError,
   type CapabilityInput,
-  type SlideResolution,
+  type SealedShowMechanism,
   type SlideCapabilityModule,
   type SlideEmitContext,
   type SlideEmitOutput,
+  type SlideResolution,
   type TextStyle,
   type ThemeContext,
 } from "@pptxdk/core/capability";
@@ -226,12 +227,13 @@ function notesObservation(
  * part, body placeholder, notes master, relationships, and font resources during emit. Notes has
  * no canvas geometry or static slide preview layer.
  */
-export const notesCapability: SlideCapabilityModule & {
-  readonly mechanisms: readonly [
-    typeof speakerNotesMechanism,
-    typeof presentationSectionsMechanism,
-  ];
-} = Object.freeze({
+export const notesCapability: SlideCapabilityModule<
+  import("@pptxdk/core/capability").BoundSlideCapability,
+  readonly [
+    SealedShowMechanism<"speaker-notes">,
+    SealedShowMechanism<"presentation-sections">,
+  ]
+> = Object.freeze({
   declaration: "notes",
   slideProp: "notes",
   slideProps: [],
@@ -327,9 +329,4 @@ export const notesCapability: SlideCapabilityModule & {
       },
     };
   },
-} satisfies SlideCapabilityModule & {
-  readonly mechanisms: readonly [
-    typeof speakerNotesMechanism,
-    typeof presentationSectionsMechanism,
-  ];
-});
+} satisfies SlideCapabilityModule);

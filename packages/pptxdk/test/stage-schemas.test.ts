@@ -36,6 +36,7 @@ import {
   exportNameSchema,
   previewFromSource,
   previewFromSourceOptionsSchema,
+  resolveFromSourceOptionsSchema,
 } from "@officedk/pptxdk/node";
 import {
   paint,
@@ -97,12 +98,18 @@ describe("stage option schemas (core + emit)", () => {
     assert.equal(previewErrorSchema, corePreviewErrorSchema);
     assert.equal(previewPlaceholderSchema, corePreviewPlaceholderSchema);
 
-    assert.deepEqual(fontEmbeddingModeSchema.options, ["full", "subset"]);
-    assert.deepEqual(targetNameSchema.options, [
-      "transitional",
-      "baseline-only",
-    ]);
-    assert.deepEqual(extensionSchema.options, ["p14", "p159", "c15"]);
+    for (const mode of ["full", "subset"]) {
+      assert.equal(fontEmbeddingModeSchema.safeParse(mode).success, true);
+    }
+    assert.equal(fontEmbeddingModeSchema.safeParse("none").success, false);
+    for (const targetName of ["transitional", "baseline-only"]) {
+      assert.equal(targetNameSchema.safeParse(targetName).success, true);
+    }
+    assert.equal(targetNameSchema.safeParse("strict").success, false);
+    for (const extension of ["p14", "p159", "c15"]) {
+      assert.equal(extensionSchema.safeParse(extension).success, true);
+    }
+    assert.equal(extensionSchema.safeParse("p16").success, false);
     assert.equal(formatBaselineSchema.safeParse(formatBaseline).success, true);
     assert.equal(formatBaselineSchema.safeParse("Strict").success, false);
     assert.equal(targetSchema.safeParse(targets.transitional).success, true);
@@ -447,9 +454,15 @@ process.stdout.write("ok");
 
 describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
   it("exposes and validates trimmed build/resolve schemas in @officedk/pptxdk/build", async () => {
-    assert.deepEqual(
-      officialCapabilityNameSchema.options,
-      officialCapabilityNames,
+    for (const capabilityName of officialCapabilityNames) {
+      assert.equal(
+        officialCapabilityNameSchema.safeParse(capabilityName).success,
+        true,
+      );
+    }
+    assert.equal(
+      officialCapabilityNameSchema.safeParse("unknown").success,
+      false,
     );
     assert.equal(
       trimmedResolveOptionsSchema.safeParse({ capabilities: ["shape"] })
@@ -562,6 +575,14 @@ describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
     );
     assert.equal(
       previewFromSourceOptionsSchema.safeParse({ pages: [0] }).success,
+      false,
+    );
+    assert.equal(
+      resolveFromSourceOptionsSchema.safeParse({ exportName: "DeckA" }).success,
+      true,
+    );
+    assert.equal(
+      resolveFromSourceOptionsSchema.safeParse({ exportName: "" }).success,
       false,
     );
 

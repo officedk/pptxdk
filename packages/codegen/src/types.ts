@@ -3,9 +3,23 @@ import type { RegisteredCapabilityModule } from "@pptxdk/core/capability";
 import type { CommonNode } from "@pptxdk/core/document";
 import { z } from "zod";
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
+export type CodegenTarget = "vanilla" | "react";
+const rawCodegenTargetSchema = z.enum(["vanilla", "react"]);
 /** Supported author source generation syntax targets. */
-export const codegenTargetSchema = z.enum(["vanilla", "react"]);
-export type CodegenTarget = z.infer<typeof codegenTargetSchema>;
+export const codegenTargetSchema: z.ZodType<CodegenTarget> =
+  rawCodegenTargetSchema satisfies z.ZodType<
+    AssertExact<
+      CodegenTarget,
+      z.infer<typeof rawCodegenTargetSchema>
+    > extends true
+      ? CodegenTarget
+      : never
+  >;
 
 export type CodegenEntryName<T extends CodegenTarget = CodegenTarget> =
   T extends "vanilla"
@@ -14,16 +28,16 @@ export type CodegenEntryName<T extends CodegenTarget = CodegenTarget> =
       ? "deck.tsx"
       : "deck.ts" | "deck.tsx";
 
-/** Options controlling `codegen` target syntax output. */
-export const codegenOptionsSchema = z
-  .object({
-    target: codegenTargetSchema,
-  })
-  .readonly();
-
 export type CodegenOptions<T extends CodegenTarget = CodegenTarget> = {
   readonly target: T;
 };
+
+/** Options controlling `codegen` target syntax output. */
+export const codegenOptionsSchema: z.ZodType<CodegenOptions> = z
+  .object({
+    target: rawCodegenTargetSchema,
+  })
+  .readonly();
 
 export type CodegenFileContent = string | Uint8Array;
 
@@ -33,16 +47,64 @@ export type CodegenResult<T extends CodegenTarget = CodegenTarget> = {
   readonly files: Readonly<Record<string, CodegenFileContent>>;
 };
 
-export const codegenDiagnosticCodeSchema = z.enum([
+export type CodegenDiagnosticCode =
+  | "invalid-document"
+  | "invalid-options"
+  | "unsupported-declaration"
+  | "unsupported-slide-property"
+  | "unexpressible-value";
+
+const rawCodegenDiagnosticCodeSchema = z.enum([
   "invalid-document",
   "invalid-options",
   "unsupported-declaration",
   "unsupported-slide-property",
   "unexpressible-value",
 ]);
-export type CodegenDiagnosticCode = z.infer<typeof codegenDiagnosticCodeSchema>;
+export const codegenDiagnosticCodeSchema: z.ZodType<CodegenDiagnosticCode> =
+  rawCodegenDiagnosticCodeSchema satisfies z.ZodType<
+    AssertExact<
+      CodegenDiagnosticCode,
+      z.infer<typeof rawCodegenDiagnosticCodeSchema>
+    > extends true
+      ? CodegenDiagnosticCode
+      : never
+  >;
 
-export const codegenDiagnosticSchema = z.discriminatedUnion("code", [
+export type CodegenDiagnostic =
+  | {
+      readonly code: "invalid-document";
+      readonly path: string;
+      readonly message: string;
+      readonly field?: string | undefined;
+    }
+  | {
+      readonly code: "invalid-options";
+      readonly path: string;
+      readonly message: string;
+      readonly field?: string | undefined;
+    }
+  | {
+      readonly code: "unsupported-declaration";
+      readonly path: string;
+      readonly message: string;
+      readonly field?: string | undefined;
+      readonly declaration: string;
+    }
+  | {
+      readonly code: "unsupported-slide-property";
+      readonly path: string;
+      readonly message: string;
+      readonly field: string;
+    }
+  | {
+      readonly code: "unexpressible-value";
+      readonly path: string;
+      readonly message: string;
+      readonly field?: string | undefined;
+    };
+
+const rawCodegenDiagnosticSchema = z.discriminatedUnion("code", [
   z.strictObject({
     code: z.literal("invalid-document"),
     path: z.string(),
@@ -75,7 +137,15 @@ export const codegenDiagnosticSchema = z.discriminatedUnion("code", [
     field: z.string().optional(),
   }),
 ]);
-export type CodegenDiagnostic = z.infer<typeof codegenDiagnosticSchema>;
+export const codegenDiagnosticSchema: z.ZodType<CodegenDiagnostic> =
+  rawCodegenDiagnosticSchema satisfies z.ZodType<
+    AssertExact<
+      CodegenDiagnostic,
+      z.infer<typeof rawCodegenDiagnosticSchema>
+    > extends true
+      ? CodegenDiagnostic
+      : never
+  >;
 
 /** Structured error thrown when an editable document cannot be expressed in generated source. */
 export class CodegenError extends Error {

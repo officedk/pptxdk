@@ -14,10 +14,12 @@ import {
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
+  type ObjectResolution,
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ObjectResolution,
+  type SealedCanvasMechanism,
+  type SealedShowMechanism,
   type SlideEmitOutput,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -45,7 +47,7 @@ import {
   parseTextCoordinate,
   parseTextExtent,
   textBoxAllowedParamKeys,
-  textBoxStyleSchema,
+  textBoxStyleKeys,
 } from "../shared/text-schemas.ts";
 import {
   computeTextMetrics,
@@ -312,7 +314,15 @@ export const embeddedFontMechanism = defineShowMechanism({
 });
 
 /** Fixed-region and content-sized text box capability bound per formal build. */
-export const textCapability = {
+export const textCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"text-box">,
+    SealedCanvasMechanism<"text-placeholder">,
+    SealedCanvasMechanism<"text-field-slidenum">,
+    SealedShowMechanism<"embedded-font">,
+  ]
+> = {
   declaration: "text",
   codegen: textCodegen,
   mechanisms: [
@@ -364,9 +374,7 @@ export const textCapability = {
       size(declaredWidth, "width");
     }
 
-    const allowedStyleKeys = new Set<string>(
-      Object.keys(textBoxStyleSchema.unwrap().shape),
-    );
+    const allowedStyleKeys = new Set<string>(textBoxStyleKeys);
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "sp",

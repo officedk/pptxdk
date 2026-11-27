@@ -36,7 +36,7 @@ import {
   resolveVisualModel,
 } from "../shared/visual.ts";
 import { boxCodegen } from "./box-codegen.ts";
-import { boxDeclarationPropsKeys, boxStyleSchema } from "./box-declaration.ts";
+import { boxDeclarationPropsKeys, boxStyleKeys } from "./box-declaration.ts";
 
 export {
   boxDeclarationPropsSchema,
@@ -48,9 +48,7 @@ export {
 
 const boxAllowedParameters: readonly string[] = boxDeclarationPropsKeys;
 
-const boxAllowedStyleKeys = new Set<string>(
-  Object.keys(boxStyleSchema.unwrap().shape),
-);
+const boxAllowedStyleKeys = new Set<string>(boxStyleKeys);
 
 function styleRecord(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};

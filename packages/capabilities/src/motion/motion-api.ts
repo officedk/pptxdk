@@ -9,21 +9,22 @@ import { CommonContainer } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
 import {
-  breatheOptionsSchema,
+  breatheOptionsShape,
   easingSchema,
   effectDelaySchema,
   effectDurationSchema,
   effectPresetSchema,
-  entranceEffectSchema,
+  entranceEffectShape,
   intervalMsSchema,
   motionDirectionSchema,
   motionGranularitySchema,
   motionHexColorSchema,
   motionMomentOffsetSchema,
   motionMomentSchema,
-  motionScopeAuthorPropsSchema,
+  motionScopeAuthorPropKeys,
   motionScopeHandleSchema,
   motionScopeModeSchema,
+  motionStepAuthorPropKeys,
   motionStepAuthorPropsSchema,
   repeatCountSchema,
   spinAngleSchema,
@@ -388,7 +389,7 @@ export function fillColor(options: FillColorOptions): EmphasisEffect {
 // Retains extra options from structured JavaScript input for formal effect validation diagnostics.
 const breatheUnknownParameters = Symbol("breathe unknown parameters");
 const breatheOptionNames = new Set([
-  ...Object.keys(breatheOptionsSchema.unwrap().shape),
+  ...Object.keys(breatheOptionsShape),
   "by",
   "intervalMs",
 ]);
@@ -594,9 +595,7 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   breathe: "emphasis",
   fillColor: "emphasis",
 };
-const effectKeys: readonly string[] = Object.keys(
-  entranceEffectSchema.unwrap().shape,
-);
+const effectKeys: readonly string[] = Object.keys(entranceEffectShape);
 
 function normalizeColor(
   value: unknown,
@@ -1011,12 +1010,10 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
   return momentValue;
 }
 
-const motionScopeAllowedParameters = new Set(
-  Object.keys(motionScopeAuthorPropsSchema.unwrap().shape),
-);
+const motionScopeAllowedParameters = new Set(motionScopeAuthorPropKeys);
 
 const motionStepAllowedParameters = new Set([
-  ...Object.keys(motionStepAuthorPropsSchema.unwrap().shape),
+  ...motionStepAuthorPropKeys,
   "stepIdentity",
 ]);
 

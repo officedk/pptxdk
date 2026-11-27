@@ -118,6 +118,11 @@ export function preset(
   return { type: "preset", name, ...(adjust !== undefined && { adjust }) };
 }
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
 const blockArcOptionsSchema = z
   .strictObject({
     startAngle: z.number().finite(),
@@ -130,9 +135,11 @@ const blockArcOptionsSchema = z
  * Native blockArc (annular arc segment). Angles are in degrees, measured clockwise from 3 o'clock, consistent with DrawingML;
  * thickness represents the ring width as a fraction of the shape's shorter side.
  */
-export function blockArc(
-  options: z.infer<typeof blockArcOptionsSchema>,
-): PresetGeometry {
+export function blockArc(options: {
+  readonly startAngle: number;
+  readonly endAngle: number;
+  readonly thickness: number;
+}): PresetGeometry {
   const parsed = blockArcOptionsSchema.safeParse(options);
   if (!parsed.success) {
     const key = String(parsed.error.issues[0]?.path[0] ?? "options");
@@ -148,7 +155,16 @@ export function blockArc(
   });
 }
 
-export const pathOptionsSchema = z
+export type PathOptions = {
+  /** Dimensions of the local coordinate space, similar to an SVG viewBox starting from 0,0. */
+  readonly viewBox: readonly [number, number];
+  readonly fill?: boolean | undefined;
+  readonly stroke?: boolean | undefined;
+  /** Fill rule for SVG path data; see `path`. */
+  readonly fillRule?: "nonzero" | "evenodd" | undefined;
+};
+
+const rawPathOptionsSchema = z
   .strictObject({
     /** Dimensions of the local coordinate space, similar to an SVG viewBox starting from 0,0. */
     viewBox: z
@@ -160,7 +176,12 @@ export const pathOptionsSchema = z
     fillRule: z.enum(["nonzero", "evenodd"]).optional(),
   })
   .readonly();
-export type PathOptions = z.infer<typeof pathOptionsSchema>;
+export const pathOptionsSchema: z.ZodType<PathOptions> =
+  rawPathOptionsSchema satisfies z.ZodType<
+    AssertExact<PathOptions, z.infer<typeof rawPathOptionsSchema>> extends true
+      ? PathOptions
+      : never
+  >;
 
 const pathDataSchema = z.union([
   z.string().refine((item) => item.trim() !== ""),

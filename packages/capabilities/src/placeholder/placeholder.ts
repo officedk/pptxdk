@@ -16,6 +16,7 @@ import {
   type ObjectResolveContext,
   type PaintOutput,
   type ObjectResolution,
+  type SealedCanvasMechanism,
 } from "@pptxdk/core/capability";
 import {
   assertXml10Characters,
@@ -73,6 +74,7 @@ import {
   placeholderAllowedPropKeys,
   placeholderDeclarationPropsSchema,
   placeholderObjectStyleSchema,
+  placeholderStyleKeys,
   type PlaceholderDeclarationProps,
   type PlaceholderNode,
 } from "./placeholder-schemas.ts";
@@ -94,9 +96,7 @@ const NonVisualSpPrFlagsSchema = z.object({
   txBox: ooxmlBoolSchema.optional(),
 });
 
-const placeholderAllowedStyleKeys = new Set<string>(
-  Object.keys(placeholderObjectStyleSchema.unwrap().shape),
-);
+const placeholderAllowedStyleKeys = new Set<string>(placeholderStyleKeys);
 
 type ResolvedPlaceholderModel = {
   readonly box: Rect;
@@ -429,7 +429,10 @@ export const contentPlaceholderMechanism = defineCanvasMechanism({
 });
 
 /** Capability preserving unpopulated non-text content placeholder slots across import/emit without synthesizing empty text bodies. */
-export const placeholderCapability = {
+export const placeholderCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [SealedCanvasMechanism<"content-placeholder">]
+> = {
   declaration: "placeholder",
   mechanisms: [contentPlaceholderMechanism] as const,
   codegen: placeholderCodegen,

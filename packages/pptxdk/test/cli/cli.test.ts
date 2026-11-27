@@ -13,13 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import {
-  build,
-  codegen,
-  codegenTargetSchema,
-  fontEmbeddingModeSchema,
-  targetNameSchema,
-} from "@officedk/pptxdk";
+import { build, codegen } from "@officedk/pptxdk";
 import { buildFromSource, importPptxFile } from "@officedk/pptxdk/node";
 import { previewPageNumberSchema } from "@officedk/pptxdk/preview";
 import {
@@ -2206,12 +2200,13 @@ describe("pptxdk CLI preview", () => {
         };
       };
     };
-    expect(parsedBuildInput.input.inputSchema.properties.target.enum).toEqual(
-      targetNameSchema.options,
-    );
+    expect(parsedBuildInput.input.inputSchema.properties.target.enum).toEqual([
+      "transitional",
+      "baseline-only",
+    ]);
     expect(
       parsedBuildInput.input.inputSchema.properties.embedFonts.enum,
-    ).toEqual(fontEmbeddingModeSchema.options);
+    ).toEqual(["full", "subset"]);
 
     const previewInputSchema = await runInMemory(
       ["preview", "--schema=input"],
@@ -2527,7 +2522,7 @@ describe("pptxdk CLI codegen", () => {
         inputSchema: {
           required: ["entry", "target"],
           properties: {
-            target: { enum: codegenTargetSchema.options },
+            target: { enum: ["vanilla", "react"] },
           },
         },
       },

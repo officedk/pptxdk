@@ -7,14 +7,14 @@ import {
 } from "#/declaration.ts";
 import { BuildError } from "#/diagnostics.ts";
 
+export type AuthorId = string;
+
 /** Non-empty trimmed author identifier unique within its naming scope. */
-export const authorIdSchema = z
+export const authorIdSchema: z.ZodType<AuthorId> = z
   .string()
   .refine((value) => value.trim() !== "", {
     message: "id must be a non-empty string",
   });
-
-export type AuthorId = z.infer<typeof authorIdSchema>;
 
 /**
  * Reads a declared author id, rejecting present but invalid values.

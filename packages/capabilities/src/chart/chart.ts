@@ -16,9 +16,10 @@ import {
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
+  type ObjectResolution,
   type PaintContext,
   type PaintOutput,
-  type ObjectResolution,
+  type SealedCanvasMechanism,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -61,8 +62,8 @@ import {
   type ResolvedScatterAxes,
 } from "./chart-model.ts";
 import {
-  chartStyleSchema,
   chartAllowedPropKeys,
+  chartStyleKeys,
   parseChartAxisBySchema,
   parseChartCoordinateBySchema,
   parseChartDisplayBlanksAsBySchema,
@@ -1028,7 +1029,23 @@ const chartMechanismsByKind = {
 } as const;
 
 /** Chart module validates input and resolves chart data/configuration for native emit and static paint. */
-export const chartCapability = {
+export const chartCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"chart-column">,
+    SealedCanvasMechanism<"chart-bar">,
+    SealedCanvasMechanism<"chart-line">,
+    SealedCanvasMechanism<"chart-area">,
+    SealedCanvasMechanism<"chart-pie">,
+    SealedCanvasMechanism<"chart-doughnut">,
+    SealedCanvasMechanism<"chart-scatter">,
+    SealedCanvasMechanism<"chart-placeholder">,
+    SealedCanvasMechanism<"chart-data-labels">,
+    SealedCanvasMechanism<"chart-trendline">,
+    SealedCanvasMechanism<"chart-error-bars">,
+    SealedCanvasMechanism<"chart-markers-and-points">,
+  ]
+> = {
   declaration: "chart",
   codegen: chartCodegen,
   mechanisms: [
@@ -1077,9 +1094,7 @@ export const chartCapability = {
       );
     }
 
-    const allowedStyleKeys = new Set<string>(
-      Object.keys(chartStyleSchema.unwrap().shape),
-    );
+    const allowedStyleKeys = new Set<string>(chartStyleKeys);
     const contract = parseCapabilityLayoutContract({
       nativeKind: "graphicFrame",
       props: input.props,

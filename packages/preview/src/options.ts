@@ -10,33 +10,78 @@ import { z } from "zod";
 export { PreviewPageRangeError, previewErrorSchema, previewPlaceholderSchema };
 export type { PreviewError, PreviewPlaceholder };
 
-export const previewPageNumberSchema = z.int().positive();
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
 
-export const previewPagesSchema = z.array(previewPageNumberSchema).readonly();
+export type PaintOptions = {
+  /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
+  readonly pages?: readonly number[] | undefined;
+  readonly signal?: AbortSignal | undefined;
+};
 
-export const paintOptionsSchema = z
+export type PreviewOptions = PaintOptions;
+
+export type ScreenPoint = {
+  readonly x: number;
+  readonly y: number;
+};
+
+export type ScreenGeometry = {
+  readonly corners: readonly ScreenPoint[];
+  readonly screenBox: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+};
+
+const rawPreviewPageNumberSchema = z.int().positive();
+export const previewPageNumberSchema: z.ZodType<number> =
+  rawPreviewPageNumberSchema;
+
+const rawPreviewPagesSchema = z.array(rawPreviewPageNumberSchema).readonly();
+export const previewPagesSchema: z.ZodType<readonly number[]> =
+  rawPreviewPagesSchema;
+
+const rawPaintOptionsSchema = z
   .strictObject({
     /** 1-based page numbers to paint. Omit to draw all pages; an empty list draws none. */
-    pages: previewPagesSchema.optional(),
+    pages: rawPreviewPagesSchema.optional(),
     signal: z.instanceof(AbortSignal).optional(),
   })
   .readonly();
-export type PaintOptions = z.infer<typeof paintOptionsSchema>;
+export const paintOptionsSchema: z.ZodType<PaintOptions> =
+  rawPaintOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      PaintOptions,
+      z.infer<typeof rawPaintOptionsSchema>
+    > extends true
+      ? PaintOptions
+      : never
+  >;
 
-export const previewOptionsSchema = paintOptionsSchema;
-export type PreviewOptions = z.infer<typeof previewOptionsSchema>;
+export const previewOptionsSchema: z.ZodType<PreviewOptions> =
+  paintOptionsSchema;
 
-export const screenPointSchema = z
+const rawScreenPointSchema = z
   .object({
     x: z.number(),
     y: z.number(),
   })
   .readonly();
-export type ScreenPoint = z.infer<typeof screenPointSchema>;
+export const screenPointSchema: z.ZodType<ScreenPoint> =
+  rawScreenPointSchema satisfies z.ZodType<
+    AssertExact<ScreenPoint, z.infer<typeof rawScreenPointSchema>> extends true
+      ? ScreenPoint
+      : never
+  >;
 
-export const screenGeometrySchema = z
+const rawScreenGeometrySchema = z
   .object({
-    corners: z.array(screenPointSchema).readonly(),
+    corners: z.array(rawScreenPointSchema).readonly(),
     screenBox: z
       .object({
         x: z.number(),
@@ -47,7 +92,15 @@ export const screenGeometrySchema = z
       .readonly(),
   })
   .readonly();
-export type ScreenGeometry = z.infer<typeof screenGeometrySchema>;
+export const screenGeometrySchema: z.ZodType<ScreenGeometry> =
+  rawScreenGeometrySchema satisfies z.ZodType<
+    AssertExact<
+      ScreenGeometry,
+      z.infer<typeof rawScreenGeometrySchema>
+    > extends true
+      ? ScreenGeometry
+      : never
+  >;
 
 /** Validates paint/preview options (`pages`, `signal`) via shared pure-data schemas. */
 export function validatePaintOptions(options: unknown = {}): PaintOptions {

@@ -513,7 +513,7 @@ function validateResolveOptions(options: ResolveOptions): void {
   ]);
 }
 
-// Deck dimensions and props validated via parseDeckProps(deck.props).
+// Deck dimensions and props validated via parseDeckProps(readInternalDeclarationProps(deck)).
 
 function unknownPropertyKey(
   props: Readonly<Record<string, unknown>>,

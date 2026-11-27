@@ -1,5 +1,9 @@
 import { replaceDeclarationProps } from "#/document-internals.ts";
-import { isSealedFont } from "#/font-seal.ts";
+import {
+  isImmutableBytes,
+  isSealedFont,
+  markImmutableBytes,
+} from "#/font-seal.ts";
 import { isMorphKey } from "#/morph.ts";
 
 const slideLayoutDefinitionSymbol = Symbol.for(
@@ -35,20 +39,21 @@ function isRecordValue(value: object): value is Record<PropertyKey, unknown> {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
 
-/**
- * Copies author-owned values received by a declaration entry.
- *
- * Record values, arrays, URLs, and byte views are isolated recursively. Enumerable getters are read
- * at receipt, while behavior handles and opaque objects keep their identity. This is a field-level
- * authoring rule, not a general document clone.
- */
-export function snapshotValue<T>(value: T): T {
+function copyValue<T>(value: T, cloneImmutableBytes: boolean): T {
   if (value === null || typeof value !== "object") return value;
-  if (value instanceof Uint8Array) return new Uint8Array(value) as T;
+  if (value instanceof Uint8Array) {
+    if (!cloneImmutableBytes && isImmutableBytes(value)) {
+      return value;
+    }
+    const copy = new Uint8Array(value);
+    return (cloneImmutableBytes ? copy : markImmutableBytes(copy)) as T;
+  }
   if (value instanceof ArrayBuffer) return value.slice(0) as T;
   if (value instanceof URL) return new URL(value.href) as T;
   if (Array.isArray(value)) {
-    return Object.freeze(value.map((item) => snapshotValue(item))) as T;
+    return Object.freeze(
+      value.map((item) => copyValue(item, cloneImmutableBytes)),
+    ) as T;
   }
   if (preservesIdentity(value)) return value;
   if (!isRecordValue(value)) return value;
@@ -60,9 +65,29 @@ export function snapshotValue<T>(value: T): T {
     Object.defineProperty(copy, key, {
       configurable: false,
       enumerable: true,
-      value: snapshotValue(observedValue),
+      value: copyValue(observedValue, cloneImmutableBytes),
       writable: false,
     });
   }
   return Object.freeze(copy) as T;
+}
+
+/**
+ * Copies author-owned values received by a declaration entry.
+ *
+ * Record values, arrays, URLs, and byte views are isolated recursively. Enumerable getters are read
+ * at receipt, while behavior handles, sealed fonts, already-immutable bytes, and opaque objects
+ * keep their identity. This is a field-level authoring rule, not a general document clone.
+ */
+export function snapshotValue<T>(value: T): T {
+  return copyValue(value, false);
+}
+
+/**
+ * Clones internal declaration values for public inspection (`CommonNode.prototype.props`),
+ * always returning fresh unmarked `Uint8Array` copies so external reads cannot mutate internal
+ * `immutableBytes` buffers.
+ */
+export function cloneExternalValue<T>(value: T): T {
+  return copyValue(value, true);
 }

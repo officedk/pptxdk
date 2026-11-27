@@ -12,6 +12,7 @@ import {
   type SlideStyle,
 } from "#/author-schemas.ts";
 import { BuildError, zodIssueToBuildDiagnostic } from "#/diagnostics.ts";
+import { snapshotValue } from "#/input-values.ts";
 import {
   masterPlaceholderMapSchema,
   masterTextStylesSchema,
@@ -467,7 +468,7 @@ export function defineSlideLayout<
   const normalized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed.data)) {
     if (value !== undefined) {
-      normalized[key] = value;
+      normalized[key] = snapshotValue(value);
     }
   }
   const frozenProps = Object.freeze(normalized) as SlideLayoutDataProps<P>;

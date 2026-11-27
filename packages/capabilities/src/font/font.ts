@@ -5,6 +5,7 @@ import {
   fontFaceStyleSchema,
   fontOptionsSchema,
   fontSchema,
+  markImmutableBytes,
   markSealedFont,
   unsealedFontSchema,
   type Font,
@@ -54,7 +55,7 @@ export function font(
         });
       }
       // Perform the single isolating copy of caller bytes and compute its SHA-256 once.
-      const copiedData = new Uint8Array(face.data);
+      const copiedData = markImmutableBytes(new Uint8Array(face.data));
       const sha256 = bytesSha256(copiedData);
       const inferred =
         face.weight === undefined || face.style === undefined

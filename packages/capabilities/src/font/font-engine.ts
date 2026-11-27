@@ -16,11 +16,6 @@ export function fontFamilyKey(value: string): string {
   return value.trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
-/** Computes the SHA-256 hex digest used to key parsed font caches and resource identities. */
-export function fontBytesIdentity(bytes: Uint8Array): string {
-  return bytesSha256(bytes);
-}
-
 type FontBinaryFormat = "TTF" | "CFF" | "WOFF" | "WOFF2";
 
 type SfntTableRecord = {
@@ -584,7 +579,7 @@ function getOrParseFontBinary(
   bytes: Uint8Array,
   knownIdentity?: string,
 ): ParsedFontBinary {
-  const identity = knownIdentity ?? fontBytesIdentity(bytes);
+  const identity = knownIdentity ?? bytesSha256(bytes);
   let parsed = parsedFontCache.get(identity);
   if (parsed === undefined) {
     parsed = parseFontBinaryUncached(bytes, identity);
@@ -1037,7 +1032,7 @@ export function validateEmbeddableTrueTypeFont(
     );
   }
 
-  const actualIdentity = fontBytesIdentity(input.bytes);
+  const actualIdentity = bytesSha256(input.bytes);
   if (actualIdentity !== input.identity) {
     return failFont(
       input,
@@ -1251,7 +1246,7 @@ function subsetTrueTypeAndVerify(
   try {
     subsetParsed = parseFontBinaryUncached(
       subsetBytes,
-      fontBytesIdentity(subsetBytes),
+      bytesSha256(subsetBytes),
     );
     if (
       subsetParsed.format !== "TTF" ||

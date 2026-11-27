@@ -5,11 +5,18 @@ import {
   BuildError,
   CapabilityError,
   codegen,
+  defineSlideLayout,
   defineTheme,
   emit,
   font,
   resolve,
 } from "@officedk/pptxdk";
+import {
+  createResolver,
+  emit as buildEmit,
+  selectCapabilities,
+  type DeclarationNode,
+} from "@officedk/pptxdk/build";
 import { paint } from "@officedk/pptxdk/preview";
 import {
   Cell,
@@ -51,6 +58,19 @@ const jostBookBytes = new Uint8Array(
 );
 const widePngBytes = new Uint8Array(
   readFileSync(new URL("./assets/wide-20000x1.png", import.meta.url)),
+);
+// Two valid 1x1 PNG buffers of identical byte length (67 bytes) for in-place mutation tests.
+const png1x1BlackBytes = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC",
+    "base64",
+  ),
+);
+const png1x1WhiteBytes = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC",
+    "base64",
+  ),
 );
 
 describe("sealed font zero-copy sharing and digest memoization", () => {
@@ -586,6 +606,289 @@ describe("sealed font zero-copy sharing and digest memoization", () => {
       );
       assert.equal(fontAssets.length, 1);
       assert.deepEqual(generated.files[fontAssets[0]!], jostBookBytes);
+    }
+  });
+
+  it("snapshots defineSlideLayout inputs so mutating themeOverride font bytes and background image bytes cannot mutate the layout", async () => {
+    const layoutFontBytes = new Uint8Array(jostBookBytes);
+    const layoutBgBytes = new Uint8Array(widePngBytes);
+
+    const layoutDef = defineSlideLayout({
+      id: "isolated-layout",
+      name: "Isolated Layout",
+      themeOverride: {
+        fonts: {
+          major: {
+            family: "Jost*",
+            faces: [{ weight: 400, style: "normal", data: layoutFontBytes }],
+          },
+        },
+      },
+      background: { image: layoutBgBytes },
+    });
+
+    // Mutate caller buffers immediately after defineSlideLayout().
+    layoutFontBytes.fill(0xff, 0, 64);
+    layoutBgBytes.fill(0x00, 0, 16);
+
+    const buildDoc = () =>
+      deck({ width: 640, height: 360 }).append(
+        slideMaster({ id: "m1" }).append(slideLayout(layoutDef)),
+        slide({ id: "s1", layout: layoutDef }).append(
+          text(
+            [
+              paragraph([
+                span("Layout Override Heading", {
+                  style: { fontFamily: "major", fontSize: 20 },
+                }),
+              ]),
+            ],
+            {
+              id: "heading",
+              style: {
+                position: "absolute",
+                left: 32,
+                top: 32,
+                width: 320,
+                height: 48,
+              },
+            },
+          ),
+        ),
+      );
+
+    const firstDoc = buildDoc();
+    const firstResolution = resolve(firstDoc);
+    assert.equal(firstResolution.report.fonts[0]?.hasResource, true);
+    const firstEmitted = emit(firstResolution, { embedFonts: "full" });
+    assert.deepEqual((await validatePptx(firstEmitted.pptx)).errors, []);
+    const firstPaint = paint(firstResolution);
+    assert.deepEqual(firstPaint.pages[0]?.errors, []);
+
+    // Mutate caller buffers again after the first resolve/emit/paint run.
+    layoutFontBytes.fill(0x11, 0, 128);
+    layoutBgBytes.fill(0x22, 0, 32);
+
+    const secondDoc = buildDoc();
+    const secondResolution = resolve(secondDoc);
+    const secondEmitted = emit(secondResolution, { embedFonts: "full" });
+    assert.deepEqual((await validatePptx(secondEmitted.pptx)).errors, []);
+    const secondPaint = paint(secondResolution);
+    assert.deepEqual(secondPaint.pages[0]?.errors, []);
+    assert.deepEqual(secondPaint.pages[0]?.png, firstPaint.pages[0]?.png);
+
+    for (const target of ["vanilla", "react"] as const) {
+      const generated = codegen(secondDoc, { target });
+      const imageAssets = Object.keys(generated.files).filter((key) =>
+        key.startsWith("assets/image-"),
+      );
+      const fontAssets = Object.keys(generated.files).filter((key) =>
+        key.startsWith("assets/font-"),
+      );
+      assert.equal(imageAssets.length, 1);
+      assert.equal(fontAssets.length, 1);
+      assert.deepEqual(generated.files[imageAssets[0]!], widePngBytes);
+      assert.deepEqual(generated.files[fontAssets[0]!], jostBookBytes);
+    }
+  });
+
+  it("does not poison bytesSha256 when createResolver consumes plain DeclarationNodes with mutated Uint8Array buffers", async () => {
+    assert.equal(png1x1BlackBytes.byteLength, png1x1WhiteBytes.byteLength);
+
+    const mutableFontBuf = new Uint8Array(jostBookBytes.byteLength + 4);
+    mutableFontBuf.set(jostBookBytes);
+    mutableFontBuf[jostBookBytes.byteLength] = 0x01;
+    const mutableImageBuf = new Uint8Array(png1x1BlackBytes);
+
+    const plainDeck: DeclarationNode = {
+      type: "deck",
+      props: { width: 640, height: 360 },
+      children: [
+        {
+          type: "slide",
+          props: { id: "s1" },
+          children: [
+            {
+              type: "text",
+              props: {
+                id: "t1",
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 20,
+                  width: 320,
+                  height: 60,
+                  fontFamily: {
+                    family: "Jost*",
+                    faces: [{ data: mutableFontBuf }],
+                  },
+                  fontSize: 18,
+                },
+              },
+              children: [{ type: "#text", text: "Plain Declaration Node" }],
+            },
+            {
+              type: "image",
+              props: {
+                id: "img1",
+                src: mutableImageBuf,
+                style: {
+                  position: "absolute",
+                  left: 20,
+                  top: 100,
+                  width: 40,
+                  height: 40,
+                },
+              },
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    const modules = await selectCapabilities(["text", "image"]);
+    const customResolve = createResolver(modules);
+
+    const firstResolution = customResolve(plainDeck);
+    assert.equal(firstResolution.report.fonts[0]?.weight, 400);
+    assert.equal(firstResolution.report.fonts[0]?.hasResource, true);
+    const firstEmitted = buildEmit(firstResolution, { embedFonts: "full" });
+    assert.deepEqual((await validatePptx(firstEmitted.pptx)).errors, []);
+    const firstZip = unzipSync(firstEmitted.pptx);
+    assert.deepEqual(firstZip["ppt/media/resource1.png"], png1x1BlackBytes);
+    const firstFontPartName = Object.keys(firstZip).find((k) =>
+      k.startsWith("ppt/fonts/"),
+    );
+    assert.ok(firstFontPartName !== undefined);
+
+    // Mutate both buffers in-place on the same plain DeclarationNode and re-run resolve + emit.
+    mutableFontBuf[jostBookBytes.byteLength] = 0x02;
+    mutableImageBuf.set(png1x1WhiteBytes);
+
+    const secondResolution = customResolve(plainDeck);
+    assert.equal(secondResolution.report.fonts[0]?.weight, 400);
+    assert.equal(secondResolution.report.fonts[0]?.hasResource, true);
+    const secondEmitted = buildEmit(secondResolution, { embedFonts: "full" });
+    assert.deepEqual((await validatePptx(secondEmitted.pptx)).errors, []);
+    const secondZip = unzipSync(secondEmitted.pptx);
+    assert.deepEqual(secondZip["ppt/media/resource1.png"], png1x1WhiteBytes);
+    const secondFontPartName = Object.keys(secondZip).find((k) =>
+      k.startsWith("ppt/fonts/"),
+    );
+    assert.ok(secondFontPartName !== undefined);
+    assert.notDeepEqual(
+      secondZip[secondFontPartName],
+      firstZip[firstFontPartName],
+    );
+  });
+
+  it("isolates inline deck theme unsealed font literals and image bytes across resolve, emit, codegen, and node.props mutations", async () => {
+    const themeFontBytes = new Uint8Array(jostBookBytes);
+    const imgBytes = new Uint8Array(png1x1BlackBytes);
+    const bgBytes = new Uint8Array(png1x1WhiteBytes);
+
+    const imageNode = image({
+      id: "hero-img",
+      src: imgBytes,
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 100,
+        width: 80,
+        height: 80,
+      },
+    });
+    const slideNode = slide({
+      id: "s1",
+      background: { image: bgBytes },
+    }).append(
+      text(
+        [
+          paragraph([
+            span("Inline Theme Font", {
+              style: { fontFamily: "major", fontSize: 20 },
+            }),
+          ]),
+        ],
+        {
+          id: "title",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 320,
+            height: 48,
+          },
+        },
+      ),
+      imageNode,
+    );
+    const doc = deck({
+      width: 640,
+      height: 360,
+      theme: {
+        fonts: {
+          major: {
+            family: "Jost*",
+            faces: [{ weight: 400, style: "normal", data: themeFontBytes }],
+          },
+        },
+      },
+    }).append(slideNode);
+
+    // Mutate caller buffers after node creation.
+    themeFontBytes.fill(0xff, 0, 64);
+    imgBytes.fill(0x00, 0, 16);
+    bgBytes.fill(0x00, 0, 16);
+
+    // Mutate defensive copies returned by public CommonNode.props getters.
+    const propsTheme = doc.props["theme"] as {
+      fonts: { major: { faces: readonly { data: Uint8Array }[] } };
+    };
+    const readThemeFont = propsTheme.fonts.major.faces[0]!.data;
+    readThemeFont.fill(0xee, 0, 64);
+    const readImg = imageNode.props["src"] as Uint8Array;
+    readImg.fill(0xee, 0, 16);
+    const readBg = (slideNode.props["background"] as { image: Uint8Array })
+      .image;
+    readBg.fill(0xee, 0, 16);
+
+    const resolution = resolve(doc);
+    assert.equal(resolution.report.fonts[0]?.hasResource, true);
+    const emitted = emit(resolution, { embedFonts: "full" });
+    assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
+    const zip = unzipSync(emitted.pptx);
+    const mediaEntries = Object.keys(zip)
+      .filter((k) => k.startsWith("ppt/media/"))
+      .map((k) => zip[k]);
+    assert.equal(mediaEntries.length, 2);
+
+    for (const target of ["vanilla", "react"] as const) {
+      const generated = codegen(doc, { target });
+      const fontAssets = Object.keys(generated.files).filter((k) =>
+        k.startsWith("assets/font-"),
+      );
+      const imageAssets = Object.keys(generated.files).filter((k) =>
+        k.startsWith("assets/image-"),
+      );
+      assert.equal(fontAssets.length, 1);
+      assert.equal(imageAssets.length, 2);
+      assert.deepEqual(generated.files[fontAssets[0]!], jostBookBytes);
+      assert.ok(
+        imageAssets.some((k) =>
+          Buffer.from(generated.files[k] as Uint8Array).equals(
+            png1x1BlackBytes,
+          ),
+        ),
+      );
+      assert.ok(
+        imageAssets.some((k) =>
+          Buffer.from(generated.files[k] as Uint8Array).equals(
+            png1x1WhiteBytes,
+          ),
+        ),
+      );
     }
   });
 });

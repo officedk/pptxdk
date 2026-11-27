@@ -593,7 +593,12 @@ export function createCodegen(
         const assetVar =
           resource === undefined
             ? undefined
-            : ctx.registerFontAsset(resource.bytes, fontValue.family);
+            : ctx.registerFontAsset(
+                resource.bytes,
+                fontValue.family,
+                undefined,
+                resource.sha256,
+              );
         return {
           ...(face.weight === undefined ? {} : { weight: face.weight }),
           ...(face.style === undefined ? {} : { style: face.style }),
@@ -732,9 +737,9 @@ export function createCodegen(
         path,
         useImport,
         registerImageAsset: (bytes, ext) => assets.registerImage(bytes, ext),
-        registerFontAsset: (bytes, family, ext) => {
+        registerFontAsset: (bytes, family, ext, knownSha256) => {
           useImport("readFileSync", "node:fs");
-          return assets.registerFont(bytes, family, ext);
+          return assets.registerFont(bytes, family, ext, knownSha256);
         },
         allocateMotionScope: (identity) => {
           if (currentMotionScopeVars === undefined) {

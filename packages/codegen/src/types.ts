@@ -200,6 +200,7 @@ export type CodegenContext = {
     bytes: Uint8Array,
     family: string,
     ext?: "ttf" | "otf",
+    knownSha256?: string,
   ): string;
   allocateMotionScope(identity: string): string;
   emitValueExpr(value: unknown, propPath?: string): string;

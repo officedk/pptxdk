@@ -200,6 +200,7 @@ export function drawChartPreview(
       layout,
       scales,
       baseChartTextStyle,
+      baseFontSizePx,
       theme: context.theme,
       slideNumber: context.slideNumber,
       clipAllocator,

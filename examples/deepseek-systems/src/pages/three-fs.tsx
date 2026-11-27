@@ -7,7 +7,7 @@ import {
   SemanticTag,
 } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const storageCategories = [
   "单客户端 KVCache 读取峰值 (GiB/s)",
@@ -218,7 +218,11 @@ export function ThreeFsPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10.5,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -228,7 +232,11 @@ export function ThreeFsPage() {
               numberFormat: "0.0",
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -255,7 +263,11 @@ export function ThreeFsPage() {
                 value: true,
                 position: "outsideEnd",
                 numberFormat: "0.0",
-                style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+                style: {
+                  fontFamily: fonts.body,
+                  fontSize: 10,
+                  color: colors.ink,
+                },
               },
             },
           ]}
@@ -265,7 +277,7 @@ export function ThreeFsPage() {
             top: 274,
             width: 520,
             height: 212,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10.5,
             color: colors.ink,
           }}

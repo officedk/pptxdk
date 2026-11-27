@@ -9,7 +9,7 @@ import {
 } from "@officedk/pptxdk/react";
 
 import { MetricCard, Rule } from "../components/primitives.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const pillars = [
   {
@@ -52,7 +52,7 @@ export function OpeningPage() {
           top: 28,
           width: 620,
           height: 22,
-          fontFamily: "metric",
+          fontFamily: fonts.metric,
           fontSize: 12,
           fontWeight: 700,
           color: colors.computeBright,
@@ -69,7 +69,7 @@ export function OpeningPage() {
           top: 28,
           width: 544,
           height: 22,
-          fontFamily: "metric",
+          fontFamily: fonts.metric,
           fontSize: 12,
           color: colors.darkMuted,
           align: "right",
@@ -332,7 +332,7 @@ export function OpeningPage() {
           top: 680,
           width: 124,
           height: 20,
-          fontFamily: "metric",
+          fontFamily: fonts.metric,
           fontSize: 11,
           fontWeight: 700,
           color: colors.darkMuted,

@@ -21,11 +21,11 @@ import { validatePptx } from "@pptxdk/validation";
 import { describe, it } from "vitest";
 
 import {
-  createBeamDivergenceDiagram,
   createMetricTile,
   createTakeawayStrip,
   createTelemetryPanel,
-} from "../src/components/vanilla.ts";
+} from "../src/components/cards.ts";
+import { createBeamDivergenceDiagram } from "../src/components/diagrams.ts";
 import { AetherLinkDeck } from "../src/index.ts";
 import { PALETTE, aetherTheme } from "../src/theme.ts";
 
@@ -407,7 +407,6 @@ describe("@pptxdk/aether-link Vanilla component library", () => {
         <Deck width={800} height={450} theme={aetherTheme}>
           <Slide id="bridge-check">
             <Box
-              theme={{ colors: { tileAccent: "#0E8A74" } }}
               style={{
                 position: "absolute",
                 left: 24,
@@ -424,7 +423,8 @@ describe("@pptxdk/aether-link Vanilla component library", () => {
                   label="SIGNAL"
                   value="78.2"
                   unit="%"
-                  detail="Resolved inside slotted panel and ThemeScope."
+                  accentColor="#0E8A74"
+                  detail="Resolved inside slotted panel with explicit accentColor."
                 />
               </TelemetryPanel>
             </Box>

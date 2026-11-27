@@ -21,7 +21,7 @@ import {
   SemanticTag,
 } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const DualPipeSchedule = fromVanilla(createDualPipeSchedule);
 
@@ -245,7 +245,7 @@ export function DualPipePage() {
             left: 66,
             top: 438,
             width: 792,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 11.5,
             color: colors.ink,
           }}
@@ -295,7 +295,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 color: colors.muted,
                 border: { color: colors.line, width: 1 },
               }}
@@ -305,7 +305,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 border: { color: colors.line, width: 1 },
               }}
             >
@@ -314,7 +314,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 border: { color: colors.line, width: 1 },
               }}
             >
@@ -323,7 +323,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 border: { color: colors.line, width: 1 },
               }}
             >
@@ -351,7 +351,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 color: colors.muted,
                 border: { color: colors.line, width: 1 },
               }}
@@ -361,7 +361,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 border: { color: colors.line, width: 1 },
               }}
             >
@@ -370,7 +370,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 border: { color: colors.line, width: 1 },
               }}
             >
@@ -379,7 +379,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 border: { color: colors.line, width: 1 },
               }}
             >
@@ -406,7 +406,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}
@@ -416,7 +416,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}
@@ -426,7 +426,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}
@@ -436,7 +436,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}
@@ -464,7 +464,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}
@@ -474,7 +474,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}
@@ -484,7 +484,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}
@@ -494,7 +494,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontWeight: 700,
                 border: { color: colors.line, width: 1 },
               }}

@@ -8,22 +8,16 @@ import {
   preset,
 } from "@officedk/pptxdk/react";
 
-import {
-  TelemetryCampaignSlide,
-  GroundNetworkSlide,
-  SubsystemMatrixSlide,
-  AnomalyPostmortemSlide,
-  RoadmapCloseSlide,
-} from "./pages/flight-campaign.tsx";
-import {
-  CoverSlide,
-  ExecSummarySlide,
-  LinkBudgetSlide,
-} from "./pages/mission-physics.tsx";
-import {
-  ArchitectureSlide,
-  PointingAcqSlide,
-} from "./pages/system-architecture.tsx";
+import { AnomalyPostmortemSlide } from "./pages/anomaly-postmortem.tsx";
+import { ArchitectureSlide } from "./pages/architecture.tsx";
+import { CoverSlide } from "./pages/cover.tsx";
+import { ExecSummarySlide } from "./pages/exec-summary.tsx";
+import { GroundNetworkSlide } from "./pages/ground-network.tsx";
+import { LinkBudgetSlide } from "./pages/link-budget.tsx";
+import { PointingAcqSlide } from "./pages/pointing-acq.tsx";
+import { RoadmapCloseSlide } from "./pages/roadmap-close.tsx";
+import { SubsystemMatrixSlide } from "./pages/subsystem-matrix.tsx";
+import { TelemetryCampaignSlide } from "./pages/telemetry-campaign.tsx";
 import {
   PALETTE,
   aetherTheme,

@@ -49,11 +49,12 @@ export type {
 import type { DeclarationChild, DeclarationNode } from "#/declaration.ts";
 import {
   insertDeclarationChild,
-  readDeclarationProps,
+  readInternalDeclarationProps,
+  registerInternalDeclarationProps,
   removeDeclarationChild,
   replaceDeclarationProps,
 } from "#/document-internals.ts";
-import { snapshotValue } from "#/input-values.ts";
+import { cloneExternalValue, snapshotValue } from "#/input-values.ts";
 import {
   isSlideLayoutDefinition,
   type SlideLayoutDefinition,
@@ -143,6 +144,8 @@ function normalizeProps(
   return Object.freeze(copy);
 }
 
+export { readInternalDeclarationProps };
+
 /**
  * Common editable document node shared by command authoring and the React handoff.
  *
@@ -174,18 +177,17 @@ export class CommonNode<
     this.kind = kind;
     this.type = type;
     this.pageAffiliated = options.pageAffiliated === true;
-    this.#props = normalizeProps(props as Readonly<Record<string, unknown>>);
+    const initialProps = normalizeProps(
+      props as Readonly<Record<string, unknown>>,
+    );
+    this.#props = initialProps;
+    registerInternalDeclarationProps(this, initialProps);
     if (kind === "deck") this.#owner = this;
   }
 
-  /** Isolated declaration values for the formal build; mutating the returned value cannot edit the node. */
+  /** Isolated declaration values for external inspection; mutating the returned value cannot edit the node. */
   get props(): Readonly<Record<string, unknown>> {
-    return snapshotValue(this.#props);
-  }
-
-  /** Internal read-only props view used by read-only pipeline stages to avoid redundant byte cloning. */
-  [readDeclarationProps](): Readonly<Record<string, unknown>> {
-    return this.#props;
+    return cloneExternalValue(this.#props);
   }
 
   /** Author id declared on this node, ignoring non-string values rejected by the formal build. */
@@ -217,7 +219,9 @@ export class CommonNode<
    * through the same field-level input snapshot as construction.
    */
   [replaceDeclarationProps](props: Readonly<Record<string, unknown>>): void {
-    this.#props = normalizeProps(props);
+    const next = normalizeProps(props);
+    this.#props = next;
+    registerInternalDeclarationProps(this, next);
   }
 
   /**
@@ -276,7 +280,9 @@ export class CommonNode<
       if (value === undefined) delete next[key];
       else next[key] = snapshotValue(value);
     }
-    this.#props = Object.freeze(next);
+    const frozen = Object.freeze(next);
+    this.#props = frozen;
+    registerInternalDeclarationProps(this, frozen);
     return this;
   }
 
@@ -290,7 +296,12 @@ export class CommonNode<
       if (value === undefined) delete next[key];
       else next[key] = snapshotValue(value);
     }
-    this.#props = Object.freeze({ ...this.#props, style: Object.freeze(next) });
+    const frozen = Object.freeze({
+      ...this.#props,
+      style: Object.freeze(next),
+    });
+    this.#props = frozen;
+    registerInternalDeclarationProps(this, frozen);
     return this;
   }
 

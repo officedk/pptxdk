@@ -1,9 +1,6 @@
 export { authorIdSchema, readAuthorId } from "#/author-ids.ts";
 export type { AuthorId } from "#/author-ids.ts";
-export {
-  readDeclarationProps,
-  readInternalDeclarationProps,
-} from "#/document-internals.ts";
+export { readInternalDeclarationProps } from "#/document-internals.ts";
 export {
   backgroundRefSchema,
   deckPropsSchema,
@@ -82,7 +79,9 @@ export {
   bytesSha256,
   createSealedFontFace,
   hasFontFaceBytes,
+  isImmutableBytes,
   isSealedFont,
+  markImmutableBytes,
   markSealedFont,
   peekFontFaceResource,
   type FontFaceResourceView,

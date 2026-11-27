@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-import { CapabilityError } from "@pptxdk/core/capability";
+import {
+  CapabilityError,
+  isImmutableBytes,
+  markImmutableBytes,
+} from "@pptxdk/core/capability";
 
 import { decodeGifFirstFrame } from "./gif-decoder.ts";
 
@@ -246,14 +250,21 @@ export function readImage(source: unknown): LoadedImage {
   }
   let bytes: Uint8Array;
   try {
-    bytes =
-      source instanceof Uint8Array
-        ? new Uint8Array(source)
-        : new Uint8Array(
-            readFileSync(
-              source instanceof URL ? fileURLToPath(source) : source,
-            ),
-          );
+    if (source instanceof Uint8Array) {
+      if (isImmutableBytes(source)) {
+        bytes = source;
+      } else {
+        const copy = new Uint8Array(source);
+        markImmutableBytes(copy);
+        bytes = copy;
+      }
+    } else {
+      const copy = new Uint8Array(
+        readFileSync(source instanceof URL ? fileURLToPath(source) : source),
+      );
+      markImmutableBytes(copy);
+      bytes = copy;
+    }
   } catch {
     throw new CapabilityError(
       "image-read-failed",

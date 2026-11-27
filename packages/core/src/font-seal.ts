@@ -8,17 +8,35 @@ export type FontFaceResourceView = {
   readonly sha256: string;
 };
 
+const immutableBytes = new WeakSet<Uint8Array>();
 const sha256ByBytes = new WeakMap<Uint8Array, string>();
 const sealedFonts = new WeakSet<object>();
 const sealedFaceResources = new WeakMap<FontFace, FontFaceResourceView>();
 
 /**
- * Computes or returns the cached lowercase hex SHA-256 digest for a `Uint8Array` instance.
+ * Marks an internally owned `Uint8Array` as immutable so `bytesSha256` can memoize its digest
+ * across pipeline stages and `snapshotValue` / `readImage` can reuse it zero-copy.
+ */
+export function markImmutableBytes(bytes: Uint8Array): Uint8Array {
+  immutableBytes.add(bytes);
+  return bytes;
+}
+
+/** Returns `true` when `bytes` is an internal immutable buffer registered with `markImmutableBytes`. */
+export function isImmutableBytes(bytes: Uint8Array): boolean {
+  return immutableBytes.has(bytes);
+}
+
+/**
+ * Computes the lowercase hex SHA-256 digest for a `Uint8Array`.
  *
- * Caching is keyed by object identity (`WeakMap`), so callers must never mutate a `Uint8Array`
- * after passing it to internal stages or `bytesSha256`.
+ * Caching in `sha256ByBytes` is restricted to buffers registered via `markImmutableBytes`;
+ * unmarked caller-owned buffers are hashed fresh every time to prevent cache poisoning.
  */
 export function bytesSha256(bytes: Uint8Array): string {
+  if (!immutableBytes.has(bytes)) {
+    return createHash("sha256").update(bytes).digest("hex");
+  }
   const cached = sha256ByBytes.get(bytes);
   if (cached !== undefined) {
     return cached;
@@ -44,7 +62,7 @@ export function createSealedFontFace(input: {
   };
 
   if (input.bytes !== undefined) {
-    const privateBytes = input.bytes;
+    const privateBytes = markImmutableBytes(input.bytes);
     const sha256 = input.sha256 ?? bytesSha256(privateBytes);
     sha256ByBytes.set(privateBytes, sha256);
     Object.defineProperty(faceRecord, "data", {

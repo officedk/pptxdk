@@ -8,7 +8,6 @@ import {
   defaultTheme,
   defineTheme,
   importPptx,
-  lighter,
 } from "@officedk/pptxdk";
 import {
   Deck,
@@ -44,7 +43,6 @@ function buildDualMasterFixtures() {
     name: "Studio Light",
     colors: {
       accent1: "#1D4ED8",
-      brandTint: lighter("accent1", 0.4),
     },
   });
 

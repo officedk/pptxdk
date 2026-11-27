@@ -117,6 +117,134 @@ export function stripVariableFontTables(source: Uint8Array): Uint8Array {
   return packSfnt(sfntVersion, tables);
 }
 
+export type SfntNameRecordInput = {
+  readonly platformID: number;
+  readonly encodingID: number;
+  readonly languageID: number;
+  readonly nameID: number;
+  readonly value: string;
+};
+
+/**
+ * Replaces an SFNT font's `name` table with spec-sorted UTF-16BE records and recomputes table checksums.
+ */
+export function replaceSfntNameTable(
+  source: Uint8Array,
+  records: readonly SfntNameRecordInput[],
+): Uint8Array {
+  const view = new DataView(
+    source.buffer,
+    source.byteOffset,
+    source.byteLength,
+  );
+  const sfntVersion = view.getUint32(0);
+  const numTables = view.getUint16(4);
+  const tables = new Map<string, Uint8Array>();
+  for (let index = 0; index < numTables; index += 1) {
+    const recordOffset = 12 + index * 16;
+    const tag = asciiTag(source, recordOffset);
+    const offset = view.getUint32(recordOffset + 8);
+    const length = view.getUint32(recordOffset + 12);
+    tables.set(tag, source.slice(offset, offset + length));
+  }
+
+  const sortedRecords = [...records]
+    .map((entry) => ({
+      ...entry,
+      bytes: utf16BeBytes(entry.value),
+    }))
+    .toSorted(
+      (a, b) =>
+        a.platformID - b.platformID ||
+        a.encodingID - b.encodingID ||
+        a.languageID - b.languageID ||
+        a.nameID - b.nameID,
+    );
+  const headerSize = 6 + sortedRecords.length * 12;
+  const totalStringBytes = sortedRecords.reduce(
+    (sum, item) => sum + item.bytes.byteLength,
+    0,
+  );
+  const nameTable = new Uint8Array(headerSize + totalStringBytes);
+  const nameView = new DataView(nameTable.buffer);
+  nameView.setUint16(0, 0);
+  nameView.setUint16(2, sortedRecords.length);
+  nameView.setUint16(4, headerSize);
+
+  let strOffset = 0;
+  for (let index = 0; index < sortedRecords.length; index += 1) {
+    const entry = sortedRecords[index]!;
+    const recOffset = 6 + index * 12;
+    nameView.setUint16(recOffset, entry.platformID);
+    nameView.setUint16(recOffset + 2, entry.encodingID);
+    nameView.setUint16(recOffset + 4, entry.languageID);
+    nameView.setUint16(recOffset + 6, entry.nameID);
+    nameView.setUint16(recOffset + 8, entry.bytes.byteLength);
+    nameView.setUint16(recOffset + 10, strOffset);
+    nameTable.set(entry.bytes, headerSize + strOffset);
+    strOffset += entry.bytes.byteLength;
+  }
+
+  tables.set("name", nameTable);
+  return packSfnt(sfntVersion, tables);
+}
+
+/**
+ * Patches `OS/2` (`usWeightClass`, `fsSelection`) and `post` (`italicAngle`) fields
+ * on an SFNT font and recomputes SFNT checksums.
+ */
+export function patchSfntOs2AndPost(
+  source: Uint8Array,
+  patch: {
+    readonly weightClass?: number;
+    readonly italic?: boolean;
+    readonly oblique?: boolean;
+    readonly bold?: boolean;
+    readonly italicAngle?: number;
+  },
+): Uint8Array {
+  const view = new DataView(
+    source.buffer,
+    source.byteOffset,
+    source.byteLength,
+  );
+  const sfntVersion = view.getUint32(0);
+  const numTables = view.getUint16(4);
+  const tables = new Map<string, Uint8Array>();
+  for (let index = 0; index < numTables; index += 1) {
+    const recordOffset = 12 + index * 16;
+    const tag = asciiTag(source, recordOffset);
+    const offset = view.getUint32(recordOffset + 8);
+    const length = view.getUint32(recordOffset + 12);
+    const tableBytes = source.slice(offset, offset + length);
+    const tableView = new DataView(tableBytes.buffer);
+    if (tag === "OS/2") {
+      if (patch.weightClass !== undefined) {
+        tableView.setUint16(4, patch.weightClass);
+      }
+      let fsSelection = tableView.getUint16(62);
+      if (patch.italic !== undefined) {
+        fsSelection = patch.italic
+          ? fsSelection | 0x0001
+          : fsSelection & ~0x0001;
+      }
+      if (patch.bold !== undefined) {
+        fsSelection = patch.bold ? fsSelection | 0x0020 : fsSelection & ~0x0020;
+      }
+      if (patch.oblique !== undefined) {
+        fsSelection = patch.oblique
+          ? fsSelection | 0x0200
+          : fsSelection & ~0x0200;
+      }
+      tableView.setUint16(62, fsSelection);
+    } else if (tag === "post" && patch.italicAngle !== undefined) {
+      tableView.setInt32(4, Math.round(patch.italicAngle * 65536));
+    }
+    tables.set(tag, tableBytes);
+  }
+  return packSfnt(sfntVersion, tables);
+}
+
 function encodeCffInt(value: number): Uint8Array {
   if (value >= -107 && value <= 107) {
     return Uint8Array.of(value + 139);

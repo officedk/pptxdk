@@ -9,11 +9,14 @@ import {
 } from "@officedk/pptxdk";
 import { paint } from "@officedk/pptxdk/preview";
 import { expandDocument } from "@officedk/pptxdk/react";
+import { deck, slide } from "@officedk/pptxdk/vanilla";
 import { validatePptx } from "@pptxdk/validation";
 import { it } from "vitest";
 
+import { createDualPipeSchedule } from "../src/components/dualpipe-schedule.ts";
 import { fetchGitHubProjects } from "../src/github-projects.ts";
 import { DeepSeekSystemsDeck } from "../src/index.ts";
+import { theme } from "../src/theme.ts";
 
 function assertValidPng1280x720(png: Uint8Array, label: string): void {
   const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -401,7 +404,96 @@ it("full deck preserves 15 slides, zero-error static preview, native charts and 
       assert.ok(step.effects.length > 0);
     }
   }
+
+  // Verify the vanilla DualPipe schedule diagram preserves exact slide-space bounds and emitted shapes.
+  const dualpipeResolved = resolution.slide("dualpipe").objects;
+  const expectedLabels = [
+    { text: "正向数据流 (Rank 0→P)", x: 68, y: 180, width: 124 },
+    { text: "镜像数据流 (Rank P→0)", x: 68, y: 226, width: 124 },
+  ] as const;
+  for (const expected of expectedLabels) {
+    const match = dualpipeResolved.find(
+      (object) => object.kind === "text" && object.text === expected.text,
+    );
+    assert.ok(match !== undefined, `Missing DualPipe label ${expected.text}`);
+    assert.equal(match.box?.x, expected.x);
+    assert.equal(match.box?.y, expected.y);
+    assert.equal(match.box?.width, expected.width);
+    assertMeasuredTextFits(match.textMetrics, `dualpipe/${expected.text}`);
+  }
+
+  const expectedBlocks = [
+    { text: "F0", x: 196, y: 172, width: 50, height: 34 },
+    { text: "F1", x: 252, y: 172, width: 50, height: 34 },
+    { text: "F&B (双向重叠)", x: 308, y: 172, width: 124, height: 34 },
+    { text: "F&B (双向重叠)", x: 438, y: 172, width: 124, height: 34 },
+    { text: "B1", x: 568, y: 172, width: 52, height: 34 },
+    { text: "W1", x: 626, y: 172, width: 48, height: 34 },
+    { text: "F'0", x: 196, y: 218, width: 50, height: 34 },
+    { text: "F&B (双向重叠)", x: 252, y: 218, width: 124, height: 34 },
+    { text: "F&B (双向重叠)", x: 382, y: 218, width: 124, height: 34 },
+    { text: "B'0", x: 512, y: 218, width: 52, height: 34 },
+    { text: "B'1", x: 570, y: 218, width: 52, height: 34 },
+    { text: "W'0", x: 628, y: 218, width: 46, height: 34 },
+  ] as const;
+  const resolvedBlocks = dualpipeResolved.filter(
+    (object) =>
+      object.kind === "shape" &&
+      (object.box?.y === 172 || object.box?.y === 218) &&
+      object.box.x >= 196,
+  );
+  assert.deepEqual(
+    resolvedBlocks.map((object) => ({
+      text: object.text,
+      x: object.box?.x,
+      y: object.box?.y,
+      width: object.box?.width,
+      height: object.box?.height,
+    })),
+    expectedBlocks,
+  );
+
+  const dualpipeFile = file.slides.find(({ id }) => id === "dualpipe")!;
+  for (const expected of expectedBlocks) {
+    assert.ok(
+      dualpipeFile.objects.some(
+        (object) =>
+          object.text?.text === expected.text &&
+          object.boxEmu?.x === expected.x * 9525 &&
+          object.boxEmu?.y === expected.y * 9525 &&
+          object.boxEmu?.width === expected.width * 9525 &&
+          object.boxEmu?.height === expected.height * 9525,
+      ),
+      `Missing emitted DualPipe block ${expected.text} at (${expected.x}, ${expected.y})`,
+    );
+  }
 }, 60_000);
+
+it("renders the vanilla DualPipe schedule diagram cleanly without React at custom panel origins", () => {
+  const standalone = deck({ theme }).append(
+    slide({ id: "dualpipe-standalone" }).append(
+      createDualPipeSchedule({ x: 100, y: 50 }),
+    ),
+  );
+  const resolution = resolve(standalone);
+  const objects = resolution.slide("dualpipe-standalone").objects;
+  assert.equal(objects.length, 14);
+  for (const object of objects) {
+    assertMeasuredTextFits(
+      object.textMetrics,
+      `dualpipe-standalone/${object.path}`,
+    );
+  }
+  assert.deepEqual(
+    objects[0]?.box && { x: objects[0].box.x, y: objects[0].box.y },
+    {
+      x: 120,
+      y: 122,
+    },
+  );
+  assert.deepEqual(objects[1]?.box, { x: 248, y: 114, width: 50, height: 34 });
+  assert.deepEqual(objects[13]?.box, { x: 680, y: 160, width: 46, height: 34 });
+});
 
 it("identifies the repository and HTTP status when fetching projects fails", async () => {
   await assert.rejects(

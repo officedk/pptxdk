@@ -48,10 +48,12 @@ export async function build(
         );
   const resolution = resolveDefault(document, resolveOptions);
   const emitted = emit(resolution, options);
+  const query = emittedBuildQuery(emitted.report, resolution);
   return Object.freeze({
     pptx: emitted.pptx,
     report: emitted.report,
-    query: emittedBuildQuery(emitted.report, resolution.query),
+    slides: query.slides,
+    slide: (id: string) => query.slide(id),
   });
 }
 
@@ -83,7 +85,8 @@ export async function preview(
   const { pages } = paint(resolution, validatedOptions);
   return Object.freeze({
     report: resolution.report,
-    query: resolution.query,
+    slides: resolution.slides,
+    slide: (id: string) => resolution.slide(id),
     pages,
   });
 }

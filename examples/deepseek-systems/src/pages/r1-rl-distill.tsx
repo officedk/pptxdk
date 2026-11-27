@@ -77,19 +77,23 @@ export function R1RlDistillPage() {
         tone="copper"
       >
         <Shape
-          x={66}
-          y={170}
-          width={348}
-          height={76}
-          fill={colors.paper}
-          style={{ borderColor: colors.copper, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 66,
+            top: 170,
+            width: 348,
+            height: 76,
+            background: colors.paper,
+            border: { color: colors.copper, width: 1 },
+          }}
         />
         <Text
-          x={80}
-          y={178}
-          width={320}
-          height={20}
           style={{
+            position: "absolute",
+            left: 80,
+            top: 178,
+            width: 320,
+            height: 20,
             fontSize: 12,
             color: colors.copperText,
             textWrap: "nowrap",
@@ -98,11 +102,12 @@ export function R1RlDistillPage() {
           组内采样相对优势估计 (Group Relative Advantage)：
         </Text>
         <Text
-          x={80}
-          y={202}
-          width={320}
-          height={24}
           style={{
+            position: "absolute",
+            left: 80,
+            top: 202,
+            width: 320,
+            height: 24,
             fontFamily: "metric",
             fontSize: 14,
             fontWeight: 700,
@@ -113,11 +118,12 @@ export function R1RlDistillPage() {
           A_i = (r_i - mean(r_1..G)) / std(r_1..G)
         </Text>
         <Text
-          x={80}
-          y={224}
-          width={320}
-          height={18}
           style={{
+            position: "absolute",
+            left: 80,
+            top: 224,
+            width: 320,
+            height: 18,
             fontSize: 10.5,
             color: colors.muted,
             textWrap: "nowrap",
@@ -127,11 +133,12 @@ export function R1RlDistillPage() {
         </Text>
 
         <Text
-          x={66}
-          y={256}
-          width={348}
-          height={84}
           style={{
+            position: "absolute",
+            left: 66,
+            top: 256,
+            width: 348,
+            height: 84,
             fontSize: 11,
             lineHeight: 16,
             color: colors.steel,
@@ -168,13 +175,16 @@ export function R1RlDistillPage() {
                 <Shape
                   key={st.step}
                   id={`r1-stage-card-${idx}`}
-                  x={cardX}
-                  y={170}
-                  width={178}
-                  height={166}
-                  fill={colors.paper}
                   enter={fade({ duration: 340 })}
-                  style={{ borderColor: accent, borderWidth: 1 }}
+                  style={{
+                    position: "absolute",
+                    left: cardX,
+                    top: 170,
+                    width: 178,
+                    height: 166,
+                    background: colors.paper,
+                    border: { color: accent, width: 1 },
+                  }}
                 />
               );
             })}
@@ -189,12 +199,15 @@ export function R1RlDistillPage() {
               return (
                 <Shape
                   key={`top-${st.step}`}
-                  x={cardX}
-                  y={170}
-                  width={178}
-                  height={4}
-                  fill={accent}
                   enter={fade({ duration: 340 })}
+                  style={{
+                    position: "absolute",
+                    left: cardX,
+                    top: 170,
+                    width: 178,
+                    height: 4,
+                    background: accent,
+                  }}
                 />
               );
             })}
@@ -203,12 +216,13 @@ export function R1RlDistillPage() {
               return (
                 <Text
                   key={`title-${st.step}`}
-                  x={cardX + 10}
-                  y={182}
-                  width={158}
-                  height={20}
                   enter={fade({ duration: 340 })}
                   style={{
+                    position: "absolute",
+                    left: cardX + 10,
+                    top: 182,
+                    width: 158,
+                    height: 20,
                     fontSize: 12,
                     color: colors.ink,
                     textWrap: "nowrap",
@@ -237,12 +251,13 @@ export function R1RlDistillPage() {
               return (
                 <Text
                   key={`desc-${st.step}`}
-                  x={cardX + 10}
-                  y={236}
-                  width={158}
-                  height={92}
                   enter={fade({ duration: 340 })}
                   style={{
+                    position: "absolute",
+                    left: cardX + 10,
+                    top: 236,
+                    width: 158,
+                    height: 92,
                     fontSize: 10.5,
                     lineHeight: 15,
                     color: colors.muted,
@@ -269,15 +284,6 @@ export function R1RlDistillPage() {
       >
         <Chart
           id="r1-distill-chart"
-          x={64}
-          y={426}
-          width={836}
-          height={220}
-          style={{
-            fontFamily: "body",
-            fontSize: 10,
-            color: colors.ink,
-          }}
           legend="top"
           axes={{
             category: {
@@ -323,24 +329,47 @@ export function R1RlDistillPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 64,
+            top: 426,
+            width: 836,
+            height: 220,
+            fontFamily: "body",
+            fontSize: 10,
+            color: colors.ink,
+          }}
         />
 
         {/* Right callout card inside bottom panel */}
         <Shape
-          x={916}
-          y={430}
-          width={296}
-          height={212}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
-        />
-        <Shape x={916} y={430} width={4} height={212} fill={colors.copper} />
-        <Text
-          x={934}
-          y={442}
-          width={264}
-          height={22}
           style={{
+            position: "absolute",
+            left: 916,
+            top: 430,
+            width: 296,
+            height: 212,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
+        />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 916,
+            top: 430,
+            width: 4,
+            height: 212,
+            background: colors.copper,
+          }}
+        />
+        <Text
+          style={{
+            position: "absolute",
+            left: 934,
+            top: 442,
+            width: 264,
+            height: 22,
             fontSize: 13,
             color: colors.steel,
             textWrap: "nowrap",
@@ -349,11 +378,12 @@ export function R1RlDistillPage() {
           核心发现：大模型探索 vs 小模型蒸馏
         </Text>
         <Text
-          x={934}
-          y={470}
-          width={264}
-          height={160}
           style={{
+            position: "absolute",
+            left: 934,
+            top: 470,
+            width: 264,
+            height: 160,
             fontSize: 11,
             lineHeight: 16.5,
             color: colors.muted,

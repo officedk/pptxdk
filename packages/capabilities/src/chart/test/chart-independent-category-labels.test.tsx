@@ -20,10 +20,7 @@ import { describe, it } from "vitest";
 import { build, build as buildDocument } from "../../../test/test-helpers.ts";
 
 const independentProps: ChartProps = {
-  x: 0,
-  y: 0,
-  width: 720,
-  height: 420,
+  style: { position: "absolute", left: 0, top: 0, width: 720, height: 420 },
   legend: "right",
   groups: [
     {
@@ -52,10 +49,7 @@ const independentProps: ChartProps = {
 };
 
 const sharedProps: ChartProps = {
-  x: 0,
-  y: 0,
-  width: 720,
-  height: 420,
+  style: { position: "absolute", left: 0, top: 0, width: 720, height: 420 },
   legend: "right",
   groups: [
     {
@@ -241,10 +235,13 @@ describe("independent category labels", () => {
         <Slide id="legend-tail">
           <Chart
             id="legend-tail"
-            x={0}
-            y={0}
-            width={640}
-            height={420}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 640,
+              height: 420,
+            }}
             legend="right"
             groups={[
               {
@@ -309,10 +306,13 @@ describe("independent category labels", () => {
         <Slide id="point-c15">
           <Chart
             id="point-c15"
-            x={0}
-            y={0}
-            width={720}
-            height={420}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 720,
+              height: 420,
+            }}
             groups={[
               {
                 kind: "doughnut",
@@ -424,9 +424,7 @@ describe("independent category labels", () => {
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
           assert.ok(
-            error.diagnostics.some(
-              ({ code }) => code === "forbidden-mechanism",
-            ),
+            error.diagnostics.some(({ code }) => code === "target-violation"),
           );
           return true;
         },
@@ -502,10 +500,13 @@ describe("independent category labels", () => {
         <Slide id="point-field">
           <Chart
             id="point-field"
-            x={0}
-            y={0}
-            width={320}
-            height={240}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 320,
+              height: 240,
+            }}
             groups={[
               {
                 kind: "doughnut",

@@ -1,7 +1,7 @@
 import {
   CapabilityError,
   type CapabilityContribution,
-  type GeometryBox,
+  type Rect,
 } from "@pptxdk/core/capability";
 
 import { maximumTimeNodeValue } from "./motion-api.ts";
@@ -14,14 +14,14 @@ import type {
   MotionGranularity,
   MotionStartDependency,
   MotionTargetRange,
-  MotionObservation,
+  ResolvedMotion,
   MotionScopeObservation,
   MotionStepObservation,
   NormalizedEffect,
 } from "./motion-api.ts";
 import {
   createMotionQuery,
-  type MotionQuery,
+  type MotionSchedule,
   type MotionQueryCueSource,
   type MotionQueryEffectSource,
   type MotionQueryMomentSource,
@@ -42,7 +42,7 @@ type MotionTarget = {
   readonly paragraphCount?: number;
   /** Original point count for every chart-wide series, in formal series order. */
   readonly chartSeriesPointCounts?: readonly number[];
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly rotationDegrees?: number;
   readonly hasBackground?: boolean;
   readonly members?: readonly MotionNativeMember[];
@@ -53,7 +53,7 @@ type MotionNativeMember = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly members?: readonly MotionNativeMember[];
 };
 
@@ -77,7 +77,7 @@ export type ScheduledEffect = MotionEffectObservation & {
   readonly targetKind: string;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
-  readonly targetBox?: GeometryBox;
+  readonly targetBox?: Rect;
   readonly targetRotationDegrees?: number;
   readonly targetHasBackground: boolean;
   readonly targetParagraphCount?: number;
@@ -306,8 +306,8 @@ export function composeMotionPlanStarts(
 /** Single slide result used jointly by writer and build report. */
 export type MotionPlan = {
   readonly steps: readonly MotionPlanStep[];
-  readonly observation: MotionObservation;
-  readonly query: MotionQuery;
+  readonly observation: ResolvedMotion;
+  readonly query: MotionSchedule;
 };
 
 type TimeCandidate = {
@@ -3102,6 +3102,10 @@ function motionPlan(
             typeof effect.from === "number"
               ? Math.round(effect.from * 60000) / 60000
               : effect.from;
+          const to =
+            typeof effect.to === "number"
+              ? Math.round(effect.to * 60000) / 60000
+              : undefined;
           const by =
             typeof effect.by === "number"
               ? Math.round(effect.by * 60000) / 60000
@@ -3128,6 +3132,7 @@ function motionPlan(
               ? { intervalMs: expansion.intervalMs }
               : {}),
             ...(from === undefined ? {} : { from }),
+            ...(to === undefined ? {} : { to }),
             ...(easing === undefined ? {} : { easing }),
             ...(knownStart === undefined ? {} : { startMs: knownStart }),
             ...(effect.preset === "breathe" || effect.preset === "fillColor"
@@ -4198,7 +4203,7 @@ function motionPlan(
     );
     return (leftScope?.order ?? 0) - (rightScope?.order ?? 0);
   });
-  const observation: MotionObservation = Object.freeze({
+  const observation: ResolvedMotion = Object.freeze({
     steps: Object.freeze(
       plans.map(({ effects, trigger, number }) => ({
         trigger,

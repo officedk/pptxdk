@@ -116,10 +116,13 @@ describe("chart authoring through the common document", () => {
       slide({ id: "charts" }).append(
         chart({
           id: "column",
-          x: 0,
-          y: 0,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "column",
@@ -133,10 +136,13 @@ describe("chart authoring through the common document", () => {
         }),
         chart({
           id: "bar",
-          x: 320,
-          y: 0,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 320,
+            top: 0,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "bar",
@@ -151,10 +157,13 @@ describe("chart authoring through the common document", () => {
         }),
         chart({
           id: "line",
-          x: 0,
-          y: 220,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 220,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "line",
@@ -168,10 +177,13 @@ describe("chart authoring through the common document", () => {
         }),
         chart({
           id: "area",
-          x: 320,
-          y: 220,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 320,
+            top: 220,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "area",
@@ -185,10 +197,13 @@ describe("chart authoring through the common document", () => {
         }),
         chart({
           id: "pie",
-          x: 640,
-          y: 0,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 640,
+            top: 0,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "pie",
@@ -203,10 +218,13 @@ describe("chart authoring through the common document", () => {
         }),
         chart({
           id: "doughnut",
-          x: 640,
-          y: 220,
-          width: 300,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 640,
+            top: 220,
+            width: 300,
+            height: 200,
+          },
           groups: [
             {
               kind: "doughnut",
@@ -304,10 +322,13 @@ describe("chart authoring through the common document", () => {
       slide({ id: "group-order" }).append(
         chart({
           id: "group-order-chart",
-          x: 20,
-          y: 20,
-          width: 600,
-          height: 360,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 600,
+            height: 360,
+          },
           axes: {
             period: { kind: "category" },
             amount: { kind: "value", max: 40, majorUnit: 10 },
@@ -447,10 +468,13 @@ describe("chart authoring through the common document", () => {
         slide({ id: "shared-strings" }).append(
           chart({
             id: "shared-strings-chart",
-            x: 0,
-            y: 0,
-            width: 300,
-            height: 200,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: 200,
+            },
             groups: [
               {
                 kind: "column",
@@ -486,10 +510,13 @@ describe("chart authoring through the common document", () => {
         slide({ id: "formula-layout" }).append(
           chart({
             id: "formula-layout-chart",
-            x: 0,
-            y: 0,
-            width: 300,
-            height: 200,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: 200,
+            },
             groups: [
               {
                 kind: "column",
@@ -550,10 +577,13 @@ describe("chart authoring through the common document", () => {
         slide({ id: "shared-strings-mismatch" }).append(
           chart({
             id: "shared-strings-mismatch-chart",
-            x: 0,
-            y: 0,
-            width: 300,
-            height: 200,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: 200,
+            },
             groups: [
               {
                 kind: "column",
@@ -604,10 +634,7 @@ describe("chart authoring through the common document", () => {
     const series = [{ name: "Original", values: [1, 2] }];
     const node = chart({
       id: "editable-chart",
-      x: 0,
-      y: 0,
-      width: 300,
-      height: 200,
+      style: { position: "absolute", left: 0, top: 0, width: 300, height: 200 },
       groups: [
         {
           kind: "column",
@@ -681,8 +708,7 @@ describe("chart authoring through the common document", () => {
             slide({ id: `invalid-${label}` }).append(
               chart({
                 id: `invalid-${label}`,
-                width: 300,
-                height: 200,
+                style: { width: 300, height: 200 },
                 groups: [
                   {
                     kind: "column",
@@ -701,7 +727,7 @@ describe("chart authoring through the common document", () => {
         ),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-data");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           return true;
         },
       );
@@ -710,7 +736,7 @@ describe("chart authoring through the common document", () => {
     const diagnostics = [
       {
         id: "unknown-axis",
-        code: "unknown-chart-axis",
+        code: "broken-reference",
         axes: {
           period: { kind: "category" as const },
           amount: { kind: "value" as const },
@@ -719,7 +745,7 @@ describe("chart authoring through the common document", () => {
       },
       {
         id: "wrong-axis-role",
-        code: "invalid-chart-axis-role",
+        code: "invalid-prop",
         axes: {
           period: { kind: "category" as const },
           amount: { kind: "value" as const },
@@ -734,8 +760,7 @@ describe("chart authoring through the common document", () => {
             slide({ id: item.id }).append(
               chart({
                 id: item.id,
-                width: 300,
-                height: 200,
+                style: { width: 300, height: 200 },
                 axes: item.axes,
                 groups: [
                   {
@@ -763,8 +788,7 @@ describe("chart authoring through the common document", () => {
           slide({ id: "independent-domain" }).append(
             chart({
               id: "independent-domain",
-              width: 300,
-              height: 200,
+              style: { width: 300, height: 200 },
               groups: [
                 {
                   kind: "column",
@@ -780,7 +804,7 @@ describe("chart authoring through the common document", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-data");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );
@@ -791,8 +815,7 @@ describe("chart authoring through the common document", () => {
           slide({ id: "domain-mismatch" }).append(
             chart({
               id: "domain-mismatch",
-              width: 300,
-              height: 200,
+              style: { width: 300, height: 200 },
               groups: [
                 {
                   kind: "column",
@@ -811,10 +834,7 @@ describe("chart authoring through the common document", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(
-          error.diagnostics[0]?.code,
-          "chart-category-domain-mismatch",
-        );
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         return true;
       },
     );
@@ -824,8 +844,7 @@ describe("chart authoring through the common document", () => {
     const document = deck({ width: 960, height: 540 }).append(
       slide({ id: "trimmed" }).append(
         chart({
-          width: 120,
-          height: 80,
+          style: { width: 120, height: 80 },
           groups: [
             {
               kind: "column",

@@ -134,13 +134,6 @@ function attachEmbeddedFontsToSubtree(
   if (styleUp.changed && styleUp.value !== undefined) {
     mutableNode.style({ fontFamily: styleUp.value["fontFamily"] });
   }
-  const textStyleUp = upgradeStyleRecordFont(
-    node.props["textStyle"],
-    fontsByKey,
-  );
-  if (textStyleUp.changed && textStyleUp.value !== undefined) {
-    mutableNode.set({ textStyle: textStyleUp.value });
-  }
   if (node.type === "slide-master" || node.type === "slide-layout") {
     const rawPlaceholders = node.props["placeholders"] as
       | PlaceholderMap

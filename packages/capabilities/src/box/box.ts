@@ -14,7 +14,7 @@ import {
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedObject,
+  type ObjectResolution,
   type ThemeScope,
 } from "@pptxdk/core/capability";
 import { xmlEscape } from "@pptxdk/emit";
@@ -136,7 +136,6 @@ export const boxCapability: ObjectCapabilityModule = {
       emitsObject: hasVisibleStyle,
       observesLayout: true,
       propagatesBaseline: true,
-      checksCanvasOverflow: true,
     };
 
     const native: BoundObjectNativeCollaboration = {
@@ -148,7 +147,7 @@ export const boxCapability: ObjectCapabilityModule = {
       contract,
       container,
       ...(morphKey !== undefined || link !== undefined ? { native } : {}),
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const box = resolveContext.layoutBox;
         if (box === undefined) {
           throw new CapabilityError(
@@ -179,9 +178,7 @@ export const boxCapability: ObjectCapabilityModule = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: false,
-          filled:
-            style["backgroundColor"] !== undefined ||
-            style["backgroundImage"] !== undefined,
+          filled: visual.fill.kind !== "none",
         } as const;
         const annotations = motionContainerAnnotations(
           motionProps,
@@ -207,9 +204,6 @@ export const boxCapability: ObjectCapabilityModule = {
           ...(transform === undefined ? {} : { transform }),
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
-          ...(visual.warnings.length === 0
-            ? {}
-            : { warnings: visual.warnings }),
           emit(emitContext: EmitContext): EmitOutput {
             return {
               xml: visual.hasVisibleStyle
@@ -236,6 +230,9 @@ export const boxCapability: ObjectCapabilityModule = {
             });
             return {
               svg: `${background.svg}${childrenSvg}`,
+              ...(background.placeholders === undefined
+                ? {}
+                : { placeholders: background.placeholders }),
             };
           },
         };

@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart, ParsedChartAxis } from "../chart-model.ts";
@@ -26,7 +26,7 @@ import {
 
 function categoryGridCoordinates(
   scale: CategoryAxisScale,
-  plot: GeometryBox,
+  plot: Rect,
   minor: boolean,
 ): number[] {
   const coords: number[] = [];
@@ -58,7 +58,7 @@ function categoryGridCoordinates(
 function drawGridlineSet(
   coords: readonly number[],
   direction: "horizontal" | "vertical",
-  plot: GeometryBox,
+  plot: Rect,
   stroke: ResolvedStroke,
 ): string {
   if (coords.length === 0) return "";
@@ -76,7 +76,7 @@ function drawGridlineSet(
 export function renderGridlinesSvg(options: {
   readonly parsed: ParsedChart;
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly theme: ThemeContext;
 }): string {
   const { parsed, scales, plotRect, theme } = options;
@@ -178,7 +178,7 @@ function axisTitleParts(
 
 export function renderAxesSvg(options: {
   readonly parsed: ParsedChart;
-  readonly chartBox: GeometryBox;
+  readonly chartBox: Rect;
   readonly layout: ComputedChartLayout;
   readonly scales: ReadonlyMap<string, AxisScale>;
   readonly baseChartTextStyle: TextStyle | undefined;
@@ -309,7 +309,7 @@ export function renderAxesSvg(options: {
           const slotW = scale.slotSpan(plotRect);
           for (let i = 0; i < scale.categories.length; i += 1) {
             const cx = scale.indexToScreen(i, plotRect);
-            const labelBox: GeometryBox = {
+            const labelBox: Rect = {
               x: cx - slotW / 2,
               y: labelY,
               width: Math.max(4, slotW),
@@ -339,7 +339,7 @@ export function renderAxesSvg(options: {
           for (const val of scale.majorTicks) {
             const cx = scale.valueToScreen(val, plotRect);
             const text = formatChartNumber(val, scale.numberFormat);
-            const labelBox: GeometryBox = {
+            const labelBox: Rect = {
               x: cx - tickSpacing / 2,
               y: labelY,
               width: tickSpacing,
@@ -413,7 +413,7 @@ export function renderAxesSvg(options: {
           for (const val of scale.majorTicks) {
             const cy = scale.valueToScreen(val, plotRect);
             const text = formatChartNumber(val, scale.numberFormat);
-            const labelBox: GeometryBox = {
+            const labelBox: Rect = {
               x: boxX,
               y: cy - labelH / 2,
               width: boxW,
@@ -440,7 +440,7 @@ export function renderAxesSvg(options: {
           const labelH = Math.max(slotH, axisFontPx * 1.2);
           for (let i = 0; i < scale.categories.length; i += 1) {
             const cy = scale.indexToScreen(i, plotRect);
-            const labelBox: GeometryBox = {
+            const labelBox: Rect = {
               x: boxX,
               y: cy - labelH / 2,
               width: boxW,

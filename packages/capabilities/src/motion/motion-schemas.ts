@@ -143,7 +143,20 @@ export const effectOptionsSchema = z
   .readonly();
 export type EffectOptions = z.infer<typeof effectOptionsSchema>;
 
-export const spinOptionsSchema = z
+export type SpinDeltaOptions = Omit<EffectOptions, "by"> & {
+  readonly by?: number | undefined;
+  readonly from?: undefined;
+  readonly to?: undefined;
+};
+
+export type SpinEndpointsOptions = EffectOptions & {
+  readonly from?: number | undefined;
+  readonly to?: number | undefined;
+};
+
+export type SpinOptions = SpinDeltaOptions | SpinEndpointsOptions;
+
+export const spinOptionsSchema: z.ZodType<SpinOptions> = z
   .strictObject({
     duration: effectDurationSchema.optional(),
     delay: effectDelaySchema.optional(),
@@ -151,9 +164,21 @@ export const spinOptionsSchema = z
     intervalMs: intervalMsSchema.optional(),
     by: z.union([motionGranularitySchema, spinAngleSchema]).optional(),
     from: spinAngleSchema.optional(),
+    to: spinAngleSchema.optional(),
   })
-  .readonly();
-export type SpinOptions = z.infer<typeof spinOptionsSchema>;
+  .readonly()
+  .superRefine((value, ctx) => {
+    if (
+      typeof value.by === "number" &&
+      (value.from !== undefined || value.to !== undefined)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "spin() cannot combine from/to and by",
+      });
+    }
+  })
+  .transform((value) => value as SpinOptions);
 
 export const fillColorOptionsSchema = z
   .strictObject({
@@ -194,6 +219,7 @@ const effectCommonFields = {
   duration: effectDurationSchema,
   delay: effectDelaySchema,
   from: z.union([motionDirectionSchema, spinAngleSchema]).optional(),
+  to: spinAngleSchema.optional(),
   fromColor: motionHexColorSchema.optional(),
   toColor: motionHexColorSchema.optional(),
   easing: easingSchema.optional(),

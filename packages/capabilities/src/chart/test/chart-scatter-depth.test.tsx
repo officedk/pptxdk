@@ -154,10 +154,13 @@ async function rejectsInBothEntries(
 describe("scatter depth", () => {
   it("writes independent unequal XY observations through the React entry", async () => {
     const props: ChartProps = {
-      x: 10,
-      y: 10,
-      width: 420,
-      height: 260,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 420,
+        height: 260,
+      },
       groups: [
         xyGroup([
           {
@@ -254,10 +257,13 @@ describe("scatter depth", () => {
     ) =>
       documentChart({
         id,
-        x,
-        y: 10,
-        width: 300,
-        height: 220,
+        style: {
+          position: "absolute",
+          left: x,
+          top: 10,
+          width: 300,
+          height: 220,
+        },
         title,
         legend: "bottom",
         axes: {
@@ -406,10 +412,13 @@ describe("scatter depth", () => {
           : series;
       return documentChart({
         id,
-        x,
-        y: 10,
-        width: 300,
-        height: 220,
+        style: {
+          position: "absolute",
+          left: x,
+          top: 10,
+          width: 300,
+          height: 220,
+        },
         groups: [xyGroup(chartSeries, extra)],
       });
     };
@@ -479,10 +488,13 @@ describe("scatter depth", () => {
         documentSlide({ id: "missing" }).append(
           documentChart({
             id: "missing",
-            x: 10,
-            y: 10,
-            width: 500,
-            height: 300,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 500,
+              height: 300,
+            },
             groups: [
               xyGroup([
                 {
@@ -552,10 +564,13 @@ describe("scatter depth", () => {
         documentSlide({ id: "all-missing-and-zero" }).append(
           documentChart({
             id: "all-missing-and-zero",
-            x: 10,
-            y: 10,
-            width: 400,
-            height: 240,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 400,
+              height: 240,
+            },
             groups: [
               xyGroup([
                 {
@@ -636,10 +651,13 @@ describe("scatter depth", () => {
     for (const entry of ["document", "react"] as const) {
       for (const { mode, groups } of matrix) {
         const pptx = await buildInEntry(entry, {
-          x: 10,
-          y: 10,
-          width: 320,
-          height: 220,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 320,
+            height: 220,
+          },
           displayBlanksAs: mode,
           groups,
         });
@@ -672,10 +690,13 @@ describe("scatter depth", () => {
 
   it("rejects span when any participating scatter group has no connecting line", async () => {
     const base = {
-      x: 10,
-      y: 10,
-      width: 320,
-      height: 220,
+      style: {
+        position: "absolute" as const,
+        left: 10,
+        top: 10,
+        width: 320,
+        height: 220,
+      },
       displayBlanksAs: "span" as const,
     };
     const lineGroup = xyGroup([{ name: "Line", x: [1, 2], y: [3, 4] }], {
@@ -684,24 +705,27 @@ describe("scatter depth", () => {
     const markerGroup = xyGroup([{ name: "Marker", x: [1, 2], y: [3, 4] }]);
     await rejectsInBothEntries(
       { ...base, groups: [markerGroup] },
-      "invalid-chart-missing-values",
+      "invalid-prop",
     );
     await rejectsInBothEntries(
       { ...base, groups: [lineGroup, markerGroup] },
-      "invalid-chart-missing-values",
+      "invalid-prop",
     );
     await rejectsInBothEntries(
       { ...base, groups: [markerGroup, lineGroup] },
-      "invalid-chart-missing-values",
+      "invalid-prop",
     );
   });
 
   it("writes scatter X and Y label content through group, series, and point inheritance", async () => {
     const props: ChartProps = {
-      x: 10,
-      y: 10,
-      width: 340,
-      height: 240,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 340,
+        height: 240,
+      },
       groups: [
         xyGroup(
           [
@@ -946,10 +970,13 @@ describe("scatter depth", () => {
       dataLabels: { value: false, xValue: true, numberFormat: "0.0" },
     };
     const projected: ChartProps = {
-      x: 10,
-      y: 10,
-      width: 340,
-      height: 240,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 340,
+        height: 240,
+      },
       groups: [xyGroup([projectedSeries])],
     };
     const explicit: ChartProps = {
@@ -1008,30 +1035,27 @@ describe("scatter depth", () => {
       categories: ["A", "B"],
     };
     const base: ChartProps = {
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 120,
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
       groups: [xyGroup([{ name: "S", x: [1], y: [2] }])],
     };
     const cases: readonly [string, ChartProps][] = [
       [
-        "invalid-data",
+        "invalid-prop",
         { ...base, groups: [xyGroup([{ name: "S", x: [1, NaN], y: [2, 3] }])] },
       ],
       [
-        "invalid-data",
+        "invalid-prop",
         {
           ...base,
           groups: [xyGroup([{ name: "S", x: [1, Infinity], y: [2, 3] }])],
         },
       ],
       [
-        "invalid-data",
+        "invalid-prop",
         { ...base, groups: [xyGroup([{ name: "S", x: [1, 2], y: [3] }])] },
       ],
       [
-        "invalid-data",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1044,11 +1068,11 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-data",
+        "invalid-prop",
         { ...base, groups: [xyGroup([{ name: "S", x: [], y: [3] }])] },
       ],
       [
-        "invalid-data",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1061,7 +1085,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-data",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1073,9 +1097,9 @@ describe("scatter depth", () => {
           ],
         },
       ],
-      ["invalid-chart-missing-values", { ...base, displayBlanksAs: "span" }],
+      ["invalid-prop", { ...base, displayBlanksAs: "span" }],
       [
-        "invalid-chart-option",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1089,7 +1113,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-scatter-presentation",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1101,7 +1125,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1113,7 +1137,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1132,7 +1156,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1141,7 +1165,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-line",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1150,7 +1174,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-data-labels",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1161,7 +1185,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-data-labels",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1172,7 +1196,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-data-labels",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1183,7 +1207,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-chart-axis-role",
+        "invalid-prop",
         {
           ...base,
           axes: { x: { kind: "category" }, y: { kind: "value" } },
@@ -1195,7 +1219,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-chart-axes",
+        "invalid-prop",
         {
           ...base,
           axes: {
@@ -1210,7 +1234,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-chart-axes",
+        "invalid-prop",
         {
           ...base,
           axes: {
@@ -1220,7 +1244,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "unknown-chart-axis",
+        "broken-reference",
         {
           ...base,
           axes: {
@@ -1235,7 +1259,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-chart-axes",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1249,7 +1273,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-data",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1265,7 +1289,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-scatter-line",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1276,7 +1300,7 @@ describe("scatter depth", () => {
         },
       ],
       [
-        "invalid-scatter-markers",
+        "invalid-prop",
         {
           ...base,
           groups: [
@@ -1299,17 +1323,20 @@ describe("scatter depth", () => {
           }),
         ],
       },
-      "invalid-data-labels",
+      "invalid-prop",
     );
   });
 
   it("rejects X value labels outside scatter charts in both entries", async () => {
     await rejectsInBothEntries(
       {
-        x: 10,
-        y: 10,
-        width: 320,
-        height: 220,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 320,
+          height: 220,
+        },
         groups: [
           {
             kind: "column",
@@ -1319,7 +1346,7 @@ describe("scatter depth", () => {
           } as never,
         ],
       },
-      "invalid-data-labels",
+      "invalid-prop",
     );
   });
 
@@ -1329,10 +1356,13 @@ describe("scatter depth", () => {
         <Slide id="scatter-motion">
           <Chart
             id="scatter-series-motion"
-            x={10}
-            y={10}
-            width={220}
-            height={220}
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 220,
+              height: 220,
+            }}
             enter={fade({ by: "series", duration: 400 })}
             groups={[
               xyGroup([
@@ -1343,10 +1373,13 @@ describe("scatter depth", () => {
           />
           <Chart
             id="scatter-category-motion"
-            x={240}
-            y={10}
-            width={220}
-            height={220}
+            style={{
+              position: "absolute",
+              left: 240,
+              top: 10,
+              width: 220,
+              height: 220,
+            }}
             enter={fade({ by: "category", duration: 400 })}
             groups={[
               xyGroup([
@@ -1379,20 +1412,26 @@ describe("scatter depth", () => {
     });
     const markerGroup = xyGroup([{ name: "Marker", x: [1, 2], y: [3, 4] }]);
     const linePptx = await buildInEntry("document", {
-      x: 10,
-      y: 10,
-      width: 320,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 320,
+        height: 220,
+      },
       displayBlanksAs: "span",
       groups: [lineGroup],
     });
     assert.deepEqual((await validatePptx(linePptx)).errors, []);
 
     const markerPptx = await buildInEntry("document", {
-      x: 10,
-      y: 10,
-      width: 320,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 320,
+        height: 220,
+      },
       groups: [markerGroup],
     });
     const markerParts = unzipSync(markerPptx);
@@ -1415,10 +1454,13 @@ describe("scatter depth", () => {
     );
 
     const mixedPptx = await buildInEntry("document", {
-      x: 10,
-      y: 10,
-      width: 320,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 320,
+        height: 220,
+      },
       groups: [lineGroup, markerGroup],
     });
     const mixedFile = await validatePptx(withSpan(unzipSync(mixedPptx)));
@@ -1429,10 +1471,13 @@ describe("scatter depth", () => {
     );
 
     const markerGap = await buildInEntry("document", {
-      x: 10,
-      y: 10,
-      width: 320,
-      height: 220,
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 320,
+        height: 220,
+      },
       displayBlanksAs: "gap",
       groups: [markerGroup],
     });
@@ -1445,10 +1490,13 @@ describe("scatter depth", () => {
         documentSlide({ id: "scatter-reader" }).append(
           documentChart({
             id: "scatter-reader",
-            x: 10,
-            y: 10,
-            width: 300,
-            height: 200,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 300,
+              height: 200,
+            },
             groups: [xyGroup([{ name: "S", x: [1, 2], y: [3, 4] }])],
           }),
         ),

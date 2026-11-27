@@ -1,14 +1,16 @@
 import type {
-  BuildQuery,
-  GeometryBox,
-  LayoutObservation,
   Locator,
   LocatorResourceObservation,
-  LocatorObservation,
-  ObjectObservation,
+  ObjectTransform,
+  Rect,
+  ResolutionDimensionsSummary,
+  ResolvedLayout,
+  ResolvedObject,
+  ResolvedSlide,
   ResourceObservation,
-  SlideObservation,
-  SlideQuery,
+  ScreenPoint,
+  SlideLocator,
+  TextMetrics,
 } from "#/types.ts";
 
 export class BuildQueryError extends Error {
@@ -37,18 +39,24 @@ export type QueryContentReference =
   | { readonly kind: "object"; readonly id: number }
   | {
       readonly kind: "part";
-      readonly box?: GeometryBox;
+      readonly partKind?: string;
+      readonly path?: string;
+      readonly box?: Rect;
+      readonly bounds?: Rect;
       readonly text?: string;
+      readonly textMetrics?: TextMetrics;
     };
 
 export type QueryContentNode = {
   readonly authorId?: string;
+  readonly path?: string;
   readonly reference: QueryContentReference;
   readonly children: readonly QueryContentNode[];
 };
 
 export type BuildQuerySlideInput = {
-  readonly observation: SlideObservation;
+  readonly observation: ResolvedSlide;
+  readonly dimensions?: ResolutionDimensionsSummary;
   readonly content: readonly QueryContentNode[];
   readonly resources?: readonly (ResourceObservation & {
     readonly objectId: number;
@@ -57,6 +65,7 @@ export type BuildQuerySlideInput = {
 
 type QueryNode = {
   readonly authorId?: string;
+  readonly path?: string;
   readonly reference?: QueryContentReference;
   readonly children: readonly QueryNode[];
 };
@@ -76,9 +85,9 @@ function assertQueryName(value: string, label: string): void {
 
 function collectObjects(
   node: QueryNode,
-  objectsById: ReadonlyMap<number, ObjectObservation>,
+  objectsById: ReadonlyMap<number, ResolvedObject>,
   seen: Set<number>,
-  objects: ObjectObservation[],
+  objects: ResolvedObject[],
 ): void {
   const addObject = (id: number) => {
     const object = objectsById.get(id);
@@ -99,11 +108,11 @@ function collectObjects(
 
 function collectTexts(
   node: QueryNode,
-  objectsById: ReadonlyMap<number, ObjectObservation>,
+  objectsById: ReadonlyMap<number, ResolvedObject>,
   seen: Set<number>,
   texts: string[],
 ): void {
-  const addMemberObjects = (object: ObjectObservation) => {
+  const addMemberObjects = (object: ResolvedObject) => {
     if (!seen.has(object.id)) {
       seen.add(object.id);
       if (object.text !== undefined) texts.push(object.text);
@@ -167,17 +176,120 @@ function queryNode(node: QueryContentNode): QueryNode {
   const children = node.children.map((child) => queryNode(child));
   return Object.freeze({
     ...(node.authorId === undefined ? {} : { authorId: node.authorId }),
+    ...(node.path === undefined ? {} : { path: node.path }),
     reference: node.reference,
     children: Object.freeze(children),
   });
 }
 
+type LocatorSnapshot = {
+  readonly id?: string;
+  readonly kind: string;
+  readonly path: string;
+  readonly box?: Rect;
+  readonly bounds?: Rect;
+  readonly corners?: readonly [
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+  ];
+  readonly transform?: ObjectTransform;
+  readonly text?: string;
+  readonly textMetrics?: TextMetrics;
+  readonly gridArea?: Rect;
+  readonly objects: readonly ResolvedObject[];
+  readonly resources?: readonly LocatorResourceObservation[];
+};
+
+function computeLocatorSnapshot(
+  node: QueryNode,
+  layouts: ReadonlyMap<number, ResolvedLayout>,
+  objectsById: ReadonlyMap<number, ResolvedObject>,
+  resourcesByObjectId: ReadonlyMap<number, readonly ResourceObservation[]>,
+  defaultKind: string,
+  defaultPath: string,
+): LocatorSnapshot {
+  const objects: ResolvedObject[] = [];
+  collectObjects(node, objectsById, new Set(), objects);
+
+  const layout =
+    node.reference?.kind === "layout"
+      ? layouts.get(node.reference.id)
+      : undefined;
+  const object =
+    node.reference?.kind === "object"
+      ? objectsById.get(node.reference.id)
+      : undefined;
+  const partRef = node.reference?.kind === "part" ? node.reference : undefined;
+
+  const textParts: string[] = [];
+  if (partRef === undefined) {
+    collectTexts(node, objectsById, new Set(), textParts);
+  }
+  const selectedText =
+    textParts.length === 0 ? undefined : textParts.join("\n");
+
+  const box =
+    partRef !== undefined ? partRef.box : (layout?.box ?? object?.box);
+  const bounds =
+    partRef !== undefined
+      ? (partRef.bounds ?? partRef.box)
+      : (layout?.box ?? object?.bounds ?? object?.box);
+  const corners = object?.corners;
+  const transform = object?.transform;
+  const gridArea = layout?.gridArea ?? object?.gridArea;
+  const text = partRef !== undefined ? partRef.text : selectedText;
+  const textMetrics =
+    partRef !== undefined ? partRef.textMetrics : object?.textMetrics;
+  const image = object?.image;
+  const kind =
+    partRef !== undefined
+      ? (partRef.partKind ?? "part")
+      : layout !== undefined
+        ? "layout"
+        : (object?.kind ?? defaultKind);
+  const path =
+    partRef?.path ?? layout?.path ?? object?.path ?? node.path ?? defaultPath;
+  const resources: LocatorResourceObservation[] = objects.flatMap((item) =>
+    (resourcesByObjectId.get(item.id) ?? []).map((resource) =>
+      Object.freeze({ objectId: item.id, ...resource }),
+    ),
+  );
+
+  return {
+    ...(node.authorId === undefined ? {} : { id: node.authorId }),
+    kind,
+    path,
+    ...(box === undefined ? {} : { box }),
+    ...(bounds === undefined ? {} : { bounds }),
+    ...(corners === undefined ? {} : { corners }),
+    ...(transform === undefined ? {} : { transform }),
+    ...(text === undefined ? {} : { text }),
+    ...(textMetrics === undefined ? {} : { textMetrics }),
+    ...(image === undefined ? {} : { image }),
+    ...(gridArea === undefined ? {} : { gridArea }),
+    objects: Object.freeze(objects),
+    ...(resources.length === 0 ? {} : { resources: Object.freeze(resources) }),
+  };
+}
+
 function makeLocator(
   entry: LocatorEntry,
-  layouts: ReadonlyMap<number, LayoutObservation>,
-  objectsById: ReadonlyMap<number, ObjectObservation>,
+  layouts: ReadonlyMap<number, ResolvedLayout>,
+  objectsById: ReadonlyMap<number, ResolvedObject>,
   resourcesByObjectId: ReadonlyMap<number, readonly ResourceObservation[]>,
+  defaultKind = "locator",
+  defaultPath = "",
 ): Locator {
+  const snapshot = computeLocatorSnapshot(
+    entry.node,
+    layouts,
+    objectsById,
+    resourcesByObjectId,
+    defaultKind,
+    defaultPath,
+  );
   const childLocators = (): readonly Locator[] =>
     Object.freeze(
       entry.node.children.map((child) =>
@@ -222,46 +334,8 @@ function makeLocator(
     if (match === undefined) throw new Error("Query match item missing");
     return match;
   };
-  const observe = (): LocatorObservation => {
-    const objects: ObjectObservation[] = [];
-    collectObjects(entry.node, objectsById, new Set(), objects);
-    const layoutBox =
-      entry.node.reference?.kind === "layout"
-        ? layouts.get(entry.node.reference.id)?.box
-        : undefined;
-    const objectBox =
-      entry.node.reference?.kind === "object"
-        ? objectsById.get(entry.node.reference.id)?.box
-        : undefined;
-    const partRef =
-      entry.node.reference?.kind === "part" ? entry.node.reference : undefined;
-    const text: string[] = [];
-    if (partRef === undefined) {
-      collectTexts(entry.node, objectsById, new Set(), text);
-    }
-    const selectedText = text.length === 0 ? undefined : text.join("\n");
-    const box = partRef !== undefined ? partRef.box : (layoutBox ?? objectBox);
-    const observedText = partRef !== undefined ? partRef.text : selectedText;
-    const resources: LocatorResourceObservation[] = objects.flatMap((object) =>
-      (resourcesByObjectId.get(object.id) ?? []).map((resource) =>
-        Object.freeze({ objectId: object.id, ...resource }),
-      ),
-    );
-    return Object.freeze({
-      evidence: "generation",
-      ...(entry.node.authorId === undefined
-        ? {}
-        : { authorId: entry.node.authorId }),
-      ...(box === undefined ? {} : { box }),
-      ...(observedText === undefined ? {} : { text: observedText }),
-      objects: Object.freeze(objects),
-      ...(resources.length === 0
-        ? {}
-        : { resources: Object.freeze(resources) }),
-    });
-  };
-
   return Object.freeze({
+    ...snapshot,
     get(id: string) {
       return oneMatch(findAuthorIds(id), "id", id);
     },
@@ -270,17 +344,30 @@ function makeLocator(
     },
     children: childLocators,
     descendants,
-    observe,
   });
 }
 
+const resolvedSlideByLocator = new WeakMap<SlideLocator, ResolvedSlide>();
+
+/** Resolves a `SlideLocator` back to its backing `ResolvedSlide` without exposing `.observation`. */
+export function resolveSlideFromLocator(
+  slide: SlideLocator | ResolvedSlide,
+): ResolvedSlide | undefined {
+  if (typeof slide !== "object" || slide === null) return undefined;
+  const registered = resolvedSlideByLocator.get(slide as SlideLocator);
+  if (registered !== undefined) return registered;
+  if ("get" in slide && typeof slide.get === "function") return undefined;
+  return slide;
+}
+
 function slideQuery(
-  observation: SlideObservation,
+  observation: ResolvedSlide,
+  dimensions: ResolutionDimensionsSummary | undefined,
   content: readonly QueryContentNode[],
   resources: readonly (ResourceObservation & { readonly objectId: number })[],
-): SlideQuery {
-  const objectsById = new Map<number, ObjectObservation>();
-  const addObject = (object: ObjectObservation) => {
+): SlideLocator {
+  const objectsById = new Map<number, ResolvedObject>();
+  const addObject = (object: ResolvedObject) => {
     if (objectsById.has(object.id)) return;
     objectsById.set(object.id, object);
     for (const member of object.members ?? []) addObject(member);
@@ -296,6 +383,7 @@ function slideQuery(
     resourcesByObjectId.set(objectId, items);
   }
   const root: QueryNode = Object.freeze({
+    path: observation.path,
     children: Object.freeze(content.map((node) => queryNode(node))),
   });
   const locator = makeLocator(
@@ -303,32 +391,40 @@ function slideQuery(
     layouts,
     objectsById,
     resourcesByObjectId,
+    "slide",
+    observation.path,
   );
-  return Object.freeze({
+  const slideLocator: SlideLocator = Object.freeze({
     ...locator,
     id: observation.id,
-    ...(observation.authorId === undefined
-      ? {}
-      : { authorId: observation.authorId }),
+    kind: "slide",
+    path: observation.path,
     index: observation.index,
-    observation,
+    dimensions: dimensions ?? Object.freeze({ width: 0, height: 0 }),
+    ...(observation.footer === undefined ? {} : { footer: observation.footer }),
   });
+  resolvedSlideByLocator.set(slideLocator, observation);
+  return slideLocator;
 }
+
+export type SlideLocatorIndex = {
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
+};
 
 /** Bind content references retained during the compilation phase to the same report without copying or rebuilding the deck tree. */
 export function createBuildQuery(
   slides: readonly BuildQuerySlideInput[],
-): BuildQuery {
+): SlideLocatorIndex {
   const queries = Object.freeze(
-    slides.map(({ observation, content, resources = [] }) =>
-      slideQuery(observation, content, resources),
+    slides.map(({ observation, dimensions, content, resources = [] }) =>
+      slideQuery(observation, dimensions, content, resources),
     ),
   );
   const byId = new Map(queries.map((slide) => [slide.id, slide] as const));
   return Object.freeze({
-    evidence: "generation" as const,
     slides: queries,
-    getSlide(id: string) {
+    slide(id: string) {
       assertQueryName(id, "id");
       const slide = byId.get(id);
       if (slide === undefined) {

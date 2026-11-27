@@ -8,11 +8,12 @@ import type {
   PlaceholderLevelStyle,
   PlaceholderListStyles,
 } from "@pptxdk/core";
-import type {
-  EmittedSlideLayoutSpec,
-  EmittedSlideMasterSpec,
-  MastersEmitDriver,
-  PptxRelationship,
+import {
+  resolvePlaceholderBoxFromLayers,
+  type EmittedSlideLayoutSpec,
+  type EmittedSlideMasterSpec,
+  type MastersEmitDriver,
+  type PptxRelationship,
 } from "@pptxdk/core/capability";
 import {
   createThemeContext,
@@ -472,7 +473,8 @@ function ooxmlAnchor(value: NonNullable<TextStyle["verticalAlign"]>): string {
 export function placeholderRefXml(ref: NativePlaceholderRef): string {
   const attrs: string[] = [];
   if (ref.explicitType !== false) attrs.push(`type="${xmlEscape(ref.type)}"`);
-  if (ref.sz !== undefined) attrs.push(`sz="${xmlEscape(ref.sz)}"`);
+  const size = ref.size;
+  if (size !== undefined) attrs.push(`sz="${xmlEscape(size)}"`);
   if (ref.orient !== undefined) attrs.push(`orient="${xmlEscape(ref.orient)}"`);
   if (ref.idx !== undefined) attrs.push(`idx="${ref.idx}"`);
   if (ref.hasCustomPrompt === true) attrs.push('hasCustomPrompt="1"');
@@ -510,6 +512,20 @@ function levelDefRPrXml(
     const resolved = themeContext.resolveColor(style.color);
     fillXml = `<a:solidFill>${resolvedColorXml(resolved)}</a:solidFill>`;
   }
+  let effectXml = "";
+  if (style.textShadow === "none") {
+    effectXml = "<a:effectLst/>";
+  } else if (style.textShadow !== undefined) {
+    const blur = pxToEmu(style.textShadow.blur ?? 4);
+    const dist = pxToEmu(style.textShadow.distance ?? 0);
+    const dir = Math.round(
+      ((((style.textShadow.angle ?? 90) % 360) + 360) % 360) * 60_000,
+    );
+    const shadowColor = themeContext.resolveColor(
+      style.textShadow.color ?? { color: "#000000", alpha: 0.35 },
+    );
+    effectXml = `<a:effectLst><a:outerShdw blurRad="${blur}" dist="${dist}" dir="${dir}" algn="ctr" rotWithShape="0">${resolvedColorXml(shadowColor)}</a:outerShdw></a:effectLst>`;
+  }
   let fontXml = "";
   if (style.fontFamily !== undefined) {
     const resolved = themeContext.resolveFont(style.fontFamily);
@@ -533,9 +549,15 @@ function levelDefRPrXml(
           : resolved.family;
     fontXml = `<a:latin typeface="${xmlEscape(latin)}"/><a:ea typeface="${xmlEscape(ea)}"/><a:cs typeface="${xmlEscape(cs)}"/>`;
   }
-  if (attrs.length === 0 && fillXml === "" && fontXml === "") return "";
+  if (
+    attrs.length === 0 &&
+    fillXml === "" &&
+    effectXml === "" &&
+    fontXml === ""
+  )
+    return "";
   const attrText = attrs.length === 0 ? "" : ` ${attrs.join(" ")}`;
-  const inner = `${fillXml}${fontXml}`;
+  const inner = `${fillXml}${effectXml}${fontXml}`;
   return inner === ""
     ? `<a:defRPr${attrText}/>`
     : `<a:defRPr${attrText}>${inner}</a:defRPr>`;
@@ -688,27 +710,29 @@ function placeholderShapesXml(
     .map(([key, spec], index) => {
       const id = 2 + index;
       const name = xmlEscape(spec.name ?? key);
+      const size = spec.size;
       const phXml = placeholderRefXml({
         type: spec.type,
         ...(spec.explicitType === undefined
           ? {}
           : { explicitType: spec.explicitType }),
         ...(spec.idx === undefined ? {} : { idx: spec.idx }),
-        ...(spec.sz === undefined ? {} : { sz: spec.sz }),
+        ...(size === undefined ? {} : { size }),
         ...(spec.orient === undefined ? {} : { orient: spec.orient }),
         ...(spec.hasCustomPrompt === undefined
           ? {}
           : { hasCustomPrompt: spec.hasCustomPrompt }),
       });
+      const resolvedBox = resolvePlaceholderBoxFromLayers([spec]);
       const hasBox =
-        spec.x !== undefined &&
-        spec.y !== undefined &&
-        spec.width !== undefined &&
-        spec.height !== undefined;
+        typeof resolvedBox.x === "number" &&
+        typeof resolvedBox.y === "number" &&
+        typeof resolvedBox.width === "number" &&
+        typeof resolvedBox.height === "number";
       const spPr =
         placeholderSpPrByKey?.[key] ??
         (hasBox
-          ? `<p:spPr><a:xfrm><a:off x="${pxToEmu(spec.x)}" y="${pxToEmu(spec.y)}"/><a:ext cx="${pxToEmu(spec.width)}" cy="${pxToEmu(spec.height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
+          ? `<p:spPr><a:xfrm><a:off x="${pxToEmu(resolvedBox.x as number)}" y="${pxToEmu(resolvedBox.y as number)}"/><a:ext cx="${pxToEmu(resolvedBox.width as number)}" cy="${pxToEmu(resolvedBox.height as number)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
           : "<p:spPr/>");
       const mergedLvl1 =
         styleAsLevel1(spec.style) === undefined &&

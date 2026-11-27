@@ -8,8 +8,8 @@ import {
   groupCapability,
   imageCapability,
   motionCapability,
+  motionSchedule,
   notesCapability,
-  observeMotion,
   preset,
   shapeCapability,
   targets,
@@ -55,8 +55,8 @@ import {
   type MorphKey,
   type ObjectResolveContext,
   type PaintContext,
-  type ResolvedObject,
-  type ResolvedSlide,
+  type ObjectResolution,
+  type SlideResolution,
   type SlideCapabilityModule,
   type SlideEmitContext,
   type SlideResolveContext,
@@ -87,9 +87,11 @@ function runJsxModules(modules: readonly CapabilityModule[]) {
       resolveOptionsFrom(options),
     );
     const emitted = emit(resolution, options);
+    const query = emittedBuildQuery(emitted.report, resolution);
     return {
       ...emitted,
-      query: emittedBuildQuery(emitted.report, resolution.query),
+      slides: query.slides,
+      slide: (id: string) => query.slide(id),
     };
   };
 }
@@ -99,9 +101,11 @@ function runDocModules(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode, options?: BuildOptions) => {
     const resolution = resolveWith(document, resolveOptionsFrom(options));
     const emitted = emit(resolution, options);
+    const query = emittedBuildQuery(emitted.report, resolution);
     return {
       ...emitted,
-      query: emittedBuildQuery(emitted.report, resolution.query),
+      slides: query.slides,
+      slide: (id: string) => query.slide(id),
     };
   };
 }
@@ -199,9 +203,42 @@ function createTrackedBadgeCapability() {
       }
       const rawLink = input.props["link"] as LinkTarget | undefined;
 
+      const rawStyle =
+        typeof input.props["style"] === "object" &&
+        input.props["style"] !== null &&
+        !Array.isArray(input.props["style"])
+          ? (input.props["style"] as Record<string, unknown>)
+          : {};
+      const hasPos =
+        typeof input.props["x"] === "number" ||
+        typeof input.props["y"] === "number";
       const contract = parseCapabilityLayoutContract({
         nativeKind: "sp",
-        props: input.props,
+        props: {
+          ...input.props,
+          style: {
+            ...(hasPos && rawStyle["position"] === undefined
+              ? { position: "absolute" }
+              : {}),
+            ...(typeof input.props["x"] === "number" &&
+            rawStyle["left"] === undefined
+              ? { left: input.props["x"] }
+              : {}),
+            ...(typeof input.props["y"] === "number" &&
+            rawStyle["top"] === undefined
+              ? { top: input.props["y"] }
+              : {}),
+            ...(typeof input.props["width"] === "number" &&
+            rawStyle["width"] === undefined
+              ? { width: input.props["width"] }
+              : {}),
+            ...(typeof input.props["height"] === "number" &&
+            rawStyle["height"] === undefined
+              ? { height: input.props["height"] }
+              : {}),
+            ...rawStyle,
+          },
+        },
         allowedStyleKeys: new Set<string>(layoutStyleKeys),
         path: context.path,
       });
@@ -211,9 +248,13 @@ function createTrackedBadgeCapability() {
       const declaredY =
         typeof input.props["y"] === "number" ? input.props["y"] : 0;
       const declaredWidth =
-        typeof contract.width === "number" ? contract.width : label.length * 10;
+        typeof contract.layoutStyle.width === "number"
+          ? contract.layoutStyle.width
+          : label.length * 10;
       const declaredHeight =
-        typeof contract.height === "number" ? contract.height : 36;
+        typeof contract.layoutStyle.height === "number"
+          ? contract.layoutStyle.height
+          : 36;
 
       // Encapsulated private state: never returned on contract or exposed to core.
       const privateLabel = label;
@@ -374,11 +415,8 @@ describe("bound object capability contract", () => {
     assert.ok(tracker.measureCalls.length >= 1);
     assert.equal(tracker.resolveCalls.length, 1);
 
-    const observed = jsxResult.query
-      .getSlide("jsx-first")
-      .get("jsx-badge")
-      .observe();
-    assert.equal(observed.authorId, "jsx-badge");
+    const observed = jsxResult.slide("jsx-first").get("jsx-badge");
+    assert.equal(observed.id, "jsx-badge");
     assert.equal(observed.text, "JSX-Flex");
     assert.deepEqual(observed.box, {
       x: 10,
@@ -416,7 +454,8 @@ describe("bound object capability contract", () => {
         assert(error instanceof BuildError);
         assert.ok(
           error.diagnostics.some(
-            (d) => d.code === "morph-object-name-conflict",
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "name-conflict",
           ),
         );
         return true;
@@ -456,12 +495,17 @@ describe("bound object capability contract", () => {
           <Shape
             id="hero-shape"
             geometry={preset("roundRect")}
-            x={80}
-            y={90}
-            width={260}
-            height={100}
-            fill="#2B579A"
-            style={{ fontFamily: notoFont, fontSize: 18, color: "#FFFFFF" }}
+            style={{
+              position: "absolute",
+              left: 80,
+              top: 90,
+              width: 260,
+              height: 100,
+              background: "#2B579A",
+              fontFamily: notoFont,
+              fontSize: 18,
+              color: "#FFFFFF",
+            }}
           >
             <P>
               <Span>Bound Shape</Span>
@@ -471,7 +515,12 @@ describe("bound object capability contract", () => {
       </Deck>,
     );
 
-    assert.deepEqual(result.report.diagnostics, []);
+    assert.deepEqual(result.slide("standalone-shape").get("hero-shape").box, {
+      x: 80,
+      y: 90,
+      width: 260,
+      height: 100,
+    });
     const validation = await validatePptx(result.pptx);
     assert.deepEqual(validation.errors, []);
     assert.equal(validation.slides[0]?.objects[0]?.text?.text, "Bound Shape");
@@ -505,14 +554,20 @@ describe("bound object capability contract", () => {
             morphKey={jsxMorph}
             link={{ id: "next" }}
             enter={fade()}
-            x={40}
-            y={40}
-            width={180}
-            height={70}
-            fill="#1D4ED8"
-            style={{ fontFamily: notoFont, fontSize: 16, color: "#FFFFFF" }}
-            text="Standalone"
-          />
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 180,
+              height: 70,
+              background: "#1D4ED8",
+              fontFamily: notoFont,
+              fontSize: 16,
+              color: "#FFFFFF",
+            }}
+          >
+            Standalone
+          </Shape>
           <Box
             id="flex-row"
             style={{
@@ -529,9 +584,9 @@ describe("bound object capability contract", () => {
           >
             <Shape
               id="flex-shape-a"
-              width={180}
-              fill="#0F766E"
               style={{
+                width: 180,
+                background: "#0F766E",
                 fontFamily: notoFont,
                 fontSize: 24,
                 color: "#FFFFFF",
@@ -545,9 +600,9 @@ describe("bound object capability contract", () => {
             </Shape>
             <Shape
               id="flex-shape-b"
-              width={160}
-              fill="#B45309"
               style={{
+                width: 160,
+                background: "#B45309",
                 fontFamily: notoFont,
                 fontSize: 14,
                 color: "#FFFFFF",
@@ -574,38 +629,44 @@ describe("bound object capability contract", () => {
           >
             <Shape
               id="grid-shape-1"
-              fill="#334155"
               style={{
+                background: "#334155",
                 fontFamily: notoFont,
                 fontSize: 14,
                 color: "#FFFFFF",
                 padding: 8,
               }}
-              text="Grid Cell 1"
-            />
+            >
+              Grid Cell 1
+            </Shape>
             <Shape
               id="grid-shape-2"
-              fill="#475569"
               style={{
+                background: "#475569",
                 fontFamily: notoFont,
                 fontSize: 14,
                 color: "#FFFFFF",
                 padding: 8,
               }}
-              text="Grid Cell 2"
-            />
+            >
+              Grid Cell 2
+            </Shape>
           </Box>
           <Group id="grouped-shapes">
             <Shape
               id="grouped-rect"
-              x={600}
-              y={140}
-              width={140}
-              height={80}
-              fill="#7C3AED"
-              style={{ fontFamily: notoFont }}
-              text="In Group"
-            />
+              style={{
+                position: "absolute",
+                left: 600,
+                top: 140,
+                width: 140,
+                height: 80,
+                background: "#7C3AED",
+                fontFamily: notoFont,
+              }}
+            >
+              In Group
+            </Shape>
           </Group>
         </Slide>
         <Slide
@@ -616,14 +677,18 @@ describe("bound object capability contract", () => {
             id="standalone-next"
             geometry="hexagon"
             morphKey={jsxMorph}
-            x={300}
-            y={80}
-            width={220}
-            height={90}
-            fill="#1D4ED8"
-            style={{ fontFamily: notoFont }}
-            text="Standalone"
-          />
+            style={{
+              position: "absolute",
+              left: 300,
+              top: 80,
+              width: 220,
+              height: 90,
+              background: "#1D4ED8",
+              fontFamily: notoFont,
+            }}
+          >
+            Standalone
+          </Shape>
         </Slide>
       </Deck>,
     );
@@ -636,14 +701,18 @@ describe("bound object capability contract", () => {
       morphKey: impMorph,
       link: { id: "next" },
       enter: fade(),
-      x: 40,
-      y: 40,
-      width: 180,
-      height: 70,
-      fill: "#1D4ED8",
-      style: { fontFamily: impNotoFont, fontSize: 16, color: "#FFFFFF" },
-      text: "Standalone",
-    });
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 40,
+        width: 180,
+        height: 70,
+        background: "#1D4ED8",
+        fontFamily: impNotoFont,
+        fontSize: 16,
+        color: "#FFFFFF",
+      },
+    }).content("Standalone");
     const impFlexRow = impBox({
       id: "flex-row",
       style: {
@@ -660,28 +729,28 @@ describe("bound object capability contract", () => {
     }).append(
       impShape({
         id: "flex-shape-a",
-        width: 180,
-        fill: "#0F766E",
         style: {
+          width: 180,
+          background: "#0F766E",
           fontFamily: impNotoFont,
           fontSize: 24,
           color: "#FFFFFF",
           verticalAlign: "top",
           padding: 8,
         },
-      }).append(impParagraph().append(impSpan("Baseline A"))),
+      }).content(impParagraph().append(impSpan("Baseline A"))),
       impShape({
         id: "flex-shape-b",
-        width: 160,
-        fill: "#B45309",
         style: {
+          width: 160,
+          background: "#B45309",
           fontFamily: impNotoFont,
           fontSize: 14,
           color: "#FFFFFF",
           verticalAlign: "top",
           padding: 8,
         },
-      }).append(impParagraph().append(impSpan("Baseline B"))),
+      }).content(impParagraph().append(impSpan("Baseline B"))),
     );
     const impGridBox = impBox({
       id: "grid-box",
@@ -697,38 +766,38 @@ describe("bound object capability contract", () => {
     }).append(
       impShape({
         id: "grid-shape-1",
-        fill: "#334155",
         style: {
+          background: "#334155",
           fontFamily: impNotoFont,
           fontSize: 14,
           color: "#FFFFFF",
           padding: 8,
         },
-        text: "Grid Cell 1",
-      }),
+      }).content("Grid Cell 1"),
       impShape({
         id: "grid-shape-2",
-        fill: "#475569",
         style: {
+          background: "#475569",
           fontFamily: impNotoFont,
           fontSize: 14,
           color: "#FFFFFF",
           padding: 8,
         },
-        text: "Grid Cell 2",
-      }),
+      }).content("Grid Cell 2"),
     );
     const impGrouped = impGroup({ id: "grouped-shapes" }).append(
       impShape({
         id: "grouped-rect",
-        x: 600,
-        y: 140,
-        width: 140,
-        height: 80,
-        fill: "#7C3AED",
-        style: { fontFamily: impNotoFont },
-        text: "In Group",
-      }),
+        style: {
+          position: "absolute",
+          left: 600,
+          top: 140,
+          width: 140,
+          height: 80,
+          background: "#7C3AED",
+          fontFamily: impNotoFont,
+        },
+      }).content("In Group"),
     );
     impSlideMain.append(impStandalone, impFlexRow, impGridBox, impGrouped);
     const impSlideNext = impSlide({
@@ -739,34 +808,30 @@ describe("bound object capability contract", () => {
         id: "standalone-next",
         geometry: "hexagon",
         morphKey: impMorph,
-        x: 300,
-        y: 80,
-        width: 220,
-        height: 90,
-        fill: "#1D4ED8",
-        style: { fontFamily: impNotoFont },
-        text: "Standalone",
-      }),
+        style: {
+          position: "absolute",
+          left: 300,
+          top: 80,
+          width: 220,
+          height: 90,
+          background: "#1D4ED8",
+          fontFamily: impNotoFont,
+        },
+      }).content("Standalone"),
     );
     impDeckNode.append(impSlideMain, impSlideNext);
     const impResult = await docBuild(impDeckNode);
 
     for (const result of [jsxResult, impResult]) {
-      assert.deepEqual(result.report.diagnostics, []);
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
       assert.equal(validation.slides[0]?.objects.length, 6);
       assert.equal(
-        result.query.getSlide("main").get("standalone").observe().objects[0]
-          ?.link,
+        result.slide("main").get("standalone").objects[0]?.link,
         "slide:next",
       );
       assert.equal(
-        result.query
-          .getSlide("main")
-          .get("grouped-shapes")
-          .get("grouped-rect")
-          .observe().text,
+        result.slide("main").get("grouped-shapes").get("grouped-rect").text,
         "In Group",
       );
       const slide1Xml = strFromU8(
@@ -776,26 +841,22 @@ describe("bound object capability contract", () => {
       assert.match(slide1Xml, /<a:prstGeom prst="hexagon">/u);
     }
 
-    const jsxFlexA = jsxResult.query
-      .getSlide("main")
+    const jsxFlexA = jsxResult
+      .slide("main")
       .get("flex-row")
-      .get("flex-shape-a")
-      .observe().box!;
-    const jsxFlexB = jsxResult.query
-      .getSlide("main")
+      .get("flex-shape-a").box!;
+    const jsxFlexB = jsxResult
+      .slide("main")
       .get("flex-row")
-      .get("flex-shape-b")
-      .observe().box!;
-    const impFlexA = impResult.query
-      .getSlide("main")
+      .get("flex-shape-b").box!;
+    const impFlexA = impResult
+      .slide("main")
       .get("flex-row")
-      .get("flex-shape-a")
-      .observe().box!;
-    const impFlexB = impResult.query
-      .getSlide("main")
+      .get("flex-shape-a").box!;
+    const impFlexB = impResult
+      .slide("main")
       .get("flex-row")
-      .get("flex-shape-b")
-      .observe().box!;
+      .get("flex-shape-b").box!;
     assert.deepEqual(jsxFlexA, impFlexA);
     assert.deepEqual(jsxFlexB, impFlexB);
     assert.ok(impFlexB.y > impFlexA.y);
@@ -805,13 +866,15 @@ describe("bound object capability contract", () => {
     const node = impShape({
       id: "mutable-shape",
       geometry: "rect",
-      x: 20,
-      y: 30,
-      width: 140,
-      height: 60,
-      fill: "#112233",
-      text: "Version 1",
-    });
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 30,
+        width: 140,
+        height: 60,
+        background: "#112233",
+      },
+    }).content("Version 1");
     const deckNode = impDeck({ width: 960, height: 540 }).append(
       impSlide({ id: "s1" }).append(node),
     );
@@ -819,12 +882,10 @@ describe("bound object capability contract", () => {
 
     const first = await docBuild(deckNode);
 
-    node.set({
-      geometry: "ellipse",
-      width: 220,
-      fill: "#445566",
-      text: "Version 2",
-    });
+    node
+      .set({ geometry: "ellipse" })
+      .style({ width: 220, background: "#445566" })
+      .content("Version 2");
 
     const second = await docBuild(deckNode);
 
@@ -832,19 +893,13 @@ describe("bound object capability contract", () => {
     const firstFile = await validatePptx(first.pptx);
     assert.deepEqual(firstFile.errors, []);
     assert.equal(firstFile.slides[0]?.objects[0]?.text?.text, "Version 1");
-    assert.equal(
-      first.query.getSlide("s1").get("mutable-shape").observe().box?.width,
-      140,
-    );
+    assert.equal(first.slide("s1").get("mutable-shape").box?.width, 140);
 
     // Second build outputs reflect Version 2
     const secondFile = await validatePptx(second.pptx);
     assert.deepEqual(secondFile.errors, []);
     assert.equal(secondFile.slides[0]?.objects[0]?.text?.text, "Version 2");
-    assert.equal(
-      second.query.getSlide("s1").get("mutable-shape").observe().box?.width,
-      220,
-    );
+    assert.equal(second.slide("s1").get("mutable-shape").box?.width, 220);
   });
 
   it("validates Shape link declarations in bind and resolves valid links in core", async () => {
@@ -855,10 +910,13 @@ describe("bound object capability contract", () => {
           <Slide id="bad-link-shape">
             <Shape
               id="malformed-link"
-              x={10}
-              y={10}
-              width={100}
-              height={40}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 40,
+              }}
               link={"not-an-object" as unknown as LinkTarget}
             />
           </Slide>
@@ -866,7 +924,11 @@ describe("bound object capability contract", () => {
       ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(error.diagnostics.some((d) => d.code === "invalid-link"));
+        assert.ok(
+          error.diagnostics.some(
+            (d) => d.code === "invalid-prop" && d.field === "link",
+          ),
+        );
         return true;
       },
     );
@@ -877,10 +939,13 @@ describe("bound object capability contract", () => {
           <Slide id="bad-url-shape">
             <Shape
               id="malformed-url"
-              x={10}
-              y={10}
-              width={100}
-              height={40}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 40,
+              }}
               link={{ url: "not a valid url" }}
             />
           </Slide>
@@ -888,7 +953,11 @@ describe("bound object capability contract", () => {
       ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(error.diagnostics.some((d) => d.code === "invalid-link"));
+        assert.ok(
+          error.diagnostics.some(
+            (d) => d.code === "invalid-prop" && d.field === "link",
+          ),
+        );
         return true;
       },
     );
@@ -959,19 +1028,19 @@ describe("bound object capability contract", () => {
       ),
     );
     const result = await customBuild(doc);
-    const grid = result.query.getSlide("generic-parts").get("grid");
-    assert.equal(grid.observe().text, "Alpha\tBeta");
+    const grid = result.slide("generic-parts").get("grid");
+    assert.equal(grid.text, "Alpha\tBeta");
     const band = grid.get("band-1");
-    assert.equal(band.observe().text, "Alpha\tBeta");
-    assert.deepEqual(band.observe().objects, []);
+    assert.equal(band.text, "Alpha\tBeta");
+    assert.deepEqual(band.objects, []);
     assert.equal(band.children().length, 2);
-    assert.deepEqual(band.get("slot-a").observe().box, {
+    assert.deepEqual(band.get("slot-a").box, {
       x: 10,
       y: 20,
       width: 60,
       height: 20,
     });
-    assert.equal(band.get("slot-b").observe().text, "Beta");
+    assert.equal(band.get("slot-b").text, "Beta");
   });
 
   it("migrates boxCapability to BoundObjectCapabilityModule with container role", async () => {
@@ -983,19 +1052,20 @@ describe("bound object capability contract", () => {
             id="transparent-card"
             style={{ display: "flex", width: 320, padding: 12 }}
           >
-            <Shape id="child-shape" width={120} height={60} fill="#1D4ED8" />
+            <Shape
+              id="child-shape"
+              style={{ width: 120, height: 60, background: "#1D4ED8" }}
+            />
           </Box>
         </Slide>
       </Deck>,
     );
 
-    assert.deepEqual(result.report.diagnostics, []);
     assert.equal(result.report.slides[0]?.objects.length, 1);
     assert.equal(result.report.slides[0]?.layouts?.length, 1);
-    const observed = result.query
-      .getSlide("box-container-slide")
-      .get("transparent-card")
-      .observe();
+    const observed = result
+      .slide("box-container-slide")
+      .get("transparent-card");
     assert.deepEqual(observed.box, { x: 0, y: 0, width: 320, height: 84 });
     assert.equal(observed.objects.length, 1);
     assert.equal(observed.objects[0]?.authorId, "child-shape");
@@ -1006,7 +1076,7 @@ describe("bound object capability contract", () => {
         <Deck width={960} height={540}>
           <Slide id="missing-box">
             <Box id="cropped-box" style={{ width: 100, height: 40 }}>
-              <Shape width={40} height={20} />
+              <Shape style={{ width: 40, height: 20 }} />
             </Box>
           </Slide>
         </Deck>,
@@ -1067,7 +1137,6 @@ describe("bound object capability contract", () => {
           theme: derivedTheme,
           emitsObject,
           propagatesBaseline: true,
-          checksCanvasOverflow: true,
         };
         const morphKey = input.props["morphKey"] as MorphKey | undefined;
         const link = input.props["link"] as LinkTarget | undefined;
@@ -1143,9 +1212,12 @@ describe("bound object capability contract", () => {
             >
               <Shape
                 id="panel-shape-a"
-                width={100}
-                fill="panelAccent"
-                style={{ verticalAlign: "top", padding: 4 }}
+                style={{
+                  width: 100,
+                  background: "panelAccent",
+                  verticalAlign: "top",
+                  padding: 4,
+                }}
               >
                 <P>
                   <Span>Row A</Span>
@@ -1154,9 +1226,13 @@ describe("bound object capability contract", () => {
             </CustomPanel>
             <Shape
               id="panel-shape-b"
-              width={100}
-              fill="#0F766E"
-              style={{ fontSize: 12, verticalAlign: "top", padding: 4 }}
+              style={{
+                width: 100,
+                background: "#0F766E",
+                fontSize: 12,
+                verticalAlign: "top",
+                padding: 4,
+              }}
             >
               <P>
                 <Span>Row B</Span>
@@ -1177,39 +1253,33 @@ describe("bound object capability contract", () => {
       </Deck>,
     );
 
-    assert.equal(
-      valid.report.diagnostics.filter((d) => d.severity === "error").length,
-      0,
-    );
+    const overflowPanelBox = valid
+      .slide("panel-slide")
+      .get("overflow-panel").box;
+    assert.deepEqual(overflowPanelBox, {
+      x: 350,
+      y: 10,
+      width: 100,
+      height: 40,
+    });
     assert.ok(
-      valid.report.diagnostics.some(
-        (w) =>
-          w.severity === "warning" &&
-          w.code === "overflow" &&
-          w.path.includes("custom-panel[overflow-panel]"),
-      ),
+      overflowPanelBox.x + overflowPanelBox.width >
+        valid.report.dimensions.width,
     );
-    const outerObserved = valid.query
-      .getSlide("panel-slide")
-      .get("outer-panel")
-      .observe();
+    const outerObserved = valid.slide("panel-slide").get("outer-panel");
     assert.equal(outerObserved.objects[0]?.kind, "shape");
-    const innerObserved = valid.query
-      .getSlide("panel-slide")
+    const innerObserved = valid
+      .slide("panel-slide")
       .get("outer-panel")
-      .get("inner-transparent-panel")
-      .observe();
+      .get("inner-transparent-panel");
     // Transparent container has layout observation box, and its native objects are its descendants.
     assert.ok(innerObserved.box !== undefined);
     assert.equal(innerObserved.objects.length, 1);
     assert.equal(innerObserved.objects[0]?.authorId, "panel-shape-a");
     // Baseline shifted smaller font shape downward to align with larger font shape.
     assert.ok(
-      valid.query
-        .getSlide("panel-slide")
-        .get("outer-panel")
-        .get("panel-shape-b")
-        .observe().box!.y > innerObserved.objects[0].box!.y,
+      valid.slide("panel-slide").get("outer-panel").get("panel-shape-b").box!
+        .y > innerObserved.objects[0].box!.y,
     );
     const unzipped = unzipSync(valid.pptx);
     assert.match(strFromU8(unzipped["ppt/slides/slide1.xml"]!), /2563EB/u);
@@ -1229,7 +1299,7 @@ describe("bound object capability contract", () => {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(
-          error.diagnostics.some((d) => d.code === "link-needs-object"),
+          error.diagnostics.some((d) => d.code === "invalid-structure"),
         );
         return true;
       },
@@ -1248,7 +1318,10 @@ describe("bound object capability contract", () => {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(
-          error.diagnostics.some((d) => d.code === "morph-needs-object"),
+          error.diagnostics.some(
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "needs-object",
+          ),
         );
         return true;
       },
@@ -1332,7 +1405,18 @@ describe("bound object capability contract", () => {
       impSlide({ id: "annotator-slide" }).append(
         new CommonContainer("annotator", "transparent-annotator", {
           style: { width: 100, height: 40 },
-        }).append(impShape({ id: "child", x: 0, y: 0, width: 20, height: 20 })),
+        }).append(
+          impShape({
+            id: "child",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            },
+          }),
+        ),
       ),
     );
     const result = await customBuild(doc);
@@ -1366,25 +1450,31 @@ describe("bound object capability contract", () => {
     const tileModule: BoundObjectCapabilityModule = {
       declaration: "metric-tile",
       bind(input, context) {
-        // Deliberately omit props.width/height/x/y; supply them strictly on contract.
+        // Deliberately omit raw style.left/top/width/height on host props; supply them strictly via contract.layoutStyle.
+        const rawStyle =
+          typeof input.props["style"] === "object" &&
+          input.props["style"] !== null &&
+          !Array.isArray(input.props["style"])
+            ? (input.props["style"] as Record<string, unknown>)
+            : {};
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
           props: {
-            ...(input.props["posX"] === undefined
-              ? {}
-              : { x: input.props["posX"] }),
-            ...(input.props["posY"] === undefined
-              ? {}
-              : { y: input.props["posY"] }),
-            ...(input.props["spanW"] === undefined
-              ? {}
-              : { width: input.props["spanW"] }),
-            ...(input.props["spanH"] === undefined
-              ? {}
-              : { height: input.props["spanH"] }),
-            ...(input.props["style"] === undefined
-              ? {}
-              : { style: input.props["style"] }),
+            style: {
+              ...rawStyle,
+              ...(input.props["posX"] === undefined
+                ? {}
+                : { left: input.props["posX"] }),
+              ...(input.props["posY"] === undefined
+                ? {}
+                : { top: input.props["posY"] }),
+              ...(input.props["spanW"] === undefined
+                ? {}
+                : { width: input.props["spanW"] }),
+              ...(input.props["spanH"] === undefined
+                ? {}
+                : { height: input.props["spanH"] }),
+            },
           },
           allowedStyleKeys: new Set<string>(layoutStyleKeys),
           path: context.path,
@@ -1396,9 +1486,13 @@ describe("bound object capability contract", () => {
         const minW =
           typeof input.props["minW"] === "number" ? input.props["minW"] : 40;
         const naturalW =
-          typeof contract.width === "number" ? contract.width : 80;
+          typeof contract.layoutStyle.width === "number"
+            ? contract.layoutStyle.width
+            : 80;
         const naturalH =
-          typeof contract.height === "number" ? contract.height : 30;
+          typeof contract.layoutStyle.height === "number"
+            ? contract.layoutStyle.height
+            : 30;
         return {
           contract,
           measureLayout() {
@@ -1450,7 +1544,7 @@ describe("bound object capability contract", () => {
               gap: 10,
             }}
           >
-            {/* spanW=60 clamps minContentWidth=100 down to 60 via contract.width */}
+            {/* spanW=60 clamps minContentWidth=100 down to 60 via contract.layoutStyle.width */}
             <MetricTile
               id="clamped-tile"
               spanW={60}
@@ -1478,20 +1572,15 @@ describe("bound object capability contract", () => {
       </Deck>,
     );
 
-    const clamped = result.query
-      .getSlide("contract-only-layout")
+    const clamped = result
+      .slide("contract-only-layout")
       .get("narrow-row")
-      .get("clamped-tile")
-      .observe().box!;
-    const shifted = result.query
-      .getSlide("contract-only-layout")
+      .get("clamped-tile").box!;
+    const shifted = result
+      .slide("contract-only-layout")
       .get("narrow-row")
-      .get("shifted-tile")
-      .observe().box!;
-    const abs = result.query
-      .getSlide("contract-only-layout")
-      .get("abs-tile")
-      .observe().box!;
+      .get("shifted-tile").box!;
+    const abs = result.slide("contract-only-layout").get("abs-tile").box!;
 
     // Total width 140, gap 10 -> 130 available; clamped-tile min is min(100, 60)=60, shifted-tile min is 80 -> 60 + 80 > 130 so flexShrink keeps at least 60/80 or proportional shrink above contract clamp.
     assert.ok(clamped.width >= 60);
@@ -1499,7 +1588,7 @@ describe("bound object capability contract", () => {
     // Baseline 28 vs 14 shifts shifted-tile down by 14px.
     assert.equal(clamped.y, 20);
     assert.equal(shifted.y, 34);
-    // Absolute position comes from contract.x / contract.y (posX / posY).
+    // Absolute position comes from contract.layoutStyle.left / top (posX / posY).
     assert.deepEqual(abs, { x: 220, y: 40, width: 90, height: 50 });
   });
 
@@ -1509,26 +1598,35 @@ describe("bound object capability contract", () => {
       <Deck width={960} height={540} theme={{ colors: { ink: "#111111" } }}>
         <Slide id="group-bound-slide">
           <Group id="loose-group" theme={{ colors: { ink: "#2563EB" } }}>
-            <Shape id="m1" x={10} y={20} width={50} height={30} fill="ink" />
+            <Shape
+              id="m1"
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 20,
+                width: 50,
+                height: 30,
+                background: "ink",
+              }}
+            />
             <Shape
               id="m2"
-              x={70}
-              y={30}
-              width={40}
-              height={40}
-              fill="#0F766E"
+              style={{
+                position: "absolute",
+                left: 70,
+                top: 30,
+                width: 40,
+                height: 40,
+                background: "#0F766E",
+              }}
             />
           </Group>
         </Slide>
       </Deck>,
     );
 
-    assert.deepEqual(result.report.diagnostics, []);
     assert.equal(result.report.slides[0]?.layouts, undefined);
-    const observed = result.query
-      .getSlide("group-bound-slide")
-      .get("loose-group")
-      .observe();
+    const observed = result.slide("group-bound-slide").get("loose-group");
     assert.deepEqual(observed.box, { x: 10, y: 20, width: 100, height: 50 });
     assert.deepEqual(
       observed.objects.map((object) => object.authorId),
@@ -1541,7 +1639,15 @@ describe("bound object capability contract", () => {
         <Deck width={960} height={540}>
           <Slide id="missing-group">
             <Group id="cropped-group">
-              <Shape x={0} y={0} width={40} height={20} />
+              <Shape
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 40,
+                  height: 20,
+                }}
+              />
             </Group>
           </Slide>
         </Deck>,
@@ -1556,7 +1662,7 @@ describe("bound object capability contract", () => {
     );
   });
 
-  it("coordinates generic non-Group BoundContainerCollaboration modules with when-styled layout, member composition, and continuity restrictions", async () => {
+  it("coordinates generic non-Group BoundContainerCollaboration modules with member composition and continuity restrictions", async () => {
     type ClusterProps = {
       readonly id?: string;
       readonly name?: string;
@@ -1606,12 +1712,10 @@ describe("bound object capability contract", () => {
           children: input.children,
           theme: derivedTheme,
           emitsObject: true,
-          layoutMode: "when-styled",
           childComposition: "members",
           restrictsMemberContinuity: true,
           observesLayout: false,
           propagatesBaseline: false,
-          checksCanvasOverflow: false,
         };
         return {
           contract,
@@ -1638,12 +1742,16 @@ describe("bound object capability contract", () => {
             const y = Math.min(...boxes.map((b) => b.y));
             const right = Math.max(...boxes.map((b) => b.x + b.width));
             const bottom = Math.max(...boxes.map((b) => b.y + b.height));
-            const box = resolveContext.layoutBox ?? {
-              x,
-              y,
-              width: right - x,
-              height: bottom - y,
-            };
+            const box =
+              contract.layoutStyle.width !== undefined &&
+              resolveContext.layoutBox !== undefined
+                ? resolveContext.layoutBox
+                : {
+                    x,
+                    y,
+                    width: right - x,
+                    height: bottom - y,
+                  };
             const name =
               resolveContext.morphName ??
               requestedName ??
@@ -1681,14 +1789,27 @@ describe("bound object capability contract", () => {
             id="loose-cluster"
             theme={{ colors: { tone: "#DC2626" } }}
           >
-            <Shape id="c1" x={15} y={25} width={40} height={30} fill="tone" />
+            <Shape
+              id="c1"
+              style={{
+                position: "absolute",
+                left: 15,
+                top: 25,
+                width: 40,
+                height: 30,
+                background: "tone",
+              }}
+            />
             <Shape
               id="c2"
-              x={75}
-              y={40}
-              width={30}
-              height={25}
-              fill="#0F766E"
+              style={{
+                position: "absolute",
+                left: 75,
+                top: 40,
+                width: 30,
+                height: 25,
+                background: "#0F766E",
+              }}
             />
           </CustomCluster>
           <Box
@@ -1707,29 +1828,30 @@ describe("bound object capability contract", () => {
               morphKey={clusterMorph}
               style={{ display: "flex", width: 120, height: 60 }}
             >
-              <Shape id="lc1" width={50} height={40} fill="#1D4ED8" />
+              <Shape
+                id="lc1"
+                style={{ width: 50, height: 40, background: "#1D4ED8" }}
+              />
             </CustomCluster>
-            <Shape id="after-cluster" width={40} height={40} fill="#F59E0B" />
+            <Shape
+              id="after-cluster"
+              style={{ width: 40, height: 40, background: "#F59E0B" }}
+            />
           </Box>
         </Slide>
       </Deck>,
     );
 
-    assert.deepEqual(valid.report.diagnostics, []);
     assert.deepEqual((await validatePptx(valid.pptx)).errors, []);
-    const looseObs = valid.query
-      .getSlide("cluster-slide")
-      .get("loose-cluster")
-      .observe();
+    const looseObs = valid.slide("cluster-slide").get("loose-cluster");
     assert.deepEqual(looseObs.box, { x: 15, y: 25, width: 90, height: 40 });
     assert.equal(looseObs.objects[0]?.kind, "group");
     assert.equal(looseObs.objects[0]?.members?.length, 2);
 
-    const afterObs = valid.query
-      .getSlide("cluster-slide")
+    const afterObs = valid
+      .slide("cluster-slide")
       .get("cluster-host")
-      .get("after-cluster")
-      .observe();
+      .get("after-cluster");
     assert.deepEqual(afterObs.box, { x: 152, y: 120, width: 40, height: 40 });
     const unzipped = unzipSync(valid.pptx);
     assert.match(strFromU8(unzipped["ppt/slides/slide1.xml"]!), /DC2626/u);
@@ -1743,10 +1865,13 @@ describe("bound object capability contract", () => {
               <Shape
                 id="bad-member"
                 morphKey={clusterMorph}
-                x={0}
-                y={0}
-                width={30}
-                height={30}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 30,
+                  height: 30,
+                }}
               />
             </CustomCluster>
           </Slide>
@@ -1755,7 +1880,10 @@ describe("bound object capability contract", () => {
       (error: unknown) => {
         assert(error instanceof BuildError);
         assert.ok(
-          error.diagnostics.some((d) => d.code === "morph-inside-group"),
+          error.diagnostics.some(
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "inside-group",
+          ),
         );
         return true;
       },
@@ -1775,12 +1903,6 @@ describe("bound object capability contract", () => {
     const newTileModule: BoundObjectCapabilityModule = {
       declaration: "new-tile",
       bind(input, context) {
-        const contract = parseCapabilityLayoutContract({
-          nativeKind: "sp",
-          props: input.props,
-          allowedStyleKeys: new Set<string>(layoutStyleKeys),
-          path: context.path,
-        });
         const label =
           typeof input.props["label"] === "string"
             ? input.props["label"]
@@ -1797,6 +1919,28 @@ describe("bound object capability contract", () => {
               ? input.props["height"]
               : 40,
         };
+        const rawStyle =
+          typeof input.props["style"] === "object" &&
+          input.props["style"] !== null &&
+          !Array.isArray(input.props["style"])
+            ? (input.props["style"] as Record<string, unknown>)
+            : {};
+        const contract = parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: {
+            ...input.props,
+            style: {
+              position: "absolute",
+              left: box.x,
+              top: box.y,
+              width: box.width,
+              height: box.height,
+              ...rawStyle,
+            },
+          },
+          allowedStyleKeys: new Set<string>(layoutStyleKeys),
+          path: context.path,
+        });
         const rotate =
           typeof input.props["rotate"] === "number" ? input.props["rotate"] : 0;
         const link = input.props["link"] as LinkTarget | undefined;
@@ -1805,7 +1949,7 @@ describe("bound object capability contract", () => {
         return {
           contract,
           ...(link === undefined ? {} : { native: { link } }),
-          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          resolve(resolveContext: ObjectResolveContext): ObjectResolution {
             resolveKeysSeen.push(Object.keys(resolveContext));
             const resolvedBox = resolveContext.layoutBox ?? box;
             return {
@@ -1893,14 +2037,13 @@ describe("bound object capability contract", () => {
           container: {
             children: input.children,
             emitsObject: true,
-            layoutMode: "when-styled",
             childComposition: "members",
             restrictsMemberContinuity: true,
             observesLayout: false,
             propagatesBaseline: false,
             checksCanvasOverflow: false,
           },
-          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          resolve(resolveContext: ObjectResolveContext): ObjectResolution {
             const members = resolveContext.resolveChildren(input.children);
             const boxes = members.objects
               .map((m) => m.box)
@@ -1946,7 +2089,7 @@ describe("bound object capability contract", () => {
       bindSlide(input) {
         const enabled = input.props["slideMeta"] === true;
         return {
-          resolveSlide(resolveContext: SlideResolveContext): ResolvedSlide {
+          resolveSlide(resolveContext: SlideResolveContext): SlideResolution {
             assert.equal("registerSharedPart" in resolveContext, false);
             assert.equal("registerPackagePart" in resolveContext, false);
             assert.equal("registerResource" in resolveContext, false);
@@ -1983,7 +2126,7 @@ describe("bound object capability contract", () => {
         });
         return {
           contract,
-          resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+          resolve(resolveContext: ObjectResolveContext): ObjectResolution {
             const box = { x: 10, y: 10, width: 50, height: 25 };
             return {
               observation: {
@@ -2040,21 +2183,27 @@ describe("bound object capability contract", () => {
     });
     const oldShape = impShape({
       id: "old-s1",
-      x: 200,
-      y: 30,
-      width: 100,
-      height: 50,
-      fill: "#16A34A",
+      style: {
+        position: "absolute",
+        left: 200,
+        top: 30,
+        width: 100,
+        height: 50,
+        background: "#16A34A",
+      },
       link: { url: "https://example.com" },
       enter: fade(),
     });
     const oldImage = impImage({
       id: "old-img",
       src: new Uint8Array(png1x1),
-      x: 320,
-      y: 30,
-      width: 40,
-      height: 40,
+      style: {
+        position: "absolute",
+        left: 320,
+        top: 30,
+        width: 40,
+        height: 40,
+      },
     });
     const mixedCluster = new CommonContainer("new-cluster", "new-cluster", {
       id: "mixed-cluster",
@@ -2062,11 +2211,14 @@ describe("bound object capability contract", () => {
     mixedCluster.append(
       impShape({
         id: "cluster-old",
-        x: 40,
-        y: 120,
-        width: 60,
-        height: 40,
-        fill: "#DC2626",
+        style: {
+          position: "absolute",
+          left: 40,
+          top: 120,
+          width: 60,
+          height: 40,
+          background: "#DC2626",
+        },
       }),
       new CommonNode("new-tile", "new-tile", {
         id: "cluster-new",
@@ -2098,11 +2250,14 @@ describe("bound object capability contract", () => {
     slide2.append(
       impShape({
         id: "s2-shape",
-        x: 20,
-        y: 20,
-        width: 80,
-        height: 40,
-        fill: "#0EA5E9",
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 20,
+          width: 80,
+          height: 40,
+          background: "#0EA5E9",
+        },
       }),
     );
     deckNode.append(slide1, slide2);
@@ -2111,7 +2266,7 @@ describe("bound object capability contract", () => {
     const resolution = resolve({ children: [deckNode] });
 
     assert.equal(Object.isFrozen(resolution), true);
-    assert.deepEqual(Object.keys(resolution), ["report", "query"]);
+    assert.deepEqual(Object.keys(resolution), ["report", "slides", "slide"]);
     assert.equal(Object.getOwnPropertySymbols(resolution).length, 0);
 
     // Neither emit nor paint ran during resolve.
@@ -2130,10 +2285,13 @@ describe("bound object capability contract", () => {
     slide2.append(
       impShape({
         id: "mutated-after-resolve",
-        x: 100,
-        y: 100,
-        width: 50,
-        height: 50,
+        style: {
+          position: "absolute",
+          left: 100,
+          top: 100,
+          width: 50,
+          height: 50,
+        },
       }),
     );
 
@@ -2142,14 +2300,14 @@ describe("bound object capability contract", () => {
     assert.equal(emitCalls, 0);
     assert.equal(paintCalls, 3);
     assert.equal(painted.pages.length, 2);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
     const rotatedNode = painted.pages[0]?.nodes.find(
       (n) => n.authorId === "nt1",
     );
-    assert.ok(rotatedNode?.screenBox !== undefined);
-    assert.ok(rotatedNode.screenBox.width > 120);
-    assert.ok(rotatedNode.screenBox.height > 40);
+    assert.ok(rotatedNode?.bounds !== undefined);
+    assert.ok(rotatedNode.bounds.width > 120);
+    assert.ok(rotatedNode.bounds.height > 40);
     assert.equal(painted.pages[1]?.nodes.length, 1);
 
     // Emit twice on the same Resolution: idempotent, no rId/field-id/resource conflicts.
@@ -2158,10 +2316,7 @@ describe("bound object capability contract", () => {
     assert.deepEqual((await validatePptx(emitted1.pptx)).errors, []);
     assert.deepEqual((await validatePptx(emitted2.pptx)).errors, []);
     assert.equal(emitted1.report.slides.length, 2);
-    assert.equal(
-      resolution.query.getSlide("mixed-2").observe().objects.length,
-      1,
-    );
+    assert.equal(resolution.slide("mixed-2").objects.length, 1);
     const mediaParts = Object.keys(unzipSync(emitted1.pptx)).filter((part) =>
       /^ppt\/media\/resource\d+\.png$/u.test(part),
     );
@@ -2170,7 +2325,7 @@ describe("bound object capability contract", () => {
       new Set(allocatedFieldIds.slice(0, 3)).size,
       allocatedFieldIds.slice(0, 3).length,
     );
-    assert.ok(observeMotion(emitted1.report.slides[0]!) !== undefined);
+    assert.ok(motionSchedule(emitted1.report.slides[0]!) !== undefined);
     assert.deepEqual(
       emitted1.report.slides[0]?.capabilities?.["new-slide-meta"],
       {
@@ -2185,9 +2340,7 @@ describe("bound object capability contract", () => {
       () => emit(baselineResolution, { target: targets.baselineOnly }),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(
-          error.diagnostics.some((d) => d.code === "forbidden-mechanism"),
-        );
+        assert.ok(error.diagnostics.some((d) => d.code === "target-violation"));
         return true;
       },
     );
@@ -2204,9 +2357,9 @@ describe("bound object capability contract", () => {
     assert.equal(noPaintPainted.pages[0]?.svg, undefined);
     assert.equal(noPaintPainted.pages[0]?.png, undefined);
     assert.ok(
-      noPaintPainted.pages[0]?.diagnostics.some(
+      noPaintPainted.pages[0]?.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-unsupported-capability" &&
           d.message.includes("Preview does not support no-paint-tile"),
       ),
     );
@@ -2224,7 +2377,7 @@ describe("bound object capability contract", () => {
             ? input.props["newBg"]
             : "#ffffff";
         return {
-          resolveSlide(): ResolvedSlide {
+          resolveSlide(): SlideResolution {
             return {
               extensions: [],
               emit: () => ({ xml: "" }),
@@ -2242,7 +2395,7 @@ describe("bound object capability contract", () => {
       slot: "background",
       bindSlide() {
         return {
-          resolveSlide(): ResolvedSlide {
+          resolveSlide(): SlideResolution {
             return {
               extensions: [],
               emit: () => ({ xml: "" }),
@@ -2271,9 +2424,9 @@ describe("bound object capability contract", () => {
     assert.equal(bgBadPainted.pages[0]?.svg, undefined);
     assert.equal(bgBadPainted.pages[0]?.png, undefined);
     assert.ok(
-      bgBadPainted.pages[0]?.diagnostics.some(
+      bgBadPainted.pages[0]?.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-unsupported-capability" &&
           d.message.includes("Preview does not support new-bg-nopaint"),
       ),
     );
@@ -2294,10 +2447,13 @@ describe("bound object capability contract", () => {
             impShape({
               id: "s1",
               name: "Bad\u0007Shape",
-              x: 10,
-              y: 10,
-              width: 40,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
         ),
@@ -2307,7 +2463,16 @@ describe("bound object capability contract", () => {
         impDeck({ width: 320, height: 180 }).append(
           impSlide({ id: "bad-group-name" }).append(
             impGroup({ id: "g1", name: "Bad\u0008Group" }).append(
-              impShape({ id: "s1", x: 10, y: 10, width: 40, height: 20 }),
+              impShape({
+                id: "s1",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 40,
+                  height: 20,
+                },
+              }),
             ),
           ),
         ),
@@ -2318,7 +2483,7 @@ describe("bound object capability contract", () => {
         () => resolve({ children: [badDoc] }),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-xml-character");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.equal(error.diagnostics[0]?.path, expectedPath);
           return true;
         },
@@ -2359,7 +2524,7 @@ describe("bound object capability contract", () => {
     const unlaidOutBoxDoc = impDeck({ width: 320, height: 180 }).append(
       impSlide({ id: "bad-box-slide" }).append(
         new CommonContainer("wrap", "custom-wrapper", { id: "wrap" }).append(
-          impBox({ id: "b1", style: { backgroundColor: "#112233" } }),
+          impBox({ id: "b1", style: { background: "#112233" } }),
         ),
       ),
     );
@@ -2367,7 +2532,7 @@ describe("bound object capability contract", () => {
       () => resolveWithWrapper({ children: [unlaidOutBoxDoc] }),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "layout-unavailable");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[bad-box-slide]/custom-wrapper[wrap]/box[b1]",
@@ -2390,13 +2555,15 @@ describe("bound object capability contract", () => {
         }),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.ok(error.diagnostics.some((d) => d.code === "empty-group"));
+        assert.ok(
+          error.diagnostics.some((d) => d.code === "invalid-structure"),
+        );
         return true;
       },
     );
 
     // 3. Screen geometry depends only on resolve facts: even when a rotated member's paint() fails
-    //    due to a corrupt image stream, its own rotation + enclosing group rotation still produce exact corners and screenBox.
+    //    due to a corrupt image stream, its own rotation + enclosing group rotation still produce exact corners and bounds.
     const corruptPng = new Uint8Array(
       Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -2419,19 +2586,25 @@ describe("bound object capability contract", () => {
           impImage({
             id: "corrupt-member",
             src: corruptPng,
-            x: 100,
-            y: 100,
-            width: 40,
-            height: 40,
-            style: { rotate: 45 },
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 100,
+              width: 40,
+              height: 40,
+              rotate: 45,
+            },
           }),
           impShape({
             id: "rect-member",
-            x: 160,
-            y: 120,
-            width: 40,
-            height: 20,
-            fill: "#16A34A",
+            style: {
+              position: "absolute",
+              left: 160,
+              top: 120,
+              width: 40,
+              height: 20,
+              background: "#16A34A",
+            },
           }),
         ),
       ),
@@ -2441,9 +2614,9 @@ describe("bound object capability contract", () => {
     const page = painted.pages[0]!;
     assert.equal(page.png, undefined);
     assert.ok(
-      page.diagnostics.some(
+      page.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-corrupt-image" &&
           /decode PNG/i.test(d.message) &&
           d.path.includes("image[corrupt-member]"),
       ),
@@ -2453,11 +2626,11 @@ describe("bound object capability contract", () => {
       (n) => n.authorId === "corrupt-member",
     )!;
     const halfDiag = 20 * Math.SQRT2;
-    assert.ok(corruptNode.screenBox !== undefined);
-    assert.ok(Math.abs(corruptNode.screenBox.x - (150 - halfDiag)) < 1e-6);
-    assert.ok(Math.abs(corruptNode.screenBox.y - (90 - halfDiag)) < 1e-6);
-    assert.ok(Math.abs(corruptNode.screenBox.width - 2 * halfDiag) < 1e-6);
-    assert.ok(Math.abs(corruptNode.screenBox.height - 2 * halfDiag) < 1e-6);
+    assert.ok(corruptNode.bounds !== undefined);
+    assert.ok(Math.abs(corruptNode.bounds.x - (150 - halfDiag)) < 1e-6);
+    assert.ok(Math.abs(corruptNode.bounds.y - (90 - halfDiag)) < 1e-6);
+    assert.ok(Math.abs(corruptNode.bounds.width - 2 * halfDiag) < 1e-6);
+    assert.ok(Math.abs(corruptNode.bounds.height - 2 * halfDiag) < 1e-6);
 
     // 4. resolve() without emit options + independent emit() with subset font embedding & Shape inline text,
     //    even when a sibling corrupt image fails paint().
@@ -2479,25 +2652,31 @@ describe("bound object capability contract", () => {
             width: 240,
             height: 80,
             padding: 8,
-            backgroundColor: "#F8FAFC",
+            background: "#F8FAFC",
           },
         }).append(
           impShape({
             id: "shaped-text",
-            width: 200,
-            height: 48,
-            fill: "#1E293B",
-            style: { fontFamily: jostFont, fontSize: 16, color: "#FFFFFF" },
-            text: "Resolved once",
-          }),
+            style: {
+              width: 200,
+              height: 48,
+              background: "#1E293B",
+              fontFamily: jostFont,
+              fontSize: 16,
+              color: "#FFFFFF",
+            },
+          }).content("Resolved once"),
         ),
         impImage({
           id: "corrupt-blocker",
           src: corruptPng,
-          x: 10,
-          y: 120,
-          width: 20,
-          height: 20,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 120,
+            width: 20,
+            height: 20,
+          },
         }),
       ),
     );
@@ -2505,9 +2684,9 @@ describe("bound object capability contract", () => {
     const textPainted = paint(textResolution);
     assert.equal(textPainted.pages[0]?.png, undefined);
     assert.ok(
-      textPainted.pages[0]?.diagnostics.some(
+      textPainted.pages[0]?.errors.some(
         (d) =>
-          d.severity === "error" &&
+          d.code === "preview-corrupt-image" &&
           /decode PNG/i.test(d.message) &&
           d.path.includes("image[corrupt-blocker]"),
       ),
@@ -2543,12 +2722,15 @@ describe("bound object capability contract", () => {
         alt: "Square sample",
         src: png1x1,
         fit: "contain",
-        x: 20,
-        y: 40,
-        width: 120,
-        height: 60,
-        style: { rotate: 30 },
-        flipH: true,
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 40,
+          width: 120,
+          height: 60,
+          rotate: 30,
+          flipH: true,
+        },
         link: { id: "img-s2" },
       }),
     );
@@ -2558,10 +2740,13 @@ describe("bound object capability contract", () => {
         id: "thumb-jpeg",
         src: jpeg1x1,
         crop: { left: 0.25 },
-        x: 50,
-        y: 50,
-        width: 80,
-        height: 80,
+        style: {
+          position: "absolute",
+          left: 50,
+          top: 50,
+          width: 80,
+          height: 80,
+        },
       }),
     );
     deckNode.append(slide1, slide2);
@@ -2570,25 +2755,22 @@ describe("bound object capability contract", () => {
 
     // Placement (contain of 1x1 into 120x60 -> 60x60 centered at x=50) happens in resolve;
     // resource registration does NOT happen during resolve.
-    const heroObs = resolution.query
-      .getSlide("img-s1")
-      .get("hero-png")
-      .observe();
+    const heroObs = resolution.slide("img-s1").get("hero-png");
     assert.deepEqual(heroObs.box, { x: 50, y: 40, width: 60, height: 60 });
     assert.equal(heroObs.resources, undefined);
 
-    // Paint succeeds directly from Resolution before emit() runs, and computes screenBox from transform.
+    // Paint succeeds directly from Resolution before emit() runs, and computes bounds from transform.
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 2);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
     assert.match(painted.pages[0]?.svg ?? "", /<image/u);
     const paintedHero = painted.pages[0]?.nodes.find(
       (n) => n.authorId === "hero-png",
     );
-    assert.ok(paintedHero?.screenBox !== undefined);
-    assert.ok(paintedHero.screenBox.width > 60);
-    assert.ok(paintedHero.screenBox.height > 60);
+    assert.ok(paintedHero?.bounds !== undefined);
+    assert.ok(paintedHero.bounds.width > 60);
+    assert.ok(paintedHero.bounds.height > 60);
 
     // Emit registers media resources and produces valid PPTX; repeat emit is idempotent.
     const emitted1 = emit(resolution);
@@ -2614,7 +2796,7 @@ describe("bound object capability contract", () => {
         () => resolveImages({ children: [badDeck] }),
         (error: unknown) =>
           error instanceof BuildError &&
-          error.diagnostics.some((d) => d.code === "invalid-xml-character"),
+          error.diagnostics.some((d) => d.code === "invalid-prop"),
       );
     }
   });

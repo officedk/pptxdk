@@ -17,6 +17,13 @@ export function requiresFontGlyph(character: string): boolean {
   return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(character);
 }
 
+/** Checks whether a character is a visible non-whitespace character requiring a non-.notdef glyph. */
+export function requiresVisibleFontGlyph(character: string): boolean {
+  return !/^[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}]$/u.test(
+    character,
+  );
+}
+
 const fontRelationship =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
 const fontContentType = "application/x-fontdata";
@@ -43,8 +50,90 @@ type FontkitExtras = {
   readonly post?: { readonly isFixedPitch: number };
 };
 
-function fail(use: FontEmbeddingUse, code: string, message: string): never {
-  throw new CapabilityError(code, message, use.path);
+function fail(
+  use: FontEmbeddingUse,
+  code: string,
+  message: string,
+  characters?: readonly string[],
+): never {
+  throw new CapabilityError(code, message, use.path, {
+    font: {
+      family: use.family,
+      weight: use.weight,
+      style: use.style,
+    },
+    ...(characters === undefined ? {} : { characters }),
+  });
+}
+
+/** Checks whether raw font bytes and author policy allow full TrueType font embedding. */
+export function isFontEmbeddable(
+  bytes: Uint8Array,
+  substitute: boolean,
+  declaredEmbeddable: boolean,
+): boolean {
+  if (substitute || !declaredEmbeddable || bytes.byteLength < 12) {
+    return false;
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const signature = String.fromCharCode(...bytes.subarray(0, 4));
+  if (signature !== "\0\x01\0\0" && signature !== "true") {
+    return false;
+  }
+  const count = view.getUint16(4);
+  if (12 + count * 16 > bytes.byteLength) {
+    return false;
+  }
+  let os2Offset: number | undefined;
+  let os2Length = 0;
+  let hasGlyf = false;
+  let hasFvar = false;
+  let hasHead = false;
+  let hasName = false;
+  for (let index = 0; index < count; index += 1) {
+    const record = 12 + index * 16;
+    const name = String.fromCharCode(...bytes.subarray(record, record + 4));
+    const offset = view.getUint32(record + 8);
+    const length = view.getUint32(record + 12);
+    if (offset > bytes.byteLength || length > bytes.byteLength - offset) {
+      return false;
+    }
+    if (name === "OS/2") {
+      os2Offset = offset;
+      os2Length = length;
+    } else if (name === "glyf") {
+      hasGlyf = true;
+    } else if (name === "fvar") {
+      hasFvar = true;
+    } else if (name === "head") {
+      hasHead = true;
+    } else if (name === "name") {
+      hasName = true;
+    }
+  }
+  if (
+    os2Offset === undefined ||
+    os2Length < 64 ||
+    !hasGlyf ||
+    hasFvar ||
+    !hasHead ||
+    !hasName
+  ) {
+    return false;
+  }
+  const fsType = view.getUint16(os2Offset + 8);
+  const usagePermission = fsType & 0x000f;
+  if (![0, 2, 4, 8].includes(usagePermission) || (fsType & ~0x030f) !== 0) {
+    return false;
+  }
+  if (
+    usagePermission === 2 ||
+    usagePermission === 4 ||
+    (fsType & 0x0200) !== 0
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
@@ -257,19 +346,22 @@ function subsetBytes(
   characters: string,
 ): Uint8Array {
   const requiredCharacters = [...new Set(characters)];
-  for (const character of requiredCharacters) {
+  const missingCharacters = requiredCharacters.filter((character) => {
     const codePoint = character.codePointAt(0);
-    if (
+    return (
       codePoint !== undefined &&
-      requiresFontGlyph(character) &&
-      !checked.font.hasGlyphForCodePoint(codePoint)
-    ) {
-      return fail(
-        use,
-        "font-missing-glyph",
-        `${use.family} ${use.weight} ${use.style} font is missing glyph for emitted character ${character}`,
-      );
-    }
+      requiresVisibleFontGlyph(character) &&
+      (!checked.font.hasGlyphForCodePoint(codePoint) ||
+        checked.font.glyphForCodePoint(codePoint).id === 0)
+    );
+  });
+  if (missingCharacters.length > 0) {
+    return fail(
+      use,
+      "font-missing-glyph",
+      `${use.family} ${use.weight} ${use.style} font is missing glyph for emitted character ${missingCharacters[0]!}`,
+      missingCharacters,
+    );
   }
 
   let bytes: Uint8Array;
@@ -319,7 +411,7 @@ function subsetBytes(
     const codePoint = character.codePointAt(0);
     if (
       codePoint !== undefined &&
-      requiresFontGlyph(character) &&
+      requiresVisibleFontGlyph(character) &&
       !font.hasGlyphForCodePoint(codePoint)
     ) {
       return fail(

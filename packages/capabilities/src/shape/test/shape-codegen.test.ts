@@ -50,35 +50,35 @@ describe("shape capability codegen", () => {
 
     const doc = deck({ width: 960, height: 540 }).append(
       slide({ id: "shapes" }).append(
-        shape({
+        shape("Preset Label", {
           id: "rounded",
           name: "Rounded Card",
           morphKey: morphScope.handle("card"),
           link: { url: "https://example.com" },
           geometry: preset("roundRect", { adj: 20000 }),
-          x: 24,
-          y: 24,
-          width: 160,
-          height: 80,
-          fill: "#2563EB",
-          text: "Preset Label",
-          textStyle: { fontSize: 16, color: "#FFFFFF" },
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 160,
+            height: 80,
+            background: "#2563EB",
+            border: { color: "#1E293B", width: 2, style: "dashed" },
             rotate: 15,
+            fontSize: 16,
+            color: "#FFFFFF",
           },
         }),
         shape({
           id: "arc-shape",
           geometry: blockArc({ startAngle: 0, endAngle: 180, thickness: 0.3 }),
-          x: 200,
-          y: 24,
-          width: 100,
-          height: 100,
           style: {
-            backgroundImage: linearGradient(90, "#1D4ED8", "#0EA5E9"),
+            position: "absolute",
+            left: 200,
+            top: 24,
+            width: 100,
+            height: 100,
+            background: linearGradient(90, "#1D4ED8", "#0EA5E9"),
           },
         }),
         shape({
@@ -88,53 +88,59 @@ describe("shape capability codegen", () => {
             fill: true,
             stroke: true,
           }),
-          x: 320,
-          y: 24,
-          width: 120,
-          height: 100,
-          flipH: true,
-          flipV: true,
           style: {
-            backgroundImage: radialGradient("#FDE047", "#D97706"),
-            borderColor: "#78350F",
-            borderWidth: 2,
+            position: "absolute",
+            left: 320,
+            top: 24,
+            width: 120,
+            height: 100,
+            flipH: true,
+            flipV: true,
+            background: radialGradient("#FDE047", "#D97706"),
+            border: { color: "#78350F", width: 2 },
           },
         }),
         shape({
           id: "composite-custom",
           geometry: compositeGeometry,
-          x: 460,
-          y: 24,
-          width: 120,
-          height: 96,
-          fill: "#10B981",
           style: {
-            borderColor: "#064E3B",
-            borderWidth: 2,
+            position: "absolute",
+            left: 460,
+            top: 24,
+            width: 120,
+            height: 96,
+            background: "#10B981",
+            border: { color: "#064E3B", width: 2 },
           },
         }),
         shape({
           id: "arrow-line",
           geometry: "line",
-          x: 24,
-          y: 160,
-          width: 180,
-          height: 2,
           style: {
-            borderColor: "#DC2626",
-            borderWidth: 3,
-            startArrow: "oval",
-            endArrow: "triangle",
+            position: "absolute",
+            left: 24,
+            top: 160,
+            width: 180,
+            height: 2,
+            border: {
+              color: "#DC2626",
+              width: 3,
+              startArrow: "oval",
+              endArrow: "triangle",
+            },
           },
         }),
         shape({
           id: "rich-shape",
           geometry: "diamond",
-          x: 24,
-          y: 200,
-          width: 220,
-          height: 100,
-          fill: "#0F766E",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 200,
+            width: 220,
+            height: 100,
+            background: "#0F766E",
+          },
         }).append(
           paragraph([
             span("Bold ", { style: { fontWeight: "bold", color: "#FFFFFF" } }),
@@ -167,8 +173,11 @@ describe("shape capability codegen", () => {
     assert.match(vanillaSource, /linearGradient\(90,/u);
     assert.match(vanillaSource, /radialGradient\(/u);
     assert.match(vanillaSource, /morphScope\.handle\("card"\)/u);
-    assert.match(vanillaSource, /text: "Preset Label"/u);
-    assert.match(vanillaSource, /id: "rich-shape"[\s\S]*?\.append\(/u);
+    assert.match(vanillaSource, /shape\(\s*"Preset Label",/u);
+    assert.match(
+      vanillaSource,
+      /shape\(\s*\[\s*paragraph\(\)\.append\([\s\S]*?id: "rich-shape"/u,
+    );
     assert.doesNotMatch(vanillaSource, /id: "rich-shape"[\s\S]*?text:/u);
 
     const react = generate(doc, { target: "react" });
@@ -183,22 +192,29 @@ describe("shape capability codegen", () => {
       reactSource,
       /geometry=\{path\("M 10 80 C 10 15 90 15 90 80 Q 50 95 10 80 Z"/u,
     );
-    assert.match(reactSource, /flipH/u);
-    assert.match(reactSource, /flipV/u);
+    assert.match(reactSource, /flipH:\s*true/u);
+    assert.match(reactSource, /flipV:\s*true/u);
+    assert.match(
+      reactSource,
+      /<Shape[\s\S]*?id="rounded"[\s\S]*?>\s*Preset Label\s*<\/Shape>/u,
+    );
     assert.match(reactSource, /<Shape[\s\S]*?id="rich-shape"[\s\S]*?>\s*<P>/u);
   });
 
-  it("throws CodegenError with precise path on non-finite custom geometry values or conflicting text and children", () => {
+  it("throws CodegenError with precise path on non-finite custom geometry values or unsupported legacy text prop", () => {
     const generate = createCodegen(documentCapabilities);
 
     const invalidCustomDoc = deck({ width: 960, height: 540 }).append(
       slide({ id: "bad-geom" }).append(
         shape({
           id: "bad-path",
-          x: 10,
-          y: 10,
-          width: 100,
-          height: 100,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 100,
+            height: 100,
+          },
           geometry: {
             type: "custom",
             width: 100,
@@ -224,25 +240,28 @@ describe("shape capability codegen", () => {
         error.diagnostics[0]?.path.includes("shape[bad-path]@geometry"),
     );
 
-    const conflictingShape = shape({
-      id: "conflict",
-      x: 10,
-      y: 10,
-      width: 100,
-      height: 50,
+    const legacyTextShape = shape({
+      id: "legacy-text",
+      style: {
+        position: "absolute",
+        left: 10,
+        top: 10,
+        width: 100,
+        height: 50,
+      },
       text: "Inline",
-    }).append(paragraph("Child"));
+    } as never).append(paragraph("Child"));
 
-    const conflictDoc = deck({ width: 960, height: 540 }).append(
-      slide({ id: "s1" }).append(conflictingShape),
+    const legacyTextDoc = deck({ width: 960, height: 540 }).append(
+      slide({ id: "s1" }).append(legacyTextShape),
     );
 
     assert.throws(
-      () => generate(conflictDoc, { target: "react" }),
+      () => generate(legacyTextDoc, { target: "react" }),
       (error: unknown) =>
         error instanceof CodegenError &&
-        error.diagnostics[0]?.code === "unexpressible-value" &&
-        error.diagnostics[0]?.path === "deck/slide[s1]/shape[conflict]@text",
+        error.diagnostics[0]?.code === "invalid-document" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]/shape[legacy-text]@text",
     );
   });
 });

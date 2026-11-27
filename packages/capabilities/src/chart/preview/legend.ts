@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart } from "../chart-model.ts";
@@ -394,7 +394,7 @@ function renderLegendIconSvg(
 export function renderLegendSvg(options: {
   readonly measured: MeasuredLegend;
   readonly position: LegendPosition;
-  readonly legendBox: GeometryBox;
+  readonly legendBox: Rect;
   readonly style: TextStyle | undefined;
   readonly theme: ThemeContext;
   readonly slideNumber: number;

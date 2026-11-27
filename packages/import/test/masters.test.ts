@@ -5,7 +5,7 @@ import {
   CommonNode,
   DeckContainer,
   SlideMasterContainer,
-  type SlideLayoutObservation,
+  type ResolvedSlideLayout,
 } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { createSlideNode } from "@pptxdk/core/document";
@@ -17,7 +17,10 @@ import {
   REL_SLIDE_LAYOUT,
   REL_SLIDE_MASTER,
   R_NS,
+  XmlElementCursor,
   createImporter,
+  parseXmlPart,
+  readLineBorder,
 } from "@pptxdk/import";
 import { strToU8, zipSync } from "fflate";
 import { describe, it } from "vitest";
@@ -131,7 +134,7 @@ describe("SlideMaster and SlideLayout import", () => {
 
     const resolve = createResolver([testMastersCap]);
     const resolved = resolve(result.document);
-    const resolvedLayouts: readonly SlideLayoutObservation[] =
+    const resolvedLayouts: readonly ResolvedSlideLayout[] =
       resolved.report.masters?.[0]?.layouts ?? [];
     assert.equal(resolvedLayouts.length, 11);
     assert.equal(resolvedLayouts[9]?.type, "vertTx");
@@ -297,6 +300,149 @@ describe("SlideMaster and SlideLayout import", () => {
         header: false,
         slideNumber: false,
       },
+    );
+  });
+
+  it("imports placeholder geometry, flipH/flipV, background, border, and size onto unified style and size", () => {
+    const pptx = zipSync({
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}">
+  <p:cSld name="Brand">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="Master Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title" sz="half"/></p:nvPr></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm flipH="1" flipV="1"><a:off x="914400" y="457200"/><a:ext cx="1828800" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="112233"/></a:solidFill>
+          <a:ln w="19050"><a:solidFill><a:srgbClr val="AABBCC"/></a:solidFill><a:prstDash val="dash"/></a:ln>
+        </p:spPr>
+        <p:txBody><a:bodyPr wrap="none" anchor="ctr"/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+  <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
+  <p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>
+</p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="title">
+  <p:cSld name="Hero">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="3" name="Layout Body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" sz="quarter" idx="1"/></p:nvPr></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="914400"/><a:ext cx="914400" cy="457200"/></a:xfrm>
+          <a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 25000"/></a:avLst></a:prstGeom>
+          <a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>
+        </p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+    });
+
+    const importer = createImporter([testMastersCap]);
+    const result = importer(pptx);
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.ok(result.document instanceof DeckContainer);
+    const master = result.document.masters[0]!;
+    const masterPlaceholders = master.props["placeholders"] as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const titlePh = masterPlaceholders["title"]!;
+    assert.equal(titlePh["size"], "half");
+    assert.equal(titlePh["sz"], undefined);
+    assert.equal(titlePh["x"], undefined);
+    assert.equal(titlePh["y"], undefined);
+    assert.equal(titlePh["width"], undefined);
+    assert.equal(titlePh["height"], undefined);
+    assert.equal(titlePh["flipH"], undefined);
+    assert.equal(titlePh["flipV"], undefined);
+    assert.deepEqual(JSON.parse(JSON.stringify(titlePh["style"])), {
+      position: "absolute",
+      left: 96,
+      top: 48,
+      width: 192,
+      height: 96,
+      background: "#112233",
+      border: { color: "#AABBCC", width: 2, style: "dashed" },
+      flipH: true,
+      flipV: true,
+      textWrap: "nowrap",
+      verticalAlign: "middle",
+    });
+
+    const layout = master.layouts[0]!;
+    const layoutPlaceholders = layout.props["placeholders"] as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const bodyPh = layoutPlaceholders["body"]!;
+    assert.equal(bodyPh["size"], "quarter");
+    assert.equal(bodyPh["sz"], undefined);
+    assert.equal(bodyPh["x"], undefined);
+    assert.equal(bodyPh["y"], undefined);
+    assert.equal(bodyPh["width"], undefined);
+    assert.equal(bodyPh["height"], undefined);
+    assert.deepEqual(JSON.parse(JSON.stringify(bodyPh["style"])), {
+      position: "absolute",
+      left: 48,
+      top: 96,
+      width: 96,
+      height: 48,
+      borderRadius: 12,
+      background: {
+        type: "linear-gradient",
+        angle: 180,
+        stops: [
+          { color: "#FF0000", position: 0 },
+          { color: "#0000FF", position: 1 },
+        ],
+      },
+    });
+  });
+
+  it("readLineBorder distinguishes <a:noFill/> from omitted line fill", () => {
+    const noFillCursor = XmlElementCursor.createRoot(
+      parseXmlPart("test.xml", `<a:ln xmlns:a="${A_NS}"><a:noFill/></a:ln>`),
+      "test.xml",
+    );
+    assert.deepEqual(readLineBorder(noFillCursor, { part: "test.xml" }, []), {
+      noFill: true,
+    });
+
+    const emptyLnCursor = XmlElementCursor.createRoot(
+      parseXmlPart("test.xml", `<a:ln xmlns:a="${A_NS}" w="12700"/>`),
+      "test.xml",
+    );
+    assert.deepEqual(
+      readLineBorder(emptyLnCursor, { part: "test.xml" }, []),
+      {},
     );
   });
 });

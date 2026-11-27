@@ -32,7 +32,7 @@ const jostFont = font("Jost*", [{ weight: 400, data: jostBook }]);
 const impJostFont = impFont("Jost*", [{ weight: 400, data: jostBook }]);
 
 describe("textCapability resolved contract", () => {
-  it("resolves text metrics, rotation, and overset warnings and paints glyph outlines without calling emit", async () => {
+  it("resolves text metrics, rotation, and overset textMetrics and paints glyph outlines without calling emit", async () => {
     const resolve = createResolver([slideBackgroundCapability, textCapability]);
     const doc = await expandDocument(
       createElement(
@@ -46,11 +46,12 @@ describe("textCapability resolved contract", () => {
             {
               id: "wrapped",
               name: "WrappedTitle",
-              x: 20,
-              y: 30,
-              width: 110,
-              height: 40,
               style: {
+                position: "absolute",
+                left: 20,
+                top: 30,
+                width: 110,
+                height: 40,
                 fontFamily: jostFont,
                 fontSize: 18,
                 color: "#1E293B",
@@ -70,40 +71,32 @@ describe("textCapability resolved contract", () => {
     );
 
     const resolution = resolve(doc);
-    const slideReport = resolution.report.slides[0];
-    assert.ok(slideReport !== undefined);
-    const observed = slideReport.objects.find(
-      (obj) => obj.authorId === "wrapped",
-    );
-    assert.ok(observed !== undefined);
-    assert.equal(observed.kind, "text");
-    assert.equal(observed.name, "WrappedTitle");
+    const locator = resolution.slide("cover").get("wrapped");
+    assert.equal(locator.kind, "text");
     assert.equal(
-      observed.text,
+      locator.text,
       "Page 1 wraps across multiple lines inside fixed box",
     );
-    assert.deepEqual(observed.box, { x: 20, y: 30, width: 110, height: 40 });
+    assert.deepEqual(locator.box, { x: 20, y: 30, width: 110, height: 40 });
+    assert.equal(locator.textMetrics?.status, "measured");
+    assert.equal(locator.textMetrics.fits, false);
     assert.ok(
-      resolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" &&
-          diag.code === "overset" &&
-          diag.path === "deck/slide[cover]/text[wrapped]",
-      ),
+      locator.textMetrics.content.height > locator.textMetrics.available.height,
     );
+    assert.ok(locator.textMetrics.content.lineCount > 1);
 
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 1);
     const page = painted.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg?.includes("<path"));
     assert.ok(page.svg?.includes("rotate(15"));
 
     const paintedNode = page.nodes.find((node) => node.authorId === "wrapped");
     assert.ok(paintedNode !== undefined);
-    assert.ok((paintedNode.screenBox?.width ?? 0) > 110);
-    assert.ok((paintedNode.screenBox?.height ?? 0) > 40);
+    assert.ok((paintedNode.bounds?.width ?? 0) > 110);
+    assert.ok((paintedNode.bounds?.height ?? 0) > 40);
   });
 
   it("defers font embedding and missing-glyph embedding checks to emit using resolve-time resource claims", async () => {
@@ -119,11 +112,15 @@ describe("textCapability resolved contract", () => {
             Text,
             {
               id: "title",
-              x: 20,
-              y: 20,
-              width: 120,
-              height: "auto",
-              style: { fontFamily: jostFont, fontSize: 18 },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 120,
+                height: "auto",
+                fontFamily: jostFont,
+                fontSize: 18,
+              },
             },
             createElement(
               P,
@@ -141,11 +138,15 @@ describe("textCapability resolved contract", () => {
             Text,
             {
               id: "page-two",
-              x: 20,
-              y: 20,
-              width: 120,
-              height: 40,
-              style: { fontFamily: jostFont, fontSize: 18 },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 120,
+                height: 40,
+                fontFamily: jostFont,
+                fontSize: 18,
+              },
             },
             createElement(P, null, "Page ", createElement(SlideNumber, null)),
           ),
@@ -179,10 +180,10 @@ describe("textCapability resolved contract", () => {
       false,
     );
     const painted = paint(validResolution);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
-    assert.deepEqual(painted.pages[1]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[1]?.errors, []);
 
-    // Missing glyph: resolve without embedFonts succeeds with warning, emit with embedFonts fails.
+    // Fixed-box missing glyph: resolve succeeds with unmeasured textMetrics & FontUsage.missingGlyphs; paint reports preview-missing-glyph; emit with embedFonts fails.
     const missingGlyphDoc = await expandDocument(
       createElement(
         Deck,
@@ -194,11 +195,15 @@ describe("textCapability resolved contract", () => {
             Text,
             {
               id: "cjk",
-              x: 20,
-              y: 20,
-              width: 120,
-              height: 40,
-              style: { fontFamily: jostFont, fontSize: 18 },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 120,
+                height: 40,
+                fontFamily: jostFont,
+                fontSize: 18,
+              },
             },
             "中文",
           ),
@@ -206,14 +211,57 @@ describe("textCapability resolved contract", () => {
       ),
     );
     const missingResolution = resolve(missingGlyphDoc);
-    assert.ok(
-      missingResolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" && diag.code === "font-missing-glyph",
-      ),
+    const cjkMetrics = missingResolution.slide("cover").get("cjk").textMetrics;
+    assert.equal(cjkMetrics?.status, "unmeasured");
+    assert.equal(cjkMetrics.reason, "missing-glyphs");
+    assert.deepEqual(cjkMetrics.fonts[0]?.missingGlyphs, ["中", "文"]);
+    assert.deepEqual(missingResolution.report.fonts[0]?.missingGlyphs, [
+      "中",
+      "文",
+    ]);
+    const missingPainted = paint(missingResolution);
+    assert.equal(missingPainted.pages[0]?.svg, undefined);
+    assert.equal(missingPainted.pages[0]?.png, undefined);
+    assert.equal(
+      missingPainted.pages[0]?.errors[0]?.code,
+      "preview-missing-glyph",
     );
     assert.throws(
       () => emit(missingResolution, { embedFonts: "full" }),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(({ code }) => code === "font-missing-glyph"),
+    );
+
+    // Content-sized missing glyph throws BuildError(font-missing-glyph) directly during resolve.
+    const autoHeightMissingDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "auto-missing" },
+          createElement(
+            Text,
+            {
+              id: "auto-cjk",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 120,
+                height: "auto",
+                fontFamily: jostFont,
+                fontSize: 18,
+              },
+            },
+            "中文",
+          ),
+        ),
+      ),
+    );
+    assert.throws(
+      () => resolve(autoHeightMissingDoc),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics.some(({ code }) => code === "font-missing-glyph"),
@@ -231,10 +279,13 @@ describe("textCapability resolved contract", () => {
               text("Valid content", {
                 id: "bad-name",
                 name: "Bad\u0000Name",
-                x: 10,
-                y: 10,
-                width: 100,
-                height: 40,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 100,
+                  height: 40,
+                },
               }),
             ),
           ),
@@ -243,7 +294,7 @@ describe("textCapability resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-xml-character" &&
+            code === "invalid-prop" &&
             path === "deck/slide[cover]/text[bad-name]",
         ),
     );
@@ -255,17 +306,20 @@ describe("textCapability resolved contract", () => {
             slide({ id: "cover" }).append(
               text("Bad\u0000Text", {
                 id: "bad-text",
-                x: 10,
-                y: 10,
-                width: 100,
-                height: 40,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 100,
+                  height: 40,
+                },
               }),
             ),
           ),
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+        error.diagnostics.some(({ code }) => code === "invalid-prop"),
     );
 
     assert.throws(
@@ -275,18 +329,21 @@ describe("textCapability resolved contract", () => {
             slide({ id: "cover" }).append(
               text("Hello", {
                 id: "bad-font",
-                x: 10,
-                y: 10,
-                width: 100,
-                height: 40,
-                style: { fontFamily: "Bad\u0000Font" },
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 100,
+                  height: 40,
+                  fontFamily: "Bad\u0000Font",
+                },
               }),
             ),
           ),
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-xml-character"),
+        error.diagnostics.some(({ code }) => code === "invalid-prop"),
     );
 
     assert.throws(
@@ -296,11 +353,12 @@ describe("textCapability resolved contract", () => {
             slide({ id: "cover" }).append(
               text("Hello", {
                 id: "bad-shadow",
-                x: 10,
-                y: 10,
-                width: 100,
-                height: 40,
                 style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 100,
+                  height: 40,
                   textShadow: { color: "#000000", blur: -1 },
                 },
               }),
@@ -315,11 +373,15 @@ describe("textCapability resolved contract", () => {
     const resolve = createResolver([slideBackgroundCapability, textCapability]);
     const textNode = text([paragraph(["Snapshot ", slideNumber()])], {
       id: "mutable",
-      x: 20,
-      y: 20,
-      width: 180,
-      height: "auto",
-      style: { fontFamily: impJostFont, fontSize: 18 },
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 180,
+        height: "auto",
+        fontFamily: impJostFont,
+        fontSize: 18,
+      },
     });
     const doc = deck({ width: 480, height: 270 }).append(
       slide({ id: "cover" }).append(textNode),
@@ -332,10 +394,7 @@ describe("textCapability resolved contract", () => {
     const painted = paint(resolution);
     const emitted = emit(resolution);
     assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
-    assert.equal(
-      resolution.query.getSlide("cover").get("mutable").observe().text,
-      "Snapshot 1",
-    );
+    assert.equal(resolution.slide("cover").get("mutable").text, "Snapshot 1");
     const slideXml = strFromU8(
       unzipSync(emitted.pptx)["ppt/slides/slide1.xml"]!,
     );
@@ -343,28 +402,39 @@ describe("textCapability resolved contract", () => {
     assert.equal(slideXml.includes("Mutated text"), false);
     assert.ok(painted.pages[0]?.png !== undefined);
 
-    // Fixed-height text without font bytes resolves and emits cleanly, while paint reports error without affecting emit.
+    // Fixed-height text without font bytes resolves and emits cleanly, while report.fonts & textMetrics reflect missing resource and paint reports preview-missing-font.
     const noFontDoc = deck({ width: 480, height: 270 }).append(
       slide({ id: "cover" }).append(
         text("System fallback", {
           id: "no-font",
-          x: 20,
-          y: 20,
-          width: 160,
-          height: 50,
-          style: { fontFamily: "MissingFamily", fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 160,
+            height: 50,
+            fontFamily: "MissingFamily",
+            fontSize: 16,
+          },
         }),
       ),
     );
     const noFontResolution = resolve(noFontDoc);
     assert.ok(
-      noFontResolution.report.diagnostics.some(
-        (diag) => diag.code === "font-measurement-unavailable",
+      noFontResolution.report.fonts.some(
+        (usage) =>
+          usage.family === "MissingFamily" && usage.hasResource === false,
       ),
     );
+    const noFontMetrics = noFontResolution
+      .slide("cover")
+      .get("no-font").textMetrics;
+    assert.equal(noFontMetrics?.status, "unmeasured");
+    assert.equal(noFontMetrics.reason, "missing-font-resource");
     const noFontPaint = paint(noFontResolution);
+    assert.equal(noFontPaint.pages[0]?.svg, undefined);
     assert.equal(noFontPaint.pages[0]?.png, undefined);
-    assert.ok((noFontPaint.pages[0]?.diagnostics.length ?? 0) > 0);
+    assert.equal(noFontPaint.pages[0]?.errors[0]?.code, "preview-missing-font");
     const noFontEmit = emit(noFontResolution);
     assert.deepEqual((await validatePptx(noFontEmit.pptx)).errors, []);
   });
@@ -381,8 +451,25 @@ describe("textCapability resolved contract", () => {
           { id: "cover" },
           createElement(
             Text,
-            { id: "bad-text", x: 20, y: 20, width: 200, height: 60 },
-            createElement(Shape, { x: 0, y: 0, width: 40, height: 20 }),
+            {
+              id: "bad-text",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 200,
+                height: 60,
+              },
+            },
+            createElement(Shape, {
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 40,
+                height: 20,
+              },
+            }),
           ),
         ),
       ),
@@ -391,7 +478,7 @@ describe("textCapability resolved contract", () => {
       () => resolve(shapeInTextDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "unsupported-text-child"),
+        error.diagnostics.some((d) => d.code === "invalid-structure"),
     );
 
     const shapeInParagraphDoc = await expandDocument(
@@ -403,11 +490,28 @@ describe("textCapability resolved contract", () => {
           { id: "cover" },
           createElement(
             Text,
-            { id: "bad-p", x: 20, y: 20, width: 200, height: 60 },
+            {
+              id: "bad-p",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 200,
+                height: 60,
+              },
+            },
             createElement(
               P,
               null,
-              createElement(Shape, { x: 0, y: 0, width: 40, height: 20 }),
+              createElement(Shape, {
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 40,
+                  height: 20,
+                },
+              }),
             ),
           ),
         ),
@@ -417,16 +521,19 @@ describe("textCapability resolved contract", () => {
       () => resolve(shapeInParagraphDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "unsupported-text-child"),
+        error.diagnostics.some((d) => d.code === "invalid-structure"),
     );
 
     const malformedChild = new CommonNode("bogus", "", {});
     const badText = text("", {
       id: "malformed",
-      x: 20,
-      y: 20,
-      width: 200,
-      height: 60,
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 200,
+        height: 60,
+      },
     });
     badText.append(malformedChild);
     const malformedDoc = deck({ width: 480, height: 270 }).append(
@@ -436,7 +543,7 @@ describe("textCapability resolved contract", () => {
       () => resolve(malformedDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "invalid-text-child"),
+        error.diagnostics.some((d) => d.code === "invalid-structure"),
     );
   });
 });

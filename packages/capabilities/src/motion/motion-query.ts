@@ -1,5 +1,5 @@
-import type { SlideObservation } from "@pptxdk/core/capability";
-import { BuildQueryError } from "@pptxdk/core/query";
+import type { ResolvedSlide, SlideLocator } from "@pptxdk/core/capability";
+import { BuildQueryError, resolveSlideFromLocator } from "@pptxdk/core/query";
 
 import type {
   MotionEffectObservation,
@@ -153,7 +153,7 @@ export type MotionStepQuery = {
   ): MotionMembership;
 };
 
-export type MotionQuery = {
+export type MotionSchedule = {
   readonly evidence: "generation";
   readonly steps: readonly MotionStepQuery[];
 };
@@ -226,7 +226,7 @@ type MotionReferenceOwner = {
 
 // Handle ownership is preserved only in WeakMap; reports and public references do not carry build identity tokens.
 const referenceOwners = new WeakMap<object, MotionReferenceOwner>();
-const queryByObservation = new WeakMap<object, MotionQuery>();
+const queryByObservation = new WeakMap<object, MotionSchedule>();
 
 function frozenRef<T extends object>(value: T, owner: MotionReferenceOwner): T {
   const ref = Object.freeze(value);
@@ -268,6 +268,7 @@ function projectEffectObservation(
       ? {}
       : { intervalMs: source.intervalMs }),
     ...(source.from === undefined ? {} : { from: source.from }),
+    ...(source.to === undefined ? {} : { to: source.to }),
     ...(source.fromColor === undefined ? {} : { fromColor: source.fromColor }),
     ...(source.toColor === undefined ? {} : { toColor: source.toColor }),
     ...(source.easing === undefined
@@ -424,7 +425,7 @@ function intervalMembership(
 
 export function createMotionQuery(
   sources: readonly MotionQueryStepSource[],
-): MotionQuery {
+): MotionSchedule {
   const queryIdentity = {};
   const stepIdentities = new Map<string, object>();
   for (const source of sources) stepIdentities.set(source.key, {});
@@ -807,16 +808,23 @@ function assertInterval(
 
 export function registerMotionObservation(
   observation: object,
-  query: MotionQuery,
+  query: MotionSchedule,
 ): void {
   queryByObservation.set(observation, query);
 }
 
-/** Accepts only slide observations directly emitted by the current build; reread files will not masquerade as build results. */
-export function observeMotion(
-  slide: SlideObservation,
-): MotionQuery | undefined {
-  const capability = slide.capabilities?.["motion"];
+/** Accepts only resolved slides or slide locators directly emitted by the current build; reread files will not masquerade as build results. */
+export function motionSchedule(
+  slide: ResolvedSlide | SlideLocator,
+): MotionSchedule | undefined {
+  const resolvedSlide = resolveSlideFromLocator(slide);
+  if (resolvedSlide === undefined) {
+    throw new BuildQueryError(
+      "unbound-observation",
+      "The motion slide observation does not belong to the current successful build",
+    );
+  }
+  const capability = resolvedSlide.capabilities?.["motion"];
   if (capability === undefined) return undefined;
   if (typeof capability !== "object" || capability === null) {
     throw new BuildQueryError(

@@ -34,10 +34,13 @@ describe("placeholder capability codegen", () => {
           type: "obj",
           explicitType: false,
           idx: 1,
-          x: 60,
-          y: 120,
-          width: 600,
-          height: 300,
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 120,
+            width: 600,
+            height: 300,
+          },
         },
       },
     });
@@ -64,10 +67,13 @@ describe("placeholder capability codegen", () => {
         placeholder({
           id: "ph-orphan",
           nativePlaceholder: { type: "obj", idx: 99 },
-          x: 80,
-          y: 140,
-          width: 240,
-          height: 120,
+          style: {
+            position: "absolute",
+            left: 80,
+            top: 140,
+            width: 240,
+            height: 120,
+          },
         }),
       ),
     );
@@ -103,10 +109,13 @@ describe("placeholder capability codegen", () => {
           createElement(Placeholder, {
             id: "ph-orphan",
             nativePlaceholder: { type: "obj", idx: 99 },
-            x: 80,
-            y: 140,
-            width: 240,
-            height: 120,
+            style: {
+              position: "absolute",
+              left: 80,
+              top: 140,
+              width: 240,
+              height: 120,
+            },
           }),
         ),
       ),

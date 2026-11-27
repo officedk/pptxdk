@@ -5,9 +5,11 @@ import {
   type ColorValue,
   type FooterPlaceholderSpec,
   type FooterPlaceholders,
-  type GeometryBox,
+  type Rect,
   type HeaderFooter,
   type PlaceholderSize,
+  type ResolvedFooter,
+  type ResolvedFooterSlot,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
   type SlideEmitContext,
@@ -21,8 +23,10 @@ import {
   type TextStyle,
   type ThemeContext,
   footerPlaceholdersSchema,
+  resolvePlaceholderBoxFromLayers,
   slideFooterValueSchema,
   slideNumberValueSchema,
+  textStyleFrom,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import {
@@ -103,7 +107,7 @@ const slotOrder: readonly FooterPlaceholderSlotKey[] = [
 function defaultSlotBox(
   slot: FooterPlaceholderSlotKey,
   dimensions: { readonly width: number; readonly height: number },
-): GeometryBox {
+): Rect {
   const y = Math.round(dimensions.height * 0.88);
   const height = Math.max(18, Math.round(dimensions.height * 0.06));
   switch (slot) {
@@ -132,18 +136,23 @@ function defaultSlotBox(
 }
 
 function hasExplicitGeometry(spec: FooterPlaceholderSpec | undefined): boolean {
+  if (spec === undefined) return false;
+  const style = spec.style as Readonly<Record<string, unknown>> | undefined;
+  if (style === undefined) return false;
   return (
-    spec !== undefined &&
-    (spec.x !== undefined ||
-      spec.y !== undefined ||
-      spec.width !== undefined ||
-      spec.height !== undefined)
+    style["left"] !== undefined ||
+    style["top"] !== undefined ||
+    style["right"] !== undefined ||
+    style["bottom"] !== undefined ||
+    style["inset"] !== undefined ||
+    style["width"] !== undefined ||
+    style["height"] !== undefined
   );
 }
 
 function mergeFooterStyle(
-  ...styles: readonly (TextStyle | undefined)[]
-): TextStyle | undefined {
+  ...styles: readonly (Readonly<Record<string, unknown>> | undefined)[]
+): Readonly<Record<string, unknown>> | undefined {
   const merged: Record<string, unknown> = {};
   for (const style of styles) {
     if (style === undefined) continue;
@@ -160,20 +169,16 @@ function resolveBoxFromSpecs(
   slot: FooterPlaceholderSlotKey,
   dimensions: { readonly width: number; readonly height: number },
   ...specs: readonly (FooterPlaceholderSpec | undefined)[]
-): GeometryBox {
+): Rect {
   const fallback = defaultSlotBox(slot, dimensions);
-  let x = fallback.x;
-  let y = fallback.y;
-  let width = fallback.width;
-  let height = fallback.height;
-  for (const spec of specs) {
-    if (spec === undefined) continue;
-    if (spec.x !== undefined) x = spec.x;
-    if (spec.y !== undefined) y = spec.y;
-    if (spec.width !== undefined) width = spec.width;
-    if (spec.height !== undefined) height = spec.height;
-  }
-  return { x, y, width, height };
+  const resolved = resolvePlaceholderBoxFromLayers(specs, dimensions);
+  return {
+    x: typeof resolved.x === "number" ? resolved.x : fallback.x,
+    y: typeof resolved.y === "number" ? resolved.y : fallback.y,
+    width: typeof resolved.width === "number" ? resolved.width : fallback.width,
+    height:
+      typeof resolved.height === "number" ? resolved.height : fallback.height,
+  };
 }
 
 type ResolvedFooterItem = {
@@ -181,7 +186,7 @@ type ResolvedFooterItem = {
   readonly phType: FooterPlaceholderOoxmlType;
   readonly idx: number;
   readonly size: PlaceholderSize;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly emitGeometry: boolean;
   readonly name: string;
   readonly text: ResolvedTextBody;
@@ -194,8 +199,8 @@ type ResolvedFooterPlaceholderModel = {
 function buildFooterTextBody(args: {
   readonly slot: FooterPlaceholderSlotKey;
   readonly content: string | undefined;
-  readonly style: TextStyle | undefined;
-  readonly box: GeometryBox;
+  readonly style: Readonly<Record<string, unknown>> | undefined;
+  readonly box: Rect;
   readonly theme: ThemeContext;
   readonly slideNumber: number;
 }): ResolvedTextBody {
@@ -208,7 +213,7 @@ function buildFooterTextBody(args: {
         : [{ type: "#text", text: content }];
   const parsed = parseTextContent(
     children,
-    style,
+    style === undefined ? undefined : textStyleFrom(style, theme),
     theme,
     { slideNumber },
     `footerPlaceholders.${slot}.style`,
@@ -308,7 +313,7 @@ function normalizeSlideSlotOverride(
       readonly explicit: true;
       readonly visible: boolean;
       readonly text?: string;
-      readonly style?: TextStyle;
+      readonly style?: Readonly<Record<string, unknown>>;
       readonly idx?: number;
       readonly size?: PlaceholderSize;
     } {
@@ -397,7 +402,17 @@ function resolveSlideFooterModel(args: {
     if (!active) continue;
 
     const defaults = slotDefaultMeta[slot];
-    const box = resolveBoxFromSpecs(slot, dimensions, masterSpec, layoutSpec);
+    const slideStyleSpec: FooterPlaceholderSpec | undefined =
+      slideOverride.explicit && slideOverride.style !== undefined
+        ? { style: slideOverride.style }
+        : undefined;
+    const box = resolveBoxFromSpecs(
+      slot,
+      dimensions,
+      masterSpec,
+      layoutSpec,
+      slideStyleSpec,
+    );
     const style = mergeFooterStyle(
       masterSpec?.style,
       layoutSpec?.style,
@@ -433,8 +448,9 @@ function resolveSlideFooterModel(args: {
       idx,
       size,
       box,
-      // PowerPoint resolves slide placeholder transforms from SlideLayout (not skipping to SlideMaster); emit inline geometry unless the layout explicitly defines box geometry.
-      emitGeometry: !hasExplicitGeometry(layoutSpec),
+      // PowerPoint resolves slide placeholder transforms from SlideLayout (not skipping to SlideMaster); emit inline geometry unless the layout explicitly defines box geometry without a slide-level override.
+      emitGeometry:
+        !hasExplicitGeometry(layoutSpec) || slideStyleSpec !== undefined,
       name: `${defaults.namePrefix} ${idx}`,
       text,
     });
@@ -736,7 +752,7 @@ function readSpPrTransformBox(
   spPr: XmlElementCursor,
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
-): GeometryBox | undefined {
+): Rect | undefined {
   const prstGeom = spPr.child(A_NS, "prstGeom");
   if (prstGeom !== undefined) {
     PrstGeomAttrSchema.safeParse(prstGeom.attrsObject(["prst"]));
@@ -927,21 +943,25 @@ function readFooterPlaceholderImport(
       existingRaw === undefined
         ? {}
         : footerPlaceholdersSchema.parse(existingRaw);
-    const spec: FooterPlaceholderSpec = {
-      ...(box === undefined
-        ? {}
+    const specStyle = mergeFooterStyle(
+      box === undefined
+        ? undefined
         : {
-            x: box.x,
-            y: box.y,
+            position: "absolute",
+            left: box.x,
+            top: box.y,
             width: box.width,
             height: box.height,
-          }),
+          },
+      style,
+    ) as FooterPlaceholderSpec["style"];
+    const spec: FooterPlaceholderSpec = {
       ...(parsedPh.data.idx === undefined ? {} : { idx: parsedPh.data.idx }),
       ...(parsedPh.data.sz === undefined ? {} : { size: parsedPh.data.sz }),
       ...(slot !== "slideNumber" && combinedText !== ""
         ? { text: combinedText }
         : {}),
-      ...(style === undefined ? {} : { style }),
+      ...(specStyle === undefined ? {} : { style: specStyle }),
       // Imported master/layout footer templates only appear on slides that explicitly realize them.
       visible: false,
     };
@@ -1043,11 +1063,36 @@ export const footerPlaceholderCapability = {
     return {
       resolveSlide() {
         const claims = model.items.flatMap((item) => item.text.resourceClaims);
-        const warnings = model.items.flatMap((item) => item.text.warnings);
+        const fontUsages = model.items.flatMap((item) =>
+          item.text.fontUsages.map((usage) => ({
+            ...usage,
+            path: `footerPlaceholders.${item.slot}`,
+          })),
+        );
+        let footer: ResolvedFooter | undefined;
+        if (input.type === "slide" && model.items.length > 0) {
+          const slots: {
+            dateTime?: ResolvedFooterSlot;
+            footer?: ResolvedFooterSlot;
+            slideNumber?: ResolvedFooterSlot;
+          } = {};
+          for (const item of model.items) {
+            if (item.text.textMetrics === undefined) continue;
+            slots[item.slot] = {
+              box: item.box,
+              text: item.text.text,
+              textMetrics: item.text.textMetrics,
+            };
+          }
+          if (Object.keys(slots).length > 0) {
+            footer = slots;
+          }
+        }
         return {
           extensions: [],
+          ...(footer === undefined ? {} : { footer }),
           ...(claims.length === 0 ? {} : { resourceClaims: claims }),
-          ...(warnings.length === 0 ? {} : { warnings }),
+          ...(fontUsages.length === 0 ? {} : { fontUsages }),
           emit: (emitContext: SlideEmitContext) =>
             footerPlaceholderMechanism.emit(model, emitContext),
           ...(model.items.length === 0

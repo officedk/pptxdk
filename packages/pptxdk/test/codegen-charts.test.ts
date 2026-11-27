@@ -58,15 +58,27 @@ const chartPlaceholderLayout = defineSlideLayout({
   id: "chart-layout",
   name: "Chart Layout",
   placeholders: {
-    title: { type: "title", x: 32, y: 16, width: 896, height: 36 },
+    title: {
+      type: "title",
+      style: {
+        position: "absolute",
+        left: 32,
+        top: 16,
+        width: 896,
+        height: 36,
+      },
+    },
     chart: {
       type: "chart",
       explicitType: true,
       idx: 2,
-      x: 32,
-      y: 60,
-      width: 520,
-      height: 300,
+      style: {
+        position: "absolute",
+        left: 32,
+        top: 60,
+        width: 520,
+        height: 300,
+      },
     },
   },
 });
@@ -113,10 +125,6 @@ function createDirectChartsVanillaDeck() {
         placeholder: "chart",
         nativePlaceholder: { type: "chart", idx: 2 },
         link: { url: "https://example.com/report" },
-        x: 32,
-        y: 60,
-        width: 520,
-        height: 300,
         title: {
           text: "Revenue & Margin",
           style: {
@@ -130,6 +138,11 @@ function createDirectChartsVanillaDeck() {
         legend: "bottom",
         plotArea: { left: 48, top: 44, width: 420, height: 210 },
         style: {
+          position: "absolute",
+          left: 32,
+          top: 60,
+          width: 520,
+          height: 300,
           fontFamily: jostFont,
           fontSize: 11,
           color: lighter("accent1", 0.4),
@@ -196,11 +209,15 @@ function createDirectChartsVanillaDeck() {
       chart({
         id: "ring-chart",
         name: "Ring Breakdown",
-        x: 580,
-        y: 60,
-        width: 340,
-        height: 240,
-        style: { fontFamily: jostFont, fontSize: 11 },
+        style: {
+          position: "absolute",
+          left: 580,
+          top: 60,
+          width: 340,
+          height: 240,
+          fontFamily: jostFont,
+          fontSize: 11,
+        },
         groups: [
           {
             kind: "doughnut",
@@ -215,11 +232,15 @@ function createDirectChartsVanillaDeck() {
       chart({
         id: "scatter-chart",
         name: "Scatter Observations",
-        x: 32,
-        y: 376,
-        width: 440,
-        height: 148,
-        style: { fontFamily: jostFont, fontSize: 11 },
+        style: {
+          position: "absolute",
+          left: 32,
+          top: 376,
+          width: 440,
+          height: 148,
+          fontFamily: jostFont,
+          fontSize: 11,
+        },
         groups: [
           {
             kind: "scatter",
@@ -262,10 +283,6 @@ async function createDirectChartsReactDeck() {
           placeholder: "chart",
           nativePlaceholder: { type: "chart", idx: 2 },
           link: { url: "https://example.com/report" },
-          x: 32,
-          y: 60,
-          width: 520,
-          height: 300,
           title: {
             text: "Revenue & Margin",
             style: {
@@ -279,6 +296,11 @@ async function createDirectChartsReactDeck() {
           legend: "bottom",
           plotArea: { left: 48, top: 44, width: 420, height: 210 },
           style: {
+            position: "absolute",
+            left: 32,
+            top: 60,
+            width: 520,
+            height: 300,
             fontFamily: jostFont,
             fontSize: 11,
             color: lighter("accent1", 0.4),
@@ -345,11 +367,15 @@ async function createDirectChartsReactDeck() {
         createElement(Chart, {
           id: "ring-chart",
           name: "Ring Breakdown",
-          x: 580,
-          y: 60,
-          width: 340,
-          height: 240,
-          style: { fontFamily: jostFont, fontSize: 11 },
+          style: {
+            position: "absolute",
+            left: 580,
+            top: 60,
+            width: 340,
+            height: 240,
+            fontFamily: jostFont,
+            fontSize: 11,
+          },
           groups: [
             {
               kind: "doughnut",
@@ -364,11 +390,15 @@ async function createDirectChartsReactDeck() {
         createElement(Chart, {
           id: "scatter-chart",
           name: "Scatter Observations",
-          x: 32,
-          y: 376,
-          width: 440,
-          height: 148,
-          style: { fontFamily: jostFont, fontSize: 11 },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 376,
+            width: 440,
+            height: 148,
+            fontFamily: jostFont,
+            fontSize: 11,
+          },
           groups: [
             {
               kind: "scatter",
@@ -458,10 +488,6 @@ describe("pptxdk native charts codegen acceptance", () => {
     const reactInput = await createDirectChartsReactDeck();
 
     const originalBuilt = await build(vanillaInput, { embedFonts: "full" });
-    assert.deepEqual(
-      originalBuilt.report.diagnostics.filter((d) => d.severity === "error"),
-      [],
-    );
     const originalBytes = new Uint8Array(originalBuilt.pptx);
     const imported = importPptx(originalBytes);
     originalBytes.fill(0);
@@ -611,26 +637,17 @@ describe("pptxdk native charts codegen acceptance", () => {
       const page = painted.pages[0]!;
       assert.ok(page.png instanceof Uint8Array, `${item.label} png`);
       assert.ok(typeof page.svg === "string", `${item.label} svg`);
-      assert.deepEqual(
-        page.diagnostics,
-        [],
-        `${item.label} preview diagnostics`,
-      );
+      assert.deepEqual(page.errors, [], `${item.label} preview errors`);
 
       for (const chartName of [
         "Combo Overview",
         "Ring Breakdown",
         "Scatter Observations",
       ]) {
-        const screenBox = page.nodes.find(
-          (n) => n.name === chartName,
-        )?.screenBox;
+        const bounds = page.nodes.find((n) => n.name === chartName)?.bounds;
+        assert.ok(bounds !== undefined, `${item.label} ${chartName} bounds`);
         assert.ok(
-          screenBox !== undefined,
-          `${item.label} ${chartName} screenBox`,
-        );
-        assert.ok(
-          countPaintedPixelsInBox(page.png, screenBox) > 100,
+          countPaintedPixelsInBox(page.png, bounds) > 100,
           `${item.label} ${chartName} painted pixels`,
         );
       }
@@ -667,14 +684,14 @@ describe("pptxdk native charts codegen acceptance", () => {
     const initialPreview = await previewGeneratedSourceRelocated(
       sourceCases[0].result,
     );
-    assert.deepEqual(initialPreview.pages[0]?.diagnostics, []);
+    assert.deepEqual(initialPreview.pages[0]?.errors, []);
     const initialComboNode = initialPreview.pages[0]?.nodes.find(
       (n) => n.name === "Combo Overview",
     );
-    assert.ok(initialComboNode?.screenBox);
+    assert.ok(initialComboNode?.bounds);
     const initialComboPixels = countPaintedPixelsInBox(
       initialPreview.pages[0].png!,
-      initialComboNode.screenBox,
+      initialComboNode.bounds,
     );
 
     const editedCases = sourceCases.map(({ label, result }) => {
@@ -771,17 +788,17 @@ describe("pptxdk native charts codegen acceptance", () => {
 
       const painted = await previewGeneratedSourceRelocated(item.result);
       assert.deepEqual(
-        painted.pages[0]?.diagnostics,
+        painted.pages[0]?.errors,
         [],
-        `${item.label} preview diagnostics`,
+        `${item.label} preview errors`,
       );
       const comboPreviewNode = painted.pages[0]?.nodes.find(
         (n) => n.name === "Combo Overview",
       );
-      assert.ok(comboPreviewNode?.screenBox);
+      assert.ok(comboPreviewNode?.bounds);
       const editedComboPixels = countPaintedPixelsInBox(
         painted.pages[0].png!,
-        comboPreviewNode.screenBox,
+        comboPreviewNode.bounds,
       );
       assert.ok(
         editedComboPixels > initialComboPixels,

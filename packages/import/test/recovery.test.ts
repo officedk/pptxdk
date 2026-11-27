@@ -125,10 +125,13 @@ describe("@pptxdk/import recovery, resources, and mc:AlternateContent", () => {
           return {
             node: new CommonNode("shape", "shape", {
               ...(nameAttr === undefined ? {} : { name: nameAttr }),
-              x: 10,
-              y: 20,
-              width: 100,
-              height: 50,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 20,
+                width: 100,
+                height: 50,
+              },
             }),
             diagnostics: idAttr === undefined ? [] : [],
           };

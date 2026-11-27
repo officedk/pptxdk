@@ -420,9 +420,7 @@ function readBorderStyle(
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
 ): {
-  readonly borderColor?: ColorValue;
-  readonly borderWidth?: number;
-  readonly borderStyle?: "solid" | "dashed" | "dotted";
+  readonly border?: ImageVisualStyle["border"];
 } {
   if (ln.ignoreEmptyChild(A_NS, "noFill")) {
     return {};
@@ -484,9 +482,11 @@ function readBorderStyle(
   }
 
   return {
-    borderColor,
-    ...(borderWidth === undefined ? {} : { borderWidth }),
-    ...(borderStyle === undefined ? {} : { borderStyle }),
+    border: {
+      color: borderColor,
+      ...(borderWidth === undefined ? {} : { width: borderWidth }),
+      ...(borderStyle === undefined ? {} : { style: borderStyle }),
+    },
   };
 }
 
@@ -904,13 +904,22 @@ export function readImagePic(
       parsedXfrm.success && parsedXfrm.data.flipV === true ? true : undefined;
   }
 
+  const layoutPhWidth =
+    typeof matchedLayoutPh?.style?.width === "number"
+      ? matchedLayoutPh.style.width
+      : undefined;
+  const layoutPhHeight =
+    typeof matchedLayoutPh?.style?.height === "number"
+      ? matchedLayoutPh.style.height
+      : undefined;
+
   const geometry = readPictureGeometry(
     spPr,
     part,
     slideIndex,
     {
-      width: localWidth ?? matchedLayoutPh?.width ?? 100,
-      height: localHeight ?? matchedLayoutPh?.height ?? 100,
+      width: localWidth ?? layoutPhWidth ?? 100,
+      height: localHeight ?? layoutPhHeight ?? 100,
     },
     diagnostics,
   );
@@ -932,7 +941,14 @@ export function readImagePic(
     diagnostics.push(...clickResult.diagnostics);
   }
 
-  const visualStyle: ImageVisualStyle = {
+  const style: NonNullable<ImageDeclarationProps["style"]> = {
+    ...(localX !== undefined && localY !== undefined
+      ? { position: "absolute", left: localX, top: localY }
+      : {}),
+    ...(localWidth === undefined ? {} : { width: localWidth }),
+    ...(localHeight === undefined ? {} : { height: localHeight }),
+    ...(flipH === undefined ? {} : { flipH }),
+    ...(flipV === undefined ? {} : { flipV }),
     ...(opacity === undefined ? {} : { opacity }),
     ...(rotate === undefined ? {} : { rotate }),
     ...border,
@@ -946,15 +962,9 @@ export function readImagePic(
     ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
     ...(alt === undefined ? {} : { alt }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
-    ...(localX === undefined ? {} : { x: localX }),
-    ...(localY === undefined ? {} : { y: localY }),
-    ...(localWidth === undefined ? {} : { width: localWidth }),
-    ...(localHeight === undefined ? {} : { height: localHeight }),
     ...(geometry === undefined ? {} : { geometry }),
-    ...(flipH === undefined ? {} : { flipH }),
-    ...(flipV === undefined ? {} : { flipV }),
     ...(crop === undefined ? {} : { crop }),
-    ...(Object.keys(visualStyle).length === 0 ? {} : { style: visualStyle }),
+    ...(Object.keys(style).length === 0 ? {} : { style }),
   };
 
   const node = createImageNode(props);

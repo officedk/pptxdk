@@ -51,7 +51,17 @@ describe("Placeholder capability acceptance & isolation", () => {
       name: "Reject Layout",
       type: "obj",
       placeholders: {
-        content: { type: "obj", idx: 1, x: 40, y: 80, width: 240, height: 180 },
+        content: {
+          type: "obj",
+          idx: 1,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 80,
+            width: 240,
+            height: 180,
+          },
+        },
       },
     });
 
@@ -64,9 +74,7 @@ describe("Placeholder capability acceptance & isolation", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          (diag) => diag.code === "missing-placeholder-binding",
-        ),
+        error.diagnostics.some((diag) => diag.code === "broken-reference"),
     );
 
     assert.throws(
@@ -84,7 +92,7 @@ describe("Placeholder capability acceptance & isolation", () => {
         ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "unknown-parameter"),
+        error.diagnostics.some((diag) => diag.code === "unknown-prop"),
     );
 
     const badChildDoc = await expandDocument(
@@ -103,10 +111,13 @@ describe("Placeholder capability acceptance & isolation", () => {
             "placeholder" as never,
             { placeholder: "content" },
             createElement("shape" as never, {
-              x: 0,
-              y: 0,
-              width: 20,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 20,
+                height: 20,
+              },
             }),
           ),
         ),
@@ -116,7 +127,7 @@ describe("Placeholder capability acceptance & isolation", () => {
       () => resolveDocument(badChildDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "unsupported-children"),
+        error.diagnostics.some((diag) => diag.code === "invalid-structure"),
     );
   });
 
@@ -127,8 +138,28 @@ describe("Placeholder capability acceptance & isolation", () => {
       type: "twoObj",
       preserve: true,
       placeholders: {
-        left: { type: "obj", idx: 1, x: 40, y: 80, width: 240, height: 200 },
-        right: { type: "obj", idx: 2, x: 340, y: 80, width: 240, height: 200 },
+        left: {
+          type: "obj",
+          idx: 1,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 80,
+            width: 240,
+            height: 200,
+          },
+        },
+        right: {
+          type: "obj",
+          idx: 2,
+          style: {
+            position: "absolute",
+            left: 340,
+            top: 80,
+            width: 240,
+            height: 200,
+          },
+        },
       },
     });
     const sourceDoc = deck({ width: 640, height: 360 }).append(
@@ -196,7 +227,7 @@ describe("Placeholder capability acceptance & isolation", () => {
 
     const recoveredPaint = paint(recoveredResolution);
     expect(recoveredPaint.pages).toHaveLength(2);
-    expect(recoveredPaint.pages[0]?.diagnostics).toEqual([]);
-    expect(recoveredPaint.pages[1]?.diagnostics).toEqual([]);
+    expect(recoveredPaint.pages[0]?.errors).toEqual([]);
+    expect(recoveredPaint.pages[1]?.errors).toEqual([]);
   });
 });

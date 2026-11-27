@@ -1,8 +1,4 @@
-import type {
-  ColorValue,
-  GeometryBox,
-  ThemeContext,
-} from "@pptxdk/core/capability";
+import type { ColorValue, Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { ParsedAreaGroup, ParsedLineGroup } from "../chart-model.ts";
 import type { ChartDisplayBlanksAs, ChartLine } from "../chart-types.ts";
@@ -194,7 +190,7 @@ function renderLineGroup(options: {
   readonly group: ParsedLineGroup;
   readonly groupIndex: number;
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly displayBlanksAs: ChartDisplayBlanksAs | undefined;
   readonly theme: ThemeContext;
 }): {
@@ -412,7 +408,7 @@ function renderAreaGroup(options: {
   readonly group: ParsedAreaGroup;
   readonly groupIndex: number;
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly displayBlanksAs: ChartDisplayBlanksAs | undefined;
   readonly theme: ThemeContext;
 }): {
@@ -625,7 +621,7 @@ export function renderLineOrAreaGroup(options: {
   readonly group: ParsedLineGroup | ParsedAreaGroup;
   readonly groupIndex: number;
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly displayBlanksAs: ChartDisplayBlanksAs | undefined;
   readonly theme: ThemeContext;
 }): {

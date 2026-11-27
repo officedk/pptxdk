@@ -9,13 +9,13 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedObject,
+  type ObjectResolution,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -31,9 +31,12 @@ import {
 import {
   hasLocalDeclaration,
   resolvePlaceholderGeometry,
+  resolvePlaceholderVisualStyle,
 } from "../shared/style-inheritance.ts";
 import {
   emitVisualModel,
+  gradientDefSvg,
+  paintImageFillSvg,
   resolveVisualModel,
   visualSvgTransform,
   type ResolvedBorder,
@@ -83,7 +86,7 @@ type ImageCrop = {
 };
 
 type ImagePlacement = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly sourceCrop: ImageCrop;
 };
 
@@ -97,10 +100,12 @@ type ResolvedImageModel = {
   readonly placement: ImagePlacement;
   readonly visual: ResolvedVisualModel;
   readonly name: string;
+  readonly authorId?: string;
   readonly alt?: string;
   readonly placeholder?: {
     readonly nativeRef: NativePlaceholderRef;
     readonly omitSpPrTransform: boolean;
+    readonly hasLocalFill: boolean;
   };
 };
 
@@ -137,9 +142,14 @@ function emitImageModel(
   model: ResolvedImageModel,
   emitContext: EmitContext,
 ): EmitOutput {
-  const properties = emitVisualModel(model.visual, undefined, {
-    omitFill: true,
-  });
+  const omitFill =
+    model.visual.fill.kind === "none" &&
+    model.placeholder?.hasLocalFill !== true;
+  const properties = emitVisualModel(
+    model.visual,
+    (resource) => emitContext.registerResource(resource),
+    { omitFill },
+  );
   const escapedName = xmlEscape(model.name);
   const escapedAlt = model.alt === undefined ? undefined : xmlEscape(model.alt);
   let relationshipId: string;
@@ -232,15 +242,38 @@ function paintImageModel(
         : "";
     return {
       svg: `<g transform="${visualSvgTransform(visual)}">${placeholderShapes}${borderElements}</g>`,
-      warnings: [
+      placeholders: [
         {
-          message: `External linked image (${image.externalUrl}) is unavailable offline; rendered placeholder`,
+          ...(model.authorId === undefined ? {} : { id: model.authorId }),
+          path: paintContext.path,
+          url: image.externalUrl,
         },
+        ...(visual.fill.kind === "image" &&
+        visual.fill.source.kind === "external"
+          ? [
+              {
+                ...(model.authorId === undefined ? {} : { id: model.authorId }),
+                path: paintContext.path,
+                url: visual.fill.source.externalUrl,
+              },
+            ]
+          : []),
       ],
     };
   }
 
-  const pngBytes = decodeImageToPngBytes(image);
+  let pngBytes: Uint8Array;
+  try {
+    pngBytes = decodeImageToPngBytes(image);
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      throw new CapabilityError(error.code, error.message, error.path, {
+        ...error.details,
+        field: "src",
+      });
+    }
+    throw error;
+  }
 
   const leftCrop = roundCropFraction(sourceCrop.l);
   const topCrop = roundCropFraction(sourceCrop.t);
@@ -255,6 +288,31 @@ function paintImageModel(
   const fillablePaths = evaluated.paths.filter(
     (pathItem) => pathItem.fillMode !== "none" && pathItem.d !== "",
   );
+
+  let backgroundElements = "";
+  if (visual.fill.kind !== "none" && fillablePaths.length > 0) {
+    let fillAttr = 'fill="none"';
+    if (visual.fill.kind === "solid") {
+      fillAttr = `fill="#${visual.fill.color.hex}" fill-opacity="${roundSvgNumber(visual.fill.color.alpha ?? 1)}"`;
+    } else if (
+      visual.fill.kind === "linear-gradient" ||
+      visual.fill.kind === "radial-gradient"
+    ) {
+      const bgDefId = `${prefix}-bg`;
+      defs.push(gradientDefSvg(bgDefId, visual.fill));
+      fillAttr = `fill="url(#${bgDefId})"`;
+    } else if (visual.fill.kind === "image") {
+      const bgDefId = `${prefix}-bg`;
+      defs.push(paintImageFillSvg(visual.fill, bgDefId, box));
+      fillAttr = `fill="url(#${bgDefId})"`;
+    }
+    backgroundElements = fillablePaths
+      .map(
+        (pathItem) =>
+          `<path d="${pathItem.d}" ${fillAttr} stroke="none" stroke-width="0"/>`,
+      )
+      .join("");
+  }
 
   const opacity = visual.opacity ?? 1;
   let imageElement = "";
@@ -313,7 +371,7 @@ function paintImageModel(
       .join("");
   }
 
-  let layer = `<g transform="${visualSvgTransform(visual)}">${imageElement}${borderElements}</g>`;
+  let layer = `<g transform="${visualSvgTransform(visual)}">${backgroundElements}${imageElement}${borderElements}</g>`;
 
   if (visual.boxShadow !== undefined) {
     const shadow = visual.boxShadow;
@@ -339,6 +397,17 @@ function paintImageModel(
   const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
   return {
     svg: `${defsXml}${layer}`,
+    ...(visual.fill.kind === "image" && visual.fill.source.kind === "external"
+      ? {
+          placeholders: [
+            {
+              ...(model.authorId === undefined ? {} : { id: model.authorId }),
+              path: paintContext.path,
+              url: visual.fill.source.externalUrl,
+            },
+          ],
+        }
+      : {}),
   };
 }
 
@@ -347,7 +416,7 @@ function imagePlacement(
   image: { readonly width?: number; readonly height?: number },
   fit: ImageFit,
   crop: Partial<ImageCrop> | undefined,
-  allocated: GeometryBox,
+  allocated: Rect,
 ): ImagePlacement {
   const { width, height } = allocated;
   const box = { ...allocated };
@@ -433,15 +502,10 @@ function dimension(
 
 function requestedDimension(
   style: Readonly<Record<string, unknown>>,
-  props: Readonly<Record<string, unknown>>,
   name: "width" | "height",
 ): unknown {
   const styled = style[name];
-  return styled === undefined
-    ? props[name]
-    : typeof styled === "number"
-      ? styled
-      : undefined;
+  return typeof styled === "number" ? styled : undefined;
 }
 
 function parseCropValues(
@@ -578,9 +642,16 @@ export const imageCapability = {
       path: context.path,
     });
 
-    const imageStyle = isRecord(input.props["style"])
-      ? { ...input.props["style"] }
-      : {};
+    const rawSlideStyle = isRecord(input.props["style"])
+      ? input.props["style"]
+      : undefined;
+    const imageStyle =
+      placeholder !== undefined
+        ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
+        : rawSlideStyle !== undefined
+          ? { ...rawSlideStyle }
+          : {};
+    const hasLocalFill = hasLocalDeclaration(rawSlideStyle, "background");
 
     const requestedFit = input.props["fit"];
     let fit: ImageFit = "fill";
@@ -598,8 +669,6 @@ export const imageCapability = {
     const crop = parseCropValues(input.props["crop"]);
     const image = readImageSource(input.props["src"]);
     const geometry = input.props["geometry"] as Geometry | undefined;
-    const flipH = input.props["flipH"] as boolean | undefined;
-    const flipV = input.props["flipV"] as boolean | undefined;
 
     // Validate geometry and visual properties during bind before layout runs.
     resolveVisualModel({
@@ -607,8 +676,6 @@ export const imageCapability = {
       style: imageStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
       ...(geometry !== undefined ? { geometry } : {}),
-      ...(flipH !== undefined ? { flipH } : {}),
-      ...(flipV !== undefined ? { flipV } : {}),
       image: true,
     });
 
@@ -618,19 +685,17 @@ export const imageCapability = {
         : resolvePlaceholderGeometry(placeholder, input.props);
     const hasLocalVisualOverride =
       geometry !== undefined ||
-      flipH === true ||
-      flipV === true ||
       [...imageVisualStyleKeys].some(
-        (key) => key !== "opacity" && hasLocalDeclaration(imageStyle, key),
+        (key) => key !== "opacity" && hasLocalDeclaration(rawSlideStyle, key),
       );
-    const declaredX = placeholderGeometry?.x ?? input.props["x"];
-    const declaredY = placeholderGeometry?.y ?? input.props["y"];
+    const declaredX = placeholderGeometry?.x;
+    const declaredY = placeholderGeometry?.y;
     const requestedWidth =
-      requestedDimension(imageStyle, input.props, "width") ??
-      placeholderGeometry?.width;
+      placeholderGeometry?.width ??
+      requestedDimension(rawSlideStyle ?? {}, "width");
     const requestedHeight =
-      requestedDimension(imageStyle, input.props, "height") ??
-      placeholderGeometry?.height;
+      placeholderGeometry?.height ??
+      requestedDimension(rawSlideStyle ?? {}, "height");
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -679,7 +744,9 @@ export const imageCapability = {
         }
         const width =
           declaredWidth ??
-          Math.min(image.width, request.availableWidth ?? image.width);
+          (declaredHeight !== undefined
+            ? (declaredHeight * image.width) / image.height
+            : Math.min(image.width, request.availableWidth ?? image.width));
         const height = declaredHeight ?? (width * image.height) / image.width;
         return {
           width,
@@ -689,7 +756,7 @@ export const imageCapability = {
         };
       },
 
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const x = dimension(resolveContext.layoutBox?.x ?? declaredX, "x", 0);
         const y = dimension(resolveContext.layoutBox?.y ?? declaredY, "y", 0);
         let width: number;
@@ -736,8 +803,6 @@ export const imageCapability = {
           style: imageStyle,
           box,
           ...(geometry === undefined ? {} : { geometry }),
-          ...(flipH === undefined ? {} : { flipH }),
-          ...(flipV === undefined ? {} : { flipV }),
           image: true,
         });
         const name =
@@ -760,13 +825,12 @@ export const imageCapability = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: false,
-          filled: false,
+          filled: resolvedVisual.fill.kind !== "none",
           box,
           rotationDegrees: angle,
           hasBackground:
-            imageStyle["borderColor"] !== undefined ||
-            (typeof imageStyle["borderWidth"] === "number" &&
-              imageStyle["borderWidth"] > 0),
+            resolvedVisual.fill.kind !== "none" ||
+            resolvedVisual.border !== undefined,
         });
         const omitSpPrTransform =
           placeholder !== undefined &&
@@ -778,6 +842,7 @@ export const imageCapability = {
           placement,
           visual: resolvedVisual,
           name,
+          ...(authorId === undefined ? {} : { authorId }),
           ...(altValue === undefined ? {} : { alt: altValue }),
           ...(placeholder === undefined
             ? {}
@@ -785,6 +850,7 @@ export const imageCapability = {
                 placeholder: {
                   nativeRef: placeholder.nativeRef,
                   omitSpPrTransform,
+                  hasLocalFill,
                 },
               }),
         };
@@ -792,6 +858,25 @@ export const imageCapability = {
           placeholder === undefined
             ? imageMechanism
             : picturePlaceholderMechanism;
+        const imageObservation =
+          image.kind === "external"
+            ? Object.freeze({
+                kind: "external" as const,
+                ...(authorId === undefined ? {} : { id: authorId }),
+                path: resolveContext.path,
+                url: image.externalUrl,
+                placeholder: Object.freeze({
+                  ...(authorId === undefined ? {} : { id: authorId }),
+                  path: resolveContext.path,
+                  url: image.externalUrl,
+                }),
+              })
+            : Object.freeze({
+                kind: "embedded" as const,
+                contentType: image.contentType,
+                width: image.width,
+                height: image.height,
+              });
 
         return {
           observation: {
@@ -799,6 +884,7 @@ export const imageCapability = {
             kind: "image",
             name,
             box,
+            image: imageObservation,
           },
           transform: {
             box,
@@ -807,9 +893,6 @@ export const imageCapability = {
             flipV: resolvedVisual.flipV,
           },
           extensions: [],
-          ...(resolvedVisual.warnings.length === 0
-            ? {}
-            : { warnings: resolvedVisual.warnings }),
           ...(annotations.length === 0 ? {} : { annotations }),
 
           emit(emitContext: EmitContext): EmitOutput {

@@ -49,7 +49,6 @@ type CustomMarkerProps = {
   readonly y: number;
   readonly size: number;
   readonly color: string;
-  readonly warnMessage?: string;
 };
 
 function createMarkerNode(
@@ -64,7 +63,6 @@ function previewDocWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(document);
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -77,7 +75,6 @@ function previewJsxWith(modules: readonly CapabilityModule[]) {
     const resolution = resolveWith(await expandDocument(element));
     return {
       resolution,
-      query: resolution.query,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -109,7 +106,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     }
   }, 15_000);
 
-  it("supports registering custom bound extension modules, warning retention, and missing preview rejection", async () => {
+  it("supports registering custom bound extension modules and missing preview rejection", async () => {
     const calls: string[] = [];
 
     const customMarkerWithPreview: BoundObjectCapabilityModule = {
@@ -119,14 +116,24 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         const y = Number(input.props["y"]);
         const size = Number(input.props["size"]);
         const color = String(input.props["color"]);
-        const warnMessage =
-          typeof input.props["warnMessage"] === "string"
-            ? input.props["warnMessage"]
-            : undefined;
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
-          props: { x, y, width: size, height: size },
-          allowedStyleKeys: new Set<string>(),
+          props: {
+            style: {
+              position: "absolute",
+              left: x,
+              top: y,
+              width: size,
+              height: size,
+            },
+          },
+          allowedStyleKeys: new Set<string>([
+            "position",
+            "left",
+            "top",
+            "width",
+            "height",
+          ]),
           allowPadding: false,
           path: parseContext.path,
         });
@@ -161,9 +168,6 @@ describe("Shape capability acceptance & bound extension contracts", () => {
                 const resolved = paintContext.theme.resolveColor(color);
                 return {
                   svg: `<circle cx="${box.x + box.width / 2}" cy="${box.y + box.height / 2}" r="${box.width / 2}" fill="#${resolved.hex}"/>`,
-                  ...(warnMessage === undefined
-                    ? {}
-                    : { warnings: [{ message: warnMessage }] }),
                 };
               },
             };
@@ -178,7 +182,13 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
           props: input.props,
-          allowedStyleKeys: new Set<string>(),
+          allowedStyleKeys: new Set<string>([
+            "position",
+            "left",
+            "top",
+            "width",
+            "height",
+          ]),
           allowPadding: false,
           path: parseContext.path,
         });
@@ -218,39 +228,39 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     ]);
 
     const doc = deck({ width: 200, height: 120 }).append(
-      slide({ id: "warn-keeps-png" }).append(
+      slide({ id: "valid-custom" }).append(
         createMarkerNode({
           id: "dot",
           x: 60,
           y: 20,
           size: 80,
           color: "#DC2626",
-          warnMessage: "Custom approximation notice",
         }),
       ),
-      slide({ id: "warn-cannot-clear-error" }).append(
+      slide({ id: "missing-preview-slide" }).append(
         new CommonNode("noprev", "custom-no-preview", {
           id: "opaque",
-          x: 10,
-          y: 10,
-          width: 20,
-          height: 20,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 20,
+            height: 20,
+          },
         }),
         createMarkerNode({
-          id: "later-warn",
+          id: "later-marker",
           x: 100,
           y: 20,
           size: 40,
           color: "#2563EB",
-          warnMessage: "Later warning must not clear earlier error",
         }),
       ),
     );
 
     const result = await previewCustom(doc);
-    // Page 1: warning preserves PNG and draws the red circle.
-    assert.equal(result.pages[0]?.diagnostics.length, 1);
-    assert.equal(result.pages[0]?.diagnostics[0]?.severity, "warning");
+    // Page 1: renders cleanly with zero errors and draws the red circle.
+    assert.deepEqual(result.pages[0]?.errors, []);
     assert.ok(result.pages[0]?.png !== undefined);
     const pixels = PNG.sync.read(Buffer.from(result.pages[0].png));
     const center = (60 * pixels.width + 100) * 4;
@@ -258,25 +268,21 @@ describe("Shape capability acceptance & bound extension contracts", () => {
       [...pixels.data.subarray(center, center + 4)],
       [0xdc, 0x26, 0x26, 255],
     );
-    assert.ok(
-      result.query.getSlide("warn-keeps-png").get("dot").observe().box
-        ?.width === 80,
+    assert.equal(
+      result.resolution.slide("valid-custom").get("dot").box?.width,
+      80,
     );
 
-    // Page 2: missing preview handler causes error; subsequent warning does NOT clear error or fabricate PNG.
+    // Page 2: missing preview handler records PreviewError and omits PNG.
     assert.equal(result.pages[1]?.png, undefined);
-    expect(result.pages[1]?.diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          severity: "error",
-          path: "deck/slide[warn-cannot-clear-error]/custom-no-preview[opaque]",
-        }),
-        expect.objectContaining({
-          severity: "warning",
-          path: "deck/slide[warn-cannot-clear-error]/custom-marker[later-warn]",
-        }),
-      ]),
-    );
+    expect(result.pages[1]?.errors).toEqual([
+      {
+        code: "preview-unsupported-capability",
+        path: "deck/slide[missing-preview-slide]/custom-no-preview[opaque]",
+        message: "Preview does not support custom-no-preview",
+        capability: "custom-no-preview",
+      },
+    ]);
 
     // Same custom bound extension works via JSX expansion and shares trimmed constraints.
     const jsxCustomPreview = previewJsxWith([shapeCapability]);
@@ -338,7 +344,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         () => createResolver([invalidModule]),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-capability-module");
+          assert.equal(error.diagnostics[0]?.code, "missing-capability");
           return true;
         },
       );
@@ -364,7 +370,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
+        assert.equal(error.diagnostics[0]?.code, "missing-capability");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[s1]/broken-object[bad-obj]",
@@ -389,7 +395,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         ),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-capability-binding");
+        assert.equal(error.diagnostics[0]?.code, "missing-capability");
         assert.equal(error.diagnostics[0]?.path, "deck/slide[s1]");
         return true;
       },
@@ -412,15 +418,18 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     const resolution = resolveWith(
       deck({ width: 320, height: 180 }).append(
         slide({ id: "embed-shape" }).append(
-          shape({
+          shape("Subset Font", {
             id: "embedded",
-            x: 20,
-            y: 20,
-            width: 180,
-            height: 60,
-            fill: "#1E293B",
-            text: "Subset Font",
-            textStyle: { fontFamily: jostSubsetFont, color: "#FFFFFF" },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 180,
+              height: 60,
+              background: "#1E293B",
+              fontFamily: jostSubsetFont,
+              color: "#FFFFFF",
+            },
           }),
         ),
       ),
@@ -428,7 +437,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     const emitted = emit(resolution, { embedFonts: "subset" });
     assert.ok(emitted.pptx.byteLength > 0);
     const painted = paint(resolution);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
   });
 
@@ -489,7 +498,6 @@ describe("Shape capability acceptance & bound extension contracts", () => {
     );
 
     const editable = execution.openEditableRoundtripDocument();
-    assert.deepEqual(editable.report.diagnostics, []);
     const editableCustom = findShape(editable.document, "Custom Radial");
     assert.ok(editableCustom !== undefined);
     editableCustom.set({ name: "Edited Radial", geometry: "diamond" });

@@ -39,7 +39,23 @@ import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
 import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
 import { Text } from "@pptxdk/capabilities/text-elements";
-import { BuildError, createMorphScope } from "@pptxdk/core";
+import {
+  codegenDiagnosticSchema,
+  type CodegenDiagnostic,
+} from "@pptxdk/codegen";
+import {
+  BuildError,
+  backgroundValueSchema,
+  borderObjectSchema,
+  borderValueSchema,
+  buildDiagnosticSchema,
+  createMorphScope,
+  layoutStyleSchema,
+  placeholderSizeSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
+  visualStyleSchema,
+} from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { createElement } from "react";
@@ -55,6 +71,7 @@ import {
   groupStyleSchema,
 } from "../src/group/group-declaration.ts";
 import { imageDeclarationPropsSchema } from "../src/image/image-schemas.ts";
+import { spinOptionsSchema } from "../src/motion/motion-schemas.ts";
 import { notesDeclarationPropsSchema } from "../src/notes/notes-schemas.ts";
 import {
   shapeDeclarationPropsSchema,
@@ -67,6 +84,10 @@ import {
   textAuthorPropsSchema,
   textBoxStyleSchema,
 } from "../src/shared/text-schemas.ts";
+import {
+  shapeBorderObjectSchema,
+  shapeBorderValueSchema,
+} from "../src/shared/visual.ts";
 import { tableDeclarationPropsSchema } from "../src/table/table-schemas.ts";
 import {
   transitionKindSchema,
@@ -86,7 +107,8 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
           display: "flex",
           padding: 12,
           fontSize: 18,
-          backgroundColor: "#F8FAFC",
+          background: "#F8FAFC",
+          border: { color: "#CBD5E1", width: 1, style: "solid" },
         },
         enter: fade(),
         motion: true,
@@ -127,13 +149,13 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
       }).success,
       true,
     );
-    // Group supports rotate but not backgroundColor or blank name.
+    // Group supports rotate/flipH/flipV but not background or blank name.
     assert.equal(
       groupDeclarationPropsSchema.safeParse({ name: "   " }).success,
       false,
     );
     assert.equal(
-      groupStyleSchema.safeParse({ backgroundColor: "#FFFFFF" }).success,
+      groupStyleSchema.safeParse({ background: "#FFFFFF" }).success,
       false,
     );
     assert.equal(
@@ -147,20 +169,22 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
         name: "Callout",
         morphKey: heroKey,
         geometry: "roundRect",
-        x: 10,
-        y: 20,
-        width: 120,
-        height: 60,
         style: {
-          backgroundColor: "#2563EB",
-          borderColor: "#1D4ED8",
-          borderWidth: 2,
-          startArrow: "none",
-          endArrow: "triangle",
+          position: "absolute",
+          left: 10,
+          top: 20,
+          width: 120,
+          height: 60,
+          background: "#2563EB",
+          border: {
+            color: "#1D4ED8",
+            width: 2,
+            startArrow: "none",
+            endArrow: "triangle",
+          },
           fontSize: "16pt",
+          fontWeight: "bold",
         },
-        text: "Hello",
-        textStyle: { fontWeight: "bold" },
         enter: fade(),
         emphasis: spin(),
         motion: true,
@@ -181,7 +205,7 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
     );
   });
 
-  it("rejects invalid Shape width/height and non-object Shape.textStyle identically across JSX and imperative entries", async () => {
+  it("rejects invalid Shape style.width, invalid Box border, and Group background identically across JSX and imperative entries", async () => {
     const resolve = createResolver([
       slideBackgroundCapability,
       boxCapability,
@@ -191,8 +215,8 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
 
     const invalidCases = [
       {
-        label: "string width on Shape inside Box",
-        expectedCode: "invalid-coordinate",
+        label: "invalid width type on Shape style inside Box",
+        expectedCode: "invalid-style",
         jsx: () =>
           createElement(
             Deck,
@@ -205,8 +229,7 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
                 { style: { display: "flex", width: 300 } },
                 createElement(Shape, {
                   id: "bad-w",
-                  width: "200" as never,
-                  height: 40,
+                  style: { width: true as never, height: 40 },
                 }),
               ),
             ),
@@ -217,15 +240,14 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
               box({ style: { display: "flex", width: 300 } }).append(
                 shape({
                   id: "bad-w",
-                  width: "200" as never,
-                  height: 40,
+                  style: { width: true as never, height: 40 },
                 }),
               ),
             ),
           ),
       },
       {
-        label: "non-object textStyle on Shape",
+        label: "invalid border value on Shape",
         expectedCode: "invalid-style",
         jsx: () =>
           createElement(
@@ -234,35 +256,43 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
             createElement(
               Slide,
               { id: "s1" },
-              createElement(Shape, {
-                id: "bad-ts",
-                x: 10,
-                y: 10,
-                width: 100,
-                height: 40,
-                text: "Hi",
-                textStyle: "bold" as never,
-              }),
+              createElement(
+                Shape,
+                {
+                  id: "bad-border",
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 100,
+                    height: 40,
+                    border: "solid" as never,
+                  },
+                },
+                "Hi",
+              ),
             ),
           ),
         vanilla: () =>
           deck({ width: 480, height: 270 }).append(
             slide({ id: "s1" }).append(
-              shape({
-                id: "bad-ts",
-                x: 10,
-                y: 10,
-                width: 100,
-                height: 40,
-                text: "Hi",
-                textStyle: "bold" as never,
+              shape("Hi", {
+                id: "bad-border",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 100,
+                  height: 40,
+                  border: "solid" as never,
+                },
               }),
             ),
           ),
       },
       {
-        label: "backgroundColor on Group",
-        expectedCode: "unknown-style",
+        label: "background on Group",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -274,14 +304,17 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
                 Group,
                 {
                   id: "bad-g",
-                  style: { backgroundColor: "#FFFFFF" } as never,
+                  style: { background: "#FFFFFF" } as never,
                 },
                 createElement(Shape, {
                   id: "m1",
-                  x: 10,
-                  y: 10,
-                  width: 40,
-                  height: 40,
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 40,
+                    height: 40,
+                  },
                 }),
               ),
             ),
@@ -291,9 +324,18 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
             slide({ id: "s1" }).append(
               group({
                 id: "bad-g",
-                style: { backgroundColor: "#FFFFFF" } as never,
+                style: { background: "#FFFFFF" } as never,
               }).append(
-                shape({ id: "m1", x: 10, y: 10, width: 40, height: 40 }),
+                shape({
+                  id: "m1",
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 40,
+                    height: 40,
+                  },
+                }),
               ),
             ),
           ),
@@ -337,11 +379,16 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
         id: "t1",
         name: "Headline",
         morphKey: heroKey,
-        x: 20,
-        y: 30,
-        width: 300,
-        height: "auto",
-        style: { fontSize: "24pt", color: "#0F172A", padding: 8 },
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 30,
+          width: 300,
+          height: "auto",
+          fontSize: "24pt",
+          color: "#0F172A",
+          padding: 8,
+        },
         enter: fade(),
         emphasis: spin(),
         motion: true,
@@ -483,8 +530,8 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
 
     const invalidCases = [
       {
-        label: "string width on Text inside Box",
-        expectedCode: "invalid-text-box",
+        label: "invalid width type on Text inside Box",
+        expectedCode: "invalid-style",
         jsx: () =>
           createElement(
             Deck,
@@ -497,7 +544,10 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
                 { style: { display: "flex", width: 300 } },
                 createElement(
                   Text,
-                  { id: "bad-tw", width: "200" as never, height: 40 },
+                  {
+                    id: "bad-tw",
+                    style: { width: true as never, height: 40 },
+                  },
                   "Hello",
                 ),
               ),
@@ -509,8 +559,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
               box({ style: { display: "flex", width: 300 } }).append(
                 text("Hello", {
                   id: "bad-tw",
-                  width: "200" as never,
-                  height: 40,
+                  style: { width: true as never, height: 40 },
                 }),
               ),
             ),
@@ -518,7 +567,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unsupported align on Table.style",
-        expectedCode: "unknown-style",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -550,7 +599,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unsupported textWrap on Cell.style",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -586,7 +635,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unknown prop on Image and Chart",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -614,7 +663,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       },
       {
         label: "unknown prop on Chart",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -704,7 +753,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
     const invalidCases = [
       {
         label: "unknown easing key",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -714,10 +763,13 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
               { id: "s1" },
               createElement(Shape, {
                 id: "sh",
-                x: 10,
-                y: 10,
-                width: 60,
-                height: 40,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 60,
+                  height: 40,
+                },
                 enter: fade({ easing: { accelerate: 0.2, extra: 1 } as never }),
               }),
             ),
@@ -727,10 +779,13 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
             slide({ id: "s1" }).append(
               shape({
                 id: "sh",
-                x: 10,
-                y: 10,
-                width: 60,
-                height: 40,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 60,
+                  height: 40,
+                },
                 enter: fade({ easing: { accelerate: 0.2, extra: 1 } as never }),
               }),
             ),
@@ -738,7 +793,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unknown breathe parameter",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -748,11 +803,14 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
               { id: "s1" },
               createElement(Shape, {
                 id: "sh",
-                x: 10,
-                y: 10,
-                width: 60,
-                height: 40,
-                fill: "#112233",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 60,
+                  height: 40,
+                  background: "#112233",
+                },
                 emphasis: breathe({
                   period: 1000,
                   from: "#112233",
@@ -767,11 +825,14 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
             slide({ id: "s1" }).append(
               shape({
                 id: "sh",
-                x: 10,
-                y: 10,
-                width: 60,
-                height: 40,
-                fill: "#112233",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 60,
+                  height: 40,
+                  background: "#112233",
+                },
                 emphasis: breathe({
                   period: 1000,
                   from: "#112233",
@@ -784,7 +845,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unknown MotionScope parameter",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -797,10 +858,13 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
                 { scope: scopeHandle, bogus: true } as never,
                 createElement(Shape, {
                   id: "sh",
-                  x: 10,
-                  y: 10,
-                  width: 60,
-                  height: 40,
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 60,
+                    height: 40,
+                  },
                   enter: fade(),
                 }),
               ),
@@ -812,10 +876,13 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
               motionScope(scopeHandle, { bogus: true } as never).append(
                 shape({
                   id: "sh",
-                  x: 10,
-                  y: 10,
-                  width: 60,
-                  height: 40,
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 60,
+                    height: 40,
+                  },
                   enter: fade(),
                 }),
               ),
@@ -824,7 +891,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unknown Step parameter",
-        expectedCode: "unknown-parameter",
+        expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
             Deck,
@@ -837,10 +904,13 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
                 { n: 1, bogus: true } as never,
                 createElement(Shape, {
                   id: "sh",
-                  x: 10,
-                  y: 10,
-                  width: 60,
-                  height: 40,
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 60,
+                    height: 40,
+                  },
                   enter: fade(),
                 }),
               ),
@@ -852,10 +922,13 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
               step({ n: 1, bogus: true } as never).append(
                 shape({
                   id: "sh",
-                  x: 10,
-                  y: 10,
-                  width: 60,
-                  height: 40,
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 60,
+                    height: 40,
+                  },
                   enter: fade(),
                 }),
               ),
@@ -864,7 +937,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       },
       {
         label: "unsupported transition kind",
-        expectedCode: "unsupported-transition",
+        expectedCode: "invalid-prop",
         jsx: () =>
           createElement(Deck, { width: 480, height: 270 }, [
             createElement(Slide, {
@@ -900,5 +973,125 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
         );
       }
     }
+  });
+
+  it("enforces updated visual, layout, placeholderSize, spinOptions, and stage error Zod schemas", () => {
+    assert.equal(backgroundValueSchema.safeParse("none").success, true);
+    assert.equal(backgroundValueSchema.safeParse("#2563EB").success, true);
+    assert.equal(
+      backgroundValueSchema.safeParse({
+        type: "linear-gradient",
+        angle: 90,
+        stops: [
+          { color: "#112233", position: 0 },
+          { color: "#445566", position: 1 },
+        ],
+      }).success,
+      true,
+    );
+    assert.equal(backgroundValueSchema.safeParse(123).success, false);
+
+    assert.equal(borderValueSchema.safeParse("none").success, true);
+    assert.equal(
+      borderObjectSchema.safeParse({
+        color: "#1E293B",
+        width: 2,
+        style: "dashed",
+      }).success,
+      true,
+    );
+    assert.equal(
+      borderValueSchema.safeParse({ color: "#1E293B", startArrow: "triangle" })
+        .success,
+      false,
+    );
+    assert.equal(
+      shapeBorderObjectSchema.safeParse({
+        color: "#1E293B",
+        width: 2,
+        startArrow: "none",
+        endArrow: "triangle",
+      }).success,
+      true,
+    );
+    assert.equal(shapeBorderValueSchema.safeParse("none").success, true);
+
+    assert.equal(
+      visualStyleSchema.safeParse({
+        background: "none",
+        border: "none",
+        boxShadow: "none",
+        flipH: true,
+        flipV: false,
+      }).success,
+      true,
+    );
+    assert.equal(
+      layoutStyleSchema.safeParse({
+        position: "absolute",
+        left: 16,
+        top: 24,
+        width: 120,
+        height: "auto",
+      }).success,
+      true,
+    );
+    assert.equal(placeholderSizeSchema.safeParse("full").success, true);
+    assert.equal(placeholderSizeSchema.safeParse("half").success, true);
+    assert.equal(placeholderSizeSchema.safeParse("quarter").success, true);
+    assert.equal(placeholderSizeSchema.safeParse("third").success, false);
+
+    assert.equal(spinOptionsSchema.safeParse({ by: 180 }).success, true);
+    assert.equal(
+      spinOptionsSchema.safeParse({ from: 0, to: 90 }).success,
+      true,
+    );
+    assert.equal(
+      spinOptionsSchema.safeParse({ by: 90, from: 0 }).success,
+      false,
+    );
+
+    assert.equal(
+      buildDiagnosticSchema.safeParse({
+        code: "invalid-prop",
+        path: "slide[0].shape[0]",
+        field: "emphasis",
+        message: "spin() cannot combine from/to and by",
+      }).success,
+      true,
+    );
+    assert.equal(
+      buildDiagnosticSchema.safeParse({
+        code: "invalid-prop",
+        path: "slide[0].shape[0]",
+        message: "legacy",
+        severity: "error",
+      }).success,
+      false,
+    );
+    assert.equal(
+      previewErrorSchema.safeParse({
+        code: "preview-missing-font",
+        path: "slide[0].text[0]",
+        message: "Missing font",
+        font: { family: "Inter", weight: 400, style: "normal" },
+      }).success,
+      true,
+    );
+    assert.equal(
+      previewPlaceholderSchema.safeParse({
+        id: "hero-img",
+        path: "slide[0].image[0]",
+        url: "https://example.com/a.png",
+      }).success,
+      true,
+    );
+    const codegenDiag: CodegenDiagnostic = {
+      code: "unexpressible-value",
+      path: "slide[0].shape[0]",
+      field: "style.background",
+      message: "Cannot serialize value",
+    };
+    assert.equal(codegenDiagnosticSchema.safeParse(codegenDiag).success, true);
   });
 });

@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { ParsedColumnOrBarGroup } from "../chart-model.ts";
 import {
@@ -12,7 +12,7 @@ export function renderColumnOrBarGroup(options: {
   readonly group: ParsedColumnOrBarGroup;
   readonly groupIndex: number;
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly theme: ThemeContext;
 }): {
   readonly svg: string;

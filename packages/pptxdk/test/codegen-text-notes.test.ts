@@ -179,22 +179,32 @@ function createRichTextAndNotesVanillaDeck() {
           {
             id: "rich-card",
             name: "RichCard",
-            x: 24,
-            y: 24,
-            width: 420,
-            height: 220,
             link: { url: "https://example.com/spec" },
-            style: { fontFamily: "minor", fontSize: "14pt", color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 420,
+              height: 220,
+              fontFamily: "minor",
+              fontSize: "14pt",
+              color: "#0F172A",
+            },
           },
         ),
         text("Jump to details", {
           id: "jump-btn",
-          x: 464,
-          y: 24,
-          width: 152,
-          height: 44,
           link: { id: "details" },
-          style: { fontFamily: "minor", fontSize: "14pt", color: "#1E3A8A" },
+          style: {
+            position: "absolute",
+            left: 464,
+            top: 24,
+            width: 152,
+            height: 44,
+            fontFamily: "minor",
+            fontSize: "14pt",
+            color: "#1E3A8A",
+          },
         }),
         notes(
           [
@@ -216,12 +226,17 @@ function createRichTextAndNotesVanillaDeck() {
       slide({ id: "details", hidden: true }).append(
         text(["Home from page ", slideNumber()], {
           id: "home-box",
-          x: 32,
-          y: 32,
-          width: 260,
-          height: 48,
           link: { action: "home" },
-          style: { fontFamily: "minor", fontSize: "16pt", color: "#111827" },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 32,
+            width: 260,
+            height: 48,
+            fontFamily: "minor",
+            fontSize: "16pt",
+            color: "#111827",
+          },
         }),
         notes("Hidden slide cue", { id: "details-notes" }),
       ),
@@ -230,11 +245,16 @@ function createRichTextAndNotesVanillaDeck() {
       slide({ id: "no-notes-page" }).append(
         text("Canvas without notes", {
           id: "plain-box",
-          x: 32,
-          y: 32,
-          width: 260,
-          height: 48,
-          style: { fontFamily: "minor", fontSize: "16pt", color: "#334155" },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 32,
+            width: 260,
+            height: 48,
+            fontFamily: "minor",
+            fontSize: "16pt",
+            color: "#334155",
+          },
         }),
       ),
     ),
@@ -257,12 +277,13 @@ async function createRichTextAndNotesReactDeck() {
             {
               id: "rich-card",
               name: "RichCard",
-              x: 24,
-              y: 24,
-              width: 420,
-              height: 220,
               link: { url: "https://example.com/spec" },
               style: {
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 420,
+                height: 220,
                 fontFamily: "minor",
                 fontSize: "14pt",
                 color: "#0F172A",
@@ -338,12 +359,13 @@ async function createRichTextAndNotesReactDeck() {
             Text,
             {
               id: "jump-btn",
-              x: 464,
-              y: 24,
-              width: 152,
-              height: 44,
               link: { id: "details" },
               style: {
+                position: "absolute",
+                left: 464,
+                top: 24,
+                width: 152,
+                height: 44,
                 fontFamily: "minor",
                 fontSize: "14pt",
                 color: "#1E3A8A",
@@ -381,12 +403,13 @@ async function createRichTextAndNotesReactDeck() {
             Text,
             {
               id: "home-box",
-              x: 32,
-              y: 32,
-              width: 260,
-              height: 48,
               link: { action: "home" },
               style: {
+                position: "absolute",
+                left: 32,
+                top: 32,
+                width: 260,
+                height: 48,
                 fontFamily: "minor",
                 fontSize: "16pt",
                 color: "#111827",
@@ -412,11 +435,12 @@ async function createRichTextAndNotesReactDeck() {
             Text,
             {
               id: "plain-box",
-              x: 32,
-              y: 32,
-              width: 260,
-              height: 48,
               style: {
+                position: "absolute",
+                left: 32,
+                top: 32,
+                width: 260,
+                height: 48,
                 fontFamily: "minor",
                 fontSize: "16pt",
                 color: "#334155",
@@ -436,10 +460,6 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
     const reactDoc = await createRichTextAndNotesReactDeck();
 
     const originalBuilt = await build(vanillaDoc, { embedFonts: "full" });
-    assert.deepEqual(
-      originalBuilt.report.diagnostics.filter((d) => d.severity === "error"),
-      [],
-    );
     const pptxBytesCopy = new Uint8Array(originalBuilt.pptx);
     const imported = importPptx(pptxBytesCopy);
     pptxBytesCopy.fill(0);
@@ -581,7 +601,7 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
       assert.equal(painted.pages.length, 3);
       for (const [pageIdx, page] of painted.pages.entries()) {
         assert.deepEqual(
-          page.diagnostics,
+          page.errors,
           [],
           `${item.label} preview page ${pageIdx + 1}`,
         );
@@ -669,7 +689,16 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
               }),
             ]),
           ],
-          { id: "sizes", x: 24, y: 24, width: 360, height: 160 },
+          {
+            id: "sizes",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 360,
+              height: 160,
+            },
+          },
         ),
         notes("File-only notes cue", { id: "file-notes" }),
       ),
@@ -722,11 +751,14 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
       slide({ id: "text-rejections" }).append(
         text("汉", {
           id: "missing-glyph",
-          x: 10,
-          y: 10,
-          width: 180,
-          height: 40,
-          style: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 180,
+            height: 40,
+            fontFamily: jostFont,
+          },
         }),
         text(
           [
@@ -736,46 +768,55 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
           ],
           {
             id: "missing-bullet-glyph",
-            x: 10,
-            y: 60,
-            width: 180,
-            height: 40,
-            style: { fontFamily: jostFont },
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 60,
+              width: 180,
+              height: 40,
+              fontFamily: jostFont,
+            },
           },
         ),
         text("Color", {
           id: "colr-font",
-          x: 220,
-          y: 10,
-          width: 180,
-          height: 40,
-          style: { fontFamily: colrJostFont },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 10,
+            width: 180,
+            height: 40,
+            fontFamily: colrJostFont,
+          },
         }),
         text("Bitmap", {
           id: "sbix-font",
-          x: 220,
-          y: 60,
-          width: 180,
-          height: 40,
-          style: { fontFamily: sbixJostFont },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 60,
+            width: 180,
+            height: 40,
+            fontFamily: sbixJostFont,
+          },
         }),
         notes("Notes survive preview rejection", { id: "preserved-notes" }),
       ),
       slide({ id: "valid-sibling" }).append(
         text("Valid sibling text", {
           id: "ok-text",
-          x: 40,
-          y: 60,
-          width: 240,
-          height: 60,
           style: {
+            position: "absolute",
+            left: 40,
+            top: 60,
+            width: 240,
+            height: 60,
             fontFamily: jostFont,
             fontSize: 22,
             padding: 12,
             verticalAlign: "middle",
-            backgroundColor: "#EFF6FF",
-            borderColor: "#2563EB",
-            borderWidth: 2,
+            background: "#EFF6FF",
+            border: { color: "#2563EB", width: 2 },
           },
         }),
         notes("Valid page notes", { id: "valid-notes" }),
@@ -807,7 +848,7 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
       const painted = await previewGeneratedSourceRelocated(item.result);
       const p1 = painted.pages[0]!;
       assert.equal(p1.png, undefined);
-      assert.equal(p1.diagnostics.length, 4);
+      assert.equal(p1.errors.length, 4);
       for (const id of [
         "missing-glyph",
         "missing-bullet-glyph",
@@ -815,15 +856,13 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
         "sbix-font",
       ]) {
         assert.ok(
-          p1.diagnostics.some(
-            (d) => d.severity === "error" && d.path.includes(`text[${id}]`),
-          ),
-          `${item.label}: missing diagnostic for ${id}`,
+          p1.errors.some((d) => d.path.includes(`text[${id}]`)),
+          `${item.label}: missing error for ${id}`,
         );
       }
 
       const p2 = painted.pages[1]!;
-      assert.deepEqual(p2.diagnostics, []);
+      assert.deepEqual(p2.errors, []);
       assert.ok(p2.png instanceof Uint8Array);
       assert.equal(p2.svg?.includes("Valid page notes"), false);
     }
@@ -846,17 +885,23 @@ describe("pptxdk rich-text, fields, links, and speaker notes codegen acceptance"
       slide({ id: "s-adj" }).append(
         text([], {
           id: "adj-text",
-          x: 10,
-          y: 10,
-          width: 200,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 200,
+            height: 40,
+          },
         }).append("Hello", "World"),
         text([], {
           id: "adj-para",
-          x: 10,
-          y: 70,
-          width: 200,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 70,
+            width: 200,
+            height: 40,
+          },
         }).append(paragraph().append("A", "B", span("C"), "D", "E")),
       ),
     );

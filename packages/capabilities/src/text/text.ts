@@ -10,14 +10,14 @@ import {
   type CapabilityParseContext,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ResolvedObject,
+  type ObjectResolution,
   type SlideEmitOutput,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -49,6 +49,7 @@ import {
   textBoxStyleSchema,
 } from "../shared/text-schemas.ts";
 import {
+  computeTextMetrics,
   emitSlideNumberRunXml,
   emitTextBody,
   measureTextLayoutFromParagraphs,
@@ -143,7 +144,7 @@ type TextInsets = ReturnType<typeof textInsets>;
 /** Closed resolved text model produced in resolve() and exhaustively consumed by emitTextModel and paintTextModel. */
 type ResolvedTextModel = {
   readonly escapedName: string;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly visual: ResolvedVisualModel;
   readonly text: ResolvedTextBody;
   readonly insets: TextInsets;
@@ -215,13 +216,14 @@ function paintTextModel(
   paintContext: PaintContext,
 ): PaintOutput {
   const paintBox = paintContext.box ?? model.box;
-  const backgroundSvg = model.visual.hasVisibleStyle
+  const visualPaint = model.visual.hasVisibleStyle
     ? paintVisualModel({
         model: model.visual,
         slideNumber: paintContext.slideNumber,
         objectId: paintContext.objectId,
-      }).svg
-    : "";
+      })
+    : undefined;
+  const backgroundSvg = visualPaint?.svg ?? "";
   const glyphs = renderTextOutlinesSvg({
     paragraphs: model.text.paragraphs,
     box: paintBox,
@@ -237,6 +239,9 @@ function paintTextModel(
   });
   return {
     svg: `${backgroundSvg}<g transform="${visualSvgTransform(model.visual)}">${glyphs}</g>`,
+    ...(visualPaint?.placeholders === undefined
+      ? {}
+      : { placeholders: visualPaint.placeholders }),
   };
 }
 
@@ -260,7 +265,7 @@ export const textPlaceholderMechanism = defineCanvasMechanism({
 
 type ResolvedSlideNumberFieldModel = {
   readonly run: Run;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly idPrefix: string;
 };
 
@@ -367,14 +372,11 @@ export const textCapability = {
       placeholder === undefined
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
-    const declaredX = placeholderGeometry?.x ?? input.props["x"];
-    const declaredY = placeholderGeometry?.y ?? input.props["y"];
-    const declaredWidth = placeholderGeometry?.width ?? input.props["width"];
+    const declaredX = placeholderGeometry?.x;
+    const declaredY = placeholderGeometry?.y;
+    const declaredWidth = placeholderGeometry?.width;
     if (declaredX !== undefined) coordinate(declaredX, "x");
     if (declaredY !== undefined) coordinate(declaredY, "y");
-    if (input.props["width"] !== undefined) {
-      size(input.props["width"], "width");
-    }
     if (declaredWidth !== undefined && typeof declaredWidth === "number") {
       size(declaredWidth, "width");
     }
@@ -393,9 +395,17 @@ export const textCapability = {
 
     const insets = textInsets(input.props["style"], placeholder);
     const styleHeight = layoutStyleValue(input, "height");
-    const requestedHeight = height(
-      styleHeight ?? input.props["height"] ?? placeholderGeometry?.height,
-    );
+    const requestedHeight = height(placeholderGeometry?.height ?? styleHeight);
+    const ls = contract.layoutStyle;
+    const hasBothVerticalOffsets =
+      ls.position === "absolute" &&
+      ((ls.inset !== undefined && ls.inset !== "auto") ||
+        (ls.top !== undefined &&
+          ls.top !== "auto" &&
+          ls.bottom !== undefined &&
+          ls.bottom !== "auto"));
+    const isContentSized =
+      requestedHeight.contentSized && !hasBothVerticalOffsets;
 
     const {
       paragraphs,
@@ -419,12 +429,6 @@ export const textCapability = {
     const inheritedPlaceholderGeometry =
       placeholder?.layoutPlaceholder?.geometry ??
       placeholder?.masterPlaceholder?.geometry;
-    const inheritedPlaceholderFlipH =
-      placeholder?.layoutPlaceholder?.flipH ??
-      placeholder?.masterPlaceholder?.flipH;
-    const inheritedPlaceholderFlipV =
-      placeholder?.layoutPlaceholder?.flipV ??
-      placeholder?.masterPlaceholder?.flipV;
     const visualStyle =
       placeholder !== undefined
         ? resolvePlaceholderVisualStyle(placeholder, rawSlideStyle)
@@ -438,12 +442,6 @@ export const textCapability = {
       ...(inheritedPlaceholderGeometry === undefined
         ? {}
         : { geometry: inheritedPlaceholderGeometry }),
-      ...(inheritedPlaceholderFlipH === undefined
-        ? {}
-        : { flipH: inheritedPlaceholderFlipH }),
-      ...(inheritedPlaceholderFlipV === undefined
-        ? {}
-        : { flipV: inheritedPlaceholderFlipV }),
     });
 
     const authorId =
@@ -476,8 +474,8 @@ export const textCapability = {
       measureLayout(
         request: CapabilityLayoutRequest,
       ): CapabilityLayoutMeasurement | undefined {
-        const isContentSized = requestedHeight.contentSized;
-        const width = request.availableWidth ?? contract.width ?? declaredWidth;
+        const width =
+          request.availableWidth ?? contract.layoutStyle.width ?? declaredWidth;
         const innerWidth =
           request.availableWidth !== undefined
             ? request.availableWidth
@@ -498,8 +496,10 @@ export const textCapability = {
         } catch (error) {
           if (
             !isContentSized &&
+            request.purpose !== "baseline" &&
             error instanceof CapabilityError &&
-            error.code === "font-measurement-unavailable"
+            (error.code === "font-measurement-unavailable" ||
+              error.code === "font-missing-glyph")
           ) {
             return {
               baseline: "unavailable",
@@ -508,18 +508,14 @@ export const textCapability = {
           throw error;
         }
       },
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const dimensions = {
-          x: coordinate(
-            resolveContext.layoutBox?.x ?? contract.x ?? declaredX,
-            "x",
-          ),
-          y: coordinate(
-            resolveContext.layoutBox?.y ?? contract.y ?? declaredY,
-            "y",
-          ),
+          x: coordinate(resolveContext.layoutBox?.x ?? declaredX, "x"),
+          y: coordinate(resolveContext.layoutBox?.y ?? declaredY, "y"),
           width: size(
-            resolveContext.layoutBox?.width ?? contract.width ?? declaredWidth,
+            resolveContext.layoutBox?.width ??
+              declaredWidth ??
+              contract.layoutStyle.width,
             "width",
           ),
         };
@@ -543,7 +539,7 @@ export const textCapability = {
           {
             width: innerWidth,
             ...(innerHeight === undefined ? {} : { height: innerHeight }),
-            contentSized: requestedHeight.contentSized,
+            contentSized: isContentSized,
             insets,
           },
           "text-box",
@@ -556,18 +552,23 @@ export const textCapability = {
                   : { localBodyDeclared }),
               },
         );
-        const box: GeometryBox = {
+        const box: Rect = {
           ...dimensions,
           height: size(
             resolveContext.layoutBox?.height ??
-              (requestedHeight.contentSized
+              (isContentSized
                 ? resolvedText.measurement === undefined
                   ? undefined
                   : resolvedText.measurement.height + insets.top + insets.bottom
-                : requestedHeight.value),
+                : measuredHeight),
             "height",
           ),
         };
+        const textMetrics = computeTextMetrics(
+          resolvedText,
+          Math.max(0, box.width - insets.left - insets.right),
+          Math.max(0, box.height - insets.top - insets.bottom),
+        );
         const visual = resolveVisualModel({
           theme: placeholder?.masterTheme ?? resolveContext.theme,
           style: visualStyle,
@@ -575,12 +576,6 @@ export const textCapability = {
           ...(inheritedPlaceholderGeometry === undefined
             ? {}
             : { geometry: inheritedPlaceholderGeometry }),
-          ...(inheritedPlaceholderFlipH === undefined
-            ? {}
-            : { flipH: inheritedPlaceholderFlipH }),
-          ...(inheritedPlaceholderFlipV === undefined
-            ? {}
-            : { flipV: inheritedPlaceholderFlipV }),
         });
         const name =
           resolveContext.morphName ??
@@ -602,26 +597,19 @@ export const textCapability = {
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: true,
-          filled:
-            visualStyle["backgroundColor"] !== undefined ||
-            visualStyle["backgroundImage"] !== undefined,
+          filled: visual.fill.kind !== "none",
           box,
           rotationDegrees: visual.rotate,
           hasBackground:
-            visualStyle["backgroundColor"] !== undefined ||
-            visualStyle["backgroundImage"] !== undefined ||
-            visualStyle["borderColor"] !== undefined ||
-            (typeof visualStyle["borderWidth"] === "number" &&
-              visualStyle["borderWidth"] > 0),
+            visual.fill.kind !== "none" || visual.border !== undefined,
           paragraphCount: resolvedText.paragraphCount,
         });
         const transform: PreviewTransform = {
           box,
           angle: visual.rotate,
-          flipH: false,
-          flipV: false,
+          flipH: visual.flipH,
+          flipV: visual.flipV,
         };
-        const warnings = [...resolvedText.warnings, ...visual.warnings];
         const model: ResolvedTextModel = {
           escapedName,
           box,
@@ -636,19 +624,14 @@ export const textCapability = {
                   spPrFlags: {
                     hasBox: placeholderGeometry?.hasLocalBoxOverride === true,
                     hasRotate: hasLocalDeclaration(rawSlideStyle, "rotate"),
-                    hasFlipH: false,
-                    hasFlipV: false,
+                    hasFlipH: hasLocalDeclaration(rawSlideStyle, "flipH"),
+                    hasFlipV: hasLocalDeclaration(rawSlideStyle, "flipV"),
                     hasGeometryOrRadius: hasLocalDeclaration(
                       rawSlideStyle,
                       "borderRadius",
                     ),
-                    hasFill:
-                      hasLocalDeclaration(rawSlideStyle, "backgroundColor") ||
-                      hasLocalDeclaration(rawSlideStyle, "backgroundImage"),
-                    hasBorder:
-                      hasLocalDeclaration(rawSlideStyle, "borderColor") ||
-                      hasLocalDeclaration(rawSlideStyle, "borderWidth") ||
-                      hasLocalDeclaration(rawSlideStyle, "borderStyle"),
+                    hasFill: hasLocalDeclaration(rawSlideStyle, "background"),
+                    hasBorder: hasLocalDeclaration(rawSlideStyle, "border"),
                     hasEffects:
                       hasLocalDeclaration(rawSlideStyle, "boxShadow") ||
                       hasLocalDeclaration(rawSlideStyle, "softEdge"),
@@ -664,12 +647,13 @@ export const textCapability = {
             name,
             box,
             text: resolvedText.text,
+            textMetrics,
           },
           transform,
           extensions: [],
-          ...(warnings.length === 0 ? {} : { warnings }),
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: resolvedText.resourceClaims,
+          fontUsages: resolvedText.fontUsages,
           emit(emitContext: EmitContext): EmitOutput {
             return placeholder !== undefined
               ? textPlaceholderMechanism.emit(model, emitContext)

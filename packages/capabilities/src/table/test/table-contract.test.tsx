@@ -48,11 +48,12 @@ describe("tableCapability resolved contract", () => {
             {
               id: "pricing",
               name: "PricingTable",
-              x: 20,
-              y: 30,
-              width: 300,
               columns: [100, "1fr", "auto"],
               style: {
+                position: "absolute",
+                left: 20,
+                top: 30,
+                width: 300,
                 fontFamily: jostFont,
                 fontSize: 14,
               },
@@ -61,7 +62,7 @@ describe("tableCapability resolved contract", () => {
               Row,
               {
                 id: "header",
-                style: { height: 40, backgroundColor: "#1E293B" },
+                style: { height: 40, background: "#1E293B" },
               },
               createElement(
                 Cell,
@@ -95,8 +96,7 @@ describe("tableCapability resolved contract", () => {
                   id: "tier-cell",
                   style: {
                     padding: 6,
-                    borderColor: "#2563EB",
-                    borderWidth: 2,
+                    border: { color: "#2563EB", width: 2 },
                   },
                 },
                 "Pro",
@@ -119,35 +119,40 @@ describe("tableCapability resolved contract", () => {
 
     const resolution = resolve(doc);
 
-    const observed = resolution.report.slides[0]?.objects.find(
-      (obj) => obj.authorId === "pricing",
-    );
+    const pricingLocator = resolution.slide("cover").get("pricing");
+    const observed = pricingLocator.objects[0];
     assert.ok(observed !== undefined);
     assert.equal(observed.kind, "table");
     assert.equal(observed.name, "PricingTable");
-    assert.equal(observed.table?.columnWidths.length, 3);
+    assert.equal(observed.table?.columns.length, 3);
     assert.deepEqual(observed.table?.merges, [
       { row: 0, column: 0, rowSpan: 1, colSpan: 2 },
     ]);
-    assert.deepEqual(observed.table?.cells, [
-      ["Plan Overview", "", "Page 1"],
-      ["Pro", "Wraps inside flexible middle track", "$49"],
-    ]);
+    assert.deepEqual(
+      observed.table?.cells.map((c) => ({
+        row: c.row,
+        column: c.column,
+        text: c.text,
+      })),
+      [
+        { row: 0, column: 0, text: "Plan Overview" },
+        { row: 0, column: 2, text: "Page 1" },
+        { row: 1, column: 0, text: "Pro" },
+        { row: 1, column: 1, text: "Wraps inside flexible middle track" },
+        { row: 1, column: 2, text: "$49" },
+      ],
+    );
 
-    const tableQuery = resolution.query.getSlide("cover").get("pricing");
-    const titleSpanBox = tableQuery
-      .get("header")
-      .get("title-span")
-      .observe().box!;
+    const titleSpanBox = pricingLocator.get("header").get("title-span").box!;
     assert.equal(
       titleSpanBox.width,
-      observed.table.columnWidths[0]! + observed.table.columnWidths[1]!,
+      observed.table.columns[0]! + observed.table.columns[1]!,
     );
     assert.equal(titleSpanBox.height, 40);
 
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 1);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
     assert.ok(painted.pages[0]?.svg?.includes("<path"));
     assert.ok(painted.pages[0]?.svg?.includes("#1E293B"));
@@ -180,10 +185,14 @@ describe("tableCapability resolved contract", () => {
             Table,
             {
               id: "embed-tbl",
-              x: 20,
-              y: 20,
               columns: [120, 120],
-              style: { fontFamily: jostFont, fontSize: 14 },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                fontFamily: jostFont,
+                fontSize: 14,
+              },
             },
             createElement(
               Row,
@@ -211,16 +220,21 @@ describe("tableCapability resolved contract", () => {
       false,
     );
 
-    // Missing glyph in a cell produces cell-located warning during resolve,
-    // allows paint and non-embedded emit, and fails with cell path on embedded emit.
-    const missingGlyphDoc = deck({ width: 480, height: 270 }).append(
+    // Missing glyph in a fixed-height cell succeeds in resolve with unmeasured textMetrics
+    // (reason: "missing-glyphs"), allows non-embedded emit, and fails with cell path on embedded emit;
+    // auto-height row with missing glyphs fails immediately in resolve.
+    const autoMissingGlyphDoc = deck({ width: 480, height: 270 }).append(
       slide({ id: "cover" }).append(
         table({
-          id: "tbl",
-          x: 20,
-          y: 20,
+          id: "tbl-auto",
           columns: [120],
-          style: { fontFamily: impJostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: impJostFont,
+            fontSize: 14,
+          },
         }).append(
           row({ id: "r1" }).append(
             cell("中文", { id: "c1", style: { padding: 4 } }),
@@ -228,15 +242,44 @@ describe("tableCapability resolved contract", () => {
         ),
       ),
     );
-    const missingResolution = resolve(missingGlyphDoc);
-    assert.ok(
-      missingResolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" &&
-          diag.code === "font-missing-glyph" &&
-          diag.path === "deck/slide[cover]/table[tbl]/row[r1]/cell[c1]",
+    assert.throws(
+      () => resolve(autoMissingGlyphDoc),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some(
+          ({ code, path }) =>
+            code === "font-missing-glyph" &&
+            path === "deck/slide[cover]/table[tbl-auto]/row[r1]/cell[c1]",
+        ),
+    );
+
+    const missingGlyphDoc = deck({ width: 480, height: 270 }).append(
+      slide({ id: "cover" }).append(
+        table({
+          id: "tbl",
+          columns: [120],
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: impJostFont,
+            fontSize: 14,
+          },
+        }).append(
+          row({ id: "r1", style: { height: 32 } }).append(
+            cell("中文", { id: "c1", style: { padding: 4 } }),
+          ),
+        ),
       ),
     );
+    const missingResolution = resolve(missingGlyphDoc);
+    const missingCellMetrics = missingResolution
+      .slide("cover")
+      .get("tbl")
+      .get("r1")
+      .get("c1").textMetrics;
+    assert.equal(missingCellMetrics?.status, "unmeasured");
+    assert.equal(missingCellMetrics.reason, "missing-glyphs");
     assert.deepEqual(
       (await validatePptx(emit(missingResolution).pptx)).errors,
       [],
@@ -274,20 +317,24 @@ describe("tableCapability resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-xml-character" &&
+            code === "invalid-prop" &&
             path === "deck/slide[cover]/table[bad-name]",
         ),
     );
 
-    // Fixed-height cell overflow produces build overset warning while painting clipped output cleanly; dashed border renders cleanly; missing glyph fails paint with cell path.
+    // Fixed-height cell overflow reports textMetrics.fits === false while painting clipped output cleanly; dashed border renders cleanly; missing glyph fails paint with cell path.
     const paintErrorsDoc = deck({ width: 480, height: 270 }).append(
       slide({ id: "overflow-slide" }).append(
         table({
           id: "overflow-tbl",
-          x: 20,
-          y: 20,
           columns: [80],
-          style: { fontFamily: impJostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: impJostFont,
+            fontSize: 14,
+          },
         }).append(
           row({ id: "r1", style: { height: 18 } }).append(
             cell("Line 1\nLine 2\nLine 3", { id: "c1", style: { padding: 4 } }),
@@ -297,18 +344,20 @@ describe("tableCapability resolved contract", () => {
       slide({ id: "border-slide" }).append(
         table({
           id: "border-tbl",
-          x: 20,
-          y: 20,
           columns: [120],
-          style: { fontFamily: impJostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: impJostFont,
+            fontSize: 14,
+          },
         }).append(
           row({ id: "r1" }).append(
             cell("Dashed", {
               id: "c1",
               style: {
-                borderColor: "#1E293B",
-                borderWidth: 2,
-                borderStyle: "dashed",
+                border: { color: "#1E293B", width: 2, style: "dashed" },
               },
             }),
           ),
@@ -317,33 +366,43 @@ describe("tableCapability resolved contract", () => {
       slide({ id: "glyph-slide" }).append(
         table({
           id: "glyph-tbl",
-          x: 20,
-          y: 20,
           columns: [120],
-          style: { fontFamily: impJostFont, fontSize: 14 },
-        }).append(row({ id: "r1" }).append(cell("汉", { id: "c1" }))),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: impJostFont,
+            fontSize: 14,
+          },
+        }).append(
+          row({ id: "r1", style: { height: 28 } }).append(
+            cell("汉", { id: "c1" }),
+          ),
+        ),
       ),
     );
     const paintErrorsResolution = resolve(paintErrorsDoc);
-    assert.ok(
-      paintErrorsResolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" &&
-          diag.code === "overset" &&
-          diag.path ===
-            "deck/slide[overflow-slide]/table[overflow-tbl]/row[r1]/cell[c1]",
-      ),
-    );
+    const overflowMetrics = paintErrorsResolution
+      .slide("overflow-slide")
+      .get("overflow-tbl")
+      .get("r1")
+      .get("c1").textMetrics;
+    assert.equal(overflowMetrics?.status, "measured");
+    assert.equal(overflowMetrics.fits, false);
     const paintedErrors = paint(paintErrorsResolution);
-    assert.deepEqual(paintedErrors.pages[0]?.diagnostics, []);
+    assert.deepEqual(paintedErrors.pages[0]?.errors, []);
     assert.ok(paintedErrors.pages[0]?.png !== undefined);
     assert.ok(paintedErrors.pages[0]?.svg?.includes("<clipPath"));
-    assert.deepEqual(paintedErrors.pages[1]?.diagnostics, []);
+    assert.deepEqual(paintedErrors.pages[1]?.errors, []);
     assert.ok(paintedErrors.pages[1]?.png !== undefined);
     assert.ok(paintedErrors.pages[1]?.svg?.includes('stroke-dasharray="8 6"'));
     assert.equal(paintedErrors.pages[2]?.png, undefined);
     assert.equal(
-      paintedErrors.pages[2]?.diagnostics[0]?.path,
+      paintedErrors.pages[2]?.errors[0]?.code,
+      "preview-missing-glyph",
+    );
+    assert.equal(
+      paintedErrors.pages[2]?.errors[0]?.path,
       "deck/slide[glyph-slide]/table[glyph-tbl]/row[r1]/cell[c1]",
     );
     assert.deepEqual(
@@ -365,10 +424,14 @@ describe("tableCapability resolved contract", () => {
       slide({ id: "cover" }).append(
         table({
           id: "mutable-table",
-          x: 20,
-          y: 20,
           columns: [140],
-          style: { fontFamily: impJostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: impJostFont,
+            fontSize: 14,
+          },
         }).append(row({ id: "r1" }).append(mutableCell)),
       ),
     );
@@ -377,12 +440,11 @@ describe("tableCapability resolved contract", () => {
     mutableCell.content("Mutated cell");
 
     assert.equal(
-      resolution.query
-        .getSlide("cover")
+      resolution
+        .slide("cover")
         .get("mutable-table")
         .get("r1")
-        .get("mutable-cell")
-        .observe().text,
+        .get("mutable-cell").text,
       "Snapshot cell",
     );
     const painted = paint(resolution);

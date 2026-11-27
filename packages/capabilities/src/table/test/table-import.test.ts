@@ -16,6 +16,7 @@ import {
   type RowNode,
   type TableNode,
   type TableRowStyle,
+  type TableStyle,
 } from "@pptxdk/capabilities/document";
 import { defineTheme } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
@@ -83,24 +84,27 @@ describe("native table import and editing roundtrip", () => {
         table({
           id: "tbl",
           name: "MetricsGrid",
-          x: 24,
-          y: 36,
-          width: 480,
           columns: [110, "auto", "1fr"],
-          style: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 36,
+            width: 480,
+            fontFamily: jostFont,
+            fontSize: 14,
+            color: "#0F172A",
+          },
         }).append(
           row({
             id: "hdr",
-            style: { height: 38, backgroundColor: "#1E293B", color: "#FFFFFF" },
+            style: { height: 38, background: "#1E293B", color: "#FFFFFF" },
           }).append(
             cell(paragraph("Overview", { style: { align: "center" } }), {
               colSpan: 2,
               style: {
                 fontWeight: "bold",
                 padding: [6, 10],
-                borderColor: "#0F172A",
-                borderWidth: 2,
-                borderStyle: "solid",
+                border: { color: "#0F172A", width: 2, style: "solid" },
               },
             }),
             cell(
@@ -109,11 +113,9 @@ describe("native table import and editing roundtrip", () => {
               }),
               {
                 style: {
-                  backgroundColor: "#334155",
+                  background: "#334155",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 1,
-                  borderStyle: "dashed",
+                  border: { color: "#0F172A", width: 1, style: "dashed" },
                 },
               },
             ),
@@ -123,14 +125,12 @@ describe("native table import and editing roundtrip", () => {
               style: {
                 verticalAlign: "top",
                 padding: [4, 8, 6, 12],
-                borderColor: "#2563EB",
-                borderWidth: 2,
-                borderStyle: "dotted",
+                border: { color: "#2563EB", width: 2, style: "dotted" },
               },
             }),
             cell("Metric", {
               style: {
-                backgroundColor: "#EFF6FF",
+                background: "#EFF6FF",
                 verticalAlign: "middle",
                 padding: 6,
               },
@@ -162,8 +162,11 @@ describe("native table import and editing roundtrip", () => {
     const importedSlide = importedSlides(imported.document)[0]!;
     const importedTable = findFirstTable(importedSlide);
     assert.equal(importedTable.props.name, "MetricsGrid");
-    assert.equal(importedTable.props.x, 24);
-    assert.equal(importedTable.props.y, 36);
+    const importedTableStyle = importedTable.props.style as
+      | TableStyle
+      | undefined;
+    assert.equal(importedTableStyle?.left, 24);
+    assert.equal(importedTableStyle?.top, 36);
     assert.deepEqual(
       importedTable.props.columns,
       initialObs.table!.columnWidthsEmu.map((w) => w / 9525),
@@ -183,7 +186,7 @@ describe("native table import and editing roundtrip", () => {
     const reemittedResolution = resolveDocument(imported.document);
     const reemitted = emit(reemittedResolution, { embedFonts: "full" });
     const painted = paint(reemittedResolution);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png instanceof Uint8Array);
 
     const roundtripValid = await validatePptx(reemitted.pptx);
@@ -212,10 +215,14 @@ describe("native table import and editing roundtrip", () => {
       slide({ id: "merge-grid" }).append(
         table({
           id: "rect-merge",
-          x: 20,
-          y: 20,
           columns: [80, 80, 80],
-          style: { fontFamily: jostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: jostFont,
+            fontSize: 14,
+          },
         }).append(
           row({ style: { height: 30 } }).append(
             cell("2x2 Anchor", { colSpan: 2, rowSpan: 2 }),
@@ -333,7 +340,7 @@ describe("native table import and editing roundtrip", () => {
     const editedResolution = resolveDocument(imported.document);
     const editedEmitted = emit(editedResolution);
     const editedPainted = paint(editedResolution, { pages: [1] });
-    assert.deepEqual(editedPainted.pages[0]?.diagnostics, []);
+    assert.deepEqual(editedPainted.pages[0]?.errors, []);
     assert.ok(editedPainted.pages[0]?.png instanceof Uint8Array);
 
     const editedValid = await validatePptx(editedEmitted.pptx);

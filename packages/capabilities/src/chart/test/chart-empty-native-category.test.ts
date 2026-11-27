@@ -59,10 +59,13 @@ async function buildChart(groups: readonly ChartGroup[]): Promise<{
       documentSlide({ id: "zero-category-column" }).append(
         documentChart({
           id: "zero-category-column",
-          x: 10,
-          y: 10,
-          width: 760,
-          height: 560,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 760,
+            height: 560,
+          },
           groups,
         }),
       ),

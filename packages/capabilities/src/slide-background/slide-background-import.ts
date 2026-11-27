@@ -96,6 +96,7 @@ function readBackgroundElement(
         }
         switch (fillChild.localName) {
           case "noFill":
+            result = "none";
             break;
           case "solidFill":
             result = readDrawingColor(fillChild, location, diagnostics);
@@ -106,7 +107,12 @@ function readBackgroundElement(
           case "blipFill": {
             const blip = readBlipFill(fillChild, pkg, location, diagnostics);
             if (blip !== undefined) {
-              result = { image: blip.image };
+              result = {
+                image: blip.image,
+                ...(blip.opacity === undefined
+                  ? {}
+                  : { opacity: blip.opacity }),
+              };
             }
             break;
           }

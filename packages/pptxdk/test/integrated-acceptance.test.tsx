@@ -14,15 +14,14 @@ import {
   fade,
   font,
   linearGradient,
-  observeMotion,
+  motionSchedule,
   path,
   preset,
   radialGradient,
   resolve,
   transitions,
   type ChartGroup,
-  type MotionEffectObservation,
-  type MotionObservation,
+  type MotionSchedule,
 } from "@officedk/pptxdk";
 import { paint } from "@officedk/pptxdk/preview";
 import {
@@ -132,19 +131,22 @@ function readerObject(
   return object;
 }
 
-function motion(result: Awaited<ReturnType<typeof build>>, slideIndex = 0) {
-  const value = result.report.slides[slideIndex]?.capabilities?.["motion"] as
-    | MotionObservation
-    | undefined;
+function motion(
+  result: Awaited<ReturnType<typeof build>>,
+  slideIndex = 0,
+): MotionSchedule {
+  const slide = result.slides[slideIndex];
+  assert.ok(slide);
+  const value = motionSchedule(slide);
   assert.ok(value);
   return value;
 }
 
 function chartEffects(
-  motion: MotionObservation,
+  schedule: MotionSchedule,
   authorId: string,
-): readonly MotionEffectObservation[] {
-  return motion.steps
+): readonly MotionSchedule["steps"][number]["effects"][number][] {
+  return schedule.steps
     .flatMap((step) => step.effects)
     .filter(({ target }) => target.authorId === authorId);
 }
@@ -178,7 +180,10 @@ describe("integrated acceptance", () => {
     }) {
       return createElement(
         Text,
-        { id: "appended-caption", width: 300, height: 30, style },
+        {
+          id: "appended-caption",
+          style: { ...style, width: 300, height: 30 },
+        },
         useContext(CaptionContext),
       );
     }
@@ -204,13 +209,16 @@ describe("integrated acceptance", () => {
               <Shape
                 id="hero"
                 morphKey={heroKey}
-                width={180}
-                height={64}
-                fill="#336699"
-                text="Intro"
                 enter={fade({ duration: 120 })}
-                style={heroStyle}
-              />
+                style={{
+                  ...heroStyle,
+                  width: 180,
+                  height: 64,
+                  background: "#336699",
+                }}
+              >
+                Intro
+              </Shape>
             </Box>
           </Step>
           <Step n={2}>
@@ -232,9 +240,9 @@ describe("integrated acceptance", () => {
               >
                 <Text
                   id="stage-title"
-                  width={380}
-                  height={32}
                   style={{
+                    width: 380,
+                    height: 32,
                     color: "brand",
                     fontSize: 22,
                     fontFamily: "major",
@@ -247,11 +255,16 @@ describe("integrated acceptance", () => {
           </Step>
           <Text
             id="footer"
-            x={40}
-            y={480}
-            width={400}
-            height={24}
-            style={{ color: "ink", fontSize: 12, fontFamily: "minor" }}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 480,
+              width: 400,
+              height: 24,
+              color: "ink",
+              fontSize: 12,
+              fontFamily: "minor",
+            }}
           >
             Footer
           </Text>
@@ -260,11 +273,14 @@ describe("integrated acceptance", () => {
           <Shape
             id="hero-next"
             morphKey={heroKey}
-            x={60}
-            y={60}
-            width={200}
-            height={70}
-            fill="#336699"
+            style={{
+              position: "absolute",
+              left: 60,
+              top: 60,
+              width: 200,
+              height: 70,
+              background: "#336699",
+            }}
           />
         </Slide>
       </Deck>,
@@ -302,22 +318,21 @@ describe("integrated acceptance", () => {
         [2, "click", []],
       ],
     );
-    const firstHeroObservation = first.query
-      .getSlide("story")
+    const firstHeroLocator = first
+      .slide("story")
       .get("source-panel")
-      .get("hero")
-      .observe();
-    assert.deepEqual(firstHeroObservation.box, {
+      .get("hero");
+    const firstHeroBoxSnapshot = structuredClone(firstHeroLocator.box);
+    assert.deepEqual(firstHeroBoxSnapshot, {
       x: 50,
       y: 130,
       width: 180,
       height: 64,
     });
-    const firstQueryText = first.query
-      .getSlide("story")
+    const firstQueryText = first
+      .slide("story")
       .get("stage")
-      .get("stage-title")
-      .observe().text;
+      .get("stage-title").text;
     assert.equal(firstQueryText, "Stage");
 
     const page = expanded.query.get("story");
@@ -375,8 +390,8 @@ describe("integrated acceptance", () => {
       firstHero.boxEmu,
     );
     assert.deepEqual(
-      first.query.getSlide("story").get("source-panel").get("hero").observe(),
-      firstHeroObservation,
+      first.slide("story").get("source-panel").get("hero").box,
+      firstHeroBoxSnapshot,
     );
     assert.deepEqual(
       motion(first).steps.map((step) => [
@@ -389,8 +404,7 @@ describe("integrated acceptance", () => {
       ],
     );
     assert.equal(
-      first.query.getSlide("story").get("stage").get("stage-title").observe()
-        .text,
+      first.slide("story").get("stage").get("stage-title").text,
       "Stage",
     );
     assert.match(slideXml(first, 1), /123456/u);
@@ -451,13 +465,20 @@ describe("integrated acceptance", () => {
     );
     const secondHeroId = secondHeroReport?.id;
     assert.ok(secondHeroId !== undefined);
-    const scope = secondMotion.scopes?.find(({ members }) =>
-      members.some(
-        (member) => member.kind === "object" && member.id === secondHeroId,
-      ),
-    );
+    const scope = secondMotion.steps
+      .flatMap((step) => step.scopes)
+      .find(({ members }) =>
+        members.some(
+          (member) =>
+            member.kind === "effect" && member.ref.targetId === secondHeroId,
+        ),
+      );
     assert.ok(scope);
-    assert.deepEqual(scope.members, [{ kind: "object", id: secondHeroId }]);
+    assert.equal(scope.members.length, 1);
+    assert.equal(scope.members[0]?.kind, "effect");
+    if (scope.members[0]?.kind === "effect") {
+      assert.equal(scope.members[0].ref.targetId, secondHeroId);
+    }
   });
 
   it("keeps dual-axis analysis, notes, reflow and independent rings together", async () => {
@@ -518,13 +539,15 @@ describe("integrated acceptance", () => {
     }
 
     const comboBase: Omit<ChartProps, "groups"> = {
-      x: 0,
-      y: 0,
-      width: 552,
-      height: 240,
       title: "Revenue and trend",
       legend: "bottom",
-      style: { fontFamily: "minor", fontSize: "10pt", color: "ink" },
+      style: {
+        width: 552,
+        height: 240,
+        fontFamily: "minor",
+        fontSize: "10pt",
+        color: "ink",
+      },
       axes: {
         period: { kind: "category", title: "Region" },
         amount: {
@@ -597,16 +620,17 @@ describe("integrated acceptance", () => {
             <Shape
               id="badge"
               morphKey={badgeKey}
-              width={100}
-              height={32}
-              fill="#1D4ED8"
-              text="Move me"
               style={{
+                width: 100,
+                height: 32,
+                background: "#1D4ED8",
                 color: "#FFFFFF",
                 fontFamily: "minor",
                 fontSize: 14,
               }}
-            />
+            >
+              Move me
+            </Shape>
           </Box>
           <Box
             id="badge-target"
@@ -635,13 +659,18 @@ describe("integrated acceptance", () => {
         <Slide id="rings-page">
           <Chart
             id="rings-chart"
-            x={0}
-            y={0}
-            width={520}
-            height={360}
             title="Independent rings"
             legend="right"
-            style={{ fontFamily: "minor", fontSize: "10pt", color: "ink" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 520,
+              height: 360,
+              fontFamily: "minor",
+              fontSize: "10pt",
+              color: "ink",
+            }}
             groups={[
               {
                 kind: "doughnut",
@@ -690,10 +719,13 @@ describe("integrated acceptance", () => {
           <Image
             id="panel"
             src={panelBytes}
-            x={560}
-            y={40}
-            width={320}
-            height={160}
+            style={{
+              position: "absolute",
+              left: 560,
+              top: 40,
+              width: 320,
+              height: 160,
+            }}
           />
         </Slide>
       </Deck>,
@@ -971,11 +1003,8 @@ describe("integrated acceptance", () => {
       sha256(unzipSync(first.pptx)[firstImage.image.part]!),
       sha256(panelPng),
     );
-    const firstPanelObservation = first.query
-      .getSlide("rings-page")
-      .get("panel")
-      .observe();
-    assert.deepEqual(firstPanelObservation.box, {
+    const firstPanelBox = first.slide("rings-page").get("panel").box;
+    assert.deepEqual(firstPanelBox, {
       x: 560,
       y: 40,
       width: 320,
@@ -1003,12 +1032,9 @@ describe("integrated acceptance", () => {
     assert.deepEqual(first.report, firstReportSnapshot);
     assert.equal(sha256(first.pptx), firstSha);
     assert.deepEqual(new Uint8Array(first.pptx), firstBytes);
+    assert.deepEqual(first.slide("combo-page").get("body").box, firstBodyBox);
     assert.deepEqual(
-      first.query.getSlide("combo-page").get("body").observe().box,
-      firstBodyBox,
-    );
-    assert.deepEqual(
-      first.query.getSlide("combo-page").get("combo-chart").observe().box,
+      first.slide("combo-page").get("combo-chart").box,
       firstComboBox,
     );
     const rereadFirst = await validatePptx(first.pptx);
@@ -1098,11 +1124,7 @@ describe("integrated acceptance", () => {
     });
     assert.equal(secondBadge.name, firstBadge.name);
     assert.deepEqual(
-      first.query
-        .getSlide("combo-page")
-        .get("badge-slot")
-        .get("badge")
-        .observe().box,
+      first.slide("combo-page").get("badge-slot").get("badge").box,
       firstBadgeReport?.box,
     );
 
@@ -1173,11 +1195,12 @@ describe("integrated acceptance", () => {
           >
             <Text
               id="fill-heading"
-              x={0}
-              y={0}
-              width={800}
-              height={36}
               style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 800,
+                height: 36,
                 color: "ink",
                 fontFamily: "major",
                 fontSize: 24,
@@ -1189,13 +1212,14 @@ describe("integrated acceptance", () => {
             <MotionScope scope={sourceScope}>
               <Chart
                 id="empty-category-chart"
-                x={0}
-                y={48}
-                width={560}
-                height={300}
                 title="Empty category chart"
                 legend="bottom"
                 style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 48,
+                  width: 560,
+                  height: 300,
                   fontFamily: "minor",
                   fontSize: "10pt",
                   color: "ink",
@@ -1214,13 +1238,14 @@ describe("integrated acceptance", () => {
               />
               <Chart
                 id="empty-xy-chart"
-                x={580}
-                y={48}
-                width={560}
-                height={300}
                 title="Empty XY chart"
                 legend="bottom"
                 style={{
+                  position: "absolute",
+                  left: 580,
+                  top: 48,
+                  width: 560,
+                  height: 300,
                   fontFamily: "minor",
                   fontSize: "10pt",
                   color: "ink",
@@ -1247,11 +1272,14 @@ describe("integrated acceptance", () => {
             >
               <Shape
                 id="fill-follower"
-                x={0}
-                y={370}
-                width={100}
-                height={40}
-                fill="#1D4ED8"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 370,
+                  width: 100,
+                  height: 40,
+                  background: "#1D4ED8",
+                }}
                 enter={fade({ duration: 50 })}
               />
             </MotionScope>
@@ -1268,16 +1296,17 @@ describe("integrated acceptance", () => {
               <Shape
                 id="fill-badge"
                 morphKey={badgeKey}
-                width={100}
-                height={32}
-                fill="#C2410C"
-                text="Badge"
                 style={{
+                  width: 100,
+                  height: 32,
+                  background: "#C2410C",
                   color: "#FFFFFF",
                   fontFamily: "minor",
                   fontSize: 14,
                 }}
-              />
+              >
+                Badge
+              </Shape>
             </Box>
             <Box
               id="fill-badge-target"
@@ -1357,11 +1386,12 @@ describe("integrated acceptance", () => {
       [firstFollower?.startMs, firstFollower?.endMs],
       [125, 175],
     );
-    const firstCategoryObservation = first.query
-      .getSlide("empty-fill-page")
-      .get("fill-layout")
-      .get("empty-category-chart")
-      .observe();
+    const firstCategorySnapshot = structuredClone(
+      first
+        .slide("empty-fill-page")
+        .get("fill-layout")
+        .get("empty-category-chart").box,
+    );
     const firstNotes = firstRead.slides[0]?.notes;
     assert.equal(
       firstNotes?.text.text,
@@ -1383,11 +1413,12 @@ describe("integrated acceptance", () => {
       container(layout.node),
       createElement(Text, {
         id: "fill-appended",
-        x: 0,
-        y: 480,
-        width: 400,
-        height: 24,
         style: {
+          position: "absolute",
+          left: 0,
+          top: 480,
+          width: 400,
+          height: 24,
           color: "ink",
           fontFamily: "minor",
           fontSize: 14,
@@ -1449,12 +1480,11 @@ describe("integrated acceptance", () => {
       ],
     );
     assert.deepEqual(
-      first.query
-        .getSlide("empty-fill-page")
+      first
+        .slide("empty-fill-page")
         .get("fill-layout")
-        .get("empty-category-chart")
-        .observe(),
-      firstCategoryObservation,
+        .get("empty-category-chart").box,
+      firstCategorySnapshot,
     );
     assert.deepEqual(
       motion(first).steps.map((step) =>
@@ -1611,7 +1641,7 @@ describe("integrated acceptance", () => {
       .find(({ target }) => target.authorId === "fill-follower");
     assert.deepEqual([follower?.startMs, follower?.endMs], [925, 975]);
 
-    const query = observeMotion(second.report.slides[0]!);
+    const query = motionSchedule(second.slide("empty-fill-page"));
     const queryEffects = query?.steps.flatMap((step) => step.effects) ?? [];
     const lastCategory = queryEffects
       .filter(({ target }) => target.authorId === "empty-category-chart")
@@ -1676,7 +1706,7 @@ describe("integrated acceptance", () => {
     );
   });
 
-  it("resolves once then emits and paints a 2-page deck mixing all eight canvas capabilities, notes, sections, transitions, and motion with zero preview diagnostics", async () => {
+  it("resolves once then emits and paints a 2-page deck mixing all eight canvas capabilities, notes, sections, transitions, and motion with zero preview errors", async () => {
     const notoSc = font("Noto Sans CJK SC", [
       {
         weight: 400,
@@ -1746,10 +1776,8 @@ describe("integrated acceptance", () => {
                   width: 240,
                   height: 110,
                   padding: 12,
-                  backgroundImage: radialGradient("#DBEAFE", "#93C5FD"),
-                  borderColor: "brand",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  background: radialGradient("#DBEAFE", "#93C5FD"),
+                  border: { color: "brand", width: 2, style: "dashed" },
                   borderRadius: 14,
                   boxShadow: {
                     color: "#0F172A",
@@ -1772,26 +1800,30 @@ describe("integrated acceptance", () => {
             createElement(
               Step,
               { n: 1 },
-              createElement(Shape, {
-                id: "morph-origin-card",
-                morphKey: heroMorph,
-                link: { id: "parity-canvas-2" },
-                enter: fade({ duration: 250 }),
-                geometry: preset("roundRect", { adj: 20000 }),
-                x: 24,
-                y: 144,
-                width: 240,
-                height: 60,
-                fill: "accent",
-                text: "Morph + Link Origin",
-                textStyle: {
-                  fontFamily: jost,
-                  fontSize: 14,
-                  color: "#FFFFFF",
-                  align: "center",
-                  verticalAlign: "middle",
+              createElement(
+                Shape,
+                {
+                  id: "morph-origin-card",
+                  morphKey: heroMorph,
+                  link: { id: "parity-canvas-2" },
+                  enter: fade({ duration: 250 }),
+                  geometry: preset("roundRect", { adj: 20000 }),
+                  style: {
+                    position: "absolute",
+                    left: 24,
+                    top: 144,
+                    width: 240,
+                    height: 60,
+                    background: "accent",
+                    fontFamily: jost,
+                    fontSize: 14,
+                    color: "#FFFFFF",
+                    align: "center",
+                    verticalAlign: "middle",
+                  },
                 },
-              }),
+                "Morph + Link Origin",
+              ),
             ),
             createElement(
               Group,
@@ -1804,36 +1836,43 @@ describe("integrated acceptance", () => {
                 {
                   id: "inner-nested-group",
                 },
-                createElement(Shape, {
-                  id: "grouped-arrow-shape",
-                  geometry: preset("rightArrow", { adj1: 30000 }),
-                  x: 290,
-                  y: 30,
-                  width: 200,
-                  height: 68,
-                  fill: "#7C3AED",
-                  style: { borderColor: "#4C1D95", borderWidth: 1.5 },
-                  text: "Nested Rich Arrow",
-                  textStyle: {
-                    fontFamily: jost,
-                    fontSize: 13,
-                    color: "#FFFFFF",
-                    align: "center",
-                    verticalAlign: "middle",
+                createElement(
+                  Shape,
+                  {
+                    id: "grouped-arrow-shape",
+                    geometry: preset("rightArrow", { adj1: 30000 }),
+                    style: {
+                      position: "absolute",
+                      left: 290,
+                      top: 30,
+                      width: 200,
+                      height: 68,
+                      background: "#7C3AED",
+                      border: { color: "#4C1D95", width: 1.5 },
+                      fontFamily: jost,
+                      fontSize: 13,
+                      color: "#FFFFFF",
+                      align: "center",
+                      verticalAlign: "middle",
+                    },
                   },
-                }),
+                  "Nested Rich Arrow",
+                ),
                 createElement(Shape, {
                   id: "grouped-open-bezier",
                   geometry: openBezierArrow,
-                  x: 300,
-                  y: 110,
-                  width: 190,
-                  height: 68,
                   style: {
-                    borderColor: "#0F172A",
-                    borderWidth: 2,
-                    startArrow: "oval",
-                    endArrow: "stealth",
+                    position: "absolute",
+                    left: 300,
+                    top: 110,
+                    width: 190,
+                    height: 68,
+                    border: {
+                      color: "#0F172A",
+                      width: 2,
+                      startArrow: "oval",
+                      endArrow: "stealth",
+                    },
                   },
                 }),
               ),
@@ -1842,13 +1881,13 @@ describe("integrated acceptance", () => {
               id: "clipped-hex-image",
               src: validPng1x1,
               geometry: preset("hexagon"),
-              x: 560,
-              y: 20,
-              width: 110,
-              height: 96,
               style: {
-                borderColor: "#1D4ED8",
-                borderWidth: 2,
+                position: "absolute",
+                left: 560,
+                top: 20,
+                width: 110,
+                height: 96,
+                border: { color: "#1D4ED8", width: 2 },
                 boxShadow: {
                   color: "#1E293B",
                   blur: 4,
@@ -1862,18 +1901,18 @@ describe("integrated acceptance", () => {
               Text,
               {
                 id: "multiscript-rich-text",
-                x: 690,
-                y: 20,
-                width: 246,
-                height: 220,
                 style: {
+                  position: "absolute",
+                  left: 690,
+                  top: 20,
+                  width: 246,
+                  height: 220,
                   fontFamily: jost,
                   fontSize: 13,
                   color: "ink",
                   padding: 10,
-                  backgroundColor: "#FFFFFF",
-                  borderColor: "#94A3B8",
-                  borderWidth: 1,
+                  background: "#FFFFFF",
+                  border: { color: "#94A3B8", width: 1 },
                 },
               },
               createElement(
@@ -1922,11 +1961,16 @@ describe("integrated acceptance", () => {
               Table,
               {
                 id: "parity-table",
-                x: 24,
-                y: 256,
-                width: 912,
                 columns: [180, "auto", "1fr"],
-                style: { fontFamily: jost, fontSize: 13, color: "ink" },
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 256,
+                  width: 912,
+                  fontFamily: jost,
+                  fontSize: 13,
+                  color: "ink",
+                },
               },
               createElement(
                 Row,
@@ -1937,12 +1981,10 @@ describe("integrated acceptance", () => {
                     id: "hdr-span",
                     colSpan: 2,
                     style: {
-                      backgroundColor: "#1E3A8A",
+                      background: "#1E3A8A",
                       color: "#FFFFFF",
                       padding: 6,
-                      borderColor: "#0F172A",
-                      borderWidth: 1,
-                      borderStyle: "solid",
+                      border: { color: "#0F172A", width: 1, style: "solid" },
                     },
                   },
                   "Merged Header",
@@ -1952,11 +1994,9 @@ describe("integrated acceptance", () => {
                   {
                     id: "hdr-right",
                     style: {
-                      backgroundColor: "#EFF6FF",
+                      background: "#EFF6FF",
                       padding: 6,
-                      borderColor: "#2563EB",
-                      borderWidth: 1.5,
-                      borderStyle: "dashed",
+                      border: { color: "#2563EB", width: 1.5, style: "dashed" },
                     },
                   },
                   "Auto / Fr Tracks",
@@ -1972,9 +2012,7 @@ describe("integrated acceptance", () => {
                     rowSpan: 2,
                     style: {
                       padding: 6,
-                      borderColor: "#059669",
-                      borderWidth: 1.5,
-                      borderStyle: "dotted",
+                      border: { color: "#059669", width: 1.5, style: "dotted" },
                     },
                   },
                   "Merged Side",
@@ -1985,8 +2023,7 @@ describe("integrated acceptance", () => {
                     id: "overset-cell",
                     style: {
                       padding: 2,
-                      borderColor: "#DC2626",
-                      borderWidth: 1,
+                      border: { color: "#DC2626", width: 1 },
                     },
                   },
                   "OVERSET_LINE_1\nOVERSET_LINE_2\nOVERSET_LINE_3\nOVERSET_LINE_4",
@@ -1997,8 +2034,7 @@ describe("integrated acceptance", () => {
                     id: "normal-cell-1",
                     style: {
                       padding: 4,
-                      borderColor: "#CBD5E1",
-                      borderWidth: 1,
+                      border: { color: "#CBD5E1", width: 1 },
                     },
                   },
                   "Dashed/Dotted Grid",
@@ -2013,8 +2049,7 @@ describe("integrated acceptance", () => {
                     id: "normal-cell-2",
                     style: {
                       padding: 6,
-                      borderColor: "#CBD5E1",
-                      borderWidth: 1,
+                      border: { color: "#CBD5E1", width: 1 },
                     },
                   },
                   "Row 2 Col 2",
@@ -2025,8 +2060,7 @@ describe("integrated acceptance", () => {
                     id: "normal-cell-3",
                     style: {
                       padding: 6,
-                      borderColor: "#CBD5E1",
-                      borderWidth: 1,
+                      border: { color: "#CBD5E1", width: 1 },
                     },
                   },
                   "Row 2 Col 3",
@@ -2044,30 +2078,30 @@ describe("integrated acceptance", () => {
                 fallback: transitions.fade(),
               }),
             },
-            createElement(Shape, {
-              id: "morph-target-card",
-              morphKey: heroMorph,
-              geometry: preset("roundRect", { adj: 25000 }),
-              x: 24,
-              y: 20,
-              width: 280,
-              height: 64,
-              fill: "accent2",
-              text: "Morph Target Card",
-              textStyle: {
-                fontFamily: jost,
-                fontSize: 15,
-                color: "#FFFFFF",
-                align: "center",
-                verticalAlign: "middle",
+            createElement(
+              Shape,
+              {
+                id: "morph-target-card",
+                morphKey: heroMorph,
+                geometry: preset("roundRect", { adj: 25000 }),
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 20,
+                  width: 280,
+                  height: 64,
+                  background: "accent2",
+                  fontFamily: jost,
+                  fontSize: 15,
+                  color: "#FFFFFF",
+                  align: "center",
+                  verticalAlign: "middle",
+                },
               },
-            }),
+              "Morph Target Card",
+            ),
             createElement(Chart, {
               id: "combo-dual-axis-chart",
-              x: 24,
-              y: 100,
-              width: 520,
-              height: 416,
               title: {
                 text: "Combo Dual Axis + Trend",
                 style: {
@@ -2083,7 +2117,15 @@ describe("integrated acceptance", () => {
                 },
               },
               legend: "bottom",
-              style: { fontFamily: jost, fontSize: 11 },
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 100,
+                width: 520,
+                height: 416,
+                fontFamily: jost,
+                fontSize: 11,
+              },
               axes: {
                 x: { kind: "category" },
                 yLeft: { kind: "value", position: "left" },
@@ -2136,13 +2178,17 @@ describe("integrated acceptance", () => {
             }),
             createElement(Chart, {
               id: "multi-ring-doughnut",
-              x: 564,
-              y: 100,
-              width: 372,
-              height: 416,
               title: "Multi-Ring Independent Categories",
               legend: "top",
-              style: { fontFamily: jost, fontSize: 11 },
+              style: {
+                position: "absolute",
+                left: 564,
+                top: 100,
+                width: 372,
+                height: 416,
+                fontFamily: jost,
+                fontSize: 11,
+              },
               groups: [
                 {
                   kind: "doughnut",
@@ -2170,19 +2216,21 @@ describe("integrated acceptance", () => {
     );
 
     const resolution = resolve(expanded);
-    assert.equal(resolution.report.diagnostics.length, 1);
-    assert.deepEqual(
-      {
-        severity: resolution.report.diagnostics[0]?.severity,
-        code: resolution.report.diagnostics[0]?.code,
-        path: resolution.report.diagnostics[0]?.path,
-      },
-      {
-        severity: "warning",
-        code: "overset",
-        path: "deck/slide[parity-canvas-1]/table[parity-table]/row[tbl-body-1]/cell[overset-cell]",
-      },
-    );
+    const parityTable = resolution.slide("parity-canvas-1").get("parity-table");
+    const oversetMetrics = parityTable
+      .get("tbl-body-1")
+      .get("overset-cell").textMetrics;
+    assert.equal(oversetMetrics?.status, "measured");
+    if (oversetMetrics?.status === "measured") {
+      assert.equal(oversetMetrics.fits, false);
+    }
+    const multiscriptMetrics = resolution
+      .slide("parity-canvas-1")
+      .get("multiscript-rich-text").textMetrics;
+    assert.equal(multiscriptMetrics?.status, "measured");
+    if (multiscriptMetrics?.status === "measured") {
+      assert.equal(multiscriptMetrics.fits, true);
+    }
     assert.ok(resolution.report.extensions.includes("p14"));
     assert.ok(resolution.report.extensions.includes("p159"));
     assert.ok(resolution.report.extensions.includes("c15"));
@@ -2222,7 +2270,8 @@ describe("integrated acceptance", () => {
     assert.equal(painted.pages.length, 2);
     const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
     for (const page of painted.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
+      assert.deepEqual(page.placeholders, []);
       assert.ok(page.png !== undefined);
       assert.ok((page.svg?.trim().length ?? 0) > 0);
       assert.deepEqual([...page.png.subarray(0, 8)], pngSignature);
@@ -2241,9 +2290,9 @@ describe("integrated acceptance", () => {
     const groupedBezier = painted.pages[0]?.nodes.find(
       (n) => n.authorId === "grouped-open-bezier",
     );
-    assert.ok(groupedArrow?.screenBox !== undefined);
+    assert.ok(groupedArrow?.bounds !== undefined);
     assert.equal(groupedArrow?.corners?.length, 4);
-    assert.ok(groupedBezier?.screenBox !== undefined);
+    assert.ok(groupedBezier?.bounds !== undefined);
     assert.equal(groupedBezier?.corners?.length, 4);
   });
 });

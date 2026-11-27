@@ -3,7 +3,7 @@ import type { LayoutStyle } from "#/layout-schemas.ts";
 import type {
   FooterPlaceholders,
   HeaderFooter,
-  SlideMasterObservation,
+  ResolvedMaster,
 } from "#/masters.ts";
 import type { NativeMechanismDefinition } from "#/mechanisms.ts";
 import type { MorphKey } from "#/morph.ts";
@@ -16,12 +16,13 @@ import type {
 import {
   formatBaseline,
   targets,
+  type BuildDiagnostic,
   type BuildOptions,
-  type Diagnostic,
-  type DiagnosticSeverity,
   type EmitOptions,
   type Extension,
   type FontEmbeddingMode,
+  type PreviewError,
+  type PreviewPlaceholder,
   type ResolveOptions,
   type Target,
   type TargetName,
@@ -55,7 +56,13 @@ export type {
 } from "#/layout-schemas.ts";
 
 export type {
+  BackgroundValue,
+  BorderObject,
+  BorderStyle,
+  BorderValue,
+  BoxShadowValue,
   ColorValue,
+  ExternalImageFillSource,
   Font,
   FontFace,
   FontFaceStyle,
@@ -63,6 +70,10 @@ export type {
   FontReference,
   FontSize,
   GradientStop,
+  ImageBackground,
+  ImageBackgroundFit,
+  ImageBackgroundPosition,
+  ImageFillSource,
   LinearGradient,
   FontToken,
   NativeColorSlot,
@@ -85,13 +96,14 @@ export type {
   FooterPlaceholderSpec,
   FooterPlaceholders,
   HeaderFooter,
+  ResolvedMaster,
+  ResolvedPlaceholder,
+  ResolvedSlideLayout,
   SlideLayoutDataProps,
   SlideLayoutDefinition,
-  SlideLayoutObservation,
   SlideLayoutProps,
   SlideLayoutType,
   SlideMasterDataProps,
-  SlideMasterObservation,
   SlideMasterProps,
 } from "#/masters.ts";
 export type {
@@ -108,7 +120,6 @@ export type {
   PlaceholderOrient,
   PlaceholderResolutionContext,
   PlaceholderStyle,
-  PlaceholderSz,
   TextList,
   TextPlaceholderRole,
 } from "#/placeholders.ts";
@@ -126,11 +137,67 @@ export type {
 
 // SlideBackground is derived from slideBackgroundSchema in author-schemas.ts.
 
-export type GeometryBox = {
+export type Rect = {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
+};
+
+export type FontStyleDescriptor = {
+  readonly family: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic";
+};
+
+export type UnmeasuredFontIssue = FontStyleDescriptor & {
+  /** Present when reason === "missing-glyphs": deduplicated visible non-whitespace characters mapped to .notdef. */
+  readonly missingGlyphs?: readonly string[];
+};
+
+/** Tri-state text layout metrics distinguishing measured fit/overflow from unmeasured font or glyph gaps. */
+export type TextMetrics =
+  | {
+      readonly status: "measured";
+      readonly available: {
+        readonly width: number;
+        readonly height: number;
+      };
+      readonly content: {
+        readonly width: number;
+        readonly height: number;
+        readonly lineCount: number;
+      };
+      readonly fits: boolean;
+    }
+  | {
+      readonly status: "unmeasured";
+      readonly reason: "missing-font-resource" | "missing-glyphs";
+      readonly fonts: readonly UnmeasuredFontIssue[];
+    };
+
+/** Document-level summary of a referenced font face style, its resource status, glyph gaps, and reference paths. */
+export type FontUsage = {
+  readonly family: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic";
+  readonly hasResource: boolean;
+  readonly substitute?: boolean;
+  readonly embeddable?: boolean;
+  readonly missingGlyphs?: readonly string[];
+  readonly paths: readonly string[];
+};
+
+export type ResolvedFooterSlot = {
+  readonly box: Rect;
+  readonly text: string;
+  readonly textMetrics: TextMetrics;
+};
+
+export type ResolvedFooter = {
+  readonly dateTime?: ResolvedFooterSlot;
+  readonly footer?: ResolvedFooterSlot;
+  readonly slideNumber?: ResolvedFooterSlot;
 };
 
 // LayoutLength, LayoutSpacing, LayoutStyle, PaddingStyle, and LinkTarget are derived from Zod schemas.
@@ -141,19 +208,57 @@ export type NativeLink = {
   readonly action?: string;
 };
 
-export type ObjectObservation = {
+export type ScreenPoint = {
+  readonly x: number;
+  readonly y: number;
+};
+
+export type ObjectTransform = {
+  readonly angle: number;
+  readonly flipH: boolean;
+  readonly flipV: boolean;
+};
+
+export type ResolvedImage =
+  | {
+      readonly kind: "embedded";
+      readonly contentType: string;
+      readonly width: number;
+      readonly height: number;
+    }
+  | {
+      readonly kind: "external";
+      readonly id?: string;
+      readonly path: string;
+      readonly url: string;
+      readonly placeholder: PreviewPlaceholder;
+    };
+
+export type ResolvedObject = {
   readonly id: number;
   readonly kind: string;
   readonly name: string;
   /** Author id declared on the source node; numeric `id` remains the build observation identity. */
   readonly authorId?: string;
+  readonly path: string;
   readonly placeholder?: string;
   readonly geometry?: string;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
+  readonly bounds?: Rect;
+  readonly corners?: readonly [
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+  ];
+  readonly transform?: ObjectTransform;
+  readonly gridArea?: Rect;
   readonly text?: string;
+  readonly textMetrics?: TextMetrics;
+  readonly image?: ResolvedImage;
   readonly link?: string;
-  readonly table?: NativeTableObservation;
-  readonly members?: readonly ObjectObservation[];
+  readonly table?: ResolvedTable;
+  readonly members?: readonly ResolvedObject[];
 };
 
 export type LayoutChildReference = {
@@ -161,101 +266,115 @@ export type LayoutChildReference = {
   readonly id: number;
 };
 
-export type LayoutObservation = {
+export type ResolvedLayout = {
   readonly id: number;
   readonly authorId?: string;
-  readonly box: GeometryBox;
+  readonly path: string;
+  readonly box: Rect;
+  readonly gridArea?: Rect;
+  readonly columnWidths?: readonly number[];
+  readonly rowHeights?: readonly number[];
   readonly children: readonly LayoutChildReference[];
 };
 
+export type ResolvedTableRow = {
+  readonly index: number;
+  readonly id?: string;
+  readonly path: string;
+  readonly y: number;
+  readonly height: number;
+  readonly box: Rect;
+};
+
+export type ResolvedTableCell = {
+  readonly row: number;
+  readonly column: number;
+  readonly rowSpan: number;
+  readonly colSpan: number;
+  readonly id?: string;
+  readonly path: string;
+  readonly box: Rect;
+  readonly text: string;
+  readonly textMetrics: TextMetrics;
+};
+
 /** Table report retains zero-based row and column indexes, corresponding one-to-one with native merge extents. */
-export type NativeTableObservation = {
-  readonly columnWidths: readonly number[];
-  readonly rowHeights: readonly number[];
-  /** Cells covered by a merge remain empty, while merge anchors retain cell body text. */
-  readonly cells: readonly (readonly string[])[];
+export type ResolvedTable = {
+  readonly columns: readonly number[];
+  readonly rows: readonly ResolvedTableRow[];
+  /** Unconditional anchor cell observations in row-major order. */
+  readonly cells: readonly ResolvedTableCell[];
   readonly merges: readonly {
     readonly row: number;
     readonly column: number;
     readonly rowSpan: number;
     readonly colSpan: number;
   }[];
-  /** Identities and final geometries of rows and cells are submitted by the table module in shared layout results. */
-  readonly parts?: readonly NativeTablePartObservation[];
 };
 
-export type NativeTablePartObservation = {
-  readonly kind: "row" | "cell";
-  readonly authorId?: string;
-  readonly row: number;
-  readonly column?: number;
-  readonly rowSpan?: number;
-  readonly colSpan?: number;
-  readonly box: GeometryBox;
-  readonly text: string;
-};
-
-export type SlideObservation = {
+export type ResolvedSlide = {
   /** Page author id; also the stable identifier written to the slide part. */
   readonly id: string;
   /** Author id declared on the Slide, retained as the explicit author observation for pages. */
   readonly authorId?: string;
   readonly index: number;
+  readonly path: string;
   readonly layout?: string;
   readonly section?: string;
   readonly hidden?: boolean;
   readonly showMasterPlaceholderAnimations?: boolean;
-  readonly objects: readonly ObjectObservation[];
-  readonly layouts?: readonly LayoutObservation[];
+  readonly objects: readonly ResolvedObject[];
+  readonly layouts?: readonly ResolvedLayout[];
+  readonly footer?: ResolvedFooter;
   readonly capabilities?: Readonly<Record<string, unknown>>;
+};
+
+export type ResolutionDimensionsSummary = {
+  readonly width: number;
+  readonly height: number;
 };
 
 export type ResolutionReport = {
   readonly evidence: "generation";
   readonly title?: string;
+  readonly dimensions: ResolutionDimensionsSummary;
   readonly extensions: readonly Extension[];
-  readonly masters?: readonly SlideMasterObservation[];
-  readonly slides: readonly SlideObservation[];
-  readonly diagnostics: readonly Diagnostic[];
+  readonly fonts: readonly FontUsage[];
+  readonly masters?: readonly ResolvedMaster[];
+  readonly slides: readonly ResolvedSlide[];
 };
 
 export type Resolution = {
   readonly report: ResolutionReport;
-  readonly query: BuildQuery;
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
 };
 
 export type BuildReport = {
   readonly evidence: "generation";
   readonly title?: string;
+  readonly dimensions: ResolutionDimensionsSummary;
   readonly target: {
     readonly name: string;
     readonly format: typeof formatBaseline;
     readonly extensions: readonly Extension[];
   };
   readonly extensions: readonly Extension[];
-  readonly masters?: readonly SlideMasterObservation[];
-  readonly slides: readonly SlideObservation[];
-  readonly diagnostics: readonly Diagnostic[];
+  readonly fonts: readonly FontUsage[];
+  readonly masters?: readonly ResolvedMaster[];
+  readonly slides: readonly ResolvedSlide[];
 };
 
 export type BuildResult = {
   readonly pptx: Uint8Array;
   readonly report: BuildReport;
-  readonly query: BuildQuery;
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
 };
 
 export type EmitResult = {
   readonly pptx: Uint8Array;
   readonly report: BuildReport;
-};
-
-export type LocatorObservation = {
-  readonly evidence: "generation";
-  readonly authorId?: string;
-  readonly box?: GeometryBox;
-  readonly text?: string;
-  readonly objects: readonly ObjectObservation[];
-  readonly resources?: readonly LocatorResourceObservation[];
 };
 
 export type ResourceObservation = {
@@ -270,6 +389,24 @@ export type LocatorResourceObservation = ResourceObservation & {
 
 /** Read-only locator and field observation for formal content in a successful build. */
 export type Locator = {
+  readonly id?: string;
+  readonly kind: string;
+  readonly path: string;
+  readonly box?: Rect;
+  readonly bounds?: Rect;
+  readonly corners?: readonly [
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+    ScreenPoint,
+  ];
+  readonly transform?: ObjectTransform;
+  readonly text?: string;
+  readonly textMetrics?: TextMetrics;
+  readonly image?: ResolvedImage;
+  readonly gridArea?: Rect;
+  readonly objects: readonly ResolvedObject[];
+  readonly resources?: readonly LocatorResourceObservation[];
   /** Finds one author id in this locator scope without crossing the next named scope. */
   get(id: string): Locator;
   /** Lists matches for an author id in this locator scope; duplicates are already rejected by the build. */
@@ -277,21 +414,13 @@ export type Locator = {
   /** Direct structural child locators, including anonymous and named nodes. */
   children(): readonly Locator[];
   descendants(): readonly Locator[];
-  observe(): LocatorObservation;
 };
 
-export type SlideQuery = Locator & {
+export type SlideLocator = Locator & {
   readonly id: string;
-  readonly authorId?: string;
   readonly index: number;
-  readonly observation: SlideObservation;
-};
-
-export type BuildQuery = {
-  readonly evidence: "generation";
-  readonly slides: readonly SlideQuery[];
-  /** Page lookup by author id in this build. */
-  getSlide(id: string): SlideQuery;
+  readonly dimensions: ResolutionDimensionsSummary;
+  readonly footer?: ResolvedFooter;
 };
 
 /** Generic node in the React host tree, without exposing React or renderer internal objects. */
@@ -472,6 +601,12 @@ export type CapabilityLayoutRequest = {
   readonly availableWidth?: number;
   /** Whether available width is a shrinkable upper bound or an exact width the layout must allocate. */
   readonly widthMode?: "at-most" | "exactly";
+  /** Target height provided by the current layout algorithm in pixels. */
+  readonly availableHeight?: number;
+  /** Whether available height is a shrinkable upper bound or an exact target height. */
+  readonly heightMode?: "at-most" | "exactly";
+  /** Distinguishes baseline queries from general intrinsic sizing queries. */
+  readonly purpose?: "baseline" | "layout";
   /** Theme, local scope, and container text defaults shared between measurement and object compilation. */
   readonly theme: ThemeContext;
   /** 1-based slide number in the deck, used by shared text service to measure native slide number fields. */
@@ -487,10 +622,6 @@ export type NativeElementKind =
 
 export type CapabilityLayoutContract = {
   readonly nativeKind: NativeElementKind;
-  readonly x?: number;
-  readonly y?: number;
-  readonly width?: number | `${number}%` | "auto";
-  readonly height?: number | `${number}%` | "auto";
   readonly layoutStyle: LayoutStyle;
   readonly padding?: {
     readonly top: number;
@@ -498,6 +629,10 @@ export type CapabilityLayoutContract = {
     readonly bottom: number;
     readonly left: number;
   };
+  /** Prevents `display: "block"` `alignItems: "stretch"` from expanding auto-width replaced items to container width. */
+  readonly preservesIntrinsicSize?: boolean;
+  /** Enforces measured content/track dimensions as lower bounds and preserves explicit row sums over target dimensions (CSS table sizing). */
+  readonly contentMinimumsEnforced?: boolean;
 };
 
 export type CapabilityParseContext = {
@@ -527,10 +662,25 @@ export type CapabilityLayoutMeasurement = {
  * for read-only locator traversal and observation without core knowing capability-specific part kinds.
  */
 export type CapabilitySubPartObservation = {
+  readonly kind?: string;
   readonly authorId?: string;
-  readonly box?: GeometryBox;
+  readonly path?: string;
+  readonly box?: Rect;
   readonly text?: string;
+  readonly textMetrics?: TextMetrics;
   readonly parts?: readonly CapabilitySubPartObservation[];
+};
+
+/** Font usage claim reported by capability modules to assemble document-level FontUsage summaries. */
+export type CapabilityFontUsageClaim = {
+  readonly family: string;
+  readonly weight: number;
+  readonly style: "normal" | "italic";
+  readonly hasResource: boolean;
+  readonly substitute?: boolean;
+  readonly embeddable?: boolean;
+  readonly missingGlyphs?: readonly string[];
+  readonly path?: string;
 };
 
 /** Claim provided by capability to deck-scoped resource processing; character content is generated by the shared text service. */
@@ -543,15 +693,10 @@ export type CapabilityResourceClaim = {
 };
 
 export type PreviewTransform = {
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly angle: number;
   readonly flipH: boolean;
   readonly flipV: boolean;
-};
-
-export type PreviewWarning = {
-  readonly message: string;
-  readonly path?: string;
 };
 
 /**
@@ -580,11 +725,6 @@ export type BoundContainerCollaboration = {
   /** True when this container produces a native PresentationML object rather than remaining layout-only. */
   readonly emitsObject: boolean;
   /**
-   * Controls whether this container enters the Yoga layout tree when placed inside a loose parent
-   * without declaring non-text layout styles. Defaults to `"always"`.
-   */
-  readonly layoutMode?: "always" | "when-styled";
-  /**
    * Controls whether resolved children remain siblings of the container or are enclosed as native
    * members inside `bound.resolve` via `context.resolveChildren`. Defaults to `"siblings"`.
    */
@@ -595,15 +735,6 @@ export type BoundContainerCollaboration = {
   readonly observesLayout?: boolean;
   /** True when single-child flex rows propagate text baseline through this container. Defaults to true. */
   readonly propagatesBaseline?: boolean;
-  /** True when overflowing the slide canvas emits a layout container overflow warning. Defaults to true. */
-  readonly checksCanvasOverflow?: boolean;
-};
-
-export type CapabilityWarning = {
-  readonly code: string;
-  readonly message: string;
-  /** Subpath relative to the native object, used for precisely locating cell diagnostics. */
-  readonly path?: string;
 };
 
 export type ResolvedLink = {
@@ -612,7 +743,7 @@ export type ResolvedLink = {
 };
 
 export type ResolvedObjectChildren = {
-  readonly objects: readonly ObjectObservation[];
+  readonly objects: readonly ResolvedObject[];
 };
 
 export type ObjectResolveContext = {
@@ -622,7 +753,7 @@ export type ObjectResolveContext = {
   readonly theme: ThemeContext;
   readonly options: ResolveOptions;
   readonly slideNumber: number;
-  readonly layoutBox?: GeometryBox;
+  readonly layoutBox?: Rect;
   readonly placeholder?: PlaceholderResolutionContext;
   /** Convert an explicit continuity handle into an OOXML object name; objects without declared continuity omit this value. */
   readonly morphName?: string;
@@ -654,24 +785,33 @@ export type PaintContext = {
   readonly path: string;
   readonly slideNumber: number;
   readonly objectId: number;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly theme: ThemeContext;
   readonly childrenSvg?: string;
 };
 
-export type PaintOutput = {
-  readonly svg: string;
-  readonly warnings?: readonly PreviewWarning[];
+export type PaintPlaceholderRecord = {
+  readonly id?: string;
+  readonly path?: string;
+  readonly url: string;
 };
 
-export type ResolvedObject = {
-  readonly observation: ObjectObservation;
+export type PaintOutput = {
+  readonly svg: string;
+  readonly placeholders?: readonly PaintPlaceholderRecord[];
+};
+
+/** Internal capability protocol result returned by `BoundObjectCapability.resolve()`. */
+export type ObjectResolution = {
+  readonly observation: Omit<ResolvedObject, "path"> & {
+    readonly path?: string;
+  };
   readonly transform?: PreviewTransform;
   readonly parts?: readonly CapabilitySubPartObservation[];
   readonly extensions: readonly Extension[];
   readonly annotations?: readonly CapabilityAnnotation[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];
-  readonly warnings?: readonly CapabilityWarning[];
+  readonly fontUsages?: readonly CapabilityFontUsageClaim[];
   emit(context: EmitContext): EmitOutput;
   paint?(context: PaintContext): PaintOutput;
 };
@@ -686,7 +826,7 @@ export type BoundObjectCapability = {
   measureLayout?(
     request: CapabilityLayoutRequest,
   ): CapabilityLayoutMeasurement | undefined;
-  resolve(context: ObjectResolveContext): ResolvedObject;
+  resolve(context: ObjectResolveContext): ObjectResolution;
 };
 
 /**
@@ -806,21 +946,23 @@ export type SlidePaintContext = {
 
 export type SlidePaintOutput = {
   readonly svg: string;
-  readonly warnings?: readonly PreviewWarning[];
+  readonly placeholders?: readonly PaintPlaceholderRecord[];
 };
 
-export type ResolvedSlide = {
+/** Internal capability protocol result returned by `BoundSlideCapability.resolveSlide()`. */
+export type SlideResolution = {
   readonly observation?: unknown;
+  readonly footer?: ResolvedFooter;
   readonly extensions: readonly Extension[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];
-  readonly warnings?: readonly CapabilityWarning[];
+  readonly fontUsages?: readonly CapabilityFontUsageClaim[];
   emit(context: SlideEmitContext): SlideEmitOutput;
   paint?(context: SlidePaintContext): SlidePaintOutput;
 };
 
 export type BoundSlideCapability = {
   readonly continuity?: BoundSlideContinuityCollaboration;
-  resolveSlide(context: SlideResolveContext): ResolvedSlide;
+  resolveSlide(context: SlideResolveContext): SlideResolution;
 };
 
 export type PptxRelationship = {
@@ -894,6 +1036,8 @@ export type SlideCapabilityModule<
   readonly slideProp?: string;
   /** Slide properties jointly consumed by the same module, such as transition and advance timing. */
   readonly slideProps?: readonly string[];
+  /** True when this slide capability also consumes `style.background` on Slide, SlideMaster, and SlideLayout declarations. */
+  readonly consumesOwnerBackgroundStyle?: boolean;
   /** Written to the slide following PresentationML fixed child element order. */
   readonly slot: SlideCapabilitySlot;
   /** Runs once regardless of whether Slide provides the corresponding property. */
@@ -941,6 +1085,6 @@ export type RegisteredCapabilityModule =
   | CapabilityModule
   | TransparentCapabilityModule;
 
-export type { Diagnostic, DiagnosticSeverity };
+export type { BuildDiagnostic, PreviewError, PreviewPlaceholder };
 
 // DeckProps, SlideProps, and SectionProps are derived from Zod schemas in author-schemas.ts.

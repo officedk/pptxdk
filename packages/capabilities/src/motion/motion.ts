@@ -1,9 +1,10 @@
 import {
   CapabilityError,
+  resolvePlaceholderBoxFromLayers,
   type CapabilityInput,
-  type GeometryBox,
   type LayoutPlaceholderSpec,
-  type ResolvedSlide,
+  type Rect,
+  type SlideResolution,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
   type SlideEmitContext,
@@ -18,9 +19,9 @@ import type {
   MotionDirection,
   MotionEffectObservation,
   MotionNativeProjection,
-  MotionObservation,
   MotionStartDependency,
   NormalizedEffect,
+  ResolvedMotion,
 } from "./motion-api.ts";
 import {
   ownerMotionSchema,
@@ -95,7 +96,7 @@ export {
   wipe,
   zoom,
 } from "./motion-api.ts";
-export { observeMotion } from "./motion-query.ts";
+export { motionSchedule } from "./motion-query.ts";
 export type {
   EffectInstanceObservation,
   MotionCueObservation,
@@ -108,7 +109,7 @@ export type {
   MotionMembership,
   MotionMomentObservation,
   MotionMomentRef,
-  MotionQuery,
+  MotionSchedule,
   MotionScopeQueryMember,
   MotionScopeQueryObservation,
   MotionScopeRef,
@@ -135,7 +136,6 @@ export type {
   MotionNativeProjection,
   MotionMoment,
   MotionMomentOffset,
-  MotionObservation,
   MotionScopeHandle,
   MotionScopeMode,
   MotionScopeObservation,
@@ -173,7 +173,7 @@ function timeNodeValue(value: number, field: string): number {
   return value;
 }
 
-function validateKnownMotionTimes(observation: MotionObservation): void {
+function validateKnownMotionTimes(observation: ResolvedMotion): void {
   for (const scope of observation.scopes ?? []) {
     validateKnownTime(scope.delayMs, "orchestration scope delay");
     validateKnownTime(scope.eachMs, "stagger interval");
@@ -243,7 +243,7 @@ export type TimingEffect = MotionEffectObservation & {
   readonly targetKind: string;
   readonly targetTextBody: boolean;
   readonly targetFilled: boolean;
-  readonly targetBox?: GeometryBox;
+  readonly targetBox?: Rect;
   readonly targetRotationDegrees?: number;
   readonly targetHasBackground: boolean;
   readonly targetParagraphCount?: number;
@@ -276,7 +276,7 @@ export type MotionNativeMember = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly members?: readonly MotionNativeMember[];
 };
 
@@ -435,7 +435,7 @@ function formulaOffset(value: string, offset: number): string {
 }
 
 function geometryCenter(
-  box: GeometryBox,
+  box: Rect,
   dimensions: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
   if (dimensions.width <= 0 || dimensions.height <= 0) {
@@ -452,7 +452,7 @@ function geometryCenter(
 
 /** Common rotation center is calculated using integer EMUs from serialized xfrm and sldSz to avoid differing rounding results on readback. */
 function serializedGeometryCenter(
-  box: GeometryBox,
+  box: Rect,
   dimensions: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
   const widthEmu = pxToEmu(dimensions.width);
@@ -469,7 +469,7 @@ function serializedGeometryCenter(
   };
 }
 
-function targetBox(effect: TimingEffect, purpose: string): GeometryBox {
+function targetBox(effect: TimingEffect, purpose: string): Rect {
   if (effect.targetBox === undefined) {
     throw new CapabilityError(
       "motion-target-geometry",
@@ -484,11 +484,14 @@ function rotationFormula(effect: TimingEffect): {
   readonly degrees: number;
 } {
   const relativeBy = typeof effect.by === "number";
-  const degrees = relativeBy
-    ? effect.by
-    : typeof effect.from === "number"
+  const fromDegrees =
+    typeof effect.from === "number"
       ? effect.from
-      : 360;
+      : typeof effect.to === "number"
+        ? 0
+        : 360;
+  const toDegrees = typeof effect.to === "number" ? effect.to : 0;
+  const degrees = relativeBy ? effect.by : fromDegrees - toDegrees;
   return {
     angle: `(${formulaNumber(degrees)}*pi/180)*${relativeBy ? "$" : "(1-$)"}`,
     degrees,
@@ -650,9 +653,15 @@ function behaviorIds(
         ? { by: Math.round(effect.by * 60000) }
         : {
             from: Math.round(
-              (typeof effect.from === "number" ? effect.from : 360) * 60000,
+              (typeof effect.from === "number"
+                ? effect.from
+                : typeof effect.to === "number"
+                  ? 0
+                  : 360) * 60000,
             ),
-            to: 0,
+            to: Math.round(
+              (typeof effect.to === "number" ? effect.to : 0) * 60000,
+            ),
           },
       element(
         "p:cBhvr",
@@ -2800,7 +2809,7 @@ function buildOwnerMotionSteps(
     step.effects.forEach((item, effectIdx) => {
       let spid: number;
       let targetName: string;
-      let box: GeometryBox | undefined;
+      let box: Rect | undefined;
       if ("placeholder" in item.target) {
         const entry = placeholderByKey.get(item.target.placeholder);
         if (entry === undefined) {
@@ -2812,17 +2821,18 @@ function buildOwnerMotionSteps(
         }
         spid = entry.spid;
         targetName = entry.name;
+        const resolvedBox = resolvePlaceholderBoxFromLayers([entry.spec]);
         if (
-          entry.spec.x !== undefined &&
-          entry.spec.y !== undefined &&
-          entry.spec.width !== undefined &&
-          entry.spec.height !== undefined
+          typeof resolvedBox.x === "number" &&
+          typeof resolvedBox.y === "number" &&
+          typeof resolvedBox.width === "number" &&
+          typeof resolvedBox.height === "number"
         ) {
           box = {
-            x: entry.spec.x,
-            y: entry.spec.y,
-            width: entry.spec.width,
-            height: entry.spec.height,
+            x: resolvedBox.x,
+            y: resolvedBox.y,
+            width: resolvedBox.width,
+            height: resolvedBox.height,
           };
         }
       } else {
@@ -2855,6 +2865,7 @@ function buildOwnerMotionSteps(
         delayMs,
         ...(repeatCount === undefined ? {} : { repeatCount }),
         ...(rawEffect.from === undefined ? {} : { from: rawEffect.from }),
+        ...(rawEffect.to === undefined ? {} : { to: rawEffect.to }),
         ...(rawEffect.by === undefined ? {} : { by: rawEffect.by }),
         ...(rawEffect.intervalMs === undefined
           ? {}
@@ -2951,7 +2962,7 @@ export const motionCapability: SlideCapabilityModule & {
         input.props["placeholders"],
       );
       return {
-        resolveSlide(_context: SlideResolveContext): ResolvedSlide {
+        resolveSlide(_context: SlideResolveContext): SlideResolution {
           const hasEffects = steps.some((step) => step.effects.length > 0);
           if (!hasEffects) {
             return {
@@ -2975,7 +2986,7 @@ export const motionCapability: SlideCapabilityModule & {
     }
 
     return {
-      resolveSlide(context: SlideResolveContext): ResolvedSlide {
+      resolveSlide(context: SlideResolveContext): SlideResolution {
         const plan = compileMotionPlan(context.contributions);
         validateKnownMotionTimes(plan.observation);
         const hasEffects = plan.steps.some((step) => step.effects.length > 0);
@@ -2997,7 +3008,7 @@ export const motionCapability: SlideCapabilityModule & {
           ...(timing.nativeProjections.length === 0
             ? {}
             : { nativeProjections: timing.nativeProjections }),
-        } satisfies MotionObservation;
+        } satisfies ResolvedMotion;
         // Query identity must bind to final public observation object containing native projections.
         registerMotionObservation(observation, plan.query);
         return {

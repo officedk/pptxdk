@@ -1,7 +1,7 @@
 import {
   CapabilityError,
   type CapabilityInput,
-  type ResolvedSlide,
+  type SlideResolution,
   type SlideCapabilityModule,
   type SlideEmitContext,
   type SlideEmitOutput,
@@ -269,7 +269,7 @@ export const notesCapability: SlideCapabilityModule & {
     );
     if (contributions.length === 0) {
       return {
-        resolveSlide(): ResolvedSlide {
+        resolveSlide(): SlideResolution {
           return {
             extensions: [],
             emit(): SlideEmitOutput {
@@ -300,7 +300,7 @@ export const notesCapability: SlideCapabilityModule & {
     }
 
     return {
-      resolveSlide(): ResolvedSlide {
+      resolveSlide(): SlideResolution {
         const resolvedBody = resolveTextBody(
           entry.paragraphs,
           entry.style,
@@ -313,9 +313,10 @@ export const notesCapability: SlideCapabilityModule & {
           observation: notesObservation(resolvedBody.text, entry.paragraphs),
           extensions: [],
           resourceClaims: resolvedBody.resourceClaims,
-          ...(resolvedBody.warnings.length === 0
-            ? {}
-            : { warnings: resolvedBody.warnings }),
+          fontUsages: resolvedBody.fontUsages.map((usage) => ({
+            ...usage,
+            path: contribution.path,
+          })),
           emit(emitContext: SlideEmitContext): SlideEmitOutput {
             return speakerNotesMechanism.emit(
               { resolvedBody, entryTheme: entry.theme },

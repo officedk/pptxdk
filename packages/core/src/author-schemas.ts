@@ -2,18 +2,17 @@ import { z } from "zod";
 
 import { authorIdSchema, readAuthorId, type AuthorId } from "#/author-ids.ts";
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
-import { slideLayoutStyleShape } from "#/layout-schemas.ts";
+import { layoutStyleSchema, slideLayoutStyleShape } from "#/layout-schemas.ts";
+import { placeholderSizeSchema, type PlaceholderSize } from "#/placeholders.ts";
 import {
+  backgroundValueSchema,
   colorMapOverrideSchema,
   colorValueSchema,
-  linearGradientSchema,
-  radialGradientSchema,
   textStyleSchema,
   textStyleShape,
   themeInputSchema,
   themeOverrideSchema,
   themeScopeSchema,
-  uint8ArraySchema,
   type ColorMapOverride,
   type ThemeOverride,
 } from "#/theme.ts";
@@ -64,16 +63,9 @@ export const backgroundRefSchema = z
   .readonly();
 export type BackgroundRef = z.infer<typeof backgroundRefSchema>;
 
-/** Slide background can use theme colors, gradients supported by the shared visual writer, formal image resource inputs, or theme background fill references (`p:bgRef`). */
+/** Slide background can use theme colors, gradients supported by the shared visual writer, formal image resource inputs, `"none"`, or theme background fill references (`p:bgRef`). */
 export const slideBackgroundSchema = z.union([
-  colorValueSchema,
-  linearGradientSchema,
-  radialGradientSchema,
-  z
-    .strictObject({
-      image: z.union([z.string(), z.instanceof(URL), uint8ArraySchema]),
-    })
-    .readonly(),
+  backgroundValueSchema,
   backgroundRefSchema,
 ]);
 export type SlideBackground = z.infer<typeof slideBackgroundSchema>;
@@ -92,6 +84,7 @@ export const slideStyleSchema = z
   .strictObject({
     ...textStyleShape,
     ...slideLayoutStyleShape,
+    background: slideBackgroundSchema.optional(),
   })
   .readonly();
 export type SlideStyle = z.infer<typeof slideStyleSchema>;
@@ -112,9 +105,18 @@ const slideCorePropsObjectSchema = z.strictObject({
 });
 export const slideCorePropsSchema = slideCorePropsObjectSchema.readonly();
 
-/** Official OOXML ST_PlaceholderSize values for date, footer, and slide-number slots. */
-export const placeholderSizeSchema = z.enum(["full", "half", "quarter"]);
-export type PlaceholderSize = z.infer<typeof placeholderSizeSchema>;
+export { placeholderSizeSchema, type PlaceholderSize };
+
+/** Footer placeholder slot style combining inherited text styles and LayoutStyle placement. */
+export const footerPlaceholderStyleSchema = z
+  .strictObject({
+    ...textStyleShape,
+    ...layoutStyleSchema.unwrap().shape,
+  })
+  .readonly();
+export type FooterPlaceholderStyle = z.infer<
+  typeof footerPlaceholderStyleSchema
+>;
 
 /** Per-slide dateTime/footer override declaration (`false` hides; string sets text; object overrides text/style/slot). */
 export const slideFooterValueSchema = z.union([
@@ -123,7 +125,7 @@ export const slideFooterValueSchema = z.union([
   z
     .strictObject({
       text: xml10StringSchema.optional(),
-      style: textStyleSchema.optional(),
+      style: footerPlaceholderStyleSchema.optional(),
       idx: z.number().int().nonnegative().optional(),
       size: placeholderSizeSchema.optional(),
       visible: z.boolean().optional(),
@@ -137,7 +139,7 @@ export const slideNumberValueSchema = z.union([
   z.boolean(),
   z
     .strictObject({
-      style: textStyleSchema.optional(),
+      style: footerPlaceholderStyleSchema.optional(),
       idx: z.number().int().nonnegative().optional(),
       size: placeholderSizeSchema.optional(),
       visible: z.boolean().optional(),
@@ -229,9 +231,11 @@ export function parseDeckProps(props: Readonly<Record<string, unknown>>): {
   if (unknown !== undefined) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "unknown-prop",
         path: "deck",
-        code: "unknown-parameter",
+        prop: unknown,
+        field: unknown,
+        scope: "props",
         message: `Deck contains unknown parameter ${unknown}`,
       },
     ]);
@@ -243,9 +247,9 @@ export function parseDeckProps(props: Readonly<Record<string, unknown>>): {
   if (!widthResult.success) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: "deck",
-        code: "invalid-dimension",
+        field: "width",
         message: `Deck.width ${widthResult.error.issues[0]?.message ?? "must be a finite positive pixel value"}`,
       },
     ]);
@@ -257,9 +261,9 @@ export function parseDeckProps(props: Readonly<Record<string, unknown>>): {
   if (!heightResult.success) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: "deck",
-        code: "invalid-dimension",
+        field: "height",
         message: `Deck.height ${heightResult.error.issues[0]?.message ?? "must be a finite positive pixel value"}`,
       },
     ]);
@@ -269,9 +273,9 @@ export function parseDeckProps(props: Readonly<Record<string, unknown>>): {
     if (typeof rawTitle !== "string") {
       throw new BuildError([
         {
-          severity: "error",
+          code: "invalid-prop",
           path: "deck",
-          code: "invalid-title",
+          field: "title",
           message: "Deck.title must be a string",
         },
       ]);
@@ -280,9 +284,9 @@ export function parseDeckProps(props: Readonly<Record<string, unknown>>): {
     if (!titleResult.success) {
       throw new BuildError([
         {
-          severity: "error",
+          code: "invalid-prop",
           path: "deck",
-          code: "invalid-title",
+          field: "title",
           message: "Deck.title contains characters not allowed in XML 1.0",
         },
       ]);
@@ -304,9 +308,11 @@ export function parseSectionProps(
   if (unknown !== undefined) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "unknown-prop",
         path: `deck/section[${index + 1}]`,
-        code: "unknown-section-property",
+        prop: unknown,
+        field: unknown,
+        scope: "props",
         message: `Section does not support property ${unknown}`,
       },
     ]);
@@ -315,9 +321,9 @@ export function parseSectionProps(
   if (typeof rawName !== "string" || rawName.trim() === "") {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/section[${index + 1}]`,
-        code: "invalid-section-name",
+        field: "name",
         message: "Section.name must be a non-empty string",
       },
     ]);
@@ -326,9 +332,9 @@ export function parseSectionProps(
   if (!parsed.success) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/section[${rawName}]`,
-        code: "invalid-xml-character",
+        field: "name",
         message: "Section.name contains characters not allowed in XML 1.0",
       },
     ]);
@@ -370,9 +376,10 @@ export function parseSlideCoreProps(
     const label = authorId ?? index + 1;
     throw new BuildError([
       {
-        severity: "error",
-        path: `deck/slide[${label}]`,
         code: "missing-capability",
+        path: `deck/slide[${label}]`,
+        field: unknown,
+        capability: unknown,
         message: `No capability module registered for Slide.${unknown}`,
       },
     ]);
@@ -380,9 +387,9 @@ export function parseSlideCoreProps(
   if (authorId === undefined) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/slide[${index + 1}]`,
-        code: "invalid-author-id",
+        field: "id",
         message: "Slide must declare id as a non-empty string",
       },
     ]);
@@ -390,9 +397,9 @@ export function parseSlideCoreProps(
   if (!xml10StringSchema.safeParse(authorId).success) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/slide[${index + 1}]`,
-        code: "invalid-xml-character",
+        field: "id",
         message: "Slide.id contains characters not allowed in XML 1.0",
       },
     ]);
@@ -401,9 +408,9 @@ export function parseSlideCoreProps(
   if (rawName !== undefined && typeof rawName !== "string") {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/slide[${authorId}]`,
-        code: "invalid-slide-prop",
+        field: "name",
         message: "Slide.name must be a string",
       },
     ]);
@@ -411,9 +418,9 @@ export function parseSlideCoreProps(
   if (rawName !== undefined && !xml10StringSchema.safeParse(rawName).success) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/slide[${authorId}]`,
-        code: "invalid-xml-character",
+        field: "name",
         message: "Slide.name contains characters not allowed in XML 1.0",
       },
     ]);
@@ -425,9 +432,9 @@ export function parseSlideCoreProps(
   ) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/slide[${authorId}]`,
-        code: "invalid-hidden-slide",
+        field: "hidden",
         message: "Slide.hidden must be a boolean",
       },
     ]);
@@ -441,9 +448,9 @@ export function parseSlideCoreProps(
   ) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/slide[${authorId}]`,
-        code: "invalid-show-master-shapes",
+        field: "showMasterShapes",
         message: "Slide.showMasterShapes must be a boolean",
       },
     ]);
@@ -458,9 +465,9 @@ export function parseSlideCoreProps(
   ) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-style",
         path: `deck/slide[${authorId}]`,
-        code: "unsupported-layout-style",
+        field: "style.zIndex",
         message: "Slide.style does not support zIndex",
       },
     ]);
@@ -472,9 +479,9 @@ export function parseSlideCoreProps(
     if (!parsedMap.success) {
       throw new BuildError([
         {
-          severity: "error",
+          code: "invalid-prop",
           path: `deck/slide[${authorId}]`,
-          code: "invalid-color-map-override",
+          field: "colorMapOverride",
           message:
             parsedMap.error.issues[0]?.message ??
             "Slide.colorMapOverride must be 'master' or a 12-slot color map",
@@ -490,9 +497,9 @@ export function parseSlideCoreProps(
     if (!parsedOverride.success) {
       throw new BuildError([
         {
-          severity: "error",
+          code: "invalid-prop",
           path: `deck/slide[${authorId}]`,
-          code: "invalid-theme-override",
+          field: "themeOverride",
           message:
             parsedOverride.error.issues[0]?.message ??
             "Slide.themeOverride is invalid",
@@ -511,9 +518,9 @@ export function parseSlideCoreProps(
   ) {
     throw new BuildError([
       {
-        severity: "error",
+        code: "invalid-prop",
         path: `deck/slide[${authorId}]`,
-        code: "invalid-slide-prop",
+        field: "showMasterPlaceholderAnimations",
         message: "Slide.showMasterPlaceholderAnimations must be a boolean",
       },
     ]);

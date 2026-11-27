@@ -1,4 +1,4 @@
-import { BuildError } from "#/diagnostics.ts";
+import { BuildError, toBuildDiagnostic } from "#/diagnostics.ts";
 import {
   expandedSpacing,
   resolvePercent,
@@ -7,7 +7,7 @@ import {
   type LayoutSolverNode,
   type LayoutSolverPort,
 } from "#/layout-protocol.ts";
-import type { Diagnostic, LayoutLength, LayoutStyle } from "#/types.ts";
+import type { LayoutLength, LayoutStyle } from "#/types.ts";
 
 type GridTrack =
   | { readonly kind: "px"; readonly value: number }
@@ -53,9 +53,13 @@ const gridContainerProperties = [
 
 const gridItemProperties = ["gridColumn", "gridRow", "justifySelf"] as const;
 
-function fail(path: string, code: string, message: string): never {
-  const diagnostic: Diagnostic = { severity: "error", path, code, message };
-  throw new BuildError([diagnostic]);
+function fail(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): never {
+  throw new BuildError([toBuildDiagnostic(path, code, message, details)]);
 }
 
 function gridTokens(input: string, path: string): string[] {
@@ -656,9 +660,7 @@ function buildGridModel(
 /**
  * Creates the Grid container solver collaborating strictly through `LayoutSolverPort`.
  */
-export function createGridContainerSolver(
-  warnOnce: (path: string, code: string, message: string) => void,
-): CustomContainerSolver {
+export function createGridContainerSolver(): CustomContainerSolver {
   return {
     handlesDisplay(display) {
       return display === "grid";
@@ -696,20 +698,6 @@ export function createGridContainerSolver(
         ? Math.max(0, outerHeight - padding.top - padding.bottom)
         : undefined;
       const model = buildGridModel(node, innerWidth, innerHeight, port);
-      if (innerWidth !== undefined && model.width > innerWidth + 0.01) {
-        warnOnce(
-          node.path,
-          "grid-overflow",
-          `Grid columns minimum size total ${model.width}px exceeds available width ${innerWidth}px; build retains track dimensions`,
-        );
-      }
-      if (innerHeight !== undefined && model.height > innerHeight + 0.01) {
-        warnOnce(
-          node.path,
-          "grid-overflow",
-          `Grid rows minimum size total ${model.height}px exceeds available height ${innerHeight}px; build retains track dimensions`,
-        );
-      }
       port.setContainerSize(node, {
         ...(!hasWidth && outerWidth <= 0
           ? { width: model.width + padding.left + padding.right }
@@ -717,6 +705,10 @@ export function createGridContainerSolver(
         ...(!hasResolvedHeight
           ? { height: model.height + padding.top + padding.bottom }
           : {}),
+      });
+      port.setGridTracks?.(node, {
+        columnWidths: [...model.widths],
+        rowHeights: [...model.heights],
       });
       for (const placement of model.placements) {
         const child = placement.node;
@@ -734,6 +726,12 @@ export function createGridContainerSolver(
           padding.top +
           model.spanHeight(0, placement.row) +
           (placement.row > 0 ? model.rowGap : 0);
+        port.setGridCellArea?.(child, {
+          x: cellX,
+          y: cellY,
+          width: cellWidth,
+          height: cellHeight,
+        });
         const margin = expandedSpacing(childStyle, "margin");
         const availableWidth = Math.max(
           0,
@@ -761,8 +759,8 @@ export function createGridContainerSolver(
           );
         }
         const align = gridAlignment(alignValue);
-        const declaredWidth = childStyle.width ?? child.contractWidth;
-        const declaredHeight = childStyle.height ?? child.contractHeight;
+        const declaredWidth = childStyle.width;
+        const declaredHeight = childStyle.height;
         const widthPercent = resolvePercent(declaredWidth, cellWidth);
         const heightPercent = resolvePercent(declaredHeight, cellHeight);
         const widthSpecified =
@@ -808,7 +806,11 @@ export function createGridContainerSolver(
         ) {
           width = intrinsic.height * childStyle.aspectRatio;
         }
-        if (!widthSpecified || widthPercent !== undefined) {
+        if (
+          !widthSpecified ||
+          widthPercent !== undefined ||
+          child.contentMinimumsEnforced
+        ) {
           port.setChildConstraints(child, { width: Math.max(0, width) });
         }
         const naturalAtWidth = port.measureNaturalSize(child, width);
@@ -817,7 +819,10 @@ export function createGridContainerSolver(
           : align === "stretch" && childStyle.aspectRatio === undefined
             ? availableHeight
             : naturalAtWidth.height;
-        if (!heightSpecified && childStyle.aspectRatio === undefined) {
+        if (
+          (!heightSpecified && childStyle.aspectRatio === undefined) ||
+          child.contentMinimumsEnforced
+        ) {
           port.setChildConstraints(child, { height: Math.max(0, height) });
         }
         // Recalculate after assigning the stretched size; the previous natural-size pass may
@@ -825,18 +830,14 @@ export function createGridContainerSolver(
         const finalSize = port.measureNaturalSize(child, width);
         const usedWidth = finalSize.width || width;
         const usedHeight = finalSize.height || height;
+        if (child.contentMinimumsEnforced) {
+          port.setChildConstraints(child, {
+            width: Math.max(0, usedWidth),
+            height: Math.max(0, usedHeight),
+          });
+        }
         if (child.isContainer && !heightSpecified) {
           port.setAllocatedHeight(child, height);
-        }
-        if (
-          usedWidth > availableWidth + 0.01 ||
-          usedHeight > availableHeight + 0.01
-        ) {
-          warnOnce(
-            child.path,
-            "grid-item-overflow",
-            "Grid item overflows its track area; build retains declared dimensions",
-          );
         }
         const xAlign =
           justify === "center"

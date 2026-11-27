@@ -43,10 +43,13 @@ function Read({
     Text,
     {
       ...(id === undefined ? {} : { id }),
-      x: 0,
-      y: 0,
-      width: 240,
-      height: 48,
+      style: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: 240,
+        height: 48,
+      },
     },
     text,
   );
@@ -66,7 +69,15 @@ class ErrorBoundary extends Component<
     return this.state.failed
       ? createElement(
           Text,
-          { x: 0, y: 0, width: 240, height: 48 },
+          {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 48,
+            },
+          },
           "边界业务回退",
         )
       : this.props.children;
@@ -94,7 +105,15 @@ describe("React asynchronous content in public build", () => {
       rendered += 1;
       return createElement(
         Text,
-        { x: 0, y: 0, width: 240, height: 48 },
+        {
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
+        },
         "不应执行",
       );
     }
@@ -130,7 +149,15 @@ describe("React asynchronous content in public build", () => {
           {
             fallback: createElement(
               Text,
-              { x: 0, y: 0, width: 240, height: 48 },
+              {
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 240,
+                  height: 48,
+                },
+              },
               "加载占位",
             ),
           },
@@ -173,7 +200,15 @@ describe("React asynchronous content in public build", () => {
       }, []);
       return createElement(
         Text,
-        { x: 0, y: 0, width: 240, height: 48 },
+        {
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
+        },
         "取消前的提交内容",
       );
     }
@@ -229,7 +264,15 @@ describe("React asynchronous content in public build", () => {
       deck(
         createElement(
           Text,
-          { x: 0, y: 0, width: 240, height: 48 },
+          {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 48,
+            },
+          },
           "取消后恢复",
         ),
       ),
@@ -265,13 +308,33 @@ describe("React asynchronous content in public build", () => {
       return createElement(
         Fragment,
         null,
-        createElement(Text, { x: 0, y: 0, width: 240, height: 48 }, text),
+        createElement(
+          Text,
+          {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 48,
+            },
+          },
+          text,
+        ),
         createElement(
           Suspense,
           {
             fallback: createElement(
               Text,
-              { x: 0, y: 52, width: 240, height: 48 },
+              {
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 52,
+                  width: 240,
+                  height: 48,
+                },
+              },
               "等待",
             ),
           },
@@ -332,10 +395,13 @@ describe("React asynchronous content in public build", () => {
           Text,
           {
             id: "completed-before-abort",
-            x: 0,
-            y: 0,
-            width: 240,
-            height: 48,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 48,
+            },
           },
           "完成内容",
         ),
@@ -372,10 +438,13 @@ describe("React asynchronous content in public build", () => {
         Text,
         {
           id: "cleanup-abort",
-          x: 0,
-          y: 0,
-          width: 240,
-          height: 48,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
         },
         "完成内容",
       );
@@ -434,7 +503,15 @@ describe("React asynchronous content in public build", () => {
         {
           fallback: createElement(
             Text,
-            { x: 0, y: 0, width: 240, height: 48 },
+            {
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 240,
+                height: 48,
+              },
+            },
             "加载中",
           ),
         },
@@ -485,12 +562,30 @@ describe("React asynchronous content in public build", () => {
         null,
         createElement(
           Text,
-          { id: "sync", x: 0, y: 0, width: 240, height: 48 },
+          {
+            id: "sync",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 48,
+            },
+          },
           "同步内容",
         ),
         createElement(
           Text,
-          { id: "prefetched", x: 0, y: 52, width: 240, height: 48 },
+          {
+            id: "prefetched",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 52,
+              width: 240,
+              height: 48,
+            },
+          },
           prefetched,
         ),
         createElement(
@@ -498,7 +593,15 @@ describe("React asynchronous content in public build", () => {
           {
             fallback: createElement(
               Text,
-              { x: 0, y: 104, width: 240, height: 48 },
+              {
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 104,
+                  width: 240,
+                  height: 48,
+                },
+              },
               "外层等待",
             ),
           },
@@ -512,7 +615,15 @@ describe("React asynchronous content in public build", () => {
           {
             fallback: createElement(
               Text,
-              { x: 0, y: 156, width: 240, height: 48 },
+              {
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 156,
+                  width: 240,
+                  height: 48,
+                },
+              },
               "嵌套等待",
             ),
           },
@@ -565,7 +676,16 @@ describe("React asynchronous content in public build", () => {
     const updates: number[] = [];
     const stableHost = createElement(
       Text,
-      { id: "stable-host", x: 0, y: 0, width: 240, height: 48 },
+      {
+        id: "stable-host",
+        style: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 240,
+          height: 48,
+        },
+      },
       "宿主文字保持不变",
     );
 
@@ -643,8 +763,19 @@ describe("React asynchronous content in public build", () => {
 
       assert.deepEqual(file.errors, []);
       assert.deepEqual(
-        result.report.diagnostics.map(({ code }) => code),
-        ["font-measurement-unavailable", "font-measurement-unavailable"],
+        result.slides[0]?.objects.map(({ textMetrics }) => textMetrics),
+        [
+          {
+            status: "unmeasured",
+            reason: "missing-font-resource",
+            fonts: [{ family: "Aptos", weight: 400, style: "normal" }],
+          },
+          {
+            status: "unmeasured",
+            reason: "missing-font-resource",
+            fonts: [{ family: "Aptos", weight: 400, style: "normal" }],
+          },
+        ],
       );
       assert.deepEqual(warnings, []);
       assert.deepEqual(
@@ -676,7 +807,15 @@ describe("React asynchronous content in public build", () => {
       }, []);
       return createElement(
         Text,
-        { x: 0, y: 0, width: 240, height: 48 },
+        {
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
+        },
         "不能导出的已提交内容",
       );
     }
@@ -687,7 +826,7 @@ describe("React asynchronous content in public build", () => {
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "react-render");
+        assert.equal(error.diagnostics[0]?.code, "render-failed");
         assert.match(error.message, /direct Effect failed/u);
         return true;
       },
@@ -697,7 +836,19 @@ describe("React asynchronous content in public build", () => {
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
     const recovered = await build(
       deck(
-        createElement(Text, { x: 0, y: 0, width: 240, height: 48 }, "恢复构建"),
+        createElement(
+          Text,
+          {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 48,
+            },
+          },
+          "恢复构建",
+        ),
       ),
     );
     const file = await validatePptx(recovered.pptx);
@@ -717,7 +868,15 @@ describe("React asynchronous content in public build", () => {
       }, []);
       return createElement(
         Text,
-        { x: 0, y: 0, width: 240, height: 48 },
+        {
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
+        },
         "清理失败时不能返回",
       );
     }
@@ -728,7 +887,7 @@ describe("React asynchronous content in public build", () => {
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "react-render");
+        assert.equal(error.diagnostics[0]?.code, "render-failed");
         assert.match(error.message, /passive cleanup failure/u);
         return true;
       },
@@ -739,7 +898,15 @@ describe("React asynchronous content in public build", () => {
       deck(
         createElement(
           Text,
-          { x: 0, y: 0, width: 240, height: 48 },
+          {
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 48,
+            },
+          },
           "清理后恢复",
         ),
       ),
@@ -761,7 +928,15 @@ describe("React asynchronous content in public build", () => {
       }, []);
       return createElement(
         Text,
-        { x: 0, y: 0, width: 240, height: 48 },
+        {
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
+        },
         "LayoutEffect 内容",
       );
     }
@@ -772,7 +947,7 @@ describe("React asynchronous content in public build", () => {
       }),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "react-render");
+        assert.equal(error.diagnostics[0]?.code, "render-failed");
         assert.match(error.message, /layout cleanup failure/u);
         return true;
       },
@@ -804,7 +979,7 @@ describe("React asynchronous content in public build", () => {
     await started.promise;
     const rejected = assert.rejects(pendingBuild, (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "react-render");
+      assert.equal(error.diagnostics[0]?.code, "render-failed");
       assert.match(error.message, /unhandled data error/u);
       return true;
     });
@@ -825,7 +1000,16 @@ describe("React asynchronous content in public build", () => {
       }, []);
       return createElement(
         Text,
-        { id: "background", x: 0, y: 0, width: 240, height: 48 },
+        {
+          id: "background",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 48,
+          },
+        },
         text,
       );
     }

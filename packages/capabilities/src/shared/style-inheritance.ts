@@ -1,5 +1,6 @@
 import {
   masterTextStyleCategoryForRole,
+  resolvePlaceholderBoxFromLayers,
   type PaddingStyle,
   type PlaceholderLevelStyle,
   type PlaceholderListStyles,
@@ -101,16 +102,15 @@ export const sharedStyleRules: ExhaustiveStyleRuleMap = Object.freeze({
   paddingLeft: bodyRule<PaddingStyle["paddingLeft"]>("localOnly"),
 
   // Shape visual properties (spPr, never inherited by free children)
-  backgroundColor: spPrRule<VisualStyle["backgroundColor"]>(),
-  backgroundImage: spPrRule<VisualStyle["backgroundImage"]>(),
-  borderColor: spPrRule<VisualStyle["borderColor"]>(),
-  borderWidth: spPrRule<VisualStyle["borderWidth"]>(),
-  borderStyle: spPrRule<VisualStyle["borderStyle"]>(),
+  background: spPrRule<VisualStyle["background"]>(),
+  border: spPrRule<VisualStyle["border"]>(),
   borderRadius: spPrRule<VisualStyle["borderRadius"]>(),
   opacity: spPrRule<VisualStyle["opacity"]>(),
   boxShadow: spPrRule<VisualStyle["boxShadow"]>(),
   softEdge: spPrRule<VisualStyle["softEdge"]>(),
   rotate: spPrRule<VisualStyle["rotate"]>(),
+  flipH: spPrRule<VisualStyle["flipH"]>(),
+  flipV: spPrRule<VisualStyle["flipV"]>(),
 });
 
 /** True iff `key` is an own defined declaration on `record`, honoring explicit `undefined` removal. */
@@ -286,32 +286,22 @@ export function resolvePlaceholderGeometry(
     !Array.isArray(props["style"])
       ? (props["style"] as Readonly<Record<string, unknown>>)
       : undefined;
-  const localWidth =
-    style !== undefined && hasLocalDeclaration(style, "width")
-      ? style["width"]
-      : hasLocalDeclaration(props, "width")
-        ? props["width"]
-        : undefined;
-  const localHeight =
-    style !== undefined && hasLocalDeclaration(style, "height")
-      ? style["height"]
-      : hasLocalDeclaration(props, "height")
-        ? props["height"]
-        : undefined;
-  const hasLocalX = hasLocalDeclaration(props, "x");
-  const hasLocalY = hasLocalDeclaration(props, "y");
-  const hasLocalWidth = localWidth !== undefined;
-  const hasLocalHeight = localHeight !== undefined;
-  const layoutPh = placeholder.layoutPlaceholder;
-  const masterPh = placeholder.masterPlaceholder;
+  const hasLocalStyleKey = (key: string) =>
+    style !== undefined && hasLocalDeclaration(style, key);
+  const hasLocalBoxOverride =
+    hasLocalStyleKey("left") ||
+    hasLocalStyleKey("top") ||
+    hasLocalStyleKey("right") ||
+    hasLocalStyleKey("bottom") ||
+    hasLocalStyleKey("inset") ||
+    hasLocalStyleKey("width") ||
+    hasLocalStyleKey("height");
+  const resolved = resolvePlaceholderBoxFromLayers(
+    [placeholder.masterPlaceholder, placeholder.layoutPlaceholder, props],
+    placeholder.slideDimensions,
+  );
   return {
-    x: hasLocalX ? props["x"] : (layoutPh?.x ?? masterPh?.x),
-    y: hasLocalY ? props["y"] : (layoutPh?.y ?? masterPh?.y),
-    width: hasLocalWidth ? localWidth : (layoutPh?.width ?? masterPh?.width),
-    height: hasLocalHeight
-      ? localHeight
-      : (layoutPh?.height ?? masterPh?.height),
-    hasLocalBoxOverride:
-      hasLocalX || hasLocalY || hasLocalWidth || hasLocalHeight,
+    ...resolved,
+    hasLocalBoxOverride,
   };
 }

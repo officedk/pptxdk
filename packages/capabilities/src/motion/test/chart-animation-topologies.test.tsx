@@ -5,11 +5,10 @@ import {
   Chart,
   fade,
   MotionScope,
-  observeMotion,
+  motionSchedule,
   Shape,
   useMotionScope,
   type MotionEffectObservation,
-  type MotionObservation,
 } from "@pptxdk/capabilities";
 import {
   chart as documentChart,
@@ -22,6 +21,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 import { build, build as buildDocument } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const orders = [
   "series",
@@ -151,7 +151,7 @@ const mixedDomainCombo = {
 };
 
 function chartEffects(
-  motion: MotionObservation,
+  motion: ResolvedMotion,
   authorId: string,
 ): readonly MotionEffectObservation[] {
   return (
@@ -162,7 +162,7 @@ function chartEffects(
 }
 
 function chartRanges(
-  motion: MotionObservation,
+  motion: ResolvedMotion,
   authorId: string,
 ): readonly unknown[] {
   return chartEffects(motion, authorId).map(({ target }) => target.range);
@@ -178,13 +178,16 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`shared-ring-${by}`}
               name={`shared-ring-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
               groups={sharedRingGroups}
               legend="bottom"
               enter={fade({ by, duration: 100 })}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
             />
           ))}
         </Slide>
@@ -192,7 +195,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -290,13 +293,16 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`independent-ring-${by}`}
               name={`independent-ring-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
               groups={independentRingGroups}
               legend="bottom"
               enter={fade({ by, duration: 100 })}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
             />
           ))}
         </Slide>
@@ -304,7 +310,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -396,23 +402,29 @@ describe("chart animation topology integration", () => {
             <MotionScope scope={source}>
               <Chart
                 id="ring-scope-chart"
-                x={10}
-                y={10}
-                width={500}
-                height={220}
                 groups={independentRingGroups}
                 enter={fade({ by: "categoryElements", duration: 100 })}
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 500,
+                  height: 220,
+                }}
               />
             </MotionScope>
             <MotionScope scope={follower} startAt={after(source.end, 25)}>
               <Shape
                 id="ring-scope-follower"
-                x={10}
-                y={245}
-                width={60}
-                height={40}
-                fill="#1D4ED8"
                 enter={fade({ duration: 50 })}
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  top: 245,
+                  width: 60,
+                  height: 40,
+                  background: "#1D4ED8",
+                }}
               />
             </MotionScope>
           </Slide>
@@ -423,7 +435,7 @@ describe("chart animation topology integration", () => {
     const result = await build(<RingScopeDeck />);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       chartEffects(motion, "ring-scope-chart").map(({ startMs, endMs }) => [
         startMs,
@@ -449,7 +461,7 @@ describe("chart animation topology integration", () => {
       [[1025, 1075]],
     );
 
-    const query = observeMotion(result.report.slides[0]!);
+    const query = motionSchedule(result.report.slides[0]!);
     const queryEffects = query?.steps[0]?.effects ?? [];
     const last = queryEffects
       .filter(({ target }) => target.authorId === "ring-scope-chart")
@@ -470,10 +482,13 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`shared-combo-${by}`}
               name={`shared-combo-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
               {...sharedCombo}
               enter={fade({ by, duration: 100 })}
             />
@@ -483,7 +498,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -554,10 +569,13 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`mixed-domain-${by}`}
               name={`mixed-domain-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
               {...mixedDomainCombo}
               enter={fade({ by, duration: 100 })}
             />
@@ -567,7 +585,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -659,12 +677,15 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`all-zero-${by}`}
               name={`all-zero-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
               groups={emptyGroups}
               enter={fade({ by, duration: 100 })}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
             />
           ))}
         </Slide>
@@ -672,7 +693,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -745,10 +766,6 @@ describe("chart animation topology integration", () => {
         <Slide id="all-zero-negative">
           <Chart
             id="all-zero-negative-chart"
-            x={10}
-            y={10}
-            width={460}
-            height={280}
             groups={[
               {
                 kind: "column",
@@ -757,6 +774,13 @@ describe("chart animation topology integration", () => {
               },
             ]}
             enter={fade({ by: "seriesElements", duration: 100 })}
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 460,
+              height: 280,
+            }}
           />
         </Slide>
       </Deck>,
@@ -847,10 +871,6 @@ describe("chart animation topology integration", () => {
             <MotionScope scope={source}>
               <Chart
                 id="zero-scope-chart"
-                x={10}
-                y={10}
-                width={500}
-                height={200}
                 groups={[
                   {
                     kind: "column",
@@ -859,17 +879,27 @@ describe("chart animation topology integration", () => {
                   },
                 ]}
                 enter={fade({ by: "categoryElements", duration: 100 })}
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 500,
+                  height: 200,
+                }}
               />
             </MotionScope>
             <MotionScope scope={follower} startAt={after(source.end, 25)}>
               <Shape
                 id="zero-scope-follower"
-                x={10}
-                y={220}
-                width={60}
-                height={40}
-                fill="#1D4ED8"
                 enter={fade({ duration: 50 })}
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  top: 220,
+                  width: 60,
+                  height: 40,
+                  background: "#1D4ED8",
+                }}
               />
             </MotionScope>
           </Slide>
@@ -880,7 +910,7 @@ describe("chart animation topology integration", () => {
     const result = await build(<ZeroScopeDeck />);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(
       chartEffects(motion, "zero-scope-chart").map(({ startMs, endMs }) => [
         startMs,
@@ -894,7 +924,7 @@ describe("chart animation topology integration", () => {
         .map(({ startMs, endMs }) => [startMs, endMs]),
       [[125, 175]],
     );
-    const query = observeMotion(result.report.slides[0]!);
+    const query = motionSchedule(result.report.slides[0]!);
     const queryEffects = query?.steps[0]?.effects ?? [];
     const last = queryEffects
       .filter(({ target }) => target.authorId === "zero-scope-chart")
@@ -930,12 +960,15 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`mixed-ring-${by}`}
               name={`mixed-ring-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
               groups={groups}
               enter={fade({ by, duration: 100 })}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
             />
           ))}
         </Slide>
@@ -943,7 +976,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1021,12 +1054,15 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`mixed-xy-${by}`}
               name={`mixed-xy-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
               groups={groups}
               enter={fade({ by, duration: 100 })}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
             />
           ))}
         </Slide>
@@ -1034,7 +1070,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1133,13 +1169,16 @@ describe("chart animation topology integration", () => {
               key={by}
               id={`mixed-axis-${by}`}
               name={`mixed-axis-${by}`}
-              x={10 + (index % 2) * 500}
-              y={10 + Math.floor(index / 2) * 305}
-              width={480}
-              height={280}
               axes={axes}
               groups={groups}
               enter={fade({ by, duration: 100 })}
+              style={{
+                position: "absolute",
+                left: 10 + (index % 2) * 500,
+                top: 10 + Math.floor(index / 2) * 305,
+                width: 480,
+                height: 280,
+              }}
             />
           ))}
         </Slide>
@@ -1147,7 +1186,7 @@ describe("chart animation topology integration", () => {
     );
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const expected = {
       series: [
         { step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
@@ -1201,10 +1240,6 @@ describe("chart animation topology integration", () => {
       slide({ id: "zero-command" }).append(
         documentChart({
           id: "zero-command-chart",
-          x: 10,
-          y: 10,
-          width: 460,
-          height: 260,
           groups: [
             {
               kind: "column",
@@ -1213,13 +1248,20 @@ describe("chart animation topology integration", () => {
             },
           ],
           enter: fade({ by: "categoryElements", duration: 100 }),
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 460,
+            height: 260,
+          },
         }),
       ),
     );
     const result = await buildDocument(document);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.deepEqual(chartRanges(motion, "zero-command-chart"), [
       { type: "chart", step: "gridLegend", seriesIndex: -3, categoryIndex: -3 },
     ]);

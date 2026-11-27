@@ -5,9 +5,8 @@ import {
   after,
   createMorphScope,
   fade,
-  observeMotion,
+  motionSchedule,
   transitions,
-  type MotionObservation,
 } from "@pptxdk/capabilities";
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
@@ -32,19 +31,20 @@ import {
   build as buildAny,
   buildDocument as build,
 } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const jsx = { ...capabilities, Deck, Slide, expandDocument, build: buildAny };
 
 function motionOf(
   result: Awaited<ReturnType<typeof build>>,
   index = 0,
-): MotionObservation {
+): ResolvedMotion {
   return result.report.slides[index]?.capabilities?.[
     "motion"
-  ] as MotionObservation;
+  ] as ResolvedMotion;
 }
 
-function effectMap(motion: MotionObservation | undefined) {
+function effectMap(motion: ResolvedMotion | undefined) {
   return new Map(
     motion?.steps
       .flatMap((entry) => entry.effects)
@@ -68,11 +68,14 @@ describe("plain authoring choreography", () => {
           motionScope(source, { publishEnd: ready }).append(
             shape({
               id: "source",
-              x: 10,
-              y: 10,
-              width: 40,
-              height: 20,
               enter: fade({ duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
           motionScope(follower, {
@@ -81,22 +84,28 @@ describe("plain authoring choreography", () => {
           }).append(
             shape({
               id: "follower",
-              x: 10,
-              y: 40,
-              width: 40,
-              height: 20,
               enter: fade({ duration: 50 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 40,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
         ),
         step().append(
           shape({
             id: "independent-step",
-            x: 10,
-            y: 70,
-            width: 40,
-            height: 20,
             enter: fade({ duration: 30 }),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 70,
+              width: 40,
+              height: 20,
+            },
           }),
         ),
       ),
@@ -141,7 +150,7 @@ describe("plain authoring choreography", () => {
       ],
     );
 
-    const query = observeMotion(result.report.slides[0]!);
+    const query = motionSchedule(result.report.slides[0]!);
     assert.ok(query !== undefined);
     assert.equal(query.steps.length, 2);
     assert.equal(query.steps[0]?.scopes[0]?.members.length, 1);
@@ -157,63 +166,63 @@ describe("plain authoring choreography", () => {
         box({
           id: "outer",
           enter: fade({ duration: 200, delay: 800 }),
-          style: {
-            width: 200,
-            height: 120,
-            backgroundColor: "#123456",
-          },
+          style: { width: 200, height: 120, background: "#123456" },
         }).append(
           box({
             id: "inner-background",
-            style: {
-              width: 120,
-              height: 60,
-              backgroundColor: "#654321",
-            },
+            style: { width: 120, height: 60, background: "#654321" },
           }).append(
             shape({
               id: "inherited-child",
-              x: 4,
-              y: 4,
-              width: 20,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 4,
+                top: 4,
+                width: 20,
+                height: 20,
+              },
             }),
           ),
           shape({
             id: "own-entry-child",
-            x: 40,
-            y: 4,
-            width: 20,
-            height: 20,
             enter: fade({ duration: 100 }),
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         box({
           id: "disabled",
           motion: false,
           enter: fade({ duration: 300 }),
-          style: {
-            width: 100,
-            height: 60,
-            backgroundColor: "#445566",
-          },
+          style: { width: 100, height: 60, background: "#445566" },
         }).append(
           shape({
             id: "disabled-child",
-            x: 4,
-            y: 4,
-            width: 20,
-            height: 20,
             enter: fade(),
+            style: {
+              position: "absolute",
+              left: 4,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
           shape({
             id: "disabled-reenabled",
             motion: true,
-            x: 28,
-            y: 4,
-            width: 20,
-            height: 20,
             enter: fade(),
+            style: {
+              position: "absolute",
+              left: 28,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         box({
@@ -223,10 +232,13 @@ describe("plain authoring choreography", () => {
         }).append(
           shape({
             id: "transparent-child",
-            x: 4,
-            y: 4,
-            width: 20,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 4,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
       ),
@@ -294,13 +306,19 @@ describe("plain authoring choreography", () => {
     const scenarios = [
       {
         name: "inherited-default",
-        content: box({ enter: fade({ duration: 70 }), style }).append(
+        content: box({
+          enter: fade({ duration: 70 }),
+          style: { ...style },
+        }).append(
           shape({
             id: "inherited",
-            x: 4,
-            y: 4,
-            width: 20,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 4,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         fullTiming: true,
@@ -308,14 +326,21 @@ describe("plain authoring choreography", () => {
       },
       {
         name: "disabled-explicit",
-        content: box({ motion: false, enter: fade(), style }).append(
+        content: box({
+          motion: false,
+          enter: fade(),
+          style: { ...style },
+        }).append(
           shape({
             id: "disabled",
-            x: 4,
-            y: 4,
-            width: 20,
-            height: 20,
             enter: fade(),
+            style: {
+              position: "absolute",
+              left: 4,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         fullTiming: false,
@@ -323,13 +348,16 @@ describe("plain authoring choreography", () => {
       },
       {
         name: "plain",
-        content: box({ style }).append(
+        content: box({ style: { ...style } }).append(
           shape({
             id: "plain",
-            x: 4,
-            y: 4,
-            width: 20,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 4,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         fullTiming: false,
@@ -337,14 +365,20 @@ describe("plain authoring choreography", () => {
       },
       {
         name: "local-override",
-        content: box({ enter: fade({ duration: 70 }), style }).append(
+        content: box({
+          enter: fade({ duration: 70 }),
+          style: { ...style },
+        }).append(
           shape({
             id: "override",
-            x: 4,
-            y: 4,
-            width: 20,
-            height: 20,
             enter: fade({ duration: 20 }),
+            style: {
+              position: "absolute",
+              left: 4,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         fullTiming: true,
@@ -352,15 +386,22 @@ describe("plain authoring choreography", () => {
       },
       {
         name: "disabled-reenabled",
-        content: box({ motion: false, enter: fade(), style }).append(
+        content: box({
+          motion: false,
+          enter: fade(),
+          style: { ...style },
+        }).append(
           shape({
             id: "reenabled",
             motion: true,
-            x: 4,
-            y: 4,
-            width: 20,
-            height: 20,
             enter: fade(),
+            style: {
+              position: "absolute",
+              left: 4,
+              top: 4,
+              width: 20,
+              height: 20,
+            },
           }),
         ),
         fullTiming: false,
@@ -453,10 +494,13 @@ describe("plain authoring choreography", () => {
               { enter: fade({ duration: 70 }), style },
               createElement(jsx.Shape, {
                 id: "jsx-inherited",
-                x: 4,
-                y: 4,
-                width: 20,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 4,
+                  top: 4,
+                  width: 20,
+                  height: 20,
+                },
               }),
             ),
           ),
@@ -477,10 +521,13 @@ describe("plain authoring choreography", () => {
               { motion: false, enter: fade(), style },
               createElement(jsx.Shape, {
                 id: "jsx-disabled",
-                x: 4,
-                y: 4,
-                width: 20,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 4,
+                  top: 4,
+                  width: 20,
+                  height: 20,
+                },
                 enter: fade(),
               }),
             ),
@@ -546,11 +593,8 @@ describe("plain authoring choreography", () => {
     const secondScope = createMotionScopeHandle();
     const moved = shape({
       id: "moved",
-      x: 10,
-      y: 10,
-      width: 40,
-      height: 20,
       enter: fade({ duration: 100 }),
+      style: { position: "absolute", left: 10, top: 10, width: 40, height: 20 },
     });
     const firstTarget = motionScope(firstScope).append(moved);
     const secondTarget = motionScope(secondScope);
@@ -604,11 +648,14 @@ describe("plain authoring choreography", () => {
     const innerScope = motionScope(inner).append(
       shape({
         id: "nested",
-        x: 10,
-        y: 10,
-        width: 40,
-        height: 20,
         enter: fade(),
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 40,
+          height: 20,
+        },
       }),
     );
     const document = deck({ width: 320, height: 180 }).append(
@@ -646,11 +693,14 @@ describe("plain authoring choreography", () => {
     const sourceScope = motionScope(source, { publishEnd: ready }).append(
       shape({
         id: "source",
-        x: 10,
-        y: 10,
-        width: 40,
-        height: 20,
         enter: fade(),
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 10,
+          width: 40,
+          height: 20,
+        },
       }),
     );
     const followerScope = motionScope(follower, {
@@ -658,11 +708,14 @@ describe("plain authoring choreography", () => {
     }).append(
       shape({
         id: "follower",
-        x: 10,
-        y: 40,
-        width: 40,
-        height: 20,
         enter: fade(),
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 40,
+          width: 40,
+          height: 20,
+        },
       }),
     );
     const document = deck({ width: 320, height: 180 }).append(
@@ -677,9 +730,7 @@ describe("plain authoring choreography", () => {
     await assert.rejects(build(document), (error: unknown) => {
       assert.ok(error instanceof BuildError);
       assert.ok(
-        error.diagnostics.some(({ code }) =>
-          ["missing-scope", "missing-cue"].includes(code),
-        ),
+        error.diagnostics.some(({ code }) => code === "broken-reference"),
         JSON.stringify(error.diagnostics),
       );
       return true;
@@ -698,11 +749,8 @@ describe("plain authoring choreography", () => {
     };
     const first = shape({
       id: "first",
-      x: 10,
-      y: 10,
-      width: 40,
-      height: 20,
       enter: fade(),
+      style: { position: "absolute", left: 10, top: 10, width: 40, height: 20 },
     });
     const document = deck({ width: 320, height: 180 }).append(
       slide({ id: "associations" }).append(
@@ -710,18 +758,21 @@ describe("plain authoring choreography", () => {
         motionScope(createMotionScopeHandle(), { startAt: timing }).append(
           shape({
             id: "second",
-            x: 10,
-            y: 40,
-            width: 40,
-            height: 20,
             enter: fade({ duration: 50 }),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 40,
+              width: 40,
+              height: 20,
+            },
           }),
         ),
       ),
       slide({ id: "associations-next" }).append(
         box({
           morphKey: continuity,
-          style: { width: 80, height: 40, backgroundColor: "#123456" },
+          style: { width: 80, height: 40, background: "#123456" },
         }),
       ),
     );
@@ -750,28 +801,30 @@ describe("plain authoring choreography", () => {
           box({
             id: "card",
             enter: fade({ duration: 200, delay: 50 }),
-            style: {
-              width: 200,
-              height: 100,
-              backgroundColor: "#336699",
-            },
+            style: { width: 200, height: 100, background: "#336699" },
           }).append(
             shape({
               id: "card-child",
-              x: 8,
-              y: 8,
-              width: 40,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 8,
+                top: 8,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
           motionScope(pureSource, { publishEnd: pureCue }).append(
             shape({
               id: "source",
-              x: 10,
-              y: 20,
-              width: 40,
-              height: 20,
               enter: fade({ duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 20,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
           motionScope(pureFollower, {
@@ -779,22 +832,28 @@ describe("plain authoring choreography", () => {
           }).append(
             shape({
               id: "follower",
-              x: 10,
-              y: 50,
-              width: 40,
-              height: 20,
               enter: fade({ duration: 40 }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 50,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
         ),
         step().append(
           shape({
             id: "independent",
-            x: 10,
-            y: 80,
-            width: 40,
-            height: 20,
             enter: fade({ duration: 30 }),
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 80,
+              width: 40,
+              height: 20,
+            },
           }),
         ),
       ),
@@ -817,18 +876,17 @@ describe("plain authoring choreography", () => {
               {
                 id: "card",
                 enter: fade({ duration: 200, delay: 50 }),
-                style: {
-                  width: 200,
-                  height: 100,
-                  backgroundColor: "#336699",
-                },
+                style: { width: 200, height: 100, background: "#336699" },
               },
               createElement(jsx.Shape, {
                 id: "card-child",
-                x: 8,
-                y: 8,
-                width: 40,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 8,
+                  top: 8,
+                  width: 40,
+                  height: 20,
+                },
               }),
             ),
             createElement(
@@ -836,10 +894,13 @@ describe("plain authoring choreography", () => {
               { scope: source, publishEnd: source.cue("ready") },
               createElement(jsx.Shape, {
                 id: "source",
-                x: 10,
-                y: 20,
-                width: 40,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 20,
+                  width: 40,
+                  height: 20,
+                },
                 enter: fade({ duration: 100 }),
               }),
             ),
@@ -848,10 +909,13 @@ describe("plain authoring choreography", () => {
               { scope: follower, startAt: after(source.cue("ready"), 20) },
               createElement(jsx.Shape, {
                 id: "follower",
-                x: 10,
-                y: 50,
-                width: 40,
-                height: 20,
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 50,
+                  width: 40,
+                  height: 20,
+                },
                 enter: fade({ duration: 40 }),
               }),
             ),
@@ -861,10 +925,13 @@ describe("plain authoring choreography", () => {
             {},
             createElement(jsx.Shape, {
               id: "independent",
-              x: 10,
-              y: 80,
-              width: 40,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 80,
+                width: 40,
+                height: 20,
+              },
               enter: fade({ duration: 30 }),
             }),
           ),
@@ -884,7 +951,7 @@ describe("plain authoring choreography", () => {
         ({ authorId: testId, kind, box }) => [testId, kind, box],
       ),
     );
-    const normalize = (motion: MotionObservation) => ({
+    const normalize = (motion: ResolvedMotion) => ({
       steps: motion.steps.map((entry) => [
         entry.trigger,
         entry.number,
@@ -911,15 +978,13 @@ describe("plain authoring choreography", () => {
       normalize(motionOf(pureResult)),
       normalize(motionOf(jsxResult)),
     );
-    assert.deepEqual(pureResult.report.diagnostics, []);
-    assert.deepEqual(jsxResult.report.diagnostics, []);
     assert.deepEqual((await validatePptx(jsxResult.pptx)).errors, []);
   });
 
   it("builds transitions, navigation, and Morph through the plain entry", async () => {
     const scope = createMorphScope();
     const hero = scope.handle("hero");
-    const style = { width: 100, height: 50, backgroundColor: "#336699" };
+    const style = { width: 100, height: 50, background: "#336699" };
     const document = deck({ width: 320, height: 180 }).append(
       slide({
         id: "first",
@@ -929,18 +994,23 @@ describe("plain authoring choreography", () => {
           fallback: transitions.fade(),
         }),
       }).append(
-        box({ morphKey: hero, style }),
+        box({ morphKey: hero, style: { ...style } }),
         shape({
           id: "next",
           link: { id: "second" },
-          x: 10,
-          y: 70,
-          width: 40,
-          height: 20,
-          fill: "#112233",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 70,
+            width: 40,
+            height: 20,
+            background: "#112233",
+          },
         }),
       ),
-      slide({ id: "second" }).append(box({ morphKey: hero, style })),
+      slide({ id: "second" }).append(
+        box({ morphKey: hero, style: { ...style } }),
+      ),
     );
 
     const result = await build(document);

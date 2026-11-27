@@ -11,8 +11,8 @@ import {
   createMotionScopeHandle,
   defineTheme,
   fade,
+  motionSchedule,
   RichTextContainer,
-  type MotionObservation,
 } from "@officedk/pptxdk";
 import {
   appendJSX,
@@ -75,10 +75,13 @@ describe("public React fragment append", () => {
           { id: "morph-source" },
           createElement(Shape, {
             id: "anchor",
-            x: 0,
-            y: 0,
-            width: 20,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            },
             morphKey: hero,
           }),
         ),
@@ -87,7 +90,16 @@ describe("public React fragment append", () => {
           { id: "append-target" },
           createElement(
             Text,
-            { id: "before", x: 0, y: 0, width: 160, height: 24 },
+            {
+              id: "before",
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 160,
+                height: 24,
+              },
+            },
             "Before",
           ),
         ),
@@ -104,20 +116,26 @@ describe("public React fragment append", () => {
           Text,
           {
             id: "title",
-            x: 0,
-            y: 24,
-            width: 200,
-            height: 32,
-            style: { color: "#123456" },
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 24,
+              width: 200,
+              height: 32,
+              color: "#123456",
+            },
           },
           "Appended title",
         ),
         createElement(Shape, {
           id: "hero-copy",
-          x: 0,
-          y: 60,
-          width: 40,
-          height: 30,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 60,
+            width: 40,
+            height: 30,
+          },
           morphKey: hero,
         }),
       ),
@@ -188,7 +206,16 @@ describe("public React fragment append", () => {
     function LateContent() {
       return createElement(
         Text,
-        { id: "late", x: 0, y: 0, width: 160, height: 24 },
+        {
+          id: "late",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 160,
+            height: 24,
+          },
+        },
         use(final.promise),
       );
     }
@@ -204,7 +231,16 @@ describe("public React fragment append", () => {
           {
             fallback: createElement(
               Text,
-              { id: "fallback", x: 0, y: 0, width: 160, height: 24 },
+              {
+                id: "fallback",
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 160,
+                  height: 24,
+                },
+              },
               "Loading",
             ),
           },
@@ -244,7 +280,16 @@ describe("public React fragment append", () => {
         return this.state.failed
           ? createElement(
               Text,
-              { id: "business-fallback", x: 0, y: 0, width: 200, height: 24 },
+              {
+                id: "business-fallback",
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 24,
+                },
+              },
               "Handled fallback",
             )
           : this.props.children;
@@ -301,7 +346,16 @@ describe("public React fragment append", () => {
       );
       return createElement(
         Text,
-        { id: "cleanup-probe", x: 0, y: 0, width: 160, height: 24 },
+        {
+          id: "cleanup-probe",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 160,
+            height: 24,
+          },
+        },
         "After cleanup",
       );
     }
@@ -318,7 +372,16 @@ describe("public React fragment append", () => {
     function Labeled({ id }: { readonly id: string }) {
       return createElement(
         Text,
-        { id, x: 0, y: 0, width: 160, height: 24 },
+        {
+          id,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 160,
+            height: 24,
+          },
+        },
         useContext(Label),
       );
     }
@@ -380,7 +443,17 @@ describe("public React fragment append", () => {
         { id: scope },
         createElement(
           Text,
-          { key: "same-key", id: "title", x: 0, y: 0, width: 160, height: 24 },
+          {
+            key: "same-key",
+            id: "title",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 160,
+              height: 24,
+            },
+          },
           label,
         ),
       );
@@ -436,7 +509,16 @@ describe("public React fragment append", () => {
       use(gate.promise);
       return createElement(
         Text,
-        { id: "late", x: 0, y: 0, width: 160, height: 24 },
+        {
+          id: "late",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 160,
+            height: 24,
+          },
+        },
         "Appended",
       );
     }
@@ -456,7 +538,16 @@ describe("public React fragment append", () => {
             createElement(LateFragment),
             createElement(
               Text,
-              { id: "fragment-only", x: 0, y: 60, width: 160, height: 24 },
+              {
+                id: "fragment-only",
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 60,
+                  width: 160,
+                  height: 24,
+                },
+              },
               "Fragment only",
             ),
           ),
@@ -466,17 +557,14 @@ describe("public React fragment append", () => {
     await started.promise;
     const external = text("External edit", {
       id: "late",
-      x: 0,
-      y: 30,
-      width: 160,
-      height: 24,
+      style: { position: "absolute", left: 0, top: 30, width: 160, height: 24 },
     });
     target.append(external);
 
     gate.resolve();
     await assert.rejects(appending, (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "duplicate-author-id");
+      assert.equal(error.diagnostics[0]?.code, "duplicate-id");
       return true;
     });
     assert.equal(target.query.get("late").node, external);
@@ -492,7 +580,10 @@ describe("public React fragment append", () => {
     const target = box();
     root.append(wrapper);
     wrapper.append(
-      shape({ id: "duplicate", x: 0, y: 0, width: 10, height: 10 }),
+      shape({
+        id: "duplicate",
+        style: { position: "absolute", left: 0, top: 0, width: 10, height: 10 },
+      }),
       target,
     );
     const before = [...root.children];
@@ -507,10 +598,13 @@ describe("public React fragment append", () => {
       use(gate.promise);
       return createElement(Shape, {
         id: "duplicate",
-        x: 10,
-        y: 0,
-        width: 10,
-        height: 10,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 0,
+          width: 10,
+          height: 10,
+        },
       });
     }
 
@@ -530,17 +624,14 @@ describe("public React fragment append", () => {
     await started.promise;
     const external = shape({
       id: "external",
-      x: 0,
-      y: 20,
-      width: 10,
-      height: 10,
+      style: { position: "absolute", left: 0, top: 20, width: 10, height: 10 },
     });
     root.append(external);
 
     gate.resolve();
     await assert.rejects(appending, (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.equal(error.diagnostics[0]?.code, "duplicate-author-id");
+      assert.equal(error.diagnostics[0]?.code, "duplicate-id");
       return true;
     });
     assert.deepEqual([...root.children], [...before, external]);
@@ -555,7 +646,10 @@ describe("public React fragment append", () => {
     const target = box();
     group.append(target);
     root.append(
-      shape({ id: "shared", x: 0, y: 0, width: 10, height: 10 }),
+      shape({
+        id: "shared",
+        style: { position: "absolute", left: 0, top: 0, width: 10, height: 10 },
+      }),
       group,
     );
 
@@ -563,10 +657,13 @@ describe("public React fragment append", () => {
       root,
       createElement(Shape, {
         id: "unique",
-        x: 10,
-        y: 0,
-        width: 10,
-        height: 10,
+        style: {
+          position: "absolute",
+          left: 10,
+          top: 0,
+          width: 10,
+          height: 10,
+        },
       }),
     );
     assert.equal(root.query.get("unique").node, unique[0]);
@@ -575,10 +672,7 @@ describe("public React fragment append", () => {
       target,
       createElement(Shape, {
         id: "shared",
-        x: 0,
-        y: 0,
-        width: 10,
-        height: 10,
+        style: { position: "absolute", left: 0, top: 0, width: 10, height: 10 },
       }),
     );
     assert.equal(group.query.get("shared").node, reused[0]);
@@ -617,7 +711,16 @@ describe("public React fragment append", () => {
           null,
           createElement(
             Text,
-            { id: "failed-fragment", x: 0, y: 0, width: 160, height: 24 },
+            {
+              id: "failed-fragment",
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 160,
+                height: 24,
+              },
+            },
             "Failed",
           ),
           createElement(FailedExpansion),
@@ -625,7 +728,7 @@ describe("public React fragment append", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "react-render");
+        assert.equal(error.diagnostics[0]?.code, "render-failed");
         assert.match(error.message, /fragment expansion failure/u);
         return true;
       },
@@ -640,7 +743,16 @@ describe("public React fragment append", () => {
       );
       return createElement(
         Text,
-        { id: "cleanup-fragment", x: 0, y: 0, width: 160, height: 24 },
+        {
+          id: "cleanup-fragment",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 160,
+            height: 24,
+          },
+        },
         "Cleanup",
       );
     }
@@ -648,7 +760,7 @@ describe("public React fragment append", () => {
       appendJSX(target, createElement(FailedCleanup)),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "react-render");
+        assert.equal(error.diagnostics[0]?.code, "render-failed");
         assert.match(error.message, /fragment cleanup failure/u);
         return true;
       },
@@ -690,7 +802,16 @@ describe("public React fragment append", () => {
     function PendingFragment() {
       return createElement(
         Text,
-        { id: "cancelled-fragment", x: 0, y: 0, width: 160, height: 24 },
+        {
+          id: "cancelled-fragment",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 160,
+            height: 24,
+          },
+        },
         use(never),
       );
     }
@@ -731,10 +852,13 @@ describe("public React fragment append", () => {
             Text,
             {
               id: "title",
-              x: 0,
-              y: 0,
-              width: 160,
-              height: 24,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 160,
+                height: 24,
+              },
             },
             "Slide title",
           ),
@@ -751,10 +875,13 @@ describe("public React fragment append", () => {
         Text,
         {
           id: "title",
-          x: 0,
-          y: 0,
-          width: 140,
-          height: 24,
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 140,
+            height: 24,
+          },
         },
         "Card title",
       ),
@@ -766,17 +893,20 @@ describe("public React fragment append", () => {
           Text,
           {
             id: "title",
-            x: 0,
-            y: 40,
-            width: 160,
-            height: 24,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 40,
+              width: 160,
+              height: 24,
+            },
           },
           "Duplicate slide title",
         ),
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "duplicate-author-id");
+        assert.equal(error.diagnostics[0]?.code, "duplicate-id");
         return true;
       },
     );
@@ -810,10 +940,13 @@ describe("public React fragment append", () => {
           Text,
           {
             id: "copy",
-            x: 0,
-            y: 0,
-            width: 160,
-            height: 24,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 160,
+              height: 24,
+            },
           },
           "Second slide",
         ),
@@ -827,7 +960,7 @@ describe("public React fragment append", () => {
       appendJSX(deck, createElement(Slide, { id: "first-slide" })),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "duplicate-author-id");
+        assert.equal(error.diagnostics[0]?.code, "duplicate-id");
         return true;
       },
     );
@@ -872,8 +1005,7 @@ describe("public React fragment append", () => {
             },
             createElement(Shape, {
               id: "layout-existing",
-              width: 40,
-              height: 20,
+              style: { width: 40, height: 20 },
             }),
           ),
           createElement(
@@ -891,10 +1023,13 @@ describe("public React fragment append", () => {
             },
             createElement(Shape, {
               id: "default-existing",
-              x: 0,
-              y: 0,
-              width: 10,
-              height: 10,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
           createElement(
@@ -912,10 +1047,13 @@ describe("public React fragment append", () => {
             },
             createElement(Shape, {
               id: "disabled-existing",
-              x: 0,
-              y: 0,
-              width: 10,
-              height: 10,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
           createElement(
@@ -926,10 +1064,13 @@ describe("public React fragment append", () => {
               { scope: outer, publishStart: outer.cue("ready") },
               createElement(Shape, {
                 id: "scope-existing",
-                x: 0,
-                y: 200,
-                width: 10,
-                height: 10,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 200,
+                  width: 10,
+                  height: 10,
+                },
                 enter: fade({ duration: 100 }),
               }),
             ),
@@ -951,37 +1092,50 @@ describe("public React fragment append", () => {
         Text,
         {
           id: "themed",
-          x: 240,
-          y: 200,
-          width: 180,
-          height: 30,
-          style: { color: "accent" },
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 200,
+            width: 180,
+            height: 30,
+            color: "accent",
+          },
         },
         "Themed",
       ),
     );
     await appendJSX(
       layoutSlot,
-      createElement(Text, { id: "flowed", width: 220, height: 24 }, "Flowed"),
+      createElement(
+        Text,
+        { id: "flowed", style: { width: 220, height: 24 } },
+        "Flowed",
+      ),
     );
     await appendJSX(
       defaultSlot,
       createElement(Shape, {
         id: "default-inherited",
-        x: 0,
-        y: 20,
-        width: 12,
-        height: 12,
+        style: {
+          position: "absolute",
+          left: 0,
+          top: 20,
+          width: 12,
+          height: 12,
+        },
       }),
     );
     await appendJSX(
       disabledSlot,
       createElement(Shape, {
         id: "disabled-inherited",
-        x: 0,
-        y: 20,
-        width: 12,
-        height: 12,
+        style: {
+          position: "absolute",
+          left: 0,
+          top: 20,
+          width: 12,
+          height: 12,
+        },
         enter: fade({ duration: 40 }),
       }),
     );
@@ -993,10 +1147,13 @@ describe("public React fragment append", () => {
         { scope: inner, startAt: after(outer.cue("ready"), 20) },
         createElement(Shape, {
           id: "scope-inherited",
-          x: 20,
-          y: 200,
-          width: 12,
-          height: 12,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 200,
+            width: 12,
+            height: 12,
+          },
           enter: fade({ duration: 50 }),
         }),
       );
@@ -1021,9 +1178,7 @@ describe("public React fragment append", () => {
     );
     assert.match(slideXml(result, 1), /336699/u);
 
-    const motion = result.report.slides[0]?.capabilities?.["motion"] as
-      | MotionObservation
-      | undefined;
+    const motion = motionSchedule(result.slides[0]!);
     assert.ok(motion);
     const effects = motion.steps.flatMap((step) =>
       step.effects.map((effect) => ({ step, effect })),
@@ -1039,27 +1194,33 @@ describe("public React fragment append", () => {
       ),
       false,
     );
+    const outerEffect = effects.find(
+      ({ effect }) => effect.target.id === objectId("scope-existing"),
+    );
     const scopedEffect = effects.find(
       ({ effect }) => effect.target.id === objectId("scope-inherited"),
     );
     assert.equal(scopedEffect?.step.trigger, "click");
     assert.equal(scopedEffect?.step.number, 2);
 
-    const scopes = motion.scopes ?? [];
+    const scopes = motion.steps.flatMap((step) => step.scopes);
     const outerScope = scopes.find(({ members }) =>
       members.some(
         (member) =>
-          member.kind === "object" && member.id === objectId("scope-existing"),
+          member.kind === "effect" && member.ref === outerEffect?.effect.ref,
       ),
     );
     const innerScope = scopes.find(({ members }) =>
       members.some(
         (member) =>
-          member.kind === "object" && member.id === objectId("scope-inherited"),
+          member.kind === "effect" && member.ref === scopedEffect?.effect.ref,
       ),
     );
     assert.ok(outerScope && innerScope);
-    assert.equal(innerScope.parentId, outerScope.id);
-    assert.equal(innerScope.startMs, 20);
+    assert.equal(innerScope.parent, outerScope.ref);
+    assert.equal(innerScope.start.state, "known");
+    if (innerScope.start.state === "known") {
+      assert.equal(innerScope.start.ms, 20);
+    }
   });
 });

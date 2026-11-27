@@ -1,7 +1,6 @@
 import {
   assertValidLang,
   CapabilityError,
-  layoutStyleKeys,
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
@@ -11,18 +10,18 @@ import {
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
   type CapabilitySubPartObservation,
-  type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
   type NativePlaceholderRef,
-  type NativeTableObservation,
   type ObjectCapabilityModule,
+  type ObjectResolution,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedColor,
-  type ResolvedObject,
+  type Rect,
+  type ResolvedTable,
+  type ResolvedTableCell as ResolvedTableCellObservation,
+  type ResolvedTableRow,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -45,10 +44,17 @@ import {
   parseTextParagraphs,
   renderTextOutlinesSvg,
   resolveTextBody,
+  type MissingGlyphIssue,
   type Paragraph,
   type ResolvedTextBody,
   type ResolvedTextStyle,
 } from "../shared/text-service.ts";
+import {
+  gradientDefSvg,
+  paintImageFillSvg,
+  resolveBackgroundValue,
+  type ResolvedFill,
+} from "../shared/visual.ts";
 import { tableCodegen } from "./table-codegen.ts";
 import type { TableVerticalAlign } from "./table-declaration.ts";
 import {
@@ -61,13 +67,14 @@ import {
   cellAllowedParameters,
   cellStyleKeys,
   parseOptionalTableId,
-  parseTableCellBorder,
   parseTableCellPadding,
   parseTableColumns,
   parseTableCoordinate,
+  parseTableLayerBorder,
   parseTableMergeSpan,
   parseTablePositiveSize,
   parseTableVerticalAlign,
+  resolveTableCellBorders,
   rowAllowedParameters,
   rowStyleKeys,
   tableAllowedParameters,
@@ -80,6 +87,7 @@ import {
   tableCellPropertiesXml,
   tableFrameXml,
   type TableCellBorder,
+  type TableCellBorders,
   type TableCellPadding,
 } from "./table-xml.ts";
 
@@ -116,8 +124,8 @@ type ParsedCell = {
   readonly textStyle: ResolvedTextStyle;
   readonly verticalAlign: TableVerticalAlign;
   readonly padding: Edges;
-  readonly fill?: ResolvedColor;
-  readonly border?: TableCellBorder;
+  readonly backgroundRaw?: unknown;
+  readonly borders: TableCellBorders;
 };
 
 type ParsedRow = {
@@ -126,12 +134,18 @@ type ParsedRow = {
   readonly height?: number;
   readonly textStyle: Record<string, unknown>;
   readonly verticalAlign?: TableVerticalAlign;
-  readonly fill?: ResolvedColor;
+  readonly backgroundRaw?: unknown;
+  readonly border?: TableCellBorder;
 };
 const maximumExtentEmu = 2_147_483_647;
 
-function fail(code: string, message: string, path?: string): never {
-  throw new CapabilityError(code, message, path);
+function fail(
+  code: string,
+  message: string,
+  path?: string,
+  details?: Readonly<Record<string, unknown>>,
+): never {
+  throw new CapabilityError(code, message, path, details);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -150,23 +164,6 @@ function record(
 
 function pathLabel(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() !== "" ? value : fallback;
-}
-
-function color(
-  value: unknown,
-  label: string,
-  theme: ThemeContext,
-  path?: string,
-): ResolvedColor | undefined {
-  if (value === undefined) return undefined;
-  try {
-    return theme.resolveColor(value as ColorValue);
-  } catch (error) {
-    if (error instanceof CapabilityError) {
-      fail(error.code, `${label}: ${error.message}`, path);
-    }
-    throw error;
-  }
 }
 
 function textStyle(
@@ -211,6 +208,30 @@ function mergeTextStyle(
   return { ...parent, ...child };
 }
 
+function parseLayerBackground(
+  style: Readonly<Record<string, unknown>>,
+  label: string,
+  theme: ThemeContext,
+  path?: string,
+): { readonly declared: boolean; readonly value?: unknown } {
+  if (
+    !Object.hasOwn(style, "background") ||
+    style["background"] === undefined
+  ) {
+    return { declared: false };
+  }
+  const raw = style["background"];
+  try {
+    resolveBackgroundValue(theme, raw, undefined);
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      fail(error.code, `${label}.style.background: ${error.message}`, path);
+    }
+    throw error;
+  }
+  return { declared: true, value: raw };
+}
+
 function trackStyle(
   input: CapabilityInput,
   type: "table" | "row" | "cell",
@@ -221,7 +242,7 @@ function trackStyle(
 } {
   const additional =
     type === "table"
-      ? layoutStyleKeys
+      ? tableStyleKeys
       : type === "row"
         ? rowStyleKeys
         : cellStyleKeys;
@@ -255,7 +276,7 @@ function resolveCellBody(
     );
   } catch (error) {
     if (error instanceof CapabilityError) {
-      fail(error.code, error.message, cell.path);
+      fail(error.code, error.message, cell.path, error.details);
     }
     throw error;
   }
@@ -274,6 +295,8 @@ function prepareRows(
   columns: readonly Track[],
   tableTextStyle: Record<string, unknown>,
   tableVerticalAlign: TableVerticalAlign,
+  tableBackgroundRaw: unknown,
+  tableBorder: TableCellBorder | undefined,
   theme: ThemeContext,
   slideNumber: number,
 ): {
@@ -307,12 +330,24 @@ function prepareRows(
       heightValue === undefined
         ? undefined
         : parseTablePositiveSize(heightValue, "Row.style.height", rowPath);
-    const rowFill = color(
-      rowStyle.style["backgroundColor"],
-      "Row.style.backgroundColor",
+    const rowBgParsed = parseLayerBackground(
+      rowStyle.style,
+      "Row",
       theme,
       rowPath,
     );
+    const rowBackgroundRaw = rowBgParsed.declared
+      ? rowBgParsed.value
+      : tableBackgroundRaw;
+    const rowBorderParsed = parseTableLayerBorder(
+      rowStyle.style,
+      "Row",
+      theme,
+      rowPath,
+    );
+    const rowBorder = rowBorderParsed.declared
+      ? rowBorderParsed.border
+      : tableBorder;
     const rowVerticalAlign =
       parseTableVerticalAlign(rowStyle.style["verticalAlign"], rowPath) ??
       tableVerticalAlign;
@@ -322,7 +357,10 @@ function prepareRows(
       ...(height === undefined ? {} : { height }),
       textStyle: mergeTextStyle(tableTextStyle, rowStyle.textStyle),
       verticalAlign: rowVerticalAlign,
-      ...(rowFill === undefined ? {} : { fill: rowFill }),
+      ...(rowBackgroundRaw === undefined
+        ? {}
+        : { backgroundRaw: rowBackgroundRaw }),
+      ...(rowBorder === undefined ? {} : { border: rowBorder }),
     };
     rows.push(row);
     let column = 0;
@@ -399,19 +437,21 @@ function prepareRows(
         }
       }
       const cellStyle = trackStyle(cellChild, "cell", cellPath);
-      const fill =
-        color(
-          cellStyle.style["backgroundColor"],
-          "Cell.style.backgroundColor",
-          theme,
-          cellPath,
-        ) ?? row.fill;
+      const cellBgParsed = parseLayerBackground(
+        cellStyle.style,
+        "Cell",
+        theme,
+        cellPath,
+      );
+      const cellBackgroundRaw = cellBgParsed.declared
+        ? cellBgParsed.value
+        : row.backgroundRaw;
       const cellVerticalAlign =
         parseTableVerticalAlign(cellStyle.style["verticalAlign"], cellPath) ??
         rowVerticalAlign;
-      const border = parseTableCellBorder(
+      const borders = resolveTableCellBorders(
         cellStyle.style,
-        (value, label, itemPath) => color(value, label, theme, itemPath),
+        row.border,
         theme,
         cellPath,
       );
@@ -433,7 +473,7 @@ function prepareRows(
         parsedTextStyle = textResult.style;
       } catch (error) {
         if (error instanceof CapabilityError) {
-          fail(error.code, error.message, cellPath);
+          fail(error.code, error.message, cellPath, error.details);
         }
         throw error;
       }
@@ -448,8 +488,10 @@ function prepareRows(
         textStyle: parsedTextStyle,
         verticalAlign: cellVerticalAlign,
         padding: parseTableCellPadding(cellStyle.style, cellPath),
-        ...(fill === undefined ? {} : { fill }),
-        ...(border === undefined ? {} : { border }),
+        ...(cellBackgroundRaw === undefined
+          ? {}
+          : { backgroundRaw: cellBackgroundRaw }),
+        borders,
       };
       cells.push(cell);
       for (let row = rowIndex; row < rowIndex + rowSpan; row += 1) {
@@ -480,8 +522,8 @@ function prepareRows(
 
 type ResolvedTableCell = {
   readonly cell: ParsedCell;
-  readonly box: GeometryBox;
-  readonly fill?: ResolvedColor;
+  readonly box: Rect;
+  readonly fill: ResolvedFill;
   readonly body: ResolvedTextBody;
   readonly hasText: boolean;
   readonly hasOverflow: boolean;
@@ -572,7 +614,11 @@ function emitTableModel(
         (embedFonts === "full" || embedFonts === "subset") &&
         body.missingGlyphErrors.length > 0
       ) {
-        fail("font-missing-glyph", body.missingGlyphErrors[0]!, cell.path);
+        const issue: MissingGlyphIssue = body.missingGlyphErrors[0]!;
+        fail("font-missing-glyph", issue.message, cell.path, {
+          font: issue.font,
+          characters: issue.characters,
+        });
       }
       let emittedXml: string;
       try {
@@ -581,7 +627,12 @@ function emitTableModel(
         }).xml;
       } catch (error) {
         if (error instanceof CapabilityError) {
-          fail(error.code, error.message, error.path ?? cell.path);
+          fail(
+            error.code,
+            error.message,
+            error.path ?? cell.path,
+            error.details,
+          );
         }
         throw error;
       }
@@ -594,8 +645,10 @@ function emitTableModel(
       const properties = tableCellPropertiesXml(
         cell.padding,
         cell.verticalAlign,
-        cell.border,
+        cell.borders,
         fill,
+        (resource) => emitContext.registerResource(resource),
+        entry.box,
       );
       rowCells.push(`<a:tc${attributes}>${emittedXml}${properties}</a:tc>`);
     }
@@ -631,15 +684,42 @@ function paintTableModel(
   const fills: string[] = [];
   const texts: string[] = [];
   const borders: string[] = [];
+  const placeholders: {
+    readonly id?: string;
+    readonly path?: string;
+    readonly url: string;
+  }[] = [];
   for (const entry of model.resolvedCells) {
     const { cell, box: cellBox, fill, body, hasText, hasOverflow } = entry;
-    if (fill !== undefined) {
+    const idPrefix = `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`;
+    if (fill.kind === "solid") {
       fills.push(
-        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="#${fill.hex}" fill-opacity="${roundSvgNumber(fill.alpha ?? 1)}" stroke="none"/>`,
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="#${fill.color.hex}" fill-opacity="${roundSvgNumber(fill.color.alpha ?? 1)}" stroke="none"/>`,
+      );
+    } else if (
+      fill.kind === "linear-gradient" ||
+      fill.kind === "radial-gradient"
+    ) {
+      const fillDefId = `${idPrefix}-fill`;
+      defs.push(gradientDefSvg(fillDefId, fill));
+      fills.push(
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="url(#${fillDefId})" stroke="none"/>`,
+      );
+    } else if (fill.kind === "image") {
+      const fillDefId = `${idPrefix}-fill`;
+      defs.push(paintImageFillSvg(fill, fillDefId, cellBox));
+      if (fill.source.kind === "external") {
+        placeholders.push({
+          ...(cell.authorId === undefined ? {} : { id: cell.authorId }),
+          path: `${paintContext.path}/${cell.path}`,
+          url: fill.source.externalUrl,
+        });
+      }
+      fills.push(
+        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="url(#${fillDefId})" stroke="none"/>`,
       );
     }
     if (hasText) {
-      const idPrefix = `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`;
       try {
         const glyphs = renderTextOutlinesSvg({
           paragraphs: body.paragraphs,
@@ -667,20 +747,61 @@ function paintTableModel(
             error.code,
             error.message,
             error.path ?? cell.path,
+            error.details,
           );
         }
         throw error;
       }
     }
-    if (cell.border !== undefined) {
-      borders.push(
-        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" ${tableBorderAttributes(cell.border)}/>`,
-      );
+    const { top, right, bottom, left } = cell.borders;
+    const sameSide = (
+      a: TableCellBorder | undefined,
+      b: TableCellBorder | undefined,
+    ): boolean =>
+      a === b ||
+      (a !== undefined &&
+        b !== undefined &&
+        a.width === b.width &&
+        a.dash === b.dash &&
+        a.color.hex === b.color.hex &&
+        a.color.alpha === b.color.alpha);
+    if (sameSide(top, right) && sameSide(top, bottom) && sameSide(top, left)) {
+      if (top !== undefined) {
+        borders.push(
+          `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" ${tableBorderAttributes(top)}/>`,
+        );
+      }
+    } else {
+      const x1 = roundSvgNumber(cellBox.x);
+      const y1 = roundSvgNumber(cellBox.y);
+      const x2 = roundSvgNumber(cellBox.x + cellBox.width);
+      const y2 = roundSvgNumber(cellBox.y + cellBox.height);
+      if (top !== undefined) {
+        borders.push(
+          `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y1}" ${tableBorderAttributes(top)}/>`,
+        );
+      }
+      if (right !== undefined) {
+        borders.push(
+          `<line x1="${x2}" y1="${y1}" x2="${x2}" y2="${y2}" ${tableBorderAttributes(right)}/>`,
+        );
+      }
+      if (bottom !== undefined) {
+        borders.push(
+          `<line x1="${x1}" y1="${y2}" x2="${x2}" y2="${y2}" ${tableBorderAttributes(bottom)}/>`,
+        );
+      }
+      if (left !== undefined) {
+        borders.push(
+          `<line x1="${x1}" y1="${y1}" x2="${x1}" y2="${y2}" ${tableBorderAttributes(left)}/>`,
+        );
+      }
     }
   }
   const defsXml = defs.length > 0 ? `<defs>${defs.join("")}</defs>` : "";
   return {
     svg: `${defsXml}<g>${fills.join("")}${texts.join("")}${borders.join("")}</g>`,
+    ...(placeholders.length === 0 ? {} : { placeholders }),
   };
 }
 
@@ -694,6 +815,7 @@ type ParsedTable = {
   readonly declaredX: unknown;
   readonly declaredY: unknown;
   readonly declaredWidth: unknown;
+  readonly declaredHeight: unknown;
 };
 
 type TableLayoutModel = {
@@ -703,10 +825,39 @@ type TableLayoutModel = {
   readonly cells: readonly ParsedCell[];
   readonly widths: readonly number[];
   readonly heights: readonly number[];
-  readonly warnings: { code: string; message: string; path?: string }[];
-  readonly warningKeys: Set<string>;
   readonly claims: { kind: string; key: string; identity: string }[];
 };
+
+function failTableMeasurementUnavailable(
+  result: ResolvedTextBody,
+  defaultMessage: string,
+  cellPath: string,
+): never {
+  if (
+    result.measurementError !== undefined &&
+    result.measurementError.code !== "font-measurement-unavailable"
+  ) {
+    fail(
+      result.measurementError.code,
+      result.measurementError.message,
+      cellPath,
+      result.measurementError.details,
+    );
+  }
+  const errorFont =
+    typeof result.measurementError?.details?.["font"] === "object" &&
+    result.measurementError.details["font"] !== null
+      ? (result.measurementError.details["font"] as Record<string, unknown>)
+      : undefined;
+  const fallbackFont =
+    result.unmeasuredIssues.missingResourceFonts[0] ??
+    result.unmeasuredIssues.referencedFonts[0];
+  const font = errorFont ?? fallbackFont;
+  fail("font-measurement-unavailable", defaultMessage, cellPath, {
+    ...(font === undefined ? {} : { font }),
+    reason: "missing-resource",
+  });
+}
 
 /** Shared calculation of table tracks and text dimensions used by layout measurement and table resolution. */
 function tableLayoutModel(
@@ -715,16 +866,8 @@ function tableLayoutModel(
   theme: ThemeContext,
 ): TableLayoutModel {
   const { columns, tableStyle, rows, cells } = parsed;
-  const warnings: { code: string; message: string; path?: string }[] = [];
   const claims: { kind: string; key: string; identity: string }[] = [];
-  const warningKeys = new Set<string>();
-  const addTextResult = (result: ResolvedTextBody, path: string) => {
-    for (const warning of result.warnings) {
-      const key = `${path}\u0000${warning.code}\u0000${warning.message}`;
-      if (warningKeys.has(key)) continue;
-      warningKeys.add(key);
-      warnings.push({ ...warning, path });
-    }
+  const addTextResult = (result: ResolvedTextBody) => {
     claims.push(...result.resourceClaims);
   };
   const naturalWidths = new Map<ParsedCell, number>();
@@ -748,10 +891,35 @@ function tableLayoutModel(
         undefined,
         false,
       );
-      addTextResult(measured, cell.path);
-      if (measured.measurement === undefined && measured.text.trim() !== "") {
+      addTextResult(measured);
+      if (
+        measured.textMetrics?.status === "unmeasured" &&
+        measured.textMetrics.reason === "missing-glyphs"
+      ) {
+        const issue = measured.missingGlyphErrors[0];
+        const glyphFont = measured.unmeasuredIssues.missingGlyphFonts[0];
         fail(
-          "font-measurement-unavailable",
+          "font-missing-glyph",
+          issue?.message ??
+            "auto columns require glyphs for all visible characters",
+          cell.path,
+          issue !== undefined
+            ? { font: issue.font, characters: issue.characters }
+            : glyphFont !== undefined
+              ? {
+                  font: {
+                    family: glyphFont.family,
+                    weight: glyphFont.weight,
+                    style: glyphFont.style,
+                  },
+                  characters: glyphFont.missingGlyphs ?? [],
+                }
+              : undefined,
+        );
+      }
+      if (measured.measurement === undefined && measured.text.trim() !== "") {
+        failTableMeasurementUnavailable(
+          measured,
           "auto columns require available font metrics; provide measurement fonts or use explicit column widths",
           cell.path,
         );
@@ -806,13 +974,6 @@ function tableLayoutModel(
         });
       }
     }
-    const actualWidth = widths.reduce((sum, value) => sum + value, 0);
-    if (actualWidth > requestedWidth + 0.01) {
-      warnings.push({
-        code: "table-width-overflow",
-        message: `Sum of column minimum widths ${actualWidth}px exceeds declared width ${requestedWidth}px; build preserves column widths`,
-      });
-    }
   }
   const widthsEmu = widths.map((width, index) =>
     assertTableEmuExtent(width, `column ${index + 1} width`),
@@ -834,10 +995,35 @@ function tableLayoutModel(
       widthOf(cell) - cell.padding.left - cell.padding.right,
     );
     const result = resolveCellBody(cell, theme, innerWidth, undefined, false);
-    addTextResult(result, cell.path);
-    if (result.measurement === undefined && result.text.trim() !== "") {
+    addTextResult(result);
+    if (
+      result.textMetrics?.status === "unmeasured" &&
+      result.textMetrics.reason === "missing-glyphs"
+    ) {
+      const issue = result.missingGlyphErrors[0];
+      const glyphFont = result.unmeasuredIssues.missingGlyphFonts[0];
       fail(
-        "font-measurement-unavailable",
+        "font-missing-glyph",
+        issue?.message ??
+          "Automatic row height requires glyphs for all visible characters",
+        cell.path,
+        issue !== undefined
+          ? { font: issue.font, characters: issue.characters }
+          : glyphFont !== undefined
+            ? {
+                font: {
+                  family: glyphFont.family,
+                  weight: glyphFont.weight,
+                  style: glyphFont.style,
+                },
+                characters: glyphFont.missingGlyphs ?? [],
+              }
+            : undefined,
+      );
+    }
+    if (result.measurement === undefined && result.text.trim() !== "") {
+      failTableMeasurementUnavailable(
+        result,
         "Automatic row height requires available font metrics; provide measurement fonts or specify height on Row",
         cell.path,
       );
@@ -887,8 +1073,6 @@ function tableLayoutModel(
     cells,
     widths,
     heights,
-    warnings,
-    warningKeys,
     claims,
   };
 }
@@ -941,16 +1125,31 @@ export const tableCapability = {
 
     const allowedStyleKeys = new Set<string>(tableStyleKeys);
 
-    const contract = parseCapabilityLayoutContract({
-      nativeKind: "graphicFrame",
-      props: input.props,
-      allowedStyleKeys,
-      allowPadding: false,
-      path: context.path,
-    });
+    const contract: CapabilityLayoutContract = {
+      ...parseCapabilityLayoutContract({
+        nativeKind: "graphicFrame",
+        props: input.props,
+        allowedStyleKeys,
+        allowPadding: false,
+        path: context.path,
+      }),
+      contentMinimumsEnforced: true,
+    };
 
     const columns = parseTableColumns(input.props["columns"]);
     const tableStyle = trackStyle(input, "table");
+    const tableBgParsed = parseLayerBackground(
+      tableStyle.style,
+      "Table",
+      context.theme,
+      context.path,
+    );
+    const tableBorderParsed = parseTableLayerBorder(
+      tableStyle.style,
+      "Table",
+      context.theme,
+      context.path,
+    );
     const tableVerticalAlign =
       parseTableVerticalAlign(tableStyle.style["verticalAlign"]) ?? "middle";
     const { rows, cells } = prepareRows(
@@ -958,6 +1157,8 @@ export const tableCapability = {
       columns,
       tableStyle.textStyle,
       tableVerticalAlign,
+      tableBgParsed.value,
+      tableBorderParsed.border,
       context.theme,
       context.slideNumber,
     );
@@ -973,12 +1174,11 @@ export const tableCapability = {
       rows,
       cells,
       contract,
-      declaredX: placeholderGeometry?.x ?? input.props["x"],
-      declaredY: placeholderGeometry?.y ?? input.props["y"],
-      declaredWidth:
-        contract.layoutStyle.width ??
-        input.props["width"] ??
-        placeholderGeometry?.width,
+      declaredX: placeholderGeometry?.x,
+      declaredY: placeholderGeometry?.y,
+      declaredWidth: placeholderGeometry?.width ?? contract.layoutStyle.width,
+      declaredHeight:
+        placeholderGeometry?.height ?? contract.layoutStyle.height,
     };
 
     const authorId =
@@ -1016,15 +1216,22 @@ export const tableCapability = {
           typeof parsed.declaredWidth === "number"
             ? parseTablePositiveSize(parsed.declaredWidth, "Table.width")
             : undefined;
-        const natural = tableLayoutModel(parsed, undefined, request.theme);
-        const naturalWidth = natural.widths.reduce(
-          (sum, width) => sum + width,
-          0,
-        );
+        const declaredHeight =
+          typeof parsed.declaredHeight === "number"
+            ? parseTablePositiveSize(parsed.declaredHeight, "Table.height")
+            : undefined;
         const availableWidth =
           request.availableWidth !== undefined && request.availableWidth > 0
             ? request.availableWidth
             : undefined;
+        const canSkipNatural =
+          (declaredSize !== undefined || request.widthMode === "exactly") &&
+          !columns.some((track) => track.kind === "auto");
+        const natural = canSkipNatural
+          ? undefined
+          : tableLayoutModel(parsed, undefined, request.theme);
+        const naturalWidth =
+          natural?.widths.reduce((sum, width) => sum + width, 0) ?? 0;
         const requestedWidth =
           declaredSize ??
           (availableWidth !== undefined &&
@@ -1035,30 +1242,37 @@ export const tableCapability = {
             : undefined);
         const model =
           requestedWidth === undefined
-            ? natural
+            ? (natural ?? tableLayoutModel(parsed, undefined, request.theme))
             : tableLayoutModel(parsed, requestedWidth, request.theme);
         const width = model.widths.reduce((sum, value) => sum + value, 0);
-        const height = model.heights.reduce((sum, value) => sum + value, 0);
+        const baseHeight = model.heights.reduce((sum, value) => sum + value, 0);
+        const targetHeight =
+          declaredHeight ??
+          (request.heightMode === "exactly"
+            ? request.availableHeight
+            : undefined);
+        const hasAutoRow = rows.some((row) => row.height === undefined);
+        const height =
+          targetHeight !== undefined &&
+          targetHeight > baseHeight + 0.01 &&
+          hasAutoRow
+            ? targetHeight
+            : baseHeight;
         return {
           width,
           height,
-          minContentWidth: natural.widths.reduce(
-            (sum, value) => sum + value,
-            0,
-          ),
-          minContentHeight: natural.heights.reduce(
-            (sum, value) => sum + value,
-            0,
-          ),
+          minContentWidth: natural === undefined ? width : naturalWidth,
+          minContentHeight: baseHeight,
         };
       },
 
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
-        const requestedWidth =
-          resolveContext.layoutBox?.width ??
-          (typeof parsed.declaredWidth === "number"
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
+        const declaredRequestedWidth =
+          typeof parsed.declaredWidth === "number"
             ? parseTablePositiveSize(parsed.declaredWidth, "Table.width")
-            : undefined);
+            : undefined;
+        const requestedWidth =
+          declaredRequestedWidth ?? resolveContext.layoutBox?.width;
         const model = tableLayoutModel(
           parsed,
           requestedWidth,
@@ -1066,21 +1280,18 @@ export const tableCapability = {
         );
         const { widths } = model;
         const heights = [...model.heights];
-        const warnings = [...model.warnings];
         const claims = [...model.claims];
         const fontUses: FontEmbeddingUse[] = [];
-        const warningKeys = new Set(model.warningKeys);
         const addTextResult = (result: ResolvedTextBody, path: string) => {
-          for (const warning of result.warnings) {
-            const key = `${path}\u0000${warning.code}\u0000${warning.message}`;
-            if (warningKeys.has(key)) continue;
-            warningKeys.add(key);
-            warnings.push({ ...warning, path });
-          }
           claims.push(...result.resourceClaims);
           fontUses.push(...result.fontUses.map((use) => ({ ...use, path })));
         };
-        const targetHeight = resolveContext.layoutBox?.height;
+        const declaredTargetHeight =
+          typeof parsed.declaredHeight === "number"
+            ? parseTablePositiveSize(parsed.declaredHeight, "Table.height")
+            : undefined;
+        const targetHeight =
+          declaredTargetHeight ?? resolveContext.layoutBox?.height;
         if (targetHeight !== undefined) {
           const naturalHeight = heights.reduce((sum, value) => sum + value, 0);
           if (targetHeight > naturalHeight + 0.01) {
@@ -1091,17 +1302,7 @@ export const tableCapability = {
               const extra = (targetHeight - naturalHeight) / growable.length;
               for (const row of growable)
                 heights[row] = (heights[row] ?? 0) + extra;
-            } else {
-              warnings.push({
-                code: "table-height-underflow",
-                message: `Sum of fixed row heights ${naturalHeight}px is less than layout height ${targetHeight}px; build preserves row heights`,
-              });
             }
-          } else if (targetHeight < naturalHeight - 0.01) {
-            warnings.push({
-              code: "table-height-overflow",
-              message: `Sum of row heights ${naturalHeight}px exceeds layout height ${targetHeight}px; build preserves row heights`,
-            });
           }
         }
         const x = parseTableCoordinate(
@@ -1114,7 +1315,7 @@ export const tableCapability = {
         );
         const width = widths.reduce((sum, value) => sum + value, 0);
         const height = heights.reduce((sum, value) => sum + value, 0);
-        const box: GeometryBox = { x, y, width, height };
+        const box: Rect = { x, y, width, height };
         const columnOffsets: number[] = [];
         let offsetX = x;
         for (const w of widths) {
@@ -1127,7 +1328,7 @@ export const tableCapability = {
           rowOffsets.push(offsetY);
           offsetY += h;
         }
-        const cellBoxes = new Map<ParsedCell, GeometryBox>();
+        const cellBoxes = new Map<ParsedCell, Rect>();
         for (const cell of cells) {
           cellBoxes.set(cell, {
             x: columnOffsets[cell.column] ?? x,
@@ -1167,6 +1368,16 @@ export const tableCapability = {
         );
         const resolvedCells: ResolvedTableCell[] = [];
         const resolvedAnchors = new Map<string, ResolvedTableCell>();
+        const fontUsages: {
+          readonly family: string;
+          readonly weight: number;
+          readonly style: "normal" | "italic";
+          readonly hasResource: boolean;
+          readonly substitute?: boolean;
+          readonly embeddable?: boolean;
+          readonly missingGlyphs?: readonly string[];
+          readonly path: string;
+        }[] = [];
         for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
           for (let column = 0; column < columns.length; column += 1) {
             const cell = anchors.get(`${rowIndex}:${column}`);
@@ -1198,30 +1409,31 @@ export const tableCapability = {
               contentSized,
             );
             addTextResult(body, cell.path);
+            for (const usage of body.fontUsages) {
+              fontUsages.push({ ...usage, path: cell.path });
+            }
             matrix[rowIndex]![column] = body.text;
-            const rowFill = rows[cell.row]?.fill;
-            const fill = cell.fill ?? rowFill;
+            const fill = resolveBackgroundValue(
+              resolveContext.theme,
+              cell.backgroundRaw,
+              undefined,
+            );
             const entry: ResolvedTableCell = {
               cell,
               box: cellBoxes.get(cell)!,
-              ...(fill === undefined ? {} : { fill }),
+              fill,
               body,
               hasText: cell.paragraphs.some(
                 (paragraph) =>
                   paragraph.style.list !== undefined ||
                   paragraph.runs.some((run) => run.text.length > 0),
               ),
-              hasOverflow: body.warnings.some(
-                (warning) => warning.code === "overset",
-              ),
+              hasOverflow:
+                body.textMetrics?.status === "measured" &&
+                !body.textMetrics.fits,
             };
             resolvedCells.push(entry);
             resolvedAnchors.set(`${rowIndex}:${column}`, entry);
-          }
-        }
-        for (const warning of warnings) {
-          if (warning.code === "overset") {
-            warning.message = `${warning.message} (table cell preserves original content and declared dimensions)`;
           }
         }
         const name =
@@ -1237,55 +1449,73 @@ export const tableCapability = {
             "Table.name contains characters not allowed in XML 1.0",
           );
         }
-        const tableParts = [
-          ...rows.map((row, rowIndex) => ({
-            kind: "row" as const,
-            ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
-            row: rowIndex,
-            box: {
-              x,
-              y: rowOffsets[rowIndex] ?? y,
-              width,
-              height: heights[rowIndex] ?? 0,
-            },
-            text: matrix[rowIndex]?.join("\t") ?? "",
-          })),
-          ...cells.map((cell) => ({
-            kind: "cell" as const,
-            ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
-            row: cell.row,
-            column: cell.column,
-            rowSpan: cell.rowSpan,
-            colSpan: cell.colSpan,
-            box: cellBoxes.get(cell)!,
-            text: matrix[cell.row]?.[cell.column] ?? "",
-          })),
-        ];
-        const subParts: CapabilitySubPartObservation[] = rows.map(
-          (row, rowIndex) => ({
-            ...(row.authorId === undefined ? {} : { authorId: row.authorId }),
-            box: {
-              x,
-              y: rowOffsets[rowIndex] ?? y,
-              width,
-              height: heights[rowIndex] ?? 0,
-            },
-            text: matrix[rowIndex]?.join("\t") ?? "",
-            parts: cells
-              .filter((cell) => cell.row === rowIndex)
-              .map((cell) => ({
-                ...(cell.authorId === undefined
-                  ? {}
-                  : { authorId: cell.authorId }),
-                box: cellBoxes.get(cell)!,
-                text: matrix[cell.row]?.[cell.column] ?? "",
-              })),
-          }),
+        const resolvedRowObservations: ResolvedTableRow[] = rows.map(
+          (row, rowIndex) => {
+            const rowY = rowOffsets[rowIndex] ?? y;
+            const rowHeight = heights[rowIndex] ?? 0;
+            const rowPath = `${resolveContext.path}/row[${row.authorId ?? rowIndex}]`;
+            return {
+              index: rowIndex,
+              ...(row.authorId === undefined ? {} : { id: row.authorId }),
+              path: rowPath,
+              y: rowY,
+              height: rowHeight,
+              box: {
+                x,
+                y: rowY,
+                width,
+                height: rowHeight,
+              },
+            };
+          },
         );
-        const observation: NativeTableObservation = {
-          columnWidths: [...widths],
-          rowHeights: [...heights],
-          cells: matrix,
+        const resolvedCellObservations: ResolvedTableCellObservation[] =
+          cells.map((cell) => {
+            const anchor = resolvedAnchors.get(`${cell.row}:${cell.column}`);
+            const textMetrics = anchor?.body.textMetrics;
+            if (textMetrics === undefined) {
+              throw new Error(
+                `Missing textMetrics for table cell (${cell.row}, ${cell.column})`,
+              );
+            }
+            const rowPath =
+              resolvedRowObservations[cell.row]?.path ??
+              `${resolveContext.path}/row[${cell.row}]`;
+            const cellPath = `${rowPath}/cell[${cell.authorId ?? cell.column}]`;
+            return {
+              row: cell.row,
+              column: cell.column,
+              rowSpan: cell.rowSpan,
+              colSpan: cell.colSpan,
+              ...(cell.authorId === undefined ? {} : { id: cell.authorId }),
+              path: cellPath,
+              box: cellBoxes.get(cell)!,
+              text: matrix[cell.row]?.[cell.column] ?? "",
+              textMetrics,
+            };
+          });
+        const subParts: CapabilitySubPartObservation[] =
+          resolvedRowObservations.map((rowObs) => ({
+            kind: "row",
+            ...(rowObs.id === undefined ? {} : { authorId: rowObs.id }),
+            path: rowObs.path,
+            box: rowObs.box,
+            text: matrix[rowObs.index]?.join("\t") ?? "",
+            parts: resolvedCellObservations
+              .filter((cellObs) => cellObs.row === rowObs.index)
+              .map((cellObs) => ({
+                kind: "cell" as const,
+                ...(cellObs.id === undefined ? {} : { authorId: cellObs.id }),
+                path: cellObs.path,
+                box: cellObs.box,
+                text: cellObs.text,
+                textMetrics: cellObs.textMetrics,
+              })),
+          }));
+        const observation: ResolvedTable = {
+          columns: [...widths],
+          rows: resolvedRowObservations,
+          cells: resolvedCellObservations,
           merges: cells
             .filter((cell) => cell.colSpan > 1 || cell.rowSpan > 1)
             .map(({ row, column, rowSpan, colSpan }) => ({
@@ -1294,24 +1524,17 @@ export const tableCapability = {
               rowSpan,
               colSpan,
             })),
-          ...(tableParts.some(({ authorId }) => authorId !== undefined)
-            ? { parts: tableParts }
-            : {}),
         };
         const annotations = motionAnnotations(motionProps, {
           kind: "table",
           name,
           ...(authorId === undefined ? {} : { authorId }),
           textBody: true,
-          filled: cells.some(
-            (cell) =>
-              cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
-          ),
+          filled: resolvedCells.some((entry) => entry.fill.kind !== "none"),
           box,
           rotationDegrees: 0,
-          hasBackground: cells.some(
-            (cell) =>
-              cell.fill !== undefined || rows[cell.row]?.fill !== undefined,
+          hasBackground: resolvedCells.some(
+            (entry) => entry.fill.kind !== "none",
           ),
         });
         const resolvedModel: ResolvedTableModel = {
@@ -1346,7 +1569,7 @@ export const tableCapability = {
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims: claims,
-          ...(warnings.length === 0 ? {} : { warnings }),
+          ...(fontUsages.length === 0 ? {} : { fontUsages }),
 
           emit(emitContext: EmitContext): EmitOutput {
             return mechanism.emit(resolvedModel, emitContext);

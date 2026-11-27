@@ -4,15 +4,18 @@ import { fileURLToPath } from "node:url";
 
 import {
   BuildError,
+  build,
+  buildDiagnosticSchema,
   buildOptionsSchema,
-  diagnosticSchema,
-  diagnosticSeveritySchema,
+  codegenDiagnosticSchema,
   emit,
   emitOptionsSchema,
   extensionSchema,
   fontEmbeddingModeSchema,
   formatBaseline,
   formatBaselineSchema,
+  previewErrorSchema,
+  previewPlaceholderSchema,
   resolve,
   resolveOptionsSchema,
   targetNameSchema,
@@ -38,23 +41,24 @@ import {
   paint,
   paintOptionsSchema,
   preview,
-  previewDiagnosticSchema,
+  previewErrorSchema as previewSubpathErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
-  previewSeveritySchema,
+  previewPlaceholderSchema as previewSubpathPlaceholderSchema,
   screenGeometrySchema,
   screenPointSchema,
 } from "@officedk/pptxdk/preview";
 import { deck, slide } from "@officedk/pptxdk/vanilla";
 import {
+  buildDiagnosticSchema as coreBuildDiagnosticSchema,
   buildOptionsSchema as coreBuildOptionsSchema,
-  diagnosticSchema as coreDiagnosticSchema,
-  diagnosticSeveritySchema as coreDiagnosticSeveritySchema,
   emitOptionsSchema as coreEmitOptionsSchema,
   extensionSchema as coreExtensionSchema,
   fontEmbeddingModeSchema as coreFontEmbeddingModeSchema,
   formatBaselineSchema as coreFormatBaselineSchema,
+  previewErrorSchema as corePreviewErrorSchema,
+  previewPlaceholderSchema as corePreviewPlaceholderSchema,
   resolveOptionsSchema as coreResolveOptionsSchema,
   targetNameSchema as coreTargetNameSchema,
   targetSchema as coreTargetSchema,
@@ -66,11 +70,11 @@ import {
 import { validateOptions } from "@pptxdk/emit";
 import {
   paintOptionsSchema as pkgPaintOptionsSchema,
-  previewDiagnosticSchema as pkgPreviewDiagnosticSchema,
+  previewErrorSchema as pkgPreviewErrorSchema,
   previewOptionsSchema as pkgPreviewOptionsSchema,
   previewPageNumberSchema as pkgPreviewPageNumberSchema,
   previewPagesSchema as pkgPreviewPagesSchema,
-  previewSeveritySchema as pkgPreviewSeveritySchema,
+  previewPlaceholderSchema as pkgPreviewPlaceholderSchema,
   screenGeometrySchema as pkgScreenGeometrySchema,
   screenPointSchema as pkgScreenPointSchema,
   validatePaintOptions,
@@ -89,8 +93,9 @@ describe("stage option schemas (core + emit)", () => {
     assert.equal(buildOptionsSchema, coreBuildOptionsSchema);
     assert.equal(buildOptionsSchema, buildEntryBuildOptionsSchema);
     assert.equal(emitOptionsSchema, coreEmitOptionsSchema);
-    assert.equal(diagnosticSeveritySchema, coreDiagnosticSeveritySchema);
-    assert.equal(diagnosticSchema, coreDiagnosticSchema);
+    assert.equal(buildDiagnosticSchema, coreBuildDiagnosticSchema);
+    assert.equal(previewErrorSchema, corePreviewErrorSchema);
+    assert.equal(previewPlaceholderSchema, corePreviewPlaceholderSchema);
 
     assert.deepEqual(fontEmbeddingModeSchema.options, ["full", "subset"]);
     assert.deepEqual(targetNameSchema.options, [
@@ -103,11 +108,28 @@ describe("stage option schemas (core + emit)", () => {
     assert.equal(targetSchema.safeParse(targets.transitional).success, true);
     assert.equal(targetSchema.safeParse(targets.baselineOnly).success, true);
     assert.equal(
-      diagnosticSchema.safeParse({
+      buildDiagnosticSchema.safeParse({
+        code: "invalid-options",
+        path: "build",
+        message: "Build options must be an object",
+      }).success,
+      true,
+    );
+    assert.equal(
+      buildDiagnosticSchema.safeParse({
         severity: "warning",
         path: "deck/slide[1]",
         code: "overflow",
         message: "Object exceeds slide bounds",
+      }).success,
+      false,
+    );
+    assert.equal(
+      codegenDiagnosticSchema.safeParse({
+        code: "unsupported-declaration",
+        path: "deck/slide[1]/custom[1]",
+        message: "Unsupported node",
+        declaration: "custom",
       }).success,
       true,
     );
@@ -131,7 +153,7 @@ describe("stage option schemas (core + emit)", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "resolve" &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
 
     assert.throws(
@@ -158,11 +180,11 @@ describe("stage option schemas (core + emit)", () => {
     }[] = [
       { input: null, path: "build", code: "invalid-options" },
       { input: [], path: "build", code: "invalid-options" },
-      { input: { extra: true }, path: "build", code: "unknown-parameter" },
+      { input: { extra: true }, path: "build", code: "unknown-prop" },
       {
         input: { embedFonts: "partial" },
         path: "build.embedFonts",
-        code: "unsupported-font-embedding",
+        code: "target-violation",
       },
       {
         input: { signal: {} },
@@ -172,14 +194,14 @@ describe("stage option schemas (core + emit)", () => {
       {
         input: { target: null },
         path: "build.target",
-        code: "invalid-target",
+        code: "invalid-options",
       },
       {
         input: {
           target: { name: "   ", format: formatBaseline, extensions: [] },
         },
         path: "build.target",
-        code: "invalid-target",
+        code: "invalid-options",
       },
       {
         input: {
@@ -191,14 +213,14 @@ describe("stage option schemas (core + emit)", () => {
           },
         },
         path: "build.target",
-        code: "unknown-parameter",
+        code: "unknown-prop",
       },
       {
         input: {
           target: { name: "strict", format: "Strict", extensions: [] },
         },
         path: "build.target",
-        code: "unsupported-format",
+        code: "invalid-options",
       },
       {
         input: {
@@ -209,7 +231,7 @@ describe("stage option schemas (core + emit)", () => {
           },
         },
         path: "build.target",
-        code: "invalid-target",
+        code: "invalid-options",
       },
       {
         input: {
@@ -220,7 +242,7 @@ describe("stage option schemas (core + emit)", () => {
           },
         },
         path: "build.target",
-        code: "unsupported-extension",
+        code: "target-violation",
       },
       {
         input: {
@@ -231,7 +253,7 @@ describe("stage option schemas (core + emit)", () => {
           },
         },
         path: "build.target",
-        code: "duplicate-extension",
+        code: "target-violation",
       },
     ];
 
@@ -275,13 +297,13 @@ describe("stage option schemas (core + emit)", () => {
 });
 
 describe("preview schemas and lazy resvg loading", () => {
-  it("exposes preview schemas across @pptxdk/preview and @officedk/pptxdk/preview", () => {
+  it("exposes preview schemas across @pptxdk/preview and @officedk/pptxdk/preview", async () => {
     assert.equal(previewPageNumberSchema, pkgPreviewPageNumberSchema);
     assert.equal(previewPagesSchema, pkgPreviewPagesSchema);
     assert.equal(paintOptionsSchema, pkgPaintOptionsSchema);
     assert.equal(previewOptionsSchema, pkgPreviewOptionsSchema);
-    assert.equal(previewSeveritySchema, pkgPreviewSeveritySchema);
-    assert.equal(previewDiagnosticSchema, pkgPreviewDiagnosticSchema);
+    assert.equal(previewSubpathErrorSchema, pkgPreviewErrorSchema);
+    assert.equal(previewSubpathPlaceholderSchema, pkgPreviewPlaceholderSchema);
     assert.equal(screenPointSchema, pkgScreenPointSchema);
     assert.equal(screenGeometrySchema, pkgScreenGeometrySchema);
 
@@ -296,11 +318,28 @@ describe("preview schemas and lazy resvg loading", () => {
     assert.equal(previewPagesSchema.safeParse([]).success, true);
     assert.equal(previewPagesSchema.safeParse([1, 3]).success, true);
     assert.equal(
-      previewDiagnosticSchema.safeParse({
+      previewErrorSchema.safeParse({
+        code: "preview-missing-font",
+        path: "deck/slide[1]/text[t1]",
+        message: "Font MissingFont 400 normal has no resource",
+        font: { family: "MissingFont", weight: 400, style: "normal" },
+      }).success,
+      true,
+    );
+    assert.equal(
+      previewErrorSchema.safeParse({
         severity: "error",
         page: 1,
         path: "deck/slide[1]/shape[a]",
         message: "Unsupported",
+      }).success,
+      false,
+    );
+    assert.equal(
+      previewPlaceholderSchema.safeParse({
+        id: "img1",
+        path: "deck/slide[1]/image[img1]",
+        url: "https://example.com/photo.png",
       }).success,
       true,
     );
@@ -316,6 +355,23 @@ describe("preview schemas and lazy resvg loading", () => {
       }).success,
       true,
     );
+
+    const doc = deck({ width: 320, height: 180 }).append(slide({ id: "s1" }));
+    const resolution = resolve(doc);
+    assert.equal(resolution.report.evidence, "generation");
+    assert.equal(resolution.slides.length, 1);
+    assert.equal(resolution.slide("s1").id, "s1");
+
+    const built = await build(doc);
+    assert.equal(built.report.evidence, "generation");
+    assert.equal(built.slides.length, 1);
+    assert.equal(built.slide("s1").id, "s1");
+
+    const previewed = await preview(doc);
+    assert.equal(previewed.pages.length, 1);
+    assert.deepEqual(previewed.pages[0]?.errors, []);
+    assert.deepEqual(previewed.pages[0]?.placeholders, []);
+    assert.equal(previewed.slide("s1").id, "s1");
   });
 
   it("validates paint and preview options including invalid pages, non-object options, and empty pages", async () => {
@@ -434,21 +490,21 @@ describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "resolve" &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
     await assert.rejects(
       () => resolveTrimmed(doc, { capabilities: "shape" } as never),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build.capabilities" &&
-        error.diagnostics[0]?.code === "invalid-capability-selection",
+        error.diagnostics[0]?.code === "invalid-options",
     );
     await assert.rejects(
       () => resolveTrimmed(doc, { capabilities: ["unknown"] } as never),
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build.capabilities[0]" &&
-        error.diagnostics[0]?.code === "unknown-capability",
+        error.diagnostics[0]?.code === "missing-capability",
     );
 
     await assert.rejects(
@@ -467,7 +523,7 @@ describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build" &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
     await assert.rejects(
       () =>
@@ -478,7 +534,7 @@ describe("@officedk/pptxdk/build and @officedk/pptxdk/node schemas", () => {
       (error: unknown) =>
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "build.embedFonts" &&
-        error.diagnostics[0]?.code === "unsupported-font-embedding",
+        error.diagnostics[0]?.code === "target-violation",
     );
   });
 

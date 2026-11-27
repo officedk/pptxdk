@@ -4,7 +4,7 @@ import {
   BuildError,
   build,
   fade,
-  observeMotion,
+  motionSchedule,
   type CommonNode,
 } from "@officedk/pptxdk";
 import {
@@ -59,10 +59,7 @@ describe("scoped author ids", () => {
   it("looks up editable nodes through anonymous layers and edits them before the formal build", async () => {
     const titleNode = text("Draft heading", {
       id: "title",
-      x: 0,
-      y: 0,
-      width: 600,
-      height: 40,
+      style: { position: "absolute", left: 0, top: 0, width: 600, height: 40 },
     });
     const document = deck({ width: 960, height: 540 }).append(
       slide({ id: "cover" }).append(
@@ -87,9 +84,9 @@ describe("scoped author ids", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.equal(result.report.slides[0]?.id, "cover");
     assert.equal(result.report.slides[0]?.authorId, "cover");
-    const builtTitle = result.query.getSlide("cover").get("title");
-    assert.equal(builtTitle.observe().authorId, "title");
-    assert.equal(builtTitle.observe().text, "Edited through the scoped query");
+    const builtTitle = result.slide("cover").get("title");
+    assert.equal(builtTitle.id, "title");
+    assert.equal(builtTitle.text, "Edited through the scoped query");
     assert.match(slideXml(result), /Edited through the scoped query/u);
   });
 
@@ -99,19 +96,25 @@ describe("scoped author ids", () => {
         box().append(
           text("Anonymous title", {
             id: "title",
-            x: 0,
-            y: 0,
-            width: 300,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: 30,
+            },
           }),
         ),
         box({ id: "sidebar" }).append(
           text("Sidebar title", {
             id: "title",
-            x: 0,
-            y: 40,
-            width: 300,
-            height: 30,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 40,
+              width: 300,
+              height: 30,
+            },
           }),
         ),
       ),
@@ -165,7 +168,15 @@ describe("scoped author ids", () => {
             ],
             { id: "footer", style: { spacingAfter: 6 } },
           ),
-        ).set({ id: "copy", x: 10, y: 10, width: 300, height: 80 }),
+        )
+          .set({ id: "copy" })
+          .style({
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 300,
+            height: 80,
+          }),
       ),
     );
 
@@ -191,17 +202,23 @@ describe("scoped author ids", () => {
     assert.equal(richText?.paragraphs[1]?.spacingAfterPoints, 4.5);
     assert.equal(richText?.paragraphs[1]?.runs[1]?.field, "slidenum");
     assert.equal(richText?.paragraphs[1]?.runs[1]?.text, "1");
-    assert.equal(
-      result.query.getSlide("rich").get("copy").observe().text,
-      "Body\nBold1",
-    );
+    assert.equal(result.slide("rich").get("copy").text, "Body\nBold1");
   });
 
   it("expands JSX rich text author ids into the same formal build", async () => {
     const expanded = await expandDocument(
       <Deck width={480} height={270}>
         <Slide id="jsx-rich">
-          <Text id="copy" x={10} y={10} width={300} height={80}>
+          <Text
+            id="copy"
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 300,
+              height: 80,
+            }}
+          >
             <P id="body" style={{ align: "center", fontSize: 18 }}>
               Body
             </P>
@@ -233,10 +250,7 @@ describe("scoped author ids", () => {
     assert.equal(richText?.paragraphs[0]?.alignment, "ctr");
     assert.equal(richText?.paragraphs[1]?.runs[0]?.bold, true);
     assert.equal(richText?.paragraphs[1]?.runs[1]?.field, "slidenum");
-    assert.equal(
-      result.query.getSlide("jsx-rich").get("copy").observe().text,
-      "Body\nBold1",
-    );
+    assert.equal(result.slide("jsx-rich").get("copy").text, "Body\nBold1");
     assert.match(slideXml(result), /type="slidenum"/u);
   });
 
@@ -246,14 +260,18 @@ describe("scoped author ids", () => {
         text(
           paragraph("First", { id: "same" }),
           paragraph("Second", { id: "same" }),
-        ).set({ x: 0, y: 0, width: 240, height: 60 }),
+        ).style({
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 240,
+          height: 60,
+        }),
       ),
     );
     await assert.rejects(build(duplicatedParagraph), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.ok(
-        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
-      );
+      assert.ok(error.diagnostics.some(({ code }) => code === "duplicate-id"));
       return true;
     });
 
@@ -264,14 +282,18 @@ describe("scoped author ids", () => {
             span("First", { id: "same" }),
             span("Second", { id: "same" }),
           ]),
-        ).set({ x: 0, y: 0, width: 240, height: 30 }),
+        ).style({
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 240,
+          height: 30,
+        }),
       ),
     );
     await assert.rejects(build(duplicatedSpan), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.ok(
-        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
-      );
+      assert.ok(error.diagnostics.some(({ code }) => code === "duplicate-id"));
       return true;
     });
 
@@ -281,13 +303,21 @@ describe("scoped author ids", () => {
           paragraph(["Left", span("L", { id: "part" })], { id: "left" }),
           paragraph(["Right", span("R", { id: "part" })], { id: "right" }),
           paragraph("Anonymous"),
-        ).set({ id: "copy", x: 0, y: 0, width: 240, height: 90 }),
+        )
+          .set({ id: "copy" })
+          .style({
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 90,
+          }),
       ),
     );
     const result = await build(scoped);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.equal(
-      result.query.getSlide("scoped-rich").get("copy").observe().text,
+      result.slide("scoped-rich").get("copy").text,
       "LeftL\nRightR\nAnonymous",
     );
   });
@@ -299,13 +329,19 @@ describe("scoped author ids", () => {
     ] as const) {
       const document = deck({ width: 320, height: 180 }).append(
         slide({ id: "unknown-rich" }).append(
-          text(node).set({ x: 0, y: 0, width: 240, height: 40 }),
+          text(node).style({
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 240,
+            height: 40,
+          }),
         ),
       );
       await assert.rejects(build(document), (error: unknown) => {
         assert.ok(error instanceof BuildError);
         const message =
-          error.diagnostics.find(({ code }) => code === "unknown-parameter")
+          error.diagnostics.find(({ code }) => code === "unknown-prop")
             ?.message ?? "";
         assert.match(
           message,
@@ -319,8 +355,26 @@ describe("scoped author ids", () => {
   it("rejects duplicate ids in one scope while allowing reuse across named scopes", async () => {
     const duplicated = deck({ width: 960, height: 540 }).append(
       slide({ id: "duplicates" }).append(
-        text("First", { id: "same", x: 0, y: 0, width: 100, height: 20 }),
-        text("Second", { id: "same", x: 0, y: 30, width: 100, height: 20 }),
+        text("First", {
+          id: "same",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 20,
+          },
+        }),
+        text("Second", {
+          id: "same",
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 30,
+            width: 100,
+            height: 20,
+          },
+        }),
       ),
     );
     assert.throws(
@@ -332,32 +386,46 @@ describe("scoped author ids", () => {
     );
     await assert.rejects(build(duplicated), (error: unknown) => {
       assert.ok(error instanceof BuildError);
-      assert.ok(
-        error.diagnostics.some(({ code }) => code === "duplicate-author-id"),
-      );
+      assert.ok(error.diagnostics.some(({ code }) => code === "duplicate-id"));
       return true;
     });
 
     const independent = deck({ width: 960, height: 540 }).append(
       slide({ id: "independent" }).append(
         box({ id: "left" }).append(
-          text("Left", { id: "title", x: 0, y: 0, width: 100, height: 20 }),
+          text("Left", {
+            id: "title",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 100,
+              height: 20,
+            },
+          }),
         ),
         box({ id: "right" }).append(
-          text("Right", { id: "title", x: 0, y: 30, width: 100, height: 20 }),
+          text("Right", {
+            id: "title",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 30,
+              width: 100,
+              height: 20,
+            },
+          }),
         ),
       ),
     );
     const result = await build(independent);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     assert.equal(
-      result.query.getSlide("independent").get("left").get("title").observe()
-        .text,
+      result.slide("independent").get("left").get("title").text,
       "Left",
     );
     assert.equal(
-      result.query.getSlide("independent").get("right").get("title").observe()
-        .text,
+      result.slide("independent").get("right").get("title").text,
       "Right",
     );
   });
@@ -367,11 +435,14 @@ describe("scoped author ids", () => {
       return (
         <Text
           id="title"
-          x={0}
-          y={0}
-          width={180}
-          height={30}
-          style={{ fontSize: 16 }}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 180,
+            height: 30,
+            fontSize: 16,
+          }}
         >
           {caption}
         </Text>
@@ -411,10 +482,7 @@ describe("scoped author ids", () => {
   it("keeps node identity while a move changes the query path, and freezes build observations", async () => {
     const moved = text("Before move", {
       id: "moved",
-      x: 0,
-      y: 0,
-      width: 160,
-      height: 30,
+      style: { position: "absolute", left: 0, top: 0, width: 160, height: 30 },
     });
     const source = box({ id: "source" }).append(moved);
     const target = box({ id: "target" });
@@ -423,11 +491,9 @@ describe("scoped author ids", () => {
       slide({ id: "second" }).append(target),
     );
     const first = await build(document);
-    const firstObservation = first.query
-      .getSlide("first")
-      .get("source")
-      .get("moved")
-      .observe();
+    const firstLocator = first.slide("first").get("source").get("moved");
+    const firstText = firstLocator.text;
+    const firstId = firstLocator.id;
     const beforePath = authorId(document, "first")
       .get("source")
       .get("moved").path;
@@ -452,13 +518,13 @@ describe("scoped author ids", () => {
     moved.content("After move");
     const second = await build(document);
     assert.equal(
-      second.query.getSlide("second").get("target").get("moved").observe().text,
+      second.slide("second").get("target").get("moved").text,
       "After move",
     );
-    assert.equal(firstObservation.text, "Before move");
-    assert.equal(firstObservation.authorId, "moved");
+    assert.equal(firstText, "Before move");
+    assert.equal(firstId, "moved");
     assert.equal(
-      first.query.getSlide("first").get("source").get("moved").observe().text,
+      first.slide("first").get("source").get("moved").text,
       "Before move",
     );
     assert.ok(
@@ -494,7 +560,16 @@ describe("scoped author ids", () => {
         <>
           {["first", "second"].map((label) => (
             <Box id={`box-${label}`} key={label}>
-              <Shape id="shared" x={0} y={0} width={80} height={30}>
+              <Shape
+                id="shared"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 80,
+                  height: 30,
+                }}
+              >
                 {label}
               </Shape>
             </Box>
@@ -530,7 +605,7 @@ describe("scoped author ids", () => {
     assert.ok(shared?.every(({ name }) => !name.startsWith("!!morph-")));
     assert.equal(result.report.slides[0]?.capabilities?.transition, undefined);
     assert.throws(
-      () => result.query.getSlide("missing"),
+      () => result.slide("missing"),
       (error: unknown) => {
         assert.equal((error as { code?: string }).code, "missing-slide");
         return true;
@@ -544,10 +619,13 @@ describe("scoped author ids", () => {
         <Slide id="parts">
           <Chart
             id="sales"
-            x={10}
-            y={10}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 200,
+              height: 120,
+            }}
             groups={[
               {
                 kind: "column",
@@ -558,10 +636,13 @@ describe("scoped author ids", () => {
           />
           <Table
             id="grid"
-            x={10}
-            y={140}
             columns={[120]}
-            style={{ fontSize: 12 }}
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 140,
+              fontSize: 12,
+            }}
           >
             <Row id="row" style={{ height: 24 }}>
               <Cell id="cell">Booked</Cell>
@@ -570,12 +651,12 @@ describe("scoped author ids", () => {
         </Slide>
       </Deck>,
     );
-    const slide = result.query.getSlide("parts");
-    assert.equal(slide.get("sales").observe().authorId, "sales");
+    const slide = result.slide("parts");
+    assert.equal(slide.get("sales").id, "sales");
     const row = slide.get("grid").get("row");
-    assert.equal(row.observe().authorId, "row");
-    assert.equal(row.get("cell").observe().authorId, "cell");
-    assert.equal(row.get("cell").observe().text, "Booked");
+    assert.equal(row.id, "row");
+    assert.equal(row.get("cell").id, "cell");
+    assert.equal(row.get("cell").text, "Booked");
     assert.ok(
       result.report.slides[0]?.objects.some(
         ({ authorId }) => authorId === "sales",
@@ -589,18 +670,19 @@ describe("scoped author ids", () => {
         <Slide id="motion-ids">
           <Shape
             id="entrance"
-            x={0}
-            y={0}
-            width={20}
-            height={20}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            }}
             enter={fade({ duration: 100 })}
           />
         </Slide>
       </Deck>,
     );
-    const motion = observeMotion(
-      result.query.getSlide("motion-ids").observation,
-    );
+    const motion = motionSchedule(result.slide("motion-ids"));
     const effect = motion?.steps[0]?.effects[0];
     assert.equal(effect?.target.authorId, "entrance");
     assert.equal(effect?.target.id, result.report.slides[0]?.objects[0]?.id);
@@ -609,9 +691,16 @@ describe("scoped author ids", () => {
   it("matches React expansion and command authoring through the same formal build", async () => {
     const commandDocument = deck({ width: 320, height: 180 }).append(
       slide({ id: "same-intent" }).append(
-        shape({ id: "badge", x: 10, y: 10, width: 120, height: 40 }).content(
-          "Same intent",
-        ),
+        shape("Same intent", {
+          id: "badge",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 120,
+            height: 40,
+          },
+        }),
       ),
     );
     const commandResult = await build(commandDocument);
@@ -619,7 +708,16 @@ describe("scoped author ids", () => {
     const reactResult = await build(
       <Deck width={320} height={180}>
         <Slide id="same-intent">
-          <Shape id="badge" x={10} y={10} width={120} height={40}>
+          <Shape
+            id="badge"
+            style={{
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 120,
+              height: 40,
+            }}
+          >
             Same intent
           </Shape>
         </Slide>
@@ -632,8 +730,8 @@ describe("scoped author ids", () => {
     assert.equal(reactObject?.text, commandObject?.text);
     assert.deepEqual(reactObject?.box, commandObject?.box);
     assert.deepEqual(
-      commandResult.query.getSlide("same-intent").get("badge").observe().box,
-      reactResult.query.getSlide("same-intent").get("badge").observe().box,
+      commandResult.slide("same-intent").get("badge").box,
+      reactResult.slide("same-intent").get("badge").box,
     );
     assert.deepEqual((await validatePptx(reactResult.pptx)).errors, []);
     assert.deepEqual((await validatePptx(commandResult.pptx)).errors, []);

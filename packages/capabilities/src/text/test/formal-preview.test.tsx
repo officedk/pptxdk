@@ -33,7 +33,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
+      resolution,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -109,16 +109,16 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
             Text,
             {
               id: "mixed",
-              x: 20,
-              y: 20,
-              width: 240,
               style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 240,
                 fontFamily: notoFont,
                 fontSize: 18,
                 padding: 10,
-                backgroundColor: "#EEF2FF",
-                borderColor: "#4F46E5",
-                borderWidth: 2,
+                background: "#EEF2FF",
+                border: { color: "#4F46E5", width: 2 },
               },
             },
             createElement(
@@ -151,16 +151,17 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
             Text,
             {
               id: "centered",
-              x: 280,
-              y: 40,
-              width: 160,
-              height: 120,
               style: {
+                position: "absolute",
+                left: 280,
+                top: 40,
+                width: 160,
+                height: 120,
                 fontFamily: jostFont,
                 fontSize: 16,
                 verticalAlign: "bottom",
                 align: "center",
-                backgroundColor: "#FEF3C7",
+                background: "#FEF3C7",
                 opacity: 0.9,
                 rotate: 90,
               },
@@ -198,31 +199,32 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "mixed",
-            x: 20,
-            y: 20,
-            width: 240,
             style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 240,
               fontFamily: notoFont,
               fontSize: 18,
               padding: 10,
-              backgroundColor: "#EEF2FF",
-              borderColor: "#4F46E5",
-              borderWidth: 2,
+              background: "#EEF2FF",
+              border: { color: "#4F46E5", width: 2 },
             },
           },
         ),
         text("Bottom center", {
           id: "centered",
-          x: 280,
-          y: 40,
-          width: 160,
-          height: 120,
           style: {
+            position: "absolute",
+            left: 280,
+            top: 40,
+            width: 160,
+            height: 120,
             fontFamily: jostFont,
             fontSize: 16,
             verticalAlign: "bottom",
             align: "center",
-            backgroundColor: "#FEF3C7",
+            background: "#FEF3C7",
             opacity: 0.9,
             rotate: 90,
           },
@@ -235,40 +237,39 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     assert.deepEqual((await validatePptx(jsxPreview.pptx)).errors, []);
     assert.deepEqual((await validatePptx(impPreview.pptx)).errors, []);
 
-    assert.deepEqual(jsxPreview.pages[0]?.diagnostics, []);
-    assert.deepEqual(impPreview.pages[0]?.diagnostics, []);
+    assert.deepEqual(jsxPreview.pages[0]?.errors, []);
+    assert.deepEqual(impPreview.pages[0]?.errors, []);
     assert.ok(jsxPreview.pages[0]?.png !== undefined);
     assert.deepEqual(jsxPreview.pages[0]?.png, impPreview.pages[0]?.png);
     expect(jsxPreview.pages[0]?.svg).toContain("<path");
     expect(jsxPreview.pages[0]?.svg).toContain('fill="#EEF2FF"');
     expect(jsxPreview.pages[0]?.svg).toContain("rotate(90");
 
-    const centeredNode = jsxPreview.pages[0]?.nodes.find(
-      (node) => node.authorId === "centered",
-    );
-    expect(centeredNode?.screenBox?.width).toBeCloseTo(120);
-    expect(centeredNode?.screenBox?.height).toBeCloseTo(160);
+    const centeredLocator = jsxPreview.resolution
+      .slide("text-main")
+      .get("centered");
+    expect(centeredLocator.bounds?.width).toBeCloseTo(120);
+    expect(centeredLocator.bounds?.height).toBeCloseTo(160);
     assert.equal(
-      jsxPreview.query.getSlide("text-main").get("mixed").observe().text,
+      jsxPreview.resolution.slide("text-main").get("mixed").text,
       "共享排版 shared 2026 第1页\nRight",
     );
 
-    // Box visual effects (boxShadow, dashed border, borderRadius, gradient) render on Text with zero diagnostics.
+    // Box visual effects (boxShadow, dashed border, borderRadius, gradient) render on Text with zero preview errors.
     const styledTextDoc = deck({ width: 320, height: 180 }).append(
       slide({ id: "styled-text", background: "#FFFFFF" }).append(
         text("Boxed Text", {
           id: "styled",
-          x: 20,
-          y: 20,
-          width: 180,
-          height: 60,
           style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 180,
+            height: 60,
             fontFamily: jostFont,
             padding: 10,
-            backgroundColor: "#EFF6FF",
-            borderColor: "#111827",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            background: "#EFF6FF",
+            border: { color: "#111827", width: 2, style: "dashed" },
             borderRadius: 10,
             boxShadow: { blur: 4, distance: 4, angle: 90 },
           },
@@ -277,7 +278,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     );
     const styledPreview = await previewDoc(styledTextDoc);
     assert.deepEqual((await validatePptx(styledPreview.pptx)).errors, []);
-    assert.deepEqual(styledPreview.pages[0]?.diagnostics, []);
+    assert.deepEqual(styledPreview.pages[0]?.errors, []);
     assert.ok(styledPreview.pages[0]?.png !== undefined);
     expect(styledPreview.pages[0]?.svg).toContain("<feDropShadow");
     expect(styledPreview.pages[0]?.svg).toContain("stroke-dasharray");
@@ -337,18 +338,26 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     const rejectionCases: readonly {
       readonly label: string;
       readonly node: ReturnType<typeof text>;
+      readonly expectedCode:
+        | "preview-missing-glyph"
+        | "preview-missing-font"
+        | "preview-unsupported-font";
       readonly expected: RegExp;
     }[] = [
       {
         label: "missing-glyph",
         node: text("汉", {
           id: "bad",
-          x: 10,
-          y: 10,
-          width: 160,
-          height: 50,
-          style: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 160,
+            height: 50,
+            fontFamily: jostFont,
+          },
         }),
+        expectedCode: "preview-missing-glyph",
         expected: /glyph/i,
       },
       {
@@ -361,36 +370,45 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "bad",
-            x: 10,
-            y: 10,
-            width: 160,
-            height: 50,
-            style: { fontFamily: jostFont },
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 160,
+              height: 50,
+              fontFamily: jostFont,
+            },
           },
         ),
+        expectedCode: "preview-missing-glyph",
         expected: /glyph/i,
       },
       {
         label: "missing-font-file",
         node: text("No font file", {
           id: "bad",
-          x: 10,
-          y: 10,
-          width: 160,
-          height: 50,
-          style: { fontFamily: font("Missing Preview Face") },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 160,
+            height: 50,
+            fontFamily: font("Missing Preview Face"),
+          },
         }),
+        expectedCode: "preview-missing-font",
         expected: /font file/i,
       },
       ...(["COLR", "CPAL", "sbix", "CBDT", "SVG "] as const).map((table) => ({
         label: `${table.trim().toLowerCase()}-font`,
         node: text("Color font", {
           id: "bad",
-          x: 10,
-          y: 10,
-          width: 160,
-          height: 50,
           style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 160,
+            height: 50,
             fontFamily: font(
               `${table.trim()}Jost`,
               [{ weight: 400, data: withSyntheticTable(jostBytes, table) }],
@@ -398,6 +416,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
             ),
           },
         }),
+        expectedCode: "preview-unsupported-font" as const,
         expected: /monochrome outline/i,
       })),
     ];
@@ -409,10 +428,13 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           slide({ id: "good-page" }).append(
             text("Valid", {
               id: "ok",
-              x: 10,
-              y: 10,
-              width: 120,
-              style: { fontFamily: jostFont },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 120,
+                fontFamily: jostFont,
+              },
             }),
           ),
         ),
@@ -425,20 +447,21 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       assert.equal(result.pages[0]?.png, undefined, item.label);
       assert.equal(result.pages[0]?.svg, undefined, item.label);
       assert.equal(
-        result.pages[0]?.diagnostics[0]?.severity,
-        "error",
+        result.pages[0]?.errors[0]?.code,
+        item.expectedCode,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.path ?? "",
+        result.pages[0]?.errors[0]?.path ?? "",
         /text\[bad\]/,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.message ?? "",
+        result.pages[0]?.errors[0]?.message ?? "",
         item.expected,
         item.label,
       );
+      assert.deepEqual(result.pages[1]?.errors, [], item.label);
       assert.ok(result.pages[1]?.png !== undefined, item.label);
     }
   });
@@ -446,6 +469,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
   it("closes paint() CapabilityError.code strictly to preview-unsupported-font and preview-missing-glyph across Text, Shape, Table, and Chart", () => {
     const resolveDoc = createResolver(documentCapabilities);
     const allowedCodes = new Set([
+      "preview-missing-font",
       "preview-unsupported-font",
       "preview-missing-glyph",
       "preview-corrupt-image",
@@ -490,16 +514,19 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           slide({ id: "p" }).append(
             text("No font file", {
               id: "t",
-              x: 10,
-              y: 10,
-              width: 160,
-              height: 50,
-              style: { fontFamily: missingFace },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 160,
+                height: 50,
+                fontFamily: missingFace,
+              },
             }),
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 2. Fixed-area Text list prefix without font files
@@ -509,16 +536,19 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           slide({ id: "p" }).append(
             text([paragraph("Item", { style: { list: { type: "bullet" } } })], {
               id: "t-list",
-              x: 10,
-              y: 10,
-              width: 160,
-              height: 50,
-              style: { fontFamily: missingFace },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 160,
+                height: 50,
+                fontFamily: missingFace,
+              },
             }),
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 3. Fixed-size Shape inline text without font files
@@ -526,20 +556,23 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       capturePaintErrorCode(
         deck({ width: 240, height: 120 }).append(
           slide({ id: "p" }).append(
-            shape({
+            shape("No font", {
               id: "s",
-              x: 10,
-              y: 10,
-              width: 160,
-              height: 50,
-              fill: "#1E293B",
-              text: "No font",
-              textStyle: { fontFamily: missingFace, color: "#FFFFFF" },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 160,
+                height: 50,
+                background: "#1E293B",
+                fontFamily: missingFace,
+                color: "#FFFFFF",
+              },
             }),
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 4. Fixed-row-height Table cell without font files
@@ -549,15 +582,19 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           slide({ id: "p" }).append(
             table({
               id: "tbl",
-              x: 10,
-              y: 10,
               columns: [120],
-              style: { fontFamily: missingFace, fontSize: 14 },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                fontFamily: missingFace,
+                fontSize: 14,
+              },
             }).append(row({ style: { height: 30 } }).append(cell("Cell"))),
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 5. Chart without font files
@@ -567,12 +604,15 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           slide({ id: "p" }).append(
             chart({
               id: "c",
-              x: 10,
-              y: 10,
-              width: 300,
-              height: 180,
               title: "No font",
-              style: { fontSize: 12 },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 300,
+                height: 180,
+                fontSize: 12,
+              },
               groups: [
                 {
                   kind: "column",
@@ -584,7 +624,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ),
         ),
       ),
-      "preview-unsupported-font",
+      "preview-missing-font",
     );
 
     // 6. Missing glyph in supplied font
@@ -594,11 +634,14 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           slide({ id: "p" }).append(
             text("汉", {
               id: "t-glyph",
-              x: 10,
-              y: 10,
-              width: 160,
-              height: 50,
-              style: { fontFamily: jostFont },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 160,
+                height: 50,
+                fontFamily: jostFont,
+              },
             }),
           ),
         ),
@@ -639,20 +682,25 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "deco-box",
-            x: 20,
-            y: 20,
-            width: 240,
-            height: 120,
-            style: { fontFamily: jostFont, fontSize: 18 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 240,
+              height: 120,
+              fontFamily: jostFont,
+              fontSize: 18,
+            },
           },
         ),
         text("Rotated Shadow", {
           id: "rot-shadow",
-          x: 280,
-          y: 40,
-          width: 180,
-          height: 50,
           style: {
+            position: "absolute",
+            left: 280,
+            top: 40,
+            width: 180,
+            height: 50,
             fontFamily: jostFont,
             fontSize: 18,
             rotate: 90,
@@ -661,19 +709,29 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
         }),
         text("WIDE", {
           id: "wide-track",
-          x: 20,
-          y: 150,
-          width: 200,
-          height: "auto",
-          style: { fontFamily: jostFont, fontSize: 18, letterSpacing: 6 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 150,
+            width: 200,
+            height: "auto",
+            fontFamily: jostFont,
+            fontSize: 18,
+            letterSpacing: 6,
+          },
         }),
         text("TIGHT", {
           id: "tight-track",
-          x: 240,
-          y: 150,
-          width: 200,
-          height: "auto",
-          style: { fontFamily: jostFont, fontSize: 18, letterSpacing: -2 },
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 150,
+            width: 200,
+            height: "auto",
+            fontFamily: jostFont,
+            fontSize: 18,
+            letterSpacing: -2,
+          },
         }),
       ),
     );
@@ -681,7 +739,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
 
     const slideXml = strFromU8(
@@ -708,19 +766,29 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       slide({ id: "multiscript", background: "#FFFFFF" }).append(
         text("あア 한 Д Ω ∑√≠", {
           id: "cjk-sym",
-          x: 20,
-          y: 20,
-          width: 240,
-          height: 50,
-          style: { fontFamily: notoFont, fontSize: 18, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 240,
+            height: 50,
+            fontFamily: notoFont,
+            fontSize: 18,
+            color: "#0F172A",
+          },
         }),
         text("مرحبا بالعالم 2026!", {
           id: "arabic-bidi",
-          x: 20,
-          y: 80,
-          width: 260,
-          height: 50,
-          style: { fontFamily: notoArabicFont, fontSize: 20, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 80,
+            width: 260,
+            height: 50,
+            fontFamily: notoArabicFont,
+            fontSize: 20,
+            color: "#0F172A",
+          },
         }),
         text(
           [
@@ -738,11 +806,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "hebrew-bidi",
-            x: 20,
-            y: 140,
-            width: 300,
-            height: 50,
             style: {
+              position: "absolute",
+              left: 20,
+              top: 140,
+              width: 300,
+              height: 50,
               fontFamily: notoHebrewFont,
               fontWeight: 100,
               fontSize: 20,
@@ -758,11 +827,15 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "rtl-order",
-            x: 20,
-            y: 200,
-            width: 220,
-            height: 45,
-            style: { fontFamily: notoArabicFont, fontSize: 20 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 200,
+              width: 220,
+              height: 45,
+              fontFamily: notoArabicFont,
+              fontSize: 20,
+            },
           },
         ),
         text(
@@ -778,11 +851,14 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "ltr-with-rtl",
-            x: 280,
-            y: 200,
-            width: 220,
-            height: 45,
-            style: { fontSize: 18 },
+            style: {
+              position: "absolute",
+              left: 280,
+              top: 200,
+              width: 220,
+              height: 45,
+              fontSize: 18,
+            },
           },
         ),
       ),
@@ -791,7 +867,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
 
     const svg = page.svg!;
@@ -833,20 +909,26 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "latin-justify",
-            x: 20,
-            y: 20,
-            width: 170,
-            height: 180,
-            style: { fontFamily: jostFont, fontSize: 16, padding: 10 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 170,
+              height: 180,
+              fontFamily: jostFont,
+              fontSize: 16,
+              padding: 10,
+            },
           },
         ),
         text("汉字两端对齐自动折行测试末行", {
           id: "cjk-justify",
-          x: 210,
-          y: 20,
-          width: 140,
-          height: 140,
           style: {
+            position: "absolute",
+            left: 210,
+            top: 20,
+            width: 140,
+            height: 140,
             fontFamily: notoFont,
             fontSize: 16,
             align: "justify",
@@ -856,11 +938,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
         }),
         text("One two three four five six", {
           id: "ul-justify",
-          x: 370,
-          y: 20,
-          width: 130,
-          height: 100,
           style: {
+            position: "absolute",
+            left: 370,
+            top: 20,
+            width: 130,
+            height: 100,
             fontFamily: jostFont,
             fontSize: 16,
             align: "justify",
@@ -874,7 +957,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
 
     const svg = page.svg!;
@@ -944,11 +1027,16 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "bullet-box",
-            x: 20,
-            y: 20,
-            width: 190,
-            height: "auto",
-            style: { fontFamily: jostFont, fontSize: 16, padding: 8 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 190,
+              height: "auto",
+              fontFamily: jostFont,
+              fontSize: 16,
+              padding: 8,
+            },
           },
         ),
         text(
@@ -966,11 +1054,16 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ],
           {
             id: "number-box",
-            x: 240,
-            y: 20,
-            width: 240,
-            height: "auto",
-            style: { fontFamily: jostFont, fontSize: 16, padding: 8 },
+            style: {
+              position: "absolute",
+              left: 240,
+              top: 20,
+              width: 240,
+              height: "auto",
+              fontFamily: jostFont,
+              fontSize: 16,
+              padding: 8,
+            },
           },
         ),
       ),
@@ -979,7 +1072,7 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
 
     const svg = page.svg!;
@@ -1014,11 +1107,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
       slide({ id: "tracking-wrap", background: "#FFFFFF" }).append(
         text("A", {
           id: "single-char",
-          x: 20,
-          y: 20,
-          width: 18,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 18,
+            height: "auto",
             fontFamily: jostFont,
             fontSize: 20,
             letterSpacing: -6,
@@ -1028,11 +1122,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
         }),
         text("AB", {
           id: "negative-wrap",
-          x: 60,
-          y: 20,
-          width: 18,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 60,
+            top: 20,
+            width: 18,
+            height: "auto",
             fontFamily: jostFont,
             fontSize: 20,
             letterSpacing: -6,
@@ -1047,11 +1142,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
           ]),
           {
             id: "multi-run-wrap",
-            x: 100,
-            y: 20,
-            width: 18,
-            height: "auto",
             style: {
+              position: "absolute",
+              left: 100,
+              top: 20,
+              width: 18,
+              height: "auto",
               fontFamily: jostFont,
               fontSize: 20,
               padding: 0,
@@ -1061,11 +1157,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
         ),
         text("AB", {
           id: "center-neg",
-          x: 160,
-          y: 20,
-          width: 80,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 160,
+            top: 20,
+            width: 80,
+            height: "auto",
             fontFamily: jostFont,
             fontSize: 20,
             letterSpacing: -6,
@@ -1076,11 +1173,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
         }),
         text("AB", {
           id: "right-neg",
-          x: 260,
-          y: 20,
-          width: 80,
-          height: "auto",
           style: {
+            position: "absolute",
+            left: 260,
+            top: 20,
+            width: 80,
+            height: "auto",
             fontFamily: jostFont,
             fontSize: 20,
             letterSpacing: -6,
@@ -1096,19 +1194,13 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     const { pptx } = emit(resolution);
     assert.deepEqual((await validatePptx(pptx)).errors, []);
     const page = paint(resolution).pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
 
-    const objects = resolution.report.slides[0]?.objects ?? [];
-    const singleBox = objects.find(
-      (obj) => obj.authorId === "single-char",
-    )!.box!;
-    const negWrapBox = objects.find(
-      (obj) => obj.authorId === "negative-wrap",
-    )!.box!;
-    const multiRunBox = objects.find(
-      (obj) => obj.authorId === "multi-run-wrap",
-    )!.box!;
+    const trackingSlide = resolution.slide("tracking-wrap");
+    const singleBox = trackingSlide.get("single-char").box!;
+    const negWrapBox = trackingSlide.get("negative-wrap").box!;
+    const multiRunBox = trackingSlide.get("multi-run-wrap").box!;
 
     // Single-line "A" height vs wrapped 2-line "AB" height (both single-run and multi-run).
     assert.ok(

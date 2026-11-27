@@ -75,12 +75,13 @@ const contentLayout = defineSlideLayout({
 
 const sharedFooterPlaceholders = {
   dateTime: {
-    x: 36,
-    y: 316,
-    width: 150,
-    height: 24,
     text: "2026-11-22",
     style: {
+      position: "absolute" as const,
+      left: 36,
+      top: 316,
+      width: 150,
+      height: 24,
       fontFamily: jostFont,
       fontSize: 12,
       color: "#475569",
@@ -88,12 +89,13 @@ const sharedFooterPlaceholders = {
     },
   },
   footer: {
-    x: 200,
-    y: 316,
-    width: 240,
-    height: 24,
     text: "Acme Engineering",
     style: {
+      position: "absolute" as const,
+      left: 200,
+      top: 316,
+      width: 240,
+      height: 24,
       fontFamily: jostFont,
       fontSize: 12,
       color: "#475569",
@@ -101,11 +103,12 @@ const sharedFooterPlaceholders = {
     },
   },
   slideNumber: {
-    x: 490,
-    y: 316,
-    width: 110,
-    height: 24,
     style: {
+      position: "absolute" as const,
+      left: 490,
+      top: 316,
+      width: 110,
+      height: 24,
       fontFamily: jostFont,
       fontSize: 12,
       color: "#0F172A",
@@ -149,11 +152,16 @@ export const footerPlaceholderScenario: CapabilityScenario = {
           Text,
           {
             id: "cover-title",
-            x: 48,
-            y: 120,
-            width: 540,
-            height: 60,
-            style: { fontFamily: jostFont, fontSize: 28, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 120,
+              width: 540,
+              height: 60,
+              fontFamily: jostFont,
+              fontSize: 28,
+              color: "#0F172A",
+            },
           },
           "Cover Slide",
         ),
@@ -165,11 +173,16 @@ export const footerPlaceholderScenario: CapabilityScenario = {
           Text,
           {
             id: "p2-title",
-            x: 48,
-            y: 48,
-            width: 540,
-            height: 48,
-            style: { fontFamily: jostFont, fontSize: 24, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 48,
+              width: 540,
+              height: 48,
+              fontFamily: jostFont,
+              fontSize: 24,
+              color: "#0F172A",
+            },
           },
           "Second Slide",
         ),
@@ -185,11 +198,16 @@ export const footerPlaceholderScenario: CapabilityScenario = {
           Text,
           {
             id: "p3-title",
-            x: 48,
-            y: 48,
-            width: 540,
-            height: 48,
-            style: { fontFamily: jostFont, fontSize: 24, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 48,
+              top: 48,
+              width: 540,
+              height: 48,
+              fontFamily: jostFont,
+              fontSize: 24,
+              color: "#0F172A",
+            },
           },
           "Third Slide",
         ),
@@ -206,21 +224,31 @@ export const footerPlaceholderScenario: CapabilityScenario = {
       slide({ id: "cover", layout: titleLayout }).append(
         text("Cover Slide", {
           id: "cover-title",
-          x: 48,
-          y: 120,
-          width: 540,
-          height: 60,
-          style: { fontFamily: jostFont, fontSize: 28, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 120,
+            width: 540,
+            height: 60,
+            fontFamily: jostFont,
+            fontSize: 28,
+            color: "#0F172A",
+          },
         }),
       ),
       slide({ id: "page-two", layout: contentLayout }).append(
         text("Second Slide", {
           id: "p2-title",
-          x: 48,
-          y: 48,
-          width: 540,
-          height: 48,
-          style: { fontFamily: jostFont, fontSize: 24, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 540,
+            height: 48,
+            fontFamily: jostFont,
+            fontSize: 24,
+            color: "#0F172A",
+          },
         }),
       ),
       slide({
@@ -230,11 +258,16 @@ export const footerPlaceholderScenario: CapabilityScenario = {
       }).append(
         text("Third Slide", {
           id: "p3-title",
-          x: 48,
-          y: 48,
-          width: 540,
-          height: 48,
-          style: { fontFamily: jostFont, fontSize: 24, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 540,
+            height: 48,
+            fontFamily: jostFont,
+            fontSize: 24,
+            color: "#0F172A",
+          },
         }),
       ),
     );
@@ -296,7 +329,7 @@ export const footerPlaceholderMechanismVerifications: {
       assert.equal(initial.pages.length, 3);
       assert.equal(roundtrip.pages.length, 3);
       for (const page of [...initial.pages, ...roundtrip.pages]) {
-        assert.deepEqual(page.diagnostics, []);
+        assert.deepEqual(page.errors, []);
         assert.ok(page.png && page.png.byteLength > 0);
       }
       // Title layout suppresses dt/ftr/sldNum; footer band (y >= 310) stays blank white.

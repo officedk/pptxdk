@@ -1,7 +1,7 @@
 import {
   CapabilityError,
   type ColorValue,
-  type GeometryBox,
+  type Rect,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 
@@ -464,12 +464,12 @@ function categoryFitPositionToNormalized(
 
 function renderSafeTrendlineText(options: {
   readonly candidates: readonly string[];
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly style: TextStyle | undefined;
   readonly theme: ThemeContext;
   readonly slideNumber: number;
   readonly labelPath: string;
-  readonly clipBox: GeometryBox;
+  readonly clipBox: Rect;
   readonly clipAllocator: ChartTextClipAllocator;
 }): string {
   for (const text of options.candidates) {
@@ -539,8 +539,8 @@ function safeMeasureCandidate(options: {
 export function renderTrendlinesSvg(options: {
   readonly parsed: ParsedChart;
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
-  readonly chartBox: GeometryBox;
+  readonly plotRect: Rect;
+  readonly chartBox: Rect;
   readonly baseChartTextStyle: TextStyle | undefined;
   readonly theme: ThemeContext;
   readonly slideNumber: number;

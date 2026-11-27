@@ -438,8 +438,22 @@ export function box(props: BoxAuthorProps = {}): BoxNode {
 }
 
 /** Creates a native shape whose geometry, visuals, and rich text remain editable after attachment. */
-export function shape(props: ShapeAuthorProps = {}): ShapeNode {
-  return createShapeNode(props);
+export function shape(props?: ShapeAuthorProps): ShapeNode;
+export function shape(
+  content?: TextContent,
+  props?: ShapeAuthorProps,
+): ShapeNode;
+export function shape(...content: readonly TextContent[]): ShapeNode;
+export function shape(
+  ...args: [...(readonly TextContent[]), ShapeAuthorProps]
+): ShapeNode;
+export function shape(
+  ...args: readonly (TextContent | ShapeAuthorProps | undefined)[]
+): ShapeNode {
+  const { content, props } = splitContent<ShapeAuthorProps>(args);
+  const node = createShapeNode(props ?? {});
+  node.content(...content);
+  return node;
 }
 
 /** Creates an unpopulated native content placeholder bound to a layout placeholder slot. */
@@ -582,7 +596,7 @@ export {
   wipe,
   zoom,
 } from "./motion/motion-api.ts";
-export { observeMotion } from "./motion/motion-query.ts";
+export { motionSchedule } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
 export { font, transitions };
@@ -614,7 +628,6 @@ export type {
   MotionMoment,
   MotionMomentOffset,
   MotionNativeProjection,
-  MotionObservation,
   MotionProps,
   MotionScopeAuthorProps,
   MotionScopeHandle,
@@ -645,7 +658,7 @@ export type {
   MotionMembership,
   MotionMomentObservation,
   MotionMomentRef,
-  MotionQuery,
+  MotionSchedule,
   MotionScopeQueryMember,
   MotionScopeQueryObservation,
   MotionScopeRef,

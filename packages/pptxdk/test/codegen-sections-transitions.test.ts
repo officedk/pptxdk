@@ -94,20 +94,26 @@ function createDirectVanillaSectionsAndTransitionsDeck() {
         shape({
           id: "hero-a",
           morphKey: cardA,
-          x: 60,
-          y: 80,
-          width: 140,
-          height: 100,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 80,
+            width: 140,
+            height: 100,
+            background: "#2563EB",
+          },
         }),
         shape({
           id: "isolated-a",
           morphKey: cardB,
-          x: 60,
-          y: 230,
-          width: 120,
-          height: 80,
-          fill: "#7C3AED",
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 230,
+            width: 120,
+            height: 80,
+            background: "#7C3AED",
+          },
         }),
       ),
       slide({
@@ -118,29 +124,38 @@ function createDirectVanillaSectionsAndTransitionsDeck() {
         shape({
           id: "hero-b",
           morphKey: cardA,
-          x: 420,
-          y: 120,
-          width: 200,
-          height: 120,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 420,
+            top: 120,
+            width: 200,
+            height: 120,
+            background: "#059669",
+          },
         }),
         shape({
           id: "isolated-b",
           morphKey: cardB,
-          x: 420,
-          y: 290,
-          width: 150,
-          height: 90,
-          fill: "#DC2626",
+          style: {
+            position: "absolute",
+            left: 420,
+            top: 290,
+            width: 150,
+            height: 90,
+            background: "#DC2626",
+          },
         }),
         shape({
           id: "entering-only",
           morphKey: entering,
-          x: 100,
-          y: 320,
-          width: 160,
-          height: 70,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 100,
+            top: 320,
+            width: 160,
+            height: 70,
+            background: "#D97706",
+          },
         }),
       ),
     ),
@@ -158,11 +173,14 @@ function createDirectVanillaSectionsAndTransitionsDeck() {
       }).append(
         shape({
           id: "outro-flip",
-          x: 200,
-          y: 160,
-          width: 220,
-          height: 100,
-          fill: "#F59E0B",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 160,
+            width: 220,
+            height: 100,
+            background: "#F59E0B",
+          },
         }),
       ),
       slide({
@@ -173,11 +191,14 @@ function createDirectVanillaSectionsAndTransitionsDeck() {
       }).append(
         shape({
           id: "outro-fade",
-          x: 200,
-          y: 160,
-          width: 220,
-          height: 100,
-          fill: "#0EA5E9",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 160,
+            width: 220,
+            height: 100,
+            background: "#0EA5E9",
+          },
         }),
       ),
     ),
@@ -236,20 +257,26 @@ function createDirectReactSectionsAndTransitionsElement() {
         createElement(Shape, {
           id: "hero-a",
           morphKey: cardA,
-          x: 60,
-          y: 80,
-          width: 140,
-          height: 100,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 80,
+            width: 140,
+            height: 100,
+            background: "#2563EB",
+          },
         }),
         createElement(Shape, {
           id: "isolated-a",
           morphKey: cardB,
-          x: 60,
-          y: 230,
-          width: 120,
-          height: 80,
-          fill: "#7C3AED",
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 230,
+            width: 120,
+            height: 80,
+            background: "#7C3AED",
+          },
         }),
       ),
       createElement(
@@ -262,29 +289,38 @@ function createDirectReactSectionsAndTransitionsElement() {
         createElement(Shape, {
           id: "hero-b",
           morphKey: cardA,
-          x: 420,
-          y: 120,
-          width: 200,
-          height: 120,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 420,
+            top: 120,
+            width: 200,
+            height: 120,
+            background: "#059669",
+          },
         }),
         createElement(Shape, {
           id: "isolated-b",
           morphKey: cardB,
-          x: 420,
-          y: 290,
-          width: 150,
-          height: 90,
-          fill: "#DC2626",
+          style: {
+            position: "absolute",
+            left: 420,
+            top: 290,
+            width: 150,
+            height: 90,
+            background: "#DC2626",
+          },
         }),
         createElement(Shape, {
           id: "entering-only",
           morphKey: entering,
-          x: 100,
-          y: 320,
-          width: 160,
-          height: 70,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 100,
+            top: 320,
+            width: 160,
+            height: 70,
+            background: "#D97706",
+          },
         }),
       ),
     ),
@@ -306,11 +342,14 @@ function createDirectReactSectionsAndTransitionsElement() {
         },
         createElement(Shape, {
           id: "outro-flip",
-          x: 200,
-          y: 160,
-          width: 220,
-          height: 100,
-          fill: "#F59E0B",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 160,
+            width: 220,
+            height: 100,
+            background: "#F59E0B",
+          },
         }),
       ),
       createElement(
@@ -323,11 +362,14 @@ function createDirectReactSectionsAndTransitionsElement() {
         },
         createElement(Shape, {
           id: "outro-fade",
-          x: 200,
-          y: 160,
-          width: 220,
-          height: 100,
-          fill: "#0EA5E9",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 160,
+            width: 220,
+            height: 100,
+            background: "#0EA5E9",
+          },
         }),
       ),
     ),
@@ -605,14 +647,34 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
         slideLayout(sharedLayout),
       ),
       slide({ id: "s-inherited", layout: sharedLayout }).append(
-        shape({ id: "a", x: 40, y: 40, width: 120, height: 60 }),
+        shape({
+          id: "a",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 60,
+          },
+        }),
       ),
       slide({
         id: "s-local",
         layout: sharedLayout,
         transition: transitions.push({ from: "right", duration: 400 }),
         advanceAfter: 1200,
-      }).append(shape({ id: "b", x: 40, y: 40, width: 120, height: 60 })),
+      }).append(
+        shape({
+          id: "b",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 60,
+          },
+        }),
+      ),
     );
 
     for (const target of ["vanilla", "react"] as const) {
@@ -681,20 +743,26 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
         shape({
           id: "healthy-a",
           morphKey: healthyKey,
-          x: 40,
-          y: 40,
-          width: 100,
-          height: 60,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 100,
+            height: 60,
+            background: "#2563EB",
+          },
         }),
         shape({
           id: "mismatch-a",
           morphKey: mismatchKey,
-          x: 200,
-          y: 40,
-          width: 100,
-          height: 60,
-          fill: "#DC2626",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 40,
+            width: 100,
+            height: 60,
+            background: "#DC2626",
+          },
         }),
       ),
       slide({
@@ -704,20 +772,26 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
         shape({
           id: "healthy-b",
           morphKey: healthyKey,
-          x: 320,
-          y: 80,
-          width: 140,
-          height: 80,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 320,
+            top: 80,
+            width: 140,
+            height: 80,
+            background: "#059669",
+          },
         }),
         image({
           id: "mismatch-b",
           morphKey: mismatchKey,
           src: png1x1,
-          x: 500,
-          y: 80,
-          width: 100,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 500,
+            top: 80,
+            width: 100,
+            height: 60,
+          },
         }),
       ),
     );
@@ -728,20 +802,26 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
         shape({
           id: "healthy-a",
           morphKey: healthyKey,
-          x: 40,
-          y: 40,
-          width: 100,
-          height: 60,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 100,
+            height: 60,
+            background: "#2563EB",
+          },
         }),
         group({ id: "bad-group" }).append(
           shape({
             id: "bad-grouped-shape",
             morphKey: groupedKey,
-            x: 200,
-            y: 40,
-            width: 80,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 200,
+              top: 40,
+              width: 80,
+              height: 60,
+            },
           }),
         ),
       ),
@@ -752,11 +832,14 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
         shape({
           id: "healthy-b",
           morphKey: healthyKey,
-          x: 320,
-          y: 80,
-          width: 140,
-          height: 80,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 320,
+            top: 80,
+            width: 140,
+            height: 80,
+            background: "#059669",
+          },
         }),
       ),
     );
@@ -774,7 +857,9 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
           (error: unknown) => {
             assert.ok(error instanceof BuildError);
             const diag = error.diagnostics.find(
-              (item) => item.code === "morph-object-kind-mismatch",
+              (item) =>
+                item.code === "invalid-continuity" &&
+                item.reason === "kind-mismatch",
             );
             assert.ok(diag !== undefined, `${target} mismatch diagnostic`);
             assert.equal(diag.path, "deck/slide[s2-dst]/image[mismatch-b]");
@@ -827,7 +912,9 @@ describe("codegen sections, cross-slide morph, and multi-layer transitions accep
           (error: unknown) => {
             assert.ok(error instanceof BuildError);
             const diag = error.diagnostics.find(
-              (item) => item.code === "morph-inside-group",
+              (item) =>
+                item.code === "invalid-continuity" &&
+                item.reason === "inside-group",
             );
             assert.ok(diag !== undefined, `${target} morph-inside-group`);
             assert.equal(

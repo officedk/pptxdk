@@ -51,9 +51,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert.equal(diag.path, "deck");
           return true;
         },
@@ -72,8 +72,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) =>
-              d.code === "invalid-color" || d.code === "unknown-color-token",
+            (d) => d.code === "invalid-style",
           );
           assert(diag !== undefined, "Expected invalid color diagnostic");
           assert.equal(diag.path, "deck");
@@ -94,9 +93,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert.equal(diag.path, "deck/slide[slide-with-invalid-style]");
           return true;
         },
@@ -118,9 +117,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert(
             diag.path.includes("box[invalid-box]"),
             `Expected path to include box[invalid-box], got: ${diag.path}`,
@@ -145,9 +144,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "invalid-font-size",
+            (d) => d.code === "invalid-style",
           );
-          assert(diag !== undefined, "Expected invalid-font-size diagnostic");
+          assert(diag !== undefined, "Expected invalid-style diagnostic");
           assert(
             diag.path.includes("group[invalid-group]"),
             `Expected path to include group[invalid-group], got: ${diag.path}`,
@@ -175,10 +174,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-parameter",
-          );
-          assert(diag !== undefined, "Expected unknown-parameter diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert(
             diag.message.includes("unsupportedProp"),
             `Expected message to mention unsupportedProp, got: ${diag.message}`,
@@ -201,10 +198,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-style",
-          );
-          assert(diag !== undefined, "Expected unknown-style diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert(
             diag.message.includes("invalidStyleProp"),
             `Expected message to mention invalidStyleProp, got: ${diag.message}`,
@@ -245,13 +240,13 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
               <Box style={{ display: "flex", flexDirection: "column" }}>
                 <Text
                   id="piloted-text"
-                  width={300}
-                  height={60}
                   style={{
+                    width: 300,
+                    height: 60,
                     fontSize: 24,
                     color: "#333333",
                     padding: 10,
-                    backgroundColor: "#f0f0f0",
+                    background: "#f0f0f0",
                   }}
                 >
                   <P>
@@ -284,19 +279,19 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
           <Slide id="positive-text-slide">
             <Text
               id="hero-title"
-              x={50}
-              y={60}
-              width={500}
-              height={120}
               style={{
+                position: "absolute",
+                left: 50,
+                top: 60,
+                width: 500,
+                height: 120,
                 fontFamily: notoFont,
                 fontSize: 32,
                 fontWeight: "bold",
                 color: "#112233",
                 lineHeight: 40,
-                backgroundColor: "#e8f4fd",
-                borderColor: "#3388cc",
-                borderWidth: 2,
+                background: "#e8f4fd",
+                border: { color: "#3388cc", width: 2 },
                 borderRadius: 8,
                 padding: 16,
               }}
@@ -324,7 +319,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
       assert.deepEqual(textObs.box, { x: 50, y: 60, width: 500, height: 120 });
     });
 
-    it("aligns baseline when font measurement is available and reports baseline-measurement-unavailable when font is missing", async () => {
+    it("aligns baseline when font measurement is available and reports font-unavailable when font is missing", async () => {
       // 1. Successful baseline alignment when font resource is available
       const goodResult = await build(
         <Deck width={960} height={540}>
@@ -349,7 +344,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
       const validation = await validatePptx(goodResult.pptx);
       assert.deepEqual(validation.errors, []);
 
-      // 2. Fails with baseline-measurement-unavailable when font resource is unavailable for baseline measurement
+      // 2. Fails with font-unavailable when font resource is unavailable for baseline measurement
       await assert.rejects(
         build(
           <Deck width={960} height={540}>
@@ -361,7 +356,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                   alignItems: "baseline",
                 }}
               >
-                <Text id="unmeasured-text" width={200} height={50}>
+                <Text id="unmeasured-text" style={{ width: 200, height: 50 }}>
                   No font bytes
                 </Text>
               </Box>
@@ -371,12 +366,10 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "baseline-measurement-unavailable",
+            (d) =>
+              d.code === "font-unavailable" && d.reason === "missing-resource",
           );
-          assert(
-            diag !== undefined,
-            "Expected baseline-measurement-unavailable diagnostic",
-          );
+          assert(diag !== undefined, "Expected font-unavailable diagnostic");
           return true;
         },
       );
@@ -390,17 +383,17 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
           <Slide id="shape-children-style-slide">
             <Shape
               id="child-text-shape"
-              x={60}
-              y={70}
-              width={400}
-              height={150}
               style={{
+                position: "absolute",
+                left: 60,
+                top: 70,
+                width: 400,
+                height: 150,
                 fontFamily: notoFont,
                 fontSize: 24,
                 color: "#ff3300",
-                backgroundColor: "#f5f5f5",
-                borderColor: "#333333",
-                borderWidth: 2,
+                background: "#f5f5f5",
+                border: { color: "#333333", width: 2 },
                 padding: 12,
               }}
             >
@@ -412,14 +405,12 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         </Deck>,
       );
 
-      assert.deepEqual(result.report.diagnostics, []);
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
 
-      const obs = result.report.slides[0]?.objects.find(
-        (o) => o.authorId === "child-text-shape",
-      );
-      assert(obs !== undefined, "Expected shape observation");
+      const obs = result
+        .slide("shape-children-style-slide")
+        .get("child-text-shape");
       assert.equal(obs.text, "Child paragraph headline");
 
       const slideXml = strFromU8(
@@ -449,9 +440,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
             >
               <Text
                 id="baseline-reference-text"
-                width={150}
-                height={100}
                 style={{
+                  width: 150,
+                  height: 100,
                   fontFamily: notoFont,
                   fontSize: 20,
                   verticalAlign: "top",
@@ -461,9 +452,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
               </Text>
               <Shape
                 id="baseline-child-shape"
-                width={200}
-                height={100}
                 style={{
+                  width: 200,
+                  height: 100,
                   fontFamily: notoFont,
                   fontSize: 40,
                   verticalAlign: "top",
@@ -479,18 +470,13 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         </Deck>,
       );
 
-      assert.deepEqual(result.report.diagnostics, []);
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
 
-      const objects = result.report.slides[0]?.objects ?? [];
-      const textObs = objects.find(
-        (o) => o.authorId === "baseline-reference-text",
-      );
-      const shapeObs = objects.find(
-        (o) => o.authorId === "baseline-child-shape",
-      );
-      assert(textObs?.box !== undefined && shapeObs?.box !== undefined);
+      const slide = result.slide("shape-child-baseline-slide");
+      const textObs = slide.get("baseline-reference-text");
+      const shapeObs = slide.get("baseline-child-shape");
+      assert(textObs.box !== undefined && shapeObs.box !== undefined);
       // Because shape has larger font (40) and paddingTop (10), text should shift down to align baselines
       assert(textObs.box.y > shapeObs.box.y);
     });
@@ -510,9 +496,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
               >
                 <Text
                   id="reference-text"
-                  width={150}
-                  height={100}
                   style={{
+                    width: 150,
+                    height: 100,
                     fontFamily: notoFont,
                     fontSize: 20,
                     verticalAlign: "top",
@@ -522,9 +508,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                 </Text>
                 <Shape
                   id="middle-anchor-child-shape"
-                  width={200}
-                  height={100}
                   style={{
+                    width: 200,
+                    height: 100,
                     fontFamily: notoFont,
                     fontSize: 40,
                   }}
@@ -540,12 +526,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "baseline-measurement-unavailable",
+            (d) => d.code === "invalid-structure",
           );
-          assert(
-            diag !== undefined,
-            "Expected baseline-measurement-unavailable diagnostic",
-          );
+          assert(diag !== undefined, "Expected invalid-structure diagnostic");
           assert.match(diag.path ?? "", /shape\[middle-anchor-child-shape\]/u);
           return true;
         },
@@ -567,9 +550,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
               >
                 <Text
                   id="reference-text"
-                  width={150}
-                  height={100}
                   style={{
+                    width: 150,
+                    height: 100,
                     fontFamily: notoFont,
                     fontSize: 20,
                     verticalAlign: "top",
@@ -586,7 +569,10 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                     alignSelf: "baseline",
                   }}
                 >
-                  <Shape id="textless-shape" width={100} height={100} />
+                  <Shape
+                    id="textless-shape"
+                    style={{ width: 100, height: 100 }}
+                  />
                 </Box>
               </Box>
             </Slide>
@@ -595,11 +581,11 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "unsupported-baseline-context",
+            (d) => d.code === "invalid-structure",
           );
           assert(
             diag !== undefined,
-            "Expected unsupported-baseline-context diagnostic for textless shape",
+            "Expected invalid-structure diagnostic for textless shape",
           );
           return true;
         },
@@ -620,9 +606,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
               >
                 <Text
                   id="reference-text"
-                  width={150}
-                  height={100}
                   style={{
+                    width: 150,
+                    height: 100,
                     fontFamily: notoFont,
                     fontSize: 20,
                     verticalAlign: "top",
@@ -632,9 +618,9 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                 </Text>
                 <Text
                   id="middle-text"
-                  width={150}
-                  height={100}
                   style={{
+                    width: 150,
+                    height: 100,
                     fontFamily: notoFont,
                     fontSize: 20,
                     verticalAlign: "middle",
@@ -649,11 +635,11 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "baseline-measurement-unavailable",
+            (d) => d.code === "invalid-structure",
           );
           assert(
             diag !== undefined,
-            "Expected baseline-measurement-unavailable diagnostic for middle-aligned text in baseline",
+            "Expected invalid-structure diagnostic for middle-aligned text in baseline",
           );
           return true;
         },
@@ -672,7 +658,10 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                   width: 500,
                 }}
               >
-                <Shape id="direct-textless-shape" width={100} height={100} />
+                <Shape
+                  id="direct-textless-shape"
+                  style={{ width: 100, height: 100 }}
+                />
               </Box>
             </Slide>
           </Deck>,
@@ -680,11 +669,11 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "unsupported-baseline-context",
+            (d) => d.code === "invalid-structure",
           );
           assert(
             diag !== undefined,
-            "Expected unsupported-baseline-context diagnostic for direct textless shape in baseline",
+            "Expected invalid-structure diagnostic for direct textless shape in baseline",
           );
           return true;
         },
@@ -698,8 +687,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
             <Slide id="unknown-param-slide">
               <Shape
                 id="invalid-shape"
-                width={100}
-                height={100}
+                style={{ width: 100, height: 100 }}
                 {...({ unsupportedParameter: 42 } as any)}
               />
             </Slide>
@@ -707,10 +695,8 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-parameter",
-          );
-          assert(diag !== undefined, "Expected unknown-parameter diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert.match(
             diag.message,
             /Shape contains unsupported parameter unsupportedParameter/u,
@@ -727,19 +713,21 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
             <Slide id="unknown-style-slide">
               <Shape
                 id="invalid-style-shape"
-                width={100}
-                height={100}
-                style={{ unsupportedStyleProp: "red" } as any}
+                style={
+                  {
+                    width: 100,
+                    height: 100,
+                    unsupportedStyleProp: "red",
+                  } as any
+                }
               />
             </Slide>
           </Deck>,
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-style",
-          );
-          assert(diag !== undefined, "Expected unknown-style diagnostic");
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop diagnostic");
           assert.match(
             diag.message,
             /style contains unsupported property unsupportedStyleProp/u,
@@ -749,61 +737,68 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
       );
     });
 
-    it("rejects TextStyle and padding in style when Shape bears no text", async () => {
-      // 1. fontSize on Shape without text
-      await assert.rejects(
-        build(
-          <Deck width={960} height={540}>
-            <Slide id="textless-shape-font-slide">
-              <Shape
-                id="textless-font-shape"
-                width={100}
-                height={100}
-                style={{ fontSize: 24 }}
-              />
-            </Slide>
-          </Deck>,
-        ),
-        (error: unknown) => {
-          assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-style",
-          );
-          assert(
-            diag !== undefined,
-            "Expected unknown-style diagnostic for fontSize on textless shape",
-          );
-          return true;
-        },
+    it("accepts and retains TextStyle and padding in style when Shape has empty or omitted text", async () => {
+      const built = await build(
+        <Deck width={960} height={540}>
+          <Slide id="textless-shape-styled-slide">
+            <Shape
+              id="textless-font-shape"
+              style={{
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 100,
+                height: 100,
+                fontSize: 32,
+                color: "#FF0000",
+              }}
+            />
+            <Shape
+              id="empty-string-padding-shape"
+              style={{
+                position: "absolute",
+                left: 140,
+                top: 20,
+                width: 100,
+                height: 100,
+                fontSize: 20,
+                padding: 16,
+              }}
+            >
+              {""}
+            </Shape>
+            <Shape
+              id="pure-geometric-shape"
+              style={{
+                position: "absolute",
+                left: 260,
+                top: 20,
+                width: 100,
+                height: 100,
+                background: "#3B82F6",
+              }}
+            />
+          </Slide>
+        </Deck>,
       );
 
-      // 2. padding on Shape without text
-      await assert.rejects(
-        build(
-          <Deck width={960} height={540}>
-            <Slide id="textless-shape-padding-slide">
-              <Shape
-                id="textless-padding-shape"
-                width={100}
-                height={100}
-                style={{ padding: 16 }}
-              />
-            </Slide>
-          </Deck>,
-        ),
-        (error: unknown) => {
-          assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) =>
-              d.code === "invalid-layout-context" || d.code === "unknown-style",
-          );
-          assert(
-            diag !== undefined,
-            "Expected invalid padding diagnostic on textless shape",
-          );
-          return true;
-        },
+      const validated = await validatePptx(built.pptx);
+      assert.deepEqual(validated.errors, []);
+
+      const files = unzipSync(built.pptx);
+      const slide1Xml = strFromU8(files["ppt/slides/slide1.xml"]!);
+      assert.match(
+        slide1Xml,
+        /<a:defRPr[^>]*sz="2400"[^>]*><a:solidFill><a:srgbClr val="FF0000"\/>/u,
       );
+      assert.match(
+        slide1Xml,
+        /lIns="152400" tIns="152400" rIns="152400" bIns="152400"/u,
+      );
+      const pureShape = validated.slides[0]?.objects.find(
+        (obj) => obj.boxEmu.x === 260 * 9525,
+      );
+      assert.equal(pureShape?.text, undefined);
     });
 
     it("calls shapeCapability.bind once during layout and reuses the bound handle for measureLayout and resolve", async () => {
@@ -815,11 +810,12 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
             <Slide id="parse-reuse-slide">
               <Shape
                 id="reused-shape"
-                x={100}
-                y={100}
-                width={200}
-                height={100}
                 style={{
+                  position: "absolute",
+                  left: 100,
+                  top: 100,
+                  width: 200,
+                  height: 100,
                   fontFamily: notoFont,
                   fontSize: 20,
                   verticalAlign: "top",
@@ -834,7 +830,10 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
           </Deck>,
         );
 
-        assert.deepEqual(result.report.diagnostics, []);
+        assert.equal(
+          result.slide("parse-reuse-slide").get("reused-shape").text,
+          "Parsed once, reused twice",
+        );
         assert.equal(
           bindSpy.mock.calls.length,
           1,
@@ -861,14 +860,13 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                 link={{ url: "https://example.com/target" }}
                 style={{ width: 200, height: 150 }}
               >
-                <Shape id="inner-shape" width={100} height={80} />
+                <Shape id="inner-shape" style={{ width: 100, height: 80 }} />
               </Group>
             </Box>
           </Slide>
         </Deck>,
       );
 
-      assert.deepEqual(result.report.diagnostics, []);
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
 
@@ -893,7 +891,7 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                 morphKey={groupKey}
                 style={{ width: 150, height: 100 }}
               >
-                <Shape width={50} height={50} />
+                <Shape style={{ width: 50, height: 50 }} />
               </Group>
             </Box>
           </Slide>
@@ -907,14 +905,13 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                 morphKey={groupKey}
                 style={{ width: 250, height: 200 }}
               >
-                <Shape width={80} height={80} />
+                <Shape style={{ width: 80, height: 80 }} />
               </Group>
             </Box>
           </Slide>
         </Deck>,
       );
 
-      assert.deepEqual(result.report.diagnostics, []);
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
     });
@@ -928,7 +925,15 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
           <Deck width={960} height={540}>
             <Slide id="slide-group">
               <Group morphKey={mismatchedKey}>
-                <Shape x={0} y={0} width={50} height={50} />
+                <Shape
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 50,
+                    height: 50,
+                  }}
+                />
               </Group>
             </Slide>
             <Slide
@@ -936,11 +941,14 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
               transition={transitions.morph({ fallback: transitions.fade() })}
             >
               <Shape
-                x={0}
-                y={0}
                 morphKey={mismatchedKey}
-                width={80}
-                height={80}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 80,
+                  height: 80,
+                }}
               />
             </Slide>
           </Deck>,
@@ -948,11 +956,12 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         (error: unknown) => {
           assert(error instanceof BuildError);
           const diag = error.diagnostics.find(
-            (d) => d.code === "morph-object-kind-mismatch",
+            (d) =>
+              d.code === "invalid-continuity" && d.reason === "kind-mismatch",
           );
           assert(
             diag !== undefined,
-            "Expected morph-object-kind-mismatch error",
+            "Expected invalid-continuity kind-mismatch error",
           );
           assert.match(diag.message, /grpSp/u);
           assert.match(diag.message, /sp/u);
@@ -969,11 +978,14 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         <Deck width={960} height={540}>
           <Slide id="slide-shape-start">
             <Shape
-              x={10}
-              y={10}
               morphKey={sharedSpKey}
-              width={100}
-              height={50}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 50,
+              }}
             />
           </Slide>
           <Slide
@@ -981,12 +993,15 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
             transition={transitions.morph({ fallback: transitions.fade() })}
           >
             <Text
-              x={10}
-              y={10}
               morphKey={sharedSpKey}
-              width={400}
-              height={100}
-              style={{ fontFamily: notoFont }}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 400,
+                height: 100,
+                fontFamily: notoFont,
+              }}
             >
               Morphing between Shape and Text
             </Text>
@@ -994,7 +1009,6 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
         </Deck>,
       );
 
-      assert.deepEqual(result.report.diagnostics, []);
       const validation = await validatePptx(result.pptx);
       assert.deepEqual(validation.errors, []);
     });
@@ -1006,20 +1020,15 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
             <Slide id="slide-invalid-group">
               {/* @ts-expect-error -- testing unknown parameter */}
               <Group id="bad-group" unknownProp={123}>
-                <Shape width={50} height={50} />
+                <Shape style={{ width: 50, height: 50 }} />
               </Group>
             </Slide>
           </Deck>,
         ),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          const diag = error.diagnostics.find(
-            (d) => d.code === "unknown-parameter",
-          );
-          assert(
-            diag !== undefined,
-            "Expected unknown-parameter for unknownProp",
-          );
+          const diag = error.diagnostics.find((d) => d.code === "unknown-prop");
+          assert(diag !== undefined, "Expected unknown-prop for unknownProp");
           return true;
         },
       );
@@ -1037,16 +1046,24 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
                 style={{
                   width: 200,
                   height: 100,
-                  backgroundColor: "#2B579A",
+                  background: "#2B579A",
                 }}
               >
-                <Shape width={50} height={50} />
+                <Shape style={{ width: 50, height: 50 }} />
               </Box>
             </Slide>
           </Deck>,
         );
 
-        assert.deepEqual(result.report.diagnostics, []);
+        assert.deepEqual(
+          result.slide("parse-box-slide").get("visible-box").box,
+          {
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 100,
+          },
+        );
         assert.equal(
           bindSpy.mock.calls.length,
           1,
@@ -1066,14 +1083,17 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
             <Slide id="parse-group-slide">
               <Box style={{ display: "flex", width: 400, height: 200 }}>
                 <Group id="parsed-group" style={{ width: 100, height: 80 }}>
-                  <Shape width={40} height={40} />
+                  <Shape style={{ width: 40, height: 40 }} />
                 </Group>
               </Box>
             </Slide>
           </Deck>,
         );
 
-        assert.deepEqual(result.report.diagnostics, []);
+        assert.deepEqual(
+          result.slide("parse-group-slide").get("parsed-group").box,
+          { x: 0, y: 0, width: 100, height: 80 },
+        );
         assert.equal(
           bindSpy.mock.calls.length,
           1,

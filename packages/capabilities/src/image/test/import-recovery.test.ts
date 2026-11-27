@@ -59,13 +59,16 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
           id: "hero",
           name: "HeroPhoto",
           src: samplePng,
-          x: 30,
-          y: 40,
-          width: 160,
-          height: 80,
           crop: { left: 0.25 },
           link: { id: "page-2" },
-          style: { opacity: 0.8 },
+          style: {
+            position: "absolute",
+            left: 30,
+            top: 40,
+            width: 160,
+            height: 80,
+            opacity: 0.8,
+          },
         }),
       ),
       slide({ id: "page-2" }).append(
@@ -73,10 +76,13 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
           id: "logo",
           name: "Logo",
           src: samplePng,
-          x: 40,
-          y: 40,
-          width: 80,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 80,
+            height: 40,
+          },
           link: { url: "https://example.com/about" },
         }),
       ),
@@ -102,14 +108,14 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
     );
 
     // Edit crop & position on the imported image node, then re-emit and paint offline.
-    importedHero.set({ x: 80, crop: { right: 0.5 } });
+    importedHero.style({ left: 80 }).set({ crop: { right: 0.5 } });
     const reResolved = resolveDocument(imported.document);
     const reEmitted = emit(reResolved);
     const rePainted = paint(reResolved);
     const validation = await validatePptx(reEmitted.pptx);
 
     assert.deepEqual(validation.errors, []);
-    assert.deepEqual(rePainted.pages[0]?.diagnostics, []);
+    assert.deepEqual(rePainted.pages[0]?.errors, []);
     assert.ok(rePainted.pages[0]?.png instanceof Uint8Array);
     const reHero = validation.slides[0]?.objects[0];
     assert.equal(reHero?.boxEmu.x, 80 * 9525);
@@ -132,20 +138,26 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
             id: "ext-img",
             name: "ExternalBanner",
             src: { externalUrl: "https://cdn.example.com/banner.png" },
-            x: 40,
-            y: 50,
-            width: 240,
-            height: 120,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 50,
+              width: 240,
+              height: 120,
+            },
             link: { url: "https://example.com/landing" },
           }),
           image({
             id: "local-img",
             name: "LocalSibling",
             src: samplePng,
-            x: 320,
-            y: 50,
-            width: 120,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 320,
+              top: 50,
+              width: 120,
+              height: 60,
+            },
           }),
         ),
       );
@@ -188,10 +200,20 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
         url: "https://example.com/landing",
       });
 
-      // Offline paint emits a warning for the external image placeholder while still rendering sibling content to PNG.
-      assert.ok(
-        rePainted.pages[0]?.diagnostics.some((d) => d.severity === "warning"),
+      // Offline paint records a structured placeholder for the external image while still rendering sibling content to PNG.
+      assert.deepEqual(rePainted.pages[0]?.errors, []);
+      assert.equal(rePainted.pages[0]?.placeholders.length, 1);
+      assert.equal(
+        rePainted.pages[0]?.placeholders[0]?.url,
+        "https://cdn.example.com/banner.png",
       );
+      assert.deepEqual(reResolved.slides[0]?.children()[0]?.image, {
+        kind: "external",
+        ...(importedExt.id === undefined ? {} : { id: importedExt.id }),
+        path: rePainted.pages[0]!.placeholders[0]!.path,
+        url: "https://cdn.example.com/banner.png",
+        placeholder: rePainted.pages[0]!.placeholders[0]!,
+      });
       assert.ok(rePainted.pages[0]?.png instanceof Uint8Array);
 
       const zip = unzipSync(reEmitted.pptx);
@@ -206,11 +228,15 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
     const validSibling = text("Healthy Sibling", {
       id: "healthy-text",
       name: "HealthySibling",
-      x: 40,
-      y: 220,
-      width: 240,
-      height: 40,
-      style: { fontSize: "16pt", color: "#0F172A" },
+      style: {
+        position: "absolute",
+        left: 40,
+        top: 220,
+        width: 240,
+        height: 40,
+        fontSize: "16pt",
+        color: "#0F172A",
+      },
     });
     const base = emit(
       resolveDocument(
@@ -220,10 +246,13 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
               id: "missing-media",
               name: "MissingPic",
               src: samplePng,
-              x: 40,
-              y: 30,
-              width: 100,
-              height: 50,
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 30,
+                width: 100,
+                height: 50,
+              },
               link: { url: "https://example.com/broken-pic-link" },
             }),
             validSibling,
@@ -260,7 +289,11 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
     const siblingNode = recoveredSlide.children[0] as CommonNode;
     assert.equal(siblingNode.kind, "text");
     assert.equal(siblingNode.props["name"], "HealthySibling");
-    siblingNode.set({ x: 60 });
+    (
+      siblingNode as unknown as {
+        style(patch: Readonly<Record<string, unknown>>): unknown;
+      }
+    ).style({ left: 60 });
     const reEmitted = emit(resolveDocument(missingMediaResult.document));
     const reValidated = await validatePptx(reEmitted.pptx);
     assert.deepEqual(reValidated.errors, []);
@@ -295,10 +328,13 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
                 id: "healthy-img",
                 name: "HealthyImage",
                 src: samplePng,
-                x: 40,
-                y: 40,
-                width: 120,
-                height: 60,
+                style: {
+                  position: "absolute",
+                  left: 40,
+                  top: 40,
+                  width: 120,
+                  height: 60,
+                },
                 link: { url: "https://example.com/ok" },
               }),
             ),
@@ -394,10 +430,16 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
     const fallbackPic = slideNode.children[0] as CommonNode;
     assert.equal(fallbackPic.kind, "image");
     assert.equal(fallbackPic.props["name"], "DiagramFallbackPic");
-    assert.equal(fallbackPic.props["x"], 50);
-    assert.equal(fallbackPic.props["y"], 50);
-    assert.equal(fallbackPic.props["width"], 200);
-    assert.equal(fallbackPic.props["height"], 100);
+    assert.deepEqual(
+      { ...(fallbackPic.props["style"] as Record<string, unknown>) },
+      {
+        position: "absolute",
+        left: 50,
+        top: 50,
+        width: 200,
+        height: 100,
+      },
+    );
     assert.deepEqual(
       { ...(fallbackPic.props["link"] as Record<string, unknown>) },
       { url: "https://example.com/fallback" },
@@ -421,7 +463,7 @@ describe("Image roundtrip, external links, and partial loss recovery", () => {
     const painted = paint(resolved);
     const validation = await validatePptx(reEmitted.pptx);
     assert.deepEqual(validation.errors, []);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png instanceof Uint8Array);
   });
 });

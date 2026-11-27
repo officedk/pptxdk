@@ -1,25 +1,26 @@
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   createResolver,
-  type BuildQuery,
   type Resolution,
   type ResolutionReport,
 } from "@pptxdk/core/build";
-import type { PreviewTransform, PreviewWarning } from "@pptxdk/core/capability";
+import type { PreviewTransform } from "@pptxdk/core/capability";
 import type { CommonNode } from "@pptxdk/core/document";
 import {
   PreviewPageRangeError,
   paint,
   paintOptionsSchema,
-  previewDiagnosticSchema,
+  previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
-  previewSeveritySchema,
+  previewPlaceholderSchema,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
+  type PreviewError,
   type PreviewOptions,
+  type PreviewPlaceholder,
   type PreviewResult,
 } from "@pptxdk/preview";
 import type { ReactNode } from "react";
@@ -52,8 +53,9 @@ export async function preview(
   const { pages } = paint(resolution, validatedOptions);
   return Object.freeze({
     report: resolution.report,
-    query: resolution.query,
     pages,
+    slides: resolution.slides,
+    slide: (id: string) => resolution.slide(id),
   });
 }
 
@@ -61,30 +63,28 @@ export {
   PreviewPageRangeError,
   paint,
   paintOptionsSchema,
-  previewDiagnosticSchema,
+  previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
-  previewSeveritySchema,
+  previewPlaceholderSchema,
   screenGeometrySchema,
   screenPointSchema,
 };
 export type {
-  BuildQuery,
+  PreviewError,
+  PreviewPlaceholder,
   PreviewTransform,
-  PreviewWarning,
   Resolution,
   ResolutionReport,
 };
 export type {
   PaintOptions,
   PaintResult,
-  PreviewDiagnostic,
-  PreviewNodeObservation,
+  PreviewNode,
   PreviewOptions,
   PreviewPageResult,
   PreviewResult,
-  PreviewSeverity,
   ScreenGeometry,
   ScreenPoint,
 } from "@pptxdk/preview";

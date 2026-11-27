@@ -90,7 +90,16 @@ const animatedLayout = defineSlideLayout({
   type: "title",
   showMasterPlaceholderAnimations: false,
   placeholders: {
-    title: { type: "title", x: 32, y: 16, width: 320, height: 36 },
+    title: {
+      type: "title",
+      style: {
+        position: "absolute",
+        left: 32,
+        top: 16,
+        width: 320,
+        height: 36,
+      },
+    },
   },
   motion: {
     steps: [
@@ -123,7 +132,16 @@ function createMotionAcceptanceVanillaDeck() {
       id: "motion-master",
       name: "Motion Master",
       placeholders: {
-        ftr: { type: "ftr", x: 32, y: 316, width: 200, height: 24 },
+        ftr: {
+          type: "ftr",
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 316,
+            width: 200,
+            height: 24,
+          },
+        },
       },
       motion: {
         steps: [
@@ -152,11 +170,14 @@ function createMotionAcceptanceVanillaDeck() {
         }).append(
           shape({
             id: "hero-badge",
-            x: 32,
-            y: 64,
-            width: 110,
-            height: 60,
-            fill: "#2563EB",
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 64,
+              width: 110,
+              height: 60,
+              background: "#2563EB",
+            },
             enter: fade({ duration: 240 }),
             emphasis: fillColor({
               from: "#2563EB",
@@ -166,16 +187,17 @@ function createMotionAcceptanceVanillaDeck() {
           }),
           text("Sequence Title", {
             id: "hero-title",
-            x: 160,
-            y: 64,
-            width: 190,
-            height: 60,
             enter: fly({ from: "left", duration: 220 }),
             style: {
+              position: "absolute",
+              left: 160,
+              top: 64,
+              width: 190,
+              height: 60,
               fontFamily: jostFont,
               fontSize: 15,
               color: "#0F172A",
-              backgroundColor: "#EFF6FF",
+              background: "#EFF6FF",
               padding: 8,
             },
           }),
@@ -185,11 +207,14 @@ function createMotionAcceptanceVanillaDeck() {
         }).append(
           shape({
             id: "follower-card",
-            x: 368,
-            y: 64,
-            width: 140,
-            height: 60,
-            fill: "#10B981",
+            style: {
+              position: "absolute",
+              left: 368,
+              top: 64,
+              width: 140,
+              height: 60,
+              background: "#10B981",
+            },
             enter: wipe({ from: "top", duration: 200 }),
           }),
         ),
@@ -197,16 +222,17 @@ function createMotionAcceptanceVanillaDeck() {
       step({ n: 2 }).append(
         text([paragraph("Paragraph one"), paragraph("Paragraph two")], {
           id: "para-bullets",
-          x: 32,
-          y: 144,
-          width: 240,
-          height: 80,
           enter: floatUp({ by: "paragraph", duration: 180 }),
           style: {
+            position: "absolute",
+            left: 32,
+            top: 144,
+            width: 240,
+            height: 80,
             fontFamily: jostFont,
             fontSize: 14,
             color: "#0F172A",
-            backgroundColor: "#FFFFFF",
+            background: "#FFFFFF",
             padding: 8,
           },
         }),
@@ -216,11 +242,14 @@ function createMotionAcceptanceVanillaDeck() {
         }).append(
           shape({
             id: "group-chip",
-            x: 296,
-            y: 144,
-            width: 90,
-            height: 60,
-            fill: "#F59E0B",
+            style: {
+              position: "absolute",
+              left: 296,
+              top: 144,
+              width: 90,
+              height: 60,
+              background: "#F59E0B",
+            },
             enter: zoom({ duration: 190 }),
           }),
         ),
@@ -228,19 +257,18 @@ function createMotionAcceptanceVanillaDeck() {
       step().append(
         shape({
           id: "auto-step-shape",
-          x: 410,
-          y: 144,
-          width: 120,
-          height: 60,
-          fill: "#8B5CF6",
+          style: {
+            position: "absolute",
+            left: 410,
+            top: 144,
+            width: 120,
+            height: 60,
+            background: "#8B5CF6",
+          },
           enter: [floatDown({ duration: 160 }), stretch({ duration: 180 })],
         }),
         chart({
           id: "animated-chart",
-          x: 32,
-          y: 234,
-          width: 240,
-          height: 100,
           groups: [
             {
               kind: "column",
@@ -252,7 +280,14 @@ function createMotionAcceptanceVanillaDeck() {
             },
           ],
           enter: fade({ by: "series", duration: 180 }),
-          style: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 234,
+            width: 240,
+            height: 100,
+            fontFamily: jostFont,
+          },
         }),
       ),
     ),
@@ -268,20 +303,26 @@ function createMotionAcceptanceVanillaDeck() {
       }).append(
         shape({
           id: "stagger-a",
-          x: 32,
-          y: 40,
-          width: 120,
-          height: 64,
-          fill: "#0EA5E9",
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 40,
+            width: 120,
+            height: 64,
+            background: "#0EA5E9",
+          },
           enter: spinIn({ duration: 210 }),
         }),
         shape({
           id: "stagger-b",
-          x: 172,
-          y: 40,
-          width: 120,
-          height: 64,
-          fill: "#14B8A6",
+          style: {
+            position: "absolute",
+            left: 172,
+            top: 40,
+            width: 120,
+            height: 64,
+            background: "#14B8A6",
+          },
           enter: fade({ duration: 200 }),
         }),
       ),
@@ -291,17 +332,22 @@ function createMotionAcceptanceVanillaDeck() {
         motionScope(wordSourceScope, { publishEnd: wordDoneCue }).append(
           text("Word by word", {
             id: "words-text",
-            x: 312,
-            y: 40,
-            width: 160,
-            height: 64,
             enter: wipe({
               from: "right",
               by: "word",
               intervalMs: 60,
               duration: 200,
             }),
-            style: { fontFamily: jostFont, fontSize: 15, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 312,
+              top: 40,
+              width: 160,
+              height: 64,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#0F172A",
+            },
           }),
         ),
       ),
@@ -310,22 +356,30 @@ function createMotionAcceptanceVanillaDeck() {
       }).append(
         shape({
           id: "after-word-card",
-          x: 492,
-          y: 40,
-          width: 100,
-          height: 64,
-          fill: "#9333EA",
+          style: {
+            position: "absolute",
+            left: 492,
+            top: 40,
+            width: 100,
+            height: 64,
+            background: "#9333EA",
+          },
           enter: fade({ duration: 150 }),
         }),
       ),
       text("ABC", {
         id: "letter-text",
-        x: 536,
-        y: 140,
-        width: 72,
-        height: 48,
         enter: fade({ by: "letter", intervalMs: 40, duration: 120 }),
-        style: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+        style: {
+          position: "absolute",
+          left: 536,
+          top: 140,
+          width: 72,
+          height: 48,
+          fontFamily: jostFont,
+          fontSize: 14,
+          color: "#0F172A",
+        },
       }),
       box({
         id: "box-defaults",
@@ -342,26 +396,25 @@ function createMotionAcceptanceVanillaDeck() {
       }).append(
         shape({
           id: "box-inherited",
-          width: 120,
-          height: 64,
-          fill: "#DC2626",
+          style: { width: 120, height: 64, background: "#DC2626" },
         }),
         shape({
           id: "box-muted",
-          width: 120,
-          height: 64,
-          fill: "#64748B",
+          style: { width: 120, height: 64, background: "#64748B" },
           motion: false,
           enter: fade(),
         }),
       ),
       shape({
         id: "breathe-lamp",
-        x: 360,
-        y: 140,
-        width: 160,
-        height: 64,
-        fill: "#164E3D",
+        style: {
+          position: "absolute",
+          left: 360,
+          top: 140,
+          width: 160,
+          height: 64,
+          background: "#164E3D",
+        },
         emphasis: repeat(
           breathe({ period: 1600, from: "#164E3D", to: "#4ADE80" }),
           "forever",
@@ -392,7 +445,16 @@ async function createMotionAcceptanceReactDeck() {
           id: "motion-master",
           name: "Motion Master",
           placeholders: {
-            ftr: { type: "ftr", x: 32, y: 316, width: 200, height: 24 },
+            ftr: {
+              type: "ftr",
+              style: {
+                position: "absolute",
+                left: 32,
+                top: 316,
+                width: 200,
+                height: 24,
+              },
+            },
           },
           motion: {
             steps: [
@@ -426,11 +488,14 @@ async function createMotionAcceptanceReactDeck() {
             { scope: leadScope, mode: "sequence", publishEnd: readyCue },
             createElement(Shape, {
               id: "hero-badge",
-              x: 32,
-              y: 64,
-              width: 110,
-              height: 60,
-              fill: "#2563EB",
+              style: {
+                position: "absolute",
+                left: 32,
+                top: 64,
+                width: 110,
+                height: 60,
+                background: "#2563EB",
+              },
               enter: fade({ duration: 240 }),
               emphasis: fillColor({
                 from: "#2563EB",
@@ -442,16 +507,17 @@ async function createMotionAcceptanceReactDeck() {
               Text,
               {
                 id: "hero-title",
-                x: 160,
-                y: 64,
-                width: 190,
-                height: 60,
                 enter: fly({ from: "left", duration: 220 }),
                 style: {
+                  position: "absolute",
+                  left: 160,
+                  top: 64,
+                  width: 190,
+                  height: 60,
                   fontFamily: jostFont,
                   fontSize: 15,
                   color: "#0F172A",
-                  backgroundColor: "#EFF6FF",
+                  background: "#EFF6FF",
                   padding: 8,
                 },
               },
@@ -463,11 +529,14 @@ async function createMotionAcceptanceReactDeck() {
             { scope: followerScope, startAt: after(readyCue, 80) },
             createElement(Shape, {
               id: "follower-card",
-              x: 368,
-              y: 64,
-              width: 140,
-              height: 60,
-              fill: "#10B981",
+              style: {
+                position: "absolute",
+                left: 368,
+                top: 64,
+                width: 140,
+                height: 60,
+                background: "#10B981",
+              },
               enter: wipe({ from: "top", duration: 200 }),
             }),
           ),
@@ -479,16 +548,17 @@ async function createMotionAcceptanceReactDeck() {
             Text,
             {
               id: "para-bullets",
-              x: 32,
-              y: 144,
-              width: 240,
-              height: 80,
               enter: floatUp({ by: "paragraph", duration: 180 }),
               style: {
+                position: "absolute",
+                left: 32,
+                top: 144,
+                width: 240,
+                height: 80,
                 fontFamily: jostFont,
                 fontSize: 14,
                 color: "#0F172A",
-                backgroundColor: "#FFFFFF",
+                background: "#FFFFFF",
                 padding: 8,
               },
             },
@@ -503,11 +573,14 @@ async function createMotionAcceptanceReactDeck() {
             },
             createElement(Shape, {
               id: "group-chip",
-              x: 296,
-              y: 144,
-              width: 90,
-              height: 60,
-              fill: "#F59E0B",
+              style: {
+                position: "absolute",
+                left: 296,
+                top: 144,
+                width: 90,
+                height: 60,
+                background: "#F59E0B",
+              },
               enter: zoom({ duration: 190 }),
             }),
           ),
@@ -517,19 +590,18 @@ async function createMotionAcceptanceReactDeck() {
           null,
           createElement(Shape, {
             id: "auto-step-shape",
-            x: 410,
-            y: 144,
-            width: 120,
-            height: 60,
-            fill: "#8B5CF6",
+            style: {
+              position: "absolute",
+              left: 410,
+              top: 144,
+              width: 120,
+              height: 60,
+              background: "#8B5CF6",
+            },
             enter: [floatDown({ duration: 160 }), stretch({ duration: 180 })],
           }),
           createElement(Chart, {
             id: "animated-chart",
-            x: 32,
-            y: 234,
-            width: 240,
-            height: 100,
             groups: [
               {
                 kind: "column",
@@ -541,7 +613,14 @@ async function createMotionAcceptanceReactDeck() {
               },
             ],
             enter: fade({ by: "series", duration: 180 }),
-            style: { fontFamily: jostFont },
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 234,
+              width: 240,
+              height: 100,
+              fontFamily: jostFont,
+            },
           }),
         ),
       ),
@@ -559,20 +638,26 @@ async function createMotionAcceptanceReactDeck() {
           },
           createElement(Shape, {
             id: "stagger-a",
-            x: 32,
-            y: 40,
-            width: 120,
-            height: 64,
-            fill: "#0EA5E9",
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 40,
+              width: 120,
+              height: 64,
+              background: "#0EA5E9",
+            },
             enter: spinIn({ duration: 210 }),
           }),
           createElement(Shape, {
             id: "stagger-b",
-            x: 172,
-            y: 40,
-            width: 120,
-            height: 64,
-            fill: "#14B8A6",
+            style: {
+              position: "absolute",
+              left: 172,
+              top: 40,
+              width: 120,
+              height: 64,
+              background: "#14B8A6",
+            },
             enter: fade({ duration: 200 }),
           }),
         ),
@@ -586,17 +671,22 @@ async function createMotionAcceptanceReactDeck() {
               Text,
               {
                 id: "words-text",
-                x: 312,
-                y: 40,
-                width: 160,
-                height: 64,
                 enter: wipe({
                   from: "right",
                   by: "word",
                   intervalMs: 60,
                   duration: 200,
                 }),
-                style: { fontFamily: jostFont, fontSize: 15, color: "#0F172A" },
+                style: {
+                  position: "absolute",
+                  left: 312,
+                  top: 40,
+                  width: 160,
+                  height: 64,
+                  fontFamily: jostFont,
+                  fontSize: 15,
+                  color: "#0F172A",
+                },
               },
               "Word by word",
             ),
@@ -607,11 +697,14 @@ async function createMotionAcceptanceReactDeck() {
           { scope: afterWordScope, startAt: after(wordDoneCue, 50) },
           createElement(Shape, {
             id: "after-word-card",
-            x: 492,
-            y: 40,
-            width: 100,
-            height: 64,
-            fill: "#9333EA",
+            style: {
+              position: "absolute",
+              left: 492,
+              top: 40,
+              width: 100,
+              height: 64,
+              background: "#9333EA",
+            },
             enter: fade({ duration: 150 }),
           }),
         ),
@@ -619,12 +712,17 @@ async function createMotionAcceptanceReactDeck() {
           Text,
           {
             id: "letter-text",
-            x: 536,
-            y: 140,
-            width: 72,
-            height: 48,
             enter: fade({ by: "letter", intervalMs: 40, duration: 120 }),
-            style: { fontFamily: jostFont, fontSize: 14, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 536,
+              top: 140,
+              width: 72,
+              height: 48,
+              fontFamily: jostFont,
+              fontSize: 14,
+              color: "#0F172A",
+            },
           },
           "ABC",
         ),
@@ -645,26 +743,25 @@ async function createMotionAcceptanceReactDeck() {
           },
           createElement(Shape, {
             id: "box-inherited",
-            width: 120,
-            height: 64,
-            fill: "#DC2626",
+            style: { width: 120, height: 64, background: "#DC2626" },
           }),
           createElement(Shape, {
             id: "box-muted",
-            width: 120,
-            height: 64,
-            fill: "#64748B",
+            style: { width: 120, height: 64, background: "#64748B" },
             motion: false,
             enter: fade(),
           }),
         ),
         createElement(Shape, {
           id: "breathe-lamp",
-          x: 360,
-          y: 140,
-          width: 160,
-          height: 64,
-          fill: "#164E3D",
+          style: {
+            position: "absolute",
+            left: 360,
+            top: 140,
+            width: 160,
+            height: 64,
+            background: "#164E3D",
+          },
           emphasis: repeat(
             breathe({ period: 1600, from: "#164E3D", to: "#4ADE80" }),
             "forever",
@@ -683,10 +780,6 @@ describe("pptxdk motion choreography codegen acceptance", () => {
     const reactDoc = await createMotionAcceptanceReactDeck();
 
     const initialBuilt = await build(vanillaDoc, { embedFonts: "full" });
-    assert.deepEqual(
-      initialBuilt.report.diagnostics.filter((d) => d.severity === "error"),
-      [],
-    );
     const bytesCopy = new Uint8Array(initialBuilt.pptx);
     const imported = importPptx(bytesCopy);
     bytesCopy.fill(0);
@@ -728,9 +821,9 @@ describe("pptxdk motion choreography codegen acceptance", () => {
       assert.equal(painted.pages.length, 2, `${item.label} preview page count`);
       for (const [pageIdx, page] of painted.pages.entries()) {
         assert.deepEqual(
-          page.diagnostics,
+          page.errors,
           [],
-          `${item.label} preview page ${pageIdx + 1} diagnostics`,
+          `${item.label} preview page ${pageIdx + 1} errors`,
         );
         assert.ok(page.png instanceof Uint8Array);
       }
@@ -1040,10 +1133,13 @@ describe("pptxdk motion choreography codegen acceptance", () => {
         motionScope(missingFollower, { startAt: after(missingCue, 20) }).append(
           shape({
             id: "orphan",
-            x: 10,
-            y: 10,
-            width: 40,
-            height: 20,
+            style: {
+              position: "absolute",
+              left: 10,
+              top: 10,
+              width: 40,
+              height: 20,
+            },
             enter: fade(),
           }),
         ),
@@ -1059,10 +1155,13 @@ describe("pptxdk motion choreography codegen acceptance", () => {
           motionScope(crossA, { publishEnd: crossCue }).append(
             shape({
               id: "s1",
-              x: 10,
-              y: 10,
-              width: 40,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 40,
+                height: 20,
+              },
               enter: fade(),
             }),
           ),
@@ -1071,10 +1170,13 @@ describe("pptxdk motion choreography codegen acceptance", () => {
           motionScope(crossB, { startAt: after(crossCue, 10) }).append(
             shape({
               id: "s2",
-              x: 10,
-              y: 40,
-              width: 40,
-              height: 20,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 40,
+                width: 40,
+                height: 20,
+              },
               enter: fade(),
             }),
           ),
@@ -1086,25 +1188,25 @@ describe("pptxdk motion choreography codegen acceptance", () => {
       {
         label: "missing-cue:vanilla",
         result: codegen(missingCueDeck, { target: "vanilla" }),
-        expectedCodes: ["missing-cue", "missing-scope"],
+        expectedCodes: ["broken-reference"],
         expectedPath: "deck/slide[missing]/motion-scope[1]",
       },
       {
         label: "missing-cue:react",
         result: codegen(missingCueDeck, { target: "react" }),
-        expectedCodes: ["missing-cue", "missing-scope"],
+        expectedCodes: ["broken-reference"],
         expectedPath: "deck/slide[missing]/motion-scope[1]",
       },
       {
         label: "cross-step:vanilla",
         result: codegen(crossStepDeck, { target: "vanilla" }),
-        expectedCodes: ["cross-step-motion"],
+        expectedCodes: ["invalid-structure"],
         expectedPath: "deck/slide[cross-step]/motion-step[2]/motion-scope[1]",
       },
       {
         label: "cross-step:react",
         result: codegen(crossStepDeck, { target: "react" }),
-        expectedCodes: ["cross-step-motion"],
+        expectedCodes: ["invalid-structure"],
         expectedPath: "deck/slide[cross-step]/motion-step[2]/motion-scope[1]",
       },
     ] as const;
@@ -1145,11 +1247,14 @@ describe("pptxdk motion choreography codegen acceptance", () => {
       slide({ id: "bad-codegen" }).append(
         shape({
           id: "bad-enter",
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 20,
-          enter: spin() as unknown as ReturnType<typeof fade>,
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 40,
+            height: 20,
+          },
+          enter: spin({ by: 90 }) as unknown as ReturnType<typeof fade>,
         }),
       ),
     );

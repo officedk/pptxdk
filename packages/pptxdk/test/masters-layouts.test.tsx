@@ -123,7 +123,7 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "empty-slide-master" &&
+            d.code === "invalid-structure" &&
             d.path === "deck/slide-master[empty-m]",
         ),
     );
@@ -143,7 +143,8 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "foreign-slide-layout" &&
+            d.code === "broken-reference" &&
+            d.targetKind === "layout" &&
             d.path === "deck/slide[bad-slide]" &&
             d.message.includes("other-layout"),
         ),
@@ -162,7 +163,8 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "foreign-slide-layout" &&
+            d.code === "broken-reference" &&
+            d.targetKind === "layout" &&
             d.path === "deck/slide[s1]" &&
             d.message.includes("unmounted-def"),
         ),
@@ -180,7 +182,9 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (d) =>
-            d.code === "ambiguous-slide-layout" && d.path === "deck/slide[s1]",
+            d.code === "broken-reference" &&
+            d.targetKind === "layout" &&
+            d.path === "deck/slide[s1]",
         ),
     );
   });
@@ -216,11 +220,16 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
       slide({ id: "added-cover", layout: idleLayout }).append(
         text("Created from idle layout", {
           id: "headline",
-          x: 48,
-          y: 48,
-          width: 480,
-          height: 60,
-          style: { fontFamily: jostFont, fontSize: "24pt", color: "#1E293B" },
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 480,
+            height: 60,
+            fontFamily: jostFont,
+            fontSize: "24pt",
+            color: "#1E293B",
+          },
         }),
       ),
     );
@@ -228,7 +237,8 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
     const rebuilt = await build(imported.document);
     const painted = await preview(imported.document);
     assert.equal(painted.pages.length, 1);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[0]?.placeholders, []);
 
     const rebuiltValidated = await validatePptx(rebuilt.pptx);
     assert.deepEqual(rebuiltValidated.errors, []);
@@ -344,7 +354,7 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
 
     // Edit the shared TextBox position once on SlideLayout and re-emit.
     const nextX = 80;
-    sharedText.set({ x: nextX });
+    sharedText.style({ left: nextX });
 
     const reemitted = emit(resolve(imported.document));
     const validated = await validatePptx(reemitted.pptx);
@@ -405,11 +415,15 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
             Text,
             {
               id: "t1",
-              x: 40,
-              y: 40,
-              width: 300,
-              height: 48,
-              style: { fontFamily: jostFont, fontSize: "20pt" },
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 40,
+                width: 300,
+                height: 48,
+                fontFamily: jostFont,
+                fontSize: "20pt",
+              },
             },
             "Hello Master",
           ),
@@ -424,11 +438,15 @@ describe("explicit SlideMaster and SlideLayout ownership", () => {
         slide({ id: "s1", layout: titleLayout }).append(
           text("Hello Master", {
             id: "t1",
-            x: 40,
-            y: 40,
-            width: 300,
-            height: 48,
-            style: { fontFamily: jostFont, fontSize: "20pt" },
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 300,
+              height: 48,
+              fontFamily: jostFont,
+              fontSize: "20pt",
+            },
           }),
         ),
       ),

@@ -170,23 +170,20 @@ const jpegBytes = new Uint8Array(Buffer.from("${jpegBase64}", "base64"));
 
 const doc = deck({ width: 960, height: 540 }).append(
   slide({ id: "s1", background: "#F8FAFC", transition: transitions.fade() }).append(
-    box({ id: "b1", style: { width: 200, height: 100, backgroundColor: "#FFFFFF" } }).append(
-      shape({ id: "sh1", x: 10, y: 10, width: 80, height: 40, fill: "#2563EB" }),
+    box({ id: "b1", style: { width: 200, height: 100, background: "#FFFFFF" } }).append(
+      shape({ id: "sh1", style: { position: "absolute", left: 10, top: 10, width: 80, height: 40, background: "#2563EB" } }),
     ),
-    image({ id: "img1", src: pngBytes, x: 220, y: 20, width: 40, height: 40 }),
-    image({ id: "img2", src: jpegBytes, x: 270, y: 20, width: 40, height: 40 }),
+    image({ id: "img1", src: pngBytes, style: { position: "absolute", left: 220, top: 20, width: 40, height: 40 } }),
+    image({ id: "img2", src: jpegBytes, style: { position: "absolute", left: 270, top: 20, width: 40, height: 40 } }),
     group({ id: "g1" }).append(
-      text("Group text", { id: "t1", x: 320, y: 20, width: 120, height: 32 }),
+      text("Group text", { id: "t1", style: { position: "absolute", left: 320, top: 20, width: 120, height: 32 } }),
     ),
-    table({ id: "tbl1", x: 20, y: 140, width: 240, columns: [120, "1fr"] }).append(
+    table({ id: "tbl1", columns: [120, "1fr"], style: { position: "absolute", left: 20, top: 140, width: 240 } }).append(
       row({ style: { height: 28 } }).append(cell("A"), cell("B")),
     ),
     chart({
       id: "ch1",
-      x: 280,
-      y: 140,
-      width: 240,
-      height: 160,
+      style: { position: "absolute", left: 280, top: 140, width: 240, height: 160 },
       groups: [
         {
           kind: "column",
@@ -196,7 +193,7 @@ const doc = deck({ width: 960, height: 540 }).append(
       ],
     }),
     step({ n: 1 }).append(
-      shape({ id: "sh2", x: 540, y: 140, width: 60, height: 40, enter: fade() }),
+      shape({ id: "sh2", style: { position: "absolute", left: 540, top: 140, width: 60, height: 40 }, enter: fade() }),
     ),
     notes("Speaker note"),
   ),
@@ -435,9 +432,9 @@ const { transitions } = await import("@pptxdk/capabilities/transition");
 const pngBytes = new Uint8Array(Buffer.from("${pngBase64}", "base64"));
 const doc = deck({ width: 960, height: 540 }).append(
   slide({ id: "s1", background: "#F8FAFC", transition: transitions.fade() }).append(
-    shape({ id: "sh1", x: 10, y: 10, width: 80, height: 40, fill: "#2563EB" }),
-    image({ id: "img1", src: pngBytes, x: 100, y: 20, width: 40, height: 40 }),
-    step({ n: 1 }).append(text("Animated", { id: "t1", x: 160, y: 20, width: 120, height: 32, enter: fade() })),
+    shape({ id: "sh1", style: { position: "absolute", left: 10, top: 10, width: 80, height: 40, background: "#2563EB" } }),
+    image({ id: "img1", src: pngBytes, style: { position: "absolute", left: 100, top: 20, width: 40, height: 40 } }),
+    step({ n: 1 }).append(text("Animated", { id: "t1", style: { position: "absolute", left: 160, top: 20, width: 120, height: 32 }, enter: fade() })),
     notes("Note"),
   ),
 );

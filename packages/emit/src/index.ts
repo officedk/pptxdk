@@ -25,9 +25,8 @@ export type {
   PptxRelationship,
 } from "#/ooxml.ts";
 export {
+  buildDiagnosticSchema,
   buildOptionsSchema,
-  diagnosticSchema,
-  diagnosticSeveritySchema,
   emitOptionsSchema,
   extensionSchema,
   fontEmbeddingModeSchema,
@@ -38,12 +37,10 @@ export {
   targets,
 } from "@pptxdk/core/build";
 export type {
+  BuildDiagnostic,
   BuildOptions,
-  BuildQuery,
   BuildReport,
   BuildResult,
-  Diagnostic,
-  DiagnosticSeverity,
   EmitOptions,
   EmitResult,
   Extension,

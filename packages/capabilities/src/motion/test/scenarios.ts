@@ -26,12 +26,11 @@ import {
   fillColor,
   floatUp,
   fly,
-  observeMotion,
+  motionSchedule,
   repeat,
   spin,
   wipe,
   zoom,
-  type MotionObservation,
 } from "@pptxdk/capabilities/motion";
 import {
   MotionScope,
@@ -55,6 +54,7 @@ import { PNG } from "pngjs";
 import { createElement, type ReactNode } from "react";
 
 import type { CapabilityScenario } from "../../../test/acceptance-runner.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 const jostFont = font("Jost*", [
   {
@@ -125,35 +125,38 @@ export const motionPositiveScenario: CapabilityScenario = {
               { scope: source, mode: "sequence", publishEnd: ready },
               createElement(Shape, {
                 id: "hero-badge",
-                x: 32,
-                y: 36,
-                width: 120,
-                height: 68,
-                fill: "#2563EB",
                 enter: fade({ duration: 240 }),
                 emphasis: repeat(
                   breathe({ period: 800, from: "#2563EB", to: "#60A5FA" }),
                   2,
                 ),
+                style: {
+                  position: "absolute",
+                  left: 32,
+                  top: 36,
+                  width: 120,
+                  height: 68,
+                  background: "#2563EB",
+                },
               }),
               createElement(
                 Text,
                 {
                   id: "hero-title",
-                  x: 172,
-                  y: 36,
-                  width: 220,
-                  height: 68,
                   enter: fly({ from: "left", duration: 220 }),
                   style: {
+                    position: "absolute",
+                    left: 172,
+                    top: 36,
+                    width: 220,
+                    height: 68,
                     fontFamily: jostFont,
                     fontSize: 16,
                     color: "#0F172A",
                     verticalAlign: "middle",
                     padding: 10,
-                    backgroundColor: "#EFF6FF",
-                    borderColor: "#3B82F6",
-                    borderWidth: 2,
+                    background: "#EFF6FF",
+                    border: { color: "#3B82F6", width: 2 },
                   },
                 },
                 "Step 1: Sequence Source",
@@ -164,17 +167,20 @@ export const motionPositiveScenario: CapabilityScenario = {
               { scope: follower, startAt: after(ready, 80) },
               createElement(Shape, {
                 id: "follower-card",
-                x: 412,
-                y: 36,
-                width: 196,
-                height: 68,
-                fill: "#10B981",
                 enter: wipe({ from: "top", duration: 200 }),
                 emphasis: fillColor({
                   from: "#10B981",
                   to: "#059669",
                   duration: 300,
                 }),
+                style: {
+                  position: "absolute",
+                  left: 412,
+                  top: 36,
+                  width: 196,
+                  height: 68,
+                  background: "#10B981",
+                },
               }),
             ),
           ),
@@ -198,32 +204,27 @@ export const motionPositiveScenario: CapabilityScenario = {
               },
               createElement(Shape, {
                 id: "inherited-a",
-                width: 130,
-                height: 76,
-                fill: "#F59E0B",
+                style: { width: 130, height: 76, background: "#F59E0B" },
               }),
               createElement(Shape, {
                 id: "inherited-b",
-                width: 130,
-                height: 76,
-                fill: "#8B5CF6",
+                style: { width: 130, height: 76, background: "#8B5CF6" },
               }),
               createElement(
                 Text,
                 {
                   id: "own-entry-note",
-                  width: 170,
-                  height: 76,
                   enter: zoom({ duration: 160 }),
                   style: {
+                    width: 170,
+                    height: 76,
                     fontFamily: jostFont,
                     fontSize: 15,
                     color: "#0F172A",
                     verticalAlign: "middle",
                     padding: 10,
-                    backgroundColor: "#FFFFFF",
-                    borderColor: "#CBD5E1",
-                    borderWidth: 1,
+                    background: "#FFFFFF",
+                    border: { color: "#CBD5E1", width: 1 },
                   },
                 },
                 "Step 2: Own Zoom",
@@ -238,15 +239,13 @@ export const motionPositiveScenario: CapabilityScenario = {
                     width: 98,
                     height: 76,
                     padding: 8,
-                    backgroundColor: "#E2E8F0",
+                    background: "#E2E8F0",
                   },
                 },
                 createElement(Shape, {
                   id: "muted-shape",
-                  width: 82,
-                  height: 60,
-                  fill: "#64748B",
                   enter: fade(),
+                  style: { width: 82, height: 60, background: "#64748B" },
                 }),
               ),
             ),
@@ -265,21 +264,27 @@ export const motionPositiveScenario: CapabilityScenario = {
             },
             createElement(Shape, {
               id: "auto-a",
-              x: 36,
-              y: 44,
-              width: 150,
-              height: 80,
-              fill: "#0EA5E9",
               enter: fade({ duration: 200 }),
+              style: {
+                position: "absolute",
+                left: 36,
+                top: 44,
+                width: 150,
+                height: 80,
+                background: "#0EA5E9",
+              },
             }),
             createElement(Shape, {
               id: "auto-b",
-              x: 206,
-              y: 44,
-              width: 150,
-              height: 80,
-              fill: "#14B8A6",
               enter: fade({ duration: 200 }),
+              style: {
+                position: "absolute",
+                left: 206,
+                top: 44,
+                width: 150,
+                height: 80,
+                background: "#14B8A6",
+              },
             }),
           ),
           createElement(
@@ -289,20 +294,20 @@ export const motionPositiveScenario: CapabilityScenario = {
               Text,
               {
                 id: "auto-summary",
-                x: 376,
-                y: 44,
-                width: 228,
-                height: 80,
                 enter: wipe({ from: "left", duration: 180 }),
                 style: {
+                  position: "absolute",
+                  left: 376,
+                  top: 44,
+                  width: 228,
+                  height: 80,
                   fontFamily: jostFont,
                   fontSize: 16,
                   color: "#0F172A",
                   verticalAlign: "middle",
                   padding: 10,
-                  backgroundColor: "#F1F5F9",
-                  borderColor: "#0284C7",
-                  borderWidth: 2,
+                  background: "#F1F5F9",
+                  border: { color: "#0284C7", width: 2 },
                 },
               },
               "Auto after stagger",
@@ -313,15 +318,18 @@ export const motionPositiveScenario: CapabilityScenario = {
             { scope: lamp },
             createElement(Shape, {
               id: "pulse-lamp",
-              x: 36,
-              y: 160,
-              width: 240,
-              height: 80,
-              fill: "#164E3D",
               emphasis: repeat(
                 breathe({ period: 1600, from: "#164E3D", to: "#4ADE80" }),
                 "forever",
               ),
+              style: {
+                position: "absolute",
+                left: 36,
+                top: 160,
+                width: 240,
+                height: 80,
+                background: "#164E3D",
+              },
             }),
           ),
         ),
@@ -345,50 +353,56 @@ export const motionPositiveScenario: CapabilityScenario = {
           motionScope(source, { mode: "sequence", publishEnd: ready }).append(
             shape({
               id: "hero-badge",
-              x: 32,
-              y: 36,
-              width: 120,
-              height: 68,
-              fill: "#2563EB",
               enter: fade({ duration: 240 }),
               emphasis: repeat(
                 breathe({ period: 800, from: "#2563EB", to: "#60A5FA" }),
                 2,
               ),
+              style: {
+                position: "absolute",
+                left: 32,
+                top: 36,
+                width: 120,
+                height: 68,
+                background: "#2563EB",
+              },
             }),
             text("Step 1: Sequence Source", {
               id: "hero-title",
-              x: 172,
-              y: 36,
-              width: 220,
-              height: 68,
               enter: fly({ from: "left", duration: 220 }),
               style: {
+                position: "absolute",
+                left: 172,
+                top: 36,
+                width: 220,
+                height: 68,
                 fontFamily: jostFont,
                 fontSize: 16,
                 color: "#0F172A",
                 verticalAlign: "middle",
                 padding: 10,
-                backgroundColor: "#EFF6FF",
-                borderColor: "#3B82F6",
-                borderWidth: 2,
+                background: "#EFF6FF",
+                border: { color: "#3B82F6", width: 2 },
               },
             }),
           ),
           motionScope(follower, { startAt: after(ready, 80) }).append(
             shape({
               id: "follower-card",
-              x: 412,
-              y: 36,
-              width: 196,
-              height: 68,
-              fill: "#10B981",
               enter: wipe({ from: "top", duration: 200 }),
               emphasis: fillColor({
                 from: "#10B981",
                 to: "#059669",
                 duration: 300,
               }),
+              style: {
+                position: "absolute",
+                left: 412,
+                top: 36,
+                width: 196,
+                height: 68,
+                background: "#10B981",
+              },
             }),
           ),
         ),
@@ -408,30 +422,25 @@ export const motionPositiveScenario: CapabilityScenario = {
           }).append(
             shape({
               id: "inherited-a",
-              width: 130,
-              height: 76,
-              fill: "#F59E0B",
+              style: { width: 130, height: 76, background: "#F59E0B" },
             }),
             shape({
               id: "inherited-b",
-              width: 130,
-              height: 76,
-              fill: "#8B5CF6",
+              style: { width: 130, height: 76, background: "#8B5CF6" },
             }),
             text("Step 2: Own Zoom", {
               id: "own-entry-note",
-              width: 170,
-              height: 76,
               enter: zoom({ duration: 160 }),
               style: {
+                width: 170,
+                height: 76,
                 fontFamily: jostFont,
                 fontSize: 15,
                 color: "#0F172A",
                 verticalAlign: "middle",
                 padding: 10,
-                backgroundColor: "#FFFFFF",
-                borderColor: "#CBD5E1",
-                borderWidth: 1,
+                background: "#FFFFFF",
+                border: { color: "#CBD5E1", width: 1 },
               },
             }),
             box({
@@ -442,15 +451,13 @@ export const motionPositiveScenario: CapabilityScenario = {
                 width: 98,
                 height: 76,
                 padding: 8,
-                backgroundColor: "#E2E8F0",
+                background: "#E2E8F0",
               },
             }).append(
               shape({
                 id: "muted-shape",
-                width: 82,
-                height: 60,
-                fill: "#64748B",
                 enter: fade(),
+                style: { width: 82, height: 60, background: "#64748B" },
               }),
             ),
           ),
@@ -464,55 +471,64 @@ export const motionPositiveScenario: CapabilityScenario = {
         }).append(
           shape({
             id: "auto-a",
-            x: 36,
-            y: 44,
-            width: 150,
-            height: 80,
-            fill: "#0EA5E9",
             enter: fade({ duration: 200 }),
+            style: {
+              position: "absolute",
+              left: 36,
+              top: 44,
+              width: 150,
+              height: 80,
+              background: "#0EA5E9",
+            },
           }),
           shape({
             id: "auto-b",
-            x: 206,
-            y: 44,
-            width: 150,
-            height: 80,
-            fill: "#14B8A6",
             enter: fade({ duration: 200 }),
+            style: {
+              position: "absolute",
+              left: 206,
+              top: 44,
+              width: 150,
+              height: 80,
+              background: "#14B8A6",
+            },
           }),
         ),
         motionScope(afterBody, { startAt: after(bodyDone, 50) }).append(
           text("Auto after stagger", {
             id: "auto-summary",
-            x: 376,
-            y: 44,
-            width: 228,
-            height: 80,
             enter: wipe({ from: "left", duration: 180 }),
             style: {
+              position: "absolute",
+              left: 376,
+              top: 44,
+              width: 228,
+              height: 80,
               fontFamily: jostFont,
               fontSize: 16,
               color: "#0F172A",
               verticalAlign: "middle",
               padding: 10,
-              backgroundColor: "#F1F5F9",
-              borderColor: "#0284C7",
-              borderWidth: 2,
+              background: "#F1F5F9",
+              border: { color: "#0284C7", width: 2 },
             },
           }),
         ),
         motionScope(lamp).append(
           shape({
             id: "pulse-lamp",
-            x: 36,
-            y: 160,
-            width: 240,
-            height: 80,
-            fill: "#164E3D",
             emphasis: repeat(
               breathe({ period: 1600, from: "#164E3D", to: "#4ADE80" }),
               "forever",
             ),
+            style: {
+              position: "absolute",
+              left: 36,
+              top: 160,
+              width: 240,
+              height: 80,
+              background: "#164E3D",
+            },
           }),
         ),
       ),
@@ -522,8 +538,8 @@ export const motionPositiveScenario: CapabilityScenario = {
     assert.deepEqual(validation.extensions, [], author);
     const p1 = preview.pages[0]!;
     const p2 = preview.pages[1]!;
-    assert.deepEqual(p1.diagnostics, [], author);
-    assert.deepEqual(p2.diagnostics, [], author);
+    assert.deepEqual(p1.errors, [], author);
+    assert.deepEqual(p2.errors, [], author);
     assert.ok(p1.png !== undefined, author);
     assert.ok(p2.png !== undefined, author);
 
@@ -572,8 +588,8 @@ export const motionPositiveScenario: CapabilityScenario = {
 
     const slide1 = resolution.report.slides[0]!;
     const slide2 = resolution.report.slides[1]!;
-    const motion1 = slide1.capabilities?.["motion"] as MotionObservation;
-    const motion2 = slide2.capabilities?.["motion"] as MotionObservation;
+    const motion1 = slide1.capabilities?.["motion"] as ResolvedMotion;
+    const motion2 = slide2.capabilities?.["motion"] as ResolvedMotion;
     assert.ok(motion1 !== undefined && motion2 !== undefined, author);
 
     assert.deepEqual(
@@ -607,7 +623,7 @@ export const motionPositiveScenario: CapabilityScenario = {
       author,
     );
 
-    const motionQuery1 = observeMotion(slide1);
+    const motionQuery1 = motionSchedule(slide1);
     assert.ok(motionQuery1 !== undefined, author);
     assert.equal(motionQuery1.steps.length, 2, author);
     assert.equal(motionQuery1.steps[0]?.cues[0]?.name, "ready", author);
@@ -696,41 +712,48 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
           { n: 1 },
           createElement(
             Group,
-            {
-              id: "spin-group",
-              emphasis: spin({ by: 90, duration: 400 }),
-            },
+            { id: "spin-group", emphasis: spin({ by: 90, duration: 400 }) },
             createElement(Shape, {
               id: "group-chip",
-              x: 32,
-              y: 40,
-              width: 90,
-              height: 48,
-              fill: "#2563EB",
               enter: fade({ duration: 150 }),
+              style: {
+                position: "absolute",
+                left: 32,
+                top: 40,
+                width: 90,
+                height: 48,
+                background: "#2563EB",
+              },
             }),
             createElement(
               Text,
               {
                 id: "group-label",
-                x: 32,
-                y: 96,
-                width: 90,
-                height: 32,
                 enter: fade({ duration: 150 }),
-                style: { fontFamily: jostFont, fontSize: 13 },
+                style: {
+                  position: "absolute",
+                  left: 32,
+                  top: 96,
+                  width: 90,
+                  height: 32,
+                  fontFamily: jostFont,
+                  fontSize: 13,
+                },
               },
               "Rotated",
             ),
           ),
           createElement(Chart, {
             id: "animated-chart",
-            x: 180,
-            y: 36,
-            width: 420,
-            height: 260,
             groups: chartGroups,
             enter: fade({ duration: 180, by: "series" }),
+            style: {
+              position: "absolute",
+              left: 180,
+              top: 36,
+              width: 420,
+              height: 260,
+            },
           }),
         ),
       ),
@@ -747,31 +770,41 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
           }).append(
             shape({
               id: "group-chip",
-              x: 32,
-              y: 40,
-              width: 90,
-              height: 48,
-              fill: "#2563EB",
               enter: fade({ duration: 150 }),
+              style: {
+                position: "absolute",
+                left: 32,
+                top: 40,
+                width: 90,
+                height: 48,
+                background: "#2563EB",
+              },
             }),
             text("Rotated", {
               id: "group-label",
-              x: 32,
-              y: 96,
-              width: 90,
-              height: 32,
               enter: fade({ duration: 150 }),
-              style: { fontFamily: jostFont, fontSize: 13 },
+              style: {
+                position: "absolute",
+                left: 32,
+                top: 96,
+                width: 90,
+                height: 32,
+                fontFamily: jostFont,
+                fontSize: 13,
+              },
             }),
           ),
           chart({
             id: "animated-chart",
-            x: 180,
-            y: 36,
-            width: 420,
-            height: 260,
             groups: chartGroups,
             enter: fade({ duration: 180, by: "series" }),
+            style: {
+              position: "absolute",
+              left: 180,
+              top: 36,
+              width: 420,
+              height: 260,
+            },
           }),
         ),
       ),
@@ -786,7 +819,7 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
     assert.deepEqual(validation.errors, [], author);
     const motion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     assert.equal(motion.nativeProjections?.length, 1, author);
     assert.equal(
       motion.nativeProjections?.[0]?.nativeEffects.length,
@@ -841,17 +874,20 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
               { scope: missingFollower, startAt: after(missingCue, 20) },
               createElement(Shape, {
                 id: "orphan",
-                x: 10,
-                y: 10,
-                width: 40,
-                height: 20,
                 enter: fade(),
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 40,
+                  height: 20,
+                },
               }),
             ),
           ),
         ),
       ),
-    ["missing-scope", "missing-cue"],
+    ["broken-reference"],
   );
   await expectBuildError(
     "doc-missing-cue",
@@ -864,17 +900,20 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
             }).append(
               shape({
                 id: "orphan",
-                x: 10,
-                y: 10,
-                width: 40,
-                height: 20,
                 enter: fade(),
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 40,
+                  height: 20,
+                },
               }),
             ),
           ),
         ),
       ),
-    ["missing-scope", "missing-cue"],
+    ["broken-reference"],
   );
 
   // Cross-step cue dependency
@@ -891,11 +930,14 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
               motionScope(crossA, { publishEnd: crossCue }).append(
                 shape({
                   id: "s1",
-                  x: 10,
-                  y: 10,
-                  width: 40,
-                  height: 20,
                   enter: fade(),
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 10,
+                    width: 40,
+                    height: 20,
+                  },
                 }),
               ),
             ),
@@ -903,18 +945,21 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
               motionScope(crossB, { startAt: after(crossCue, 10) }).append(
                 shape({
                   id: "s2",
-                  x: 10,
-                  y: 40,
-                  width: 40,
-                  height: 20,
                   enter: fade(),
+                  style: {
+                    position: "absolute",
+                    left: 10,
+                    top: 40,
+                    width: 40,
+                    height: 20,
+                  },
                 }),
               ),
             ),
           ),
         ),
       ),
-    ["cross-step-motion"],
+    ["invalid-structure"],
   );
 
   // Invalid breathe target on Group, fillColor on unfilled Shape, chart granularity on Shape, and repeated word iteration
@@ -940,17 +985,20 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
               },
               createElement(Shape, {
                 id: "m",
-                x: 10,
-                y: 10,
-                width: 40,
-                height: 20,
-                fill: "#164E3D",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 40,
+                  height: 20,
+                  background: "#164E3D",
+                },
               }),
             ),
           ),
         ),
       ),
-    ["invalid-breathe-target"],
+    ["invalid-prop"],
   );
   await expectBuildError(
     "fillColor-unfilled-shape",
@@ -960,20 +1008,23 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
           slide({ id: "bad-fill-color" }).append(
             shape({
               id: "hollow",
-              x: 10,
-              y: 10,
-              width: 40,
-              height: 20,
               emphasis: fillColor({
                 from: "#10B981",
                 to: "#059669",
                 duration: 200,
               }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
         ),
       ),
-    ["invalid-fill-color-target"],
+    ["invalid-prop"],
   );
   await expectBuildError(
     "chart-granularity-on-shape",
@@ -983,16 +1034,19 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
           slide({ id: "bad-granularity" }).append(
             shape({
               id: "not-a-chart",
-              x: 10,
-              y: 10,
-              width: 40,
-              height: 20,
               enter: fade({ by: "series" }),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 40,
+                height: 20,
+              },
             }),
           ),
         ),
       ),
-    ["invalid-motion-granularity"],
+    ["invalid-prop"],
   );
   await expectBuildError(
     "repeat-word-combination",
@@ -1002,16 +1056,19 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
           slide({ id: "bad-repeat" }).append(
             text("Hello world", {
               id: "t",
-              x: 10,
-              y: 10,
-              width: 120,
-              style: { fontFamily: jostFont },
               enter: repeat(fade({ by: "word" }) as never, 2),
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 120,
+                fontFamily: jostFont,
+              },
             }),
           ),
         ),
       ),
-    ["unsupported-repeat", "unsupported-repeat-combination"],
+    ["invalid-prop"],
   );
 
   // Output target & vendor extension rejections (p14 sections and c15 chart labels under strict extensions: [])
@@ -1035,19 +1092,22 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
               { id: "s1" },
               createElement(Shape, {
                 id: "animated",
-                x: 10,
-                y: 10,
-                width: 40,
-                height: 20,
-                fill: "#2563EB",
                 enter: fade(),
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 40,
+                  height: 20,
+                  background: "#2563EB",
+                },
               }),
             ),
           ),
         ),
         { target: noExtensionsTarget },
       ),
-    ["forbidden-mechanism"],
+    ["target-violation"],
   );
   await expectBuildError(
     "p14-section-rejected-with-motion-doc",
@@ -1058,19 +1118,22 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
             slide({ id: "s1" }).append(
               shape({
                 id: "animated",
-                x: 10,
-                y: 10,
-                width: 40,
-                height: 20,
-                fill: "#2563EB",
                 enter: fade(),
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 40,
+                  height: 20,
+                  background: "#2563EB",
+                },
               }),
             ),
           ),
         ),
         { target: noExtensionsTarget },
       ),
-    ["forbidden-mechanism"],
+    ["target-violation"],
   );
   await expectBuildError(
     "c15-chart-rejected-with-motion",
@@ -1080,10 +1143,6 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
           slide({ id: "s1" }).append(
             chart({
               id: "c15-chart",
-              x: 20,
-              y: 20,
-              width: 320,
-              height: 200,
               groups: [
                 {
                   kind: "doughnut",
@@ -1096,12 +1155,19 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
                 },
               ],
               enter: fade({ by: "series" }),
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 320,
+                height: 200,
+              },
             }),
           ),
         ),
         { target: noExtensionsTarget },
       ),
-    ["forbidden-mechanism"],
+    ["target-violation"],
   );
 
   // Pure Motion without vendor extensions succeeds under strict extensions: [].
@@ -1110,12 +1176,15 @@ export async function verifyMotionCollaborationAndRejections(): Promise<void> {
       slide({ id: "pure-motion" }).append(
         shape({
           id: "ok",
-          x: 10,
-          y: 10,
-          width: 40,
-          height: 20,
-          fill: "#2563EB",
           enter: fade(),
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 40,
+            height: 20,
+            background: "#2563EB",
+          },
         }),
       ),
     ),

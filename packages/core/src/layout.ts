@@ -7,11 +7,17 @@ import {
   validateBlockFlexContainerProperties,
   validateBlockFlexLayoutContextBounds,
 } from "#/block-flex-layout.ts";
-import { BuildError, CapabilityError } from "#/diagnostics.ts";
+import {
+  BuildError,
+  CapabilityError,
+  capabilityErrorToDiagnostic,
+  toBuildDiagnostic,
+} from "#/diagnostics.ts";
 import { gridLayoutMode } from "#/grid-layout.ts";
 import {
   expandedSpacing,
   type CustomContainerMode,
+  type LayoutGridTracks,
   type LayoutSolver,
   type LayoutSolverNode,
 } from "#/layout-protocol.ts";
@@ -21,15 +27,15 @@ import type {
   BoundContainerCollaboration,
   BoundObjectCapability,
   BoundObjectCapabilityModule,
+  BuildDiagnostic,
   CapabilityChild,
   CapabilityElement,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
-  Diagnostic,
-  GeometryBox,
   LayoutStyle,
   NativeElementKind,
   PlaceholderResolutionContext,
+  Rect,
   RegisteredCapabilityModule,
   ResolveOptions,
   ThemeContext,
@@ -39,11 +45,26 @@ export { paddingStyleKeys };
 
 type Dimensions = { readonly width: number; readonly height: number };
 
+function roundLayoutMetric(value: number): number {
+  const rounded = Math.round(value * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function roundRect(box: Rect): Rect {
+  return {
+    x: roundLayoutMetric(box.x),
+    y: roundLayoutMetric(box.y),
+    width: roundLayoutMetric(box.width),
+    height: roundLayoutMetric(box.height),
+  };
+}
+
 export type LayoutPassResult = {
-  readonly boxes: WeakMap<CapabilityElement, GeometryBox>;
+  readonly boxes: WeakMap<CapabilityElement, Rect>;
+  readonly gridTracks: WeakMap<CapabilityElement, LayoutGridTracks>;
+  readonly gridAreas: WeakMap<CapabilityElement, Rect>;
   readonly themes: WeakMap<CapabilityElement, ThemeContext>;
   readonly hidden: WeakSet<CapabilityElement>;
-  readonly warnings: readonly Diagnostic[];
   readonly bound: WeakMap<CapabilityElement, BoundObjectCapability>;
 };
 
@@ -63,12 +84,22 @@ export const layoutStyleKeys = layoutProperties.filter(
   (key) => !(paddingStyleKeys as readonly string[]).includes(key),
 );
 
-function diagnostic(path: string, code: string, message: string): Diagnostic {
-  return { severity: "error", path, code, message };
+function diagnostic(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): BuildDiagnostic {
+  return toBuildDiagnostic(path, code, message, details);
 }
 
-function fail(path: string, code: string, message: string): never {
-  throw new BuildError([diagnostic(path, code, message)]);
+function fail(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): never {
+  throw new BuildError([diagnostic(path, code, message, details)]);
 }
 
 function element(child: CapabilityChild): child is CapabilityElement {
@@ -93,7 +124,7 @@ function readStyle(
 ): LayoutStyle {
   if (value === undefined) return {};
   if (!isStyleRecord(value)) {
-    fail(path, "invalid-layout-style", "style must be an object");
+    fail(path, "invalid-style", "style must be an object", { field: "style" });
   }
   const unknown = Object.keys(value).find(
     (key) => !layoutPropertySet.has(key) && !allowedPresentation.has(key),
@@ -101,8 +132,9 @@ function readStyle(
   if (unknown !== undefined) {
     fail(
       path,
-      "unsupported-layout-style",
+      "unknown-style",
       `style contains unsupported property ${unknown}`,
+      { prop: unknown, field: `style.${unknown}`, scope: "style" },
     );
   }
   const resolvedDisplay = validateBlockFlexContainerContext(
@@ -154,6 +186,7 @@ export function parseCapabilityLayoutContract(options: {
         "invalid-style",
         "style must be an object",
         options.path,
+        { field: "style" },
       );
     }
     if (!allowPadding) {
@@ -165,6 +198,7 @@ export function parseCapabilityLayoutContract(options: {
           "invalid-layout-context",
           "padding is only applicable to layout containers",
           options.path,
+          { field: `style.${paddingKey}` },
         );
       }
     }
@@ -176,6 +210,7 @@ export function parseCapabilityLayoutContract(options: {
         "unknown-style",
         `style contains unsupported property ${unknown}`,
         options.path,
+        { prop: unknown, field: `style.${unknown}`, scope: "style" },
       );
     }
   }
@@ -211,29 +246,18 @@ export function parseCapabilityLayoutContract(options: {
     }
   }
 
-  const x = typeof props["x"] === "number" ? props["x"] : undefined;
-  const y = typeof props["y"] === "number" ? props["y"] : undefined;
-  const styleWidth = rawStyle !== undefined ? rawStyle["width"] : undefined;
-  const styleHeight = rawStyle !== undefined ? rawStyle["height"] : undefined;
-  const width = (styleWidth ?? props["width"]) as
-    | number
-    | `${number}%`
-    | "auto"
-    | undefined;
-  const height = (styleHeight ?? props["height"]) as
-    | number
-    | `${number}%`
-    | "auto"
-    | undefined;
+  const isIntrinsicWidthObject =
+    nativeKind === "pic" ||
+    (nativeKind === "grpSp" &&
+      layoutStyle.position !== "relative" &&
+      layoutStyle.position !== "absolute" &&
+      layoutStyle.width === undefined);
 
   return {
     nativeKind,
-    ...(x === undefined ? {} : { x }),
-    ...(y === undefined ? {} : { y }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
     layoutStyle,
     ...(padding === undefined ? {} : { padding }),
+    ...(isIntrinsicWidthObject ? { preservesIntrinsicSize: true } : {}),
   };
 }
 
@@ -284,16 +308,16 @@ function objectModule(
 
 type CommittedNodeMeta = {
   readonly element: CapabilityElement;
-  readonly checksCanvasOverflow: boolean;
 };
 
 /** Coordinates layout tree construction, capability binding, solver collaboration, and box commitment. */
 export class LayoutPass {
   readonly #modules: ReadonlyMap<string, RegisteredCapabilityModule>;
-  readonly #dimensions: Dimensions;
   readonly #slideNumber: number;
   readonly #options: ResolveOptions;
-  readonly #boxes = new WeakMap<CapabilityElement, GeometryBox>();
+  readonly #boxes = new WeakMap<CapabilityElement, Rect>();
+  readonly #gridTracks = new WeakMap<CapabilityElement, LayoutGridTracks>();
+  readonly #gridAreas = new WeakMap<CapabilityElement, Rect>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
   readonly #hidden = new WeakSet<CapabilityElement>();
   readonly #boundObjects = new WeakMap<
@@ -301,8 +325,6 @@ export class LayoutPass {
     BoundObjectCapability
   >();
   readonly #nodeMeta = new WeakMap<LayoutSolverNode, CommittedNodeMeta>();
-  readonly #warnings: Diagnostic[] = [];
-  readonly #warningKeys = new Set<string>();
   readonly #solver: LayoutSolver;
   #placeholderFor: (
     element: CapabilityElement,
@@ -315,16 +337,11 @@ export class LayoutPass {
     options: ResolveOptions = {},
   ) {
     this.#modules = modules;
-    this.#dimensions = dimensions;
     this.#slideNumber = slideNumber;
     this.#options = options;
     this.#solver = createBlockFlexLayoutSolver({
       dimensions,
-      customContainers: customContainerModes.map((mode) =>
-        mode.createSolver((path, code, message) => {
-          this.#warnOnce(path, code, message);
-        }),
-      ),
+      customContainers: customContainerModes.map((mode) => mode.createSolver()),
     });
   }
 
@@ -343,44 +360,33 @@ export class LayoutPass {
       parentPath,
       true,
       true,
-      textStyleKeys,
+      new Set([...textStyleKeys, "background"]),
     );
     const root = this.#solver.createRoot({
       path: parentPath,
       style: rootStyle,
     });
-    this.#appendChildren(
-      children,
-      parentPath,
-      root,
-      slideStyle !== undefined,
-      theme,
-    );
-    this.#solver.solve((node, box) => {
-      const meta = this.#nodeMeta.get(node);
-      if (meta === undefined) return;
-      this.#boxes.set(meta.element, box);
-      if (
-        meta.checksCanvasOverflow &&
-        (box.x < 0 ||
-          box.y < 0 ||
-          box.x + box.width > this.#dimensions.width ||
-          box.y + box.height > this.#dimensions.height)
-      ) {
-        this.#warnings.push({
-          severity: "warning",
-          path: node.path,
-          code: "overflow",
-          message:
-            "Layout container overflows slide canvas; build retains original declaration",
+    this.#appendChildren(children, parentPath, root, theme);
+    this.#solver.solve((node, box, meta) => {
+      const elementMeta = this.#nodeMeta.get(node);
+      if (elementMeta === undefined) return;
+      this.#boxes.set(elementMeta.element, box);
+      if (meta?.gridTracks !== undefined) {
+        this.#gridTracks.set(elementMeta.element, {
+          columnWidths: meta.gridTracks.columnWidths.map(roundLayoutMetric),
+          rowHeights: meta.gridTracks.rowHeights.map(roundLayoutMetric),
         });
+      }
+      if (meta?.gridArea !== undefined) {
+        this.#gridAreas.set(elementMeta.element, roundRect(meta.gridArea));
       }
     });
     return {
       boxes: this.#boxes,
+      gridTracks: this.#gridTracks,
+      gridAreas: this.#gridAreas,
       themes: this.#themes,
       hidden: this.#hidden,
-      warnings: this.#warnings,
       bound: this.#boundObjects,
     };
   }
@@ -407,29 +413,26 @@ export class LayoutPass {
         this.#boundObjects.set(child, bound);
       } catch (error) {
         if (error instanceof BuildError) throw error;
-        const code =
-          error instanceof CapabilityError
-            ? error.code
-            : "invalid-capability-input";
-        const message = error instanceof Error ? error.message : String(error);
-        const targetPath =
-          error instanceof CapabilityError && error.path !== undefined
-            ? error.path.startsWith(childPath)
-              ? error.path
-              : `${childPath}/${error.path}`
-            : childPath;
-        return fail(targetPath, code, message);
+        if (error instanceof CapabilityError) {
+          throw new BuildError([
+            capabilityErrorToDiagnostic(error, childPath, true),
+          ]);
+        }
+        return fail(
+          childPath,
+          "capability-failure",
+          error instanceof Error ? error.message : String(error),
+        );
       }
     }
     return bound;
   }
 
-  // Transparent or loose containers are not in the layout tree, so theme context must be passed separately along the declaration tree.
+  // Transparent containers are not in the layout tree, so theme context must be passed separately along the declaration tree.
   #appendChildren(
     children: readonly CapabilityChild[],
     parentPath: string,
     parent: LayoutSolverNode,
-    includeObjects: boolean,
     themeContext: ThemeContext,
   ): void {
     children.forEach((child, index) => {
@@ -444,13 +447,7 @@ export class LayoutPass {
         this.#themes.set(child, themeContext);
         // An owned subtree belongs to its capability and never becomes layout content.
         if (module.children === "owned") return;
-        this.#appendChildren(
-          child.children,
-          childPath,
-          parent,
-          includeObjects,
-          themeContext,
-        );
+        this.#appendChildren(child.children, childPath, parent, themeContext);
         return;
       }
       if (objectModule(module)) {
@@ -479,27 +476,6 @@ export class LayoutPass {
           mode.validateItemStyle(contract.layoutStyle, parent.style, childPath);
         }
         if (bound.container !== undefined) {
-          if (
-            !includeObjects &&
-            bound.container.layoutMode === "when-styled" &&
-            !Object.keys(contract.layoutStyle).some(
-              (key) =>
-                key !== "zIndex" &&
-                layoutPropertySet.has(key) &&
-                contract.layoutStyle[key as keyof LayoutStyle] !== undefined,
-            )
-          ) {
-            const theme = bound.container.theme ?? themeContext;
-            this.#themes.set(child, theme);
-            this.#appendChildren(
-              bound.container.children,
-              childPath,
-              parent,
-              false,
-              theme,
-            );
-            return;
-          }
           const built = this.#buildContainer(
             child,
             childPath,
@@ -512,12 +488,6 @@ export class LayoutPass {
           return;
         }
         this.#themes.set(child, themeContext);
-        if (
-          !includeObjects &&
-          !this.#solver.requiresLooseLayout(contract.layoutStyle)
-        ) {
-          return;
-        }
         const built = this.#buildLeafObject(
           child,
           childPath,
@@ -526,9 +496,6 @@ export class LayoutPass {
           bound,
           contract,
         );
-        if (!includeObjects) {
-          this.#solver.positionLooseGeometry(built);
-        }
         this.#solver.appendChild(parent, built);
       }
     });
@@ -551,14 +518,9 @@ export class LayoutPass {
         style,
         isContainer: true,
         propagatesBaseline: container.propagatesBaseline !== false,
-        ...(contract.width === undefined
-          ? {}
-          : { contractWidth: contract.width }),
-        ...(contract.height === undefined
-          ? {}
-          : { contractHeight: contract.height }),
-        ...(contract.x === undefined ? {} : { contractX: contract.x }),
-        ...(contract.y === undefined ? {} : { contractY: contract.y }),
+        ...(contract.preservesIntrinsicSize
+          ? { preservesIntrinsicSize: true }
+          : {}),
         ...(contract.padding === undefined
           ? {}
           : { padding: contract.padding }),
@@ -567,9 +529,8 @@ export class LayoutPass {
     );
     this.#nodeMeta.set(node, {
       element: input,
-      checksCanvasOverflow: container.checksCanvasOverflow !== false,
     });
-    this.#appendChildren(container.children, path, node, true, theme);
+    this.#appendChildren(container.children, path, node, theme);
     return node;
   }
 
@@ -587,14 +548,12 @@ export class LayoutPass {
         style: contract.layoutStyle,
         isContainer: false,
         propagatesBaseline: false,
-        ...(contract.width === undefined
-          ? {}
-          : { contractWidth: contract.width }),
-        ...(contract.height === undefined
-          ? {}
-          : { contractHeight: contract.height }),
-        ...(contract.x === undefined ? {} : { contractX: contract.x }),
-        ...(contract.y === undefined ? {} : { contractY: contract.y }),
+        ...(contract.preservesIntrinsicSize
+          ? { preservesIntrinsicSize: true }
+          : {}),
+        ...(contract.contentMinimumsEnforced
+          ? { contentMinimumsEnforced: true }
+          : {}),
         ...(contract.padding === undefined
           ? {}
           : { padding: contract.padding }),
@@ -604,6 +563,9 @@ export class LayoutPass {
               measure: (request: {
                 readonly availableWidth?: number;
                 readonly widthMode?: "at-most" | "exactly";
+                readonly availableHeight?: number;
+                readonly heightMode?: "at-most" | "exactly";
+                readonly purpose?: "baseline" | "layout";
               }) => this.#measure(path, themeContext, bound, request),
             }),
       },
@@ -611,7 +573,6 @@ export class LayoutPass {
     );
     this.#nodeMeta.set(node, {
       element: input,
-      checksCanvasOverflow: false,
     });
     return node;
   }
@@ -623,13 +584,6 @@ export class LayoutPass {
     }
   }
 
-  #warnOnce(path: string, code: string, message: string): void {
-    const key = `${path}\u0000${code}\u0000${message}`;
-    if (this.#warningKeys.has(key)) return;
-    this.#warningKeys.add(key);
-    this.#warnings.push({ severity: "warning", path, code, message });
-  }
-
   #measure(
     path: string,
     theme: ThemeContext,
@@ -637,6 +591,9 @@ export class LayoutPass {
     request: {
       readonly availableWidth?: number;
       readonly widthMode?: "at-most" | "exactly";
+      readonly availableHeight?: number;
+      readonly heightMode?: "at-most" | "exactly";
+      readonly purpose?: "baseline" | "layout";
     },
   ): CapabilityLayoutMeasurement | undefined {
     if (bound.measureLayout === undefined) {
@@ -650,18 +607,14 @@ export class LayoutPass {
       });
     } catch (error) {
       if (error instanceof BuildError) throw error;
-      const code =
-        error instanceof CapabilityError
-          ? error.code
-          : "layout-measurement-failed";
-      const message = error instanceof Error ? error.message : String(error);
-      const targetPath =
-        error instanceof CapabilityError && error.path !== undefined
-          ? error.path.startsWith(path)
-            ? error.path
-            : `${path}/${error.path}`
-          : path;
-      return fail(targetPath, code, message);
+      if (error instanceof CapabilityError) {
+        throw new BuildError([capabilityErrorToDiagnostic(error, path, true)]);
+      }
+      return fail(
+        path,
+        "capability-failure",
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 }

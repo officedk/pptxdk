@@ -49,11 +49,11 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
   id: "layout-block-flex-semantics",
   capability: "layout:block-flex",
   description:
-    "Dual-author Block and Flex layout scenario covering row/column flow, auto sizing, min-content automatic minimums, percentages, flexWrap, text/shape baseline alignment, absolute containing-block escaping, and canvas overflow warnings.",
+    "Dual-author Block and Flex layout scenario covering row/column flow, auto sizing, min-content automatic minimums, percentages, flexWrap, text/shape baseline alignment, absolute containing-block escaping, and out-of-bounds canvas geometry.",
   visualCheckpoints: [
     "Page 1 (block-flex-flow-and-auto-min): light #F8FAFC canvas; top white header row aligns auto-sized 'Block & Flex Layout' text on the left and a 30%-width blue badge ('30% Width') on the right; middle row displays 3 cards—left blue card protects its unbreakable 'MinimumContentGuard' width via automatic minimum, middle emerald card (minWidth: 0) shrinks and wraps text cleanly, right amber card takes 25% width; bottom gray block section stacks full-width column items.",
     "Page 2 (flex-wrap-and-baseline): white canvas; top-left bordered panel wraps four 110x42 colored chips across two rows (2 per row); top-right amber-bordered Flex row aligns baselines across 28px Text ('28px'), a nested Box wrapping 16px Text ('16px Boxed'), and 12px CJK/Latin Text ('12px 基线') alongside a centered teal Shape badge; bottom indigo-bordered relative box anchors an escaped absolute indigo Shape at its bottom-right corner and a dark slate Shape at its top-left.",
-    "Page 3 (canvas-overflow-and-escape): pale rose #FEF2F2 canvas; dark slate Shape escapes an enclosing static Box to position at (32, 32) on the Slide; bottom-right coral Box ('Overflow retained') intentionally extends past the right/bottom canvas edges (clipped at PNG border while retaining full coordinates in PPTX and reporting an overflow warning).",
+    "Page 3 (canvas-overflow-and-escape): pale rose #FEF2F2 canvas; dark slate Shape escapes an enclosing static Box to position at (32, 32) on the Slide; bottom-right coral Box ('Overflow retained') intentionally extends past the right/bottom canvas edges (clipped at PNG border while retaining full coordinates in PPTX).",
   ],
   nativeCheckpoints: [
     "Open exported PPTX in PowerPoint/WPS and verify identical geometry across JSX and /document builds, including clipped-at-slide-edge overflowing Box retained at its declared EMU bounds.",
@@ -84,9 +84,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               justifyContent: "space-between",
               alignItems: "center",
               padding: [10, 14],
-              backgroundColor: "#FFFFFF",
-              borderColor: "#CBD5E1",
-              borderWidth: 1,
+              background: "#FFFFFF",
+              border: { color: "#CBD5E1", width: 1 },
             },
           },
           createElement(
@@ -114,7 +113,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                backgroundColor: "#2563EB",
+                background: "#2563EB",
               },
             },
             createElement(
@@ -154,9 +153,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
                 width: 240,
                 flexShrink: 1,
                 padding: 8,
-                backgroundColor: "#EFF6FF",
-                borderColor: "#3B82F6",
-                borderWidth: 2,
+                background: "#EFF6FF",
+                border: { color: "#3B82F6", width: 2 },
               },
             },
             createElement(
@@ -180,9 +178,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
                 flex: 1,
                 minWidth: 0,
                 padding: 8,
-                backgroundColor: "#ECFDF5",
-                borderColor: "#10B981",
-                borderWidth: 2,
+                background: "#ECFDF5",
+                border: { color: "#10B981", width: 2 },
               },
             },
             createElement(
@@ -206,9 +203,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               style: {
                 width: "25%",
                 padding: 8,
-                backgroundColor: "#FEF3C7",
-                borderColor: "#D97706",
-                borderWidth: 2,
+                background: "#FEF3C7",
+                border: { color: "#D97706", width: 2 },
               },
             },
             createElement(
@@ -232,7 +228,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             style: {
               padding: 10,
               gap: 6,
-              backgroundColor: "#E2E8F0",
+              background: "#E2E8F0",
               display: "flex",
               flexDirection: "column",
             },
@@ -243,9 +239,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               id: "block-child-default",
               style: {
                 padding: [6, 10],
-                backgroundColor: "#FFFFFF",
-                borderColor: "#94A3B8",
-                borderWidth: 1,
+                background: "#FFFFFF",
+                border: { color: "#94A3B8", width: 1 },
               },
             },
             createElement(
@@ -263,8 +258,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
           ),
           createElement(Shape, {
             id: "block-accent-bar",
-            height: 18,
-            fill: "#0F766E",
+            style: { height: 18, background: "#0F766E" },
           }),
         ),
       ),
@@ -287,34 +281,25 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               alignContent: "flex-start",
               gap: 12,
               padding: 14,
-              backgroundColor: "#F8FAFC",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "#F8FAFC",
+              border: { color: "#94A3B8", width: 1 },
             },
           },
           createElement(Shape, {
             id: "chip-1",
-            width: 112,
-            height: 44,
-            fill: "#2563EB",
+            style: { width: 112, height: 44, background: "#2563EB" },
           }),
           createElement(Shape, {
             id: "chip-2",
-            width: 112,
-            height: 44,
-            fill: "#0F766E",
+            style: { width: 112, height: 44, background: "#0F766E" },
           }),
           createElement(Shape, {
             id: "chip-3",
-            width: 112,
-            height: 44,
-            fill: "#D97706",
+            style: { width: 112, height: 44, background: "#D97706" },
           }),
           createElement(Shape, {
             id: "chip-4",
-            width: 112,
-            height: 44,
-            fill: "#7C3AED",
+            style: { width: 112, height: 44, background: "#7C3AED" },
           }),
         ),
         createElement(
@@ -331,9 +316,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               alignItems: "baseline",
               gap: 10,
               padding: 12,
-              backgroundColor: "#FFFBEB",
-              borderColor: "#F59E0B",
-              borderWidth: 2,
+              background: "#FFFBEB",
+              border: { color: "#F59E0B", width: 2 },
             },
           },
           createElement(
@@ -345,7 +329,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
                 fontSize: 28,
                 color: "#78350F",
                 padding: 4,
-                backgroundColor: "#FFFFFF",
+                background: "#FFFFFF",
               },
             },
             "28px",
@@ -369,7 +353,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
                   fontSize: 16,
                   color: "#FFFFFF",
                   padding: 4,
-                  backgroundColor: "#0F766E",
+                  background: "#0F766E",
                 },
               },
               "16px Boxed",
@@ -384,17 +368,19 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
                 fontSize: 12,
                 color: "#0C4A6E",
                 padding: 4,
-                backgroundColor: "#E0F2FE",
+                background: "#E0F2FE",
               },
             },
             "12px 基线",
           ),
           createElement(Shape, {
             id: "base-non-participant",
-            width: 18,
-            height: 18,
-            fill: "#0F766E",
-            style: { alignSelf: "center" },
+            style: {
+              width: 18,
+              height: 18,
+              background: "#0F766E",
+              alignSelf: "center",
+            },
           }),
         ),
         createElement(
@@ -407,9 +393,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               top: 244,
               width: 592,
               height: 92,
-              backgroundColor: "#EEF2FF",
-              borderColor: "#6366F1",
-              borderWidth: 1,
+              background: "#EEF2FF",
+              border: { color: "#6366F1", width: 1 },
               padding: 10,
             },
           },
@@ -421,25 +406,25 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             },
             createElement(Shape, {
               id: "escaped-to-relative",
-              fill: "#4F46E5",
               style: {
                 position: "absolute",
                 right: 14,
                 bottom: 12,
                 width: 150,
                 height: 36,
+                background: "#4F46E5",
               },
             }),
           ),
           createElement(Shape, {
             id: "anchored-top-left",
-            fill: "#1E293B",
             style: {
               position: "absolute",
               left: 14,
               top: 12,
               width: 150,
               height: 36,
+              background: "#1E293B",
             },
           }),
         ),
@@ -456,20 +441,19 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               marginTop: 140,
               width: 140,
               height: 60,
-              backgroundColor: "#FEE2E2",
-              borderColor: "#EF4444",
-              borderWidth: 1,
+              background: "#FEE2E2",
+              border: { color: "#EF4444", width: 1 },
             },
           },
           createElement(Shape, {
             id: "escaped-to-slide",
-            fill: "#0F172A",
             style: {
               position: "absolute",
               left: 32,
               top: 32,
               width: 180,
               height: 54,
+              background: "#0F172A",
             },
           }),
         ),
@@ -484,9 +468,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               width: 180,
               height: 120,
               padding: 12,
-              backgroundColor: "#FCA5A5",
-              borderColor: "#DC2626",
-              borderWidth: 2,
+              background: "#FCA5A5",
+              border: { color: "#DC2626", width: 2 },
             },
           },
           createElement(
@@ -525,9 +508,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             justifyContent: "space-between",
             alignItems: "center",
             padding: [10, 14],
-            backgroundColor: "#FFFFFF",
-            borderColor: "#CBD5E1",
-            borderWidth: 1,
+            background: "#FFFFFF",
+            border: { color: "#CBD5E1", width: 1 },
           },
         }).append(
           text("Block & Flex Layout", {
@@ -549,7 +531,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
-              backgroundColor: "#2563EB",
+              background: "#2563EB",
             },
           }).append(
             text("30% Width", {
@@ -581,9 +563,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               width: 240,
               flexShrink: 1,
               padding: 8,
-              backgroundColor: "#EFF6FF",
-              borderColor: "#3B82F6",
-              borderWidth: 2,
+              background: "#EFF6FF",
+              border: { color: "#3B82F6", width: 2 },
             },
           }).append(
             text("MinimumContentGuard", {
@@ -601,9 +582,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               flex: 1,
               minWidth: 0,
               padding: 8,
-              backgroundColor: "#ECFDF5",
-              borderColor: "#10B981",
-              borderWidth: 2,
+              background: "#ECFDF5",
+              border: { color: "#10B981", width: 2 },
             },
           }).append(
             text("Released minWidth: 0 wraps inside remaining space", {
@@ -621,9 +601,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             style: {
               width: "25%",
               padding: 8,
-              backgroundColor: "#FEF3C7",
-              borderColor: "#D97706",
-              borderWidth: 2,
+              background: "#FEF3C7",
+              border: { color: "#D97706", width: 2 },
             },
           }).append(
             text("25% card", {
@@ -641,7 +620,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
           style: {
             padding: 10,
             gap: 6,
-            backgroundColor: "#E2E8F0",
+            background: "#E2E8F0",
             display: "flex",
             flexDirection: "column",
           },
@@ -650,9 +629,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             id: "block-child-default",
             style: {
               padding: [6, 10],
-              backgroundColor: "#FFFFFF",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "#FFFFFF",
+              border: { color: "#94A3B8", width: 1 },
             },
           }).append(
             text("Default block child stretches to full container width", {
@@ -666,8 +644,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
           ),
           shape({
             id: "block-accent-bar",
-            height: 18,
-            fill: "#0F766E",
+            style: { height: 18, background: "#0F766E" },
           }),
         ),
       ),
@@ -686,15 +663,26 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             alignContent: "flex-start",
             gap: 12,
             padding: 14,
-            backgroundColor: "#F8FAFC",
-            borderColor: "#94A3B8",
-            borderWidth: 1,
+            background: "#F8FAFC",
+            border: { color: "#94A3B8", width: 1 },
           },
         }).append(
-          shape({ id: "chip-1", width: 112, height: 44, fill: "#2563EB" }),
-          shape({ id: "chip-2", width: 112, height: 44, fill: "#0F766E" }),
-          shape({ id: "chip-3", width: 112, height: 44, fill: "#D97706" }),
-          shape({ id: "chip-4", width: 112, height: 44, fill: "#7C3AED" }),
+          shape({
+            id: "chip-1",
+            style: { width: 112, height: 44, background: "#2563EB" },
+          }),
+          shape({
+            id: "chip-2",
+            style: { width: 112, height: 44, background: "#0F766E" },
+          }),
+          shape({
+            id: "chip-3",
+            style: { width: 112, height: 44, background: "#D97706" },
+          }),
+          shape({
+            id: "chip-4",
+            style: { width: 112, height: 44, background: "#7C3AED" },
+          }),
         ),
         box({
           id: "baseline-row",
@@ -708,9 +696,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             alignItems: "baseline",
             gap: 10,
             padding: 12,
-            backgroundColor: "#FFFBEB",
-            borderColor: "#F59E0B",
-            borderWidth: 2,
+            background: "#FFFBEB",
+            border: { color: "#F59E0B", width: 2 },
           },
         }).append(
           text("28px", {
@@ -720,7 +707,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               fontSize: 28,
               color: "#78350F",
               padding: 4,
-              backgroundColor: "#FFFFFF",
+              background: "#FFFFFF",
             },
           }),
           box({
@@ -738,7 +725,7 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
                 fontSize: 16,
                 color: "#FFFFFF",
                 padding: 4,
-                backgroundColor: "#0F766E",
+                background: "#0F766E",
               },
             }),
           ),
@@ -749,15 +736,17 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
               fontSize: 12,
               color: "#0C4A6E",
               padding: 4,
-              backgroundColor: "#E0F2FE",
+              background: "#E0F2FE",
             },
           }),
           shape({
             id: "base-non-participant",
-            width: 18,
-            height: 18,
-            fill: "#0F766E",
-            style: { alignSelf: "center" },
+            style: {
+              width: 18,
+              height: 18,
+              background: "#0F766E",
+              alignSelf: "center",
+            },
           }),
         ),
         box({
@@ -768,9 +757,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             top: 244,
             width: 592,
             height: 92,
-            backgroundColor: "#EEF2FF",
-            borderColor: "#6366F1",
-            borderWidth: 1,
+            background: "#EEF2FF",
+            border: { color: "#6366F1", width: 1 },
             padding: 10,
           },
         }).append(
@@ -780,25 +768,25 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
           }).append(
             shape({
               id: "escaped-to-relative",
-              fill: "#4F46E5",
               style: {
                 position: "absolute",
                 right: 14,
                 bottom: 12,
                 width: 150,
                 height: 36,
+                background: "#4F46E5",
               },
             }),
           ),
           shape({
             id: "anchored-top-left",
-            fill: "#1E293B",
             style: {
               position: "absolute",
               left: 14,
               top: 12,
               width: 150,
               height: 36,
+              background: "#1E293B",
             },
           }),
         ),
@@ -815,20 +803,19 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             marginTop: 140,
             width: 140,
             height: 60,
-            backgroundColor: "#FEE2E2",
-            borderColor: "#EF4444",
-            borderWidth: 1,
+            background: "#FEE2E2",
+            border: { color: "#EF4444", width: 1 },
           },
         }).append(
           shape({
             id: "escaped-to-slide",
-            fill: "#0F172A",
             style: {
               position: "absolute",
               left: 32,
               top: 32,
               width: 180,
               height: 54,
+              background: "#0F172A",
             },
           }),
         ),
@@ -841,9 +828,8 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
             width: 180,
             height: 120,
             padding: 12,
-            backgroundColor: "#FCA5A5",
-            borderColor: "#DC2626",
-            borderWidth: 2,
+            background: "#FCA5A5",
+            border: { color: "#DC2626", width: 2 },
           },
         }).append(
           text("Overflow retained", {
@@ -864,88 +850,76 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
 
     // Page 1: Flex row/column, percentage badge, automatic minimum, and minWidth: 0 wrapping.
     const page1 = preview.pages[0]!;
-    assert.deepEqual(page1.diagnostics, [], author);
+    assert.deepEqual(page1.errors, [], author);
     assert.ok(page1.png !== undefined, author);
-    const headerRow = resolution.query
-      .getSlide("block-flex-flow-and-auto-min")
+    const headerRow = resolution
+      .slide("block-flex-flow-and-auto-min")
+      .get("header-row");
+    const badge = resolution
+      .slide("block-flex-flow-and-auto-min")
       .get("header-row")
-      .observe();
-    const badge = resolution.query
-      .getSlide("block-flex-flow-and-auto-min")
-      .get("header-row")
-      .get("header-badge")
-      .observe();
+      .get("header-badge");
     assert.ok(
       Math.abs(badge.box!.width - (headerRow.box!.width - 28) * 0.3) < 0.5,
       author,
     );
-    const autominCard = resolution.query
-      .getSlide("block-flex-flow-and-auto-min")
+    const autominCard = resolution
+      .slide("block-flex-flow-and-auto-min")
       .get("auto-min-row")
-      .get("card-automin")
-      .observe();
-    const releasedCard = resolution.query
-      .getSlide("block-flex-flow-and-auto-min")
+      .get("card-automin");
+    const releasedCard = resolution
+      .slide("block-flex-flow-and-auto-min")
       .get("auto-min-row")
-      .get("card-released")
-      .observe();
-    const percentCard = resolution.query
-      .getSlide("block-flex-flow-and-auto-min")
+      .get("card-released");
+    const percentCard = resolution
+      .slide("block-flex-flow-and-auto-min")
       .get("auto-min-row")
-      .get("card-percent")
-      .observe();
+      .get("card-percent");
     assert.ok(autominCard.box!.width > 160, author);
     assert.ok(releasedCard.box!.width > 80, author);
     assert.equal(percentCard.box!.width, 150, author);
 
     // Page 2: Flex wrap across rows, baseline alignment, and relative containing-block escape.
     const page2 = preview.pages[1]!;
-    assert.deepEqual(page2.diagnostics, [], author);
+    assert.deepEqual(page2.errors, [], author);
     assert.ok(page2.png !== undefined, author);
-    const chip1 = resolution.query
-      .getSlide("flex-wrap-and-baseline")
+    const chip1 = resolution
+      .slide("flex-wrap-and-baseline")
       .get("wrap-panel")
-      .get("chip-1")
-      .observe().box!;
-    const chip2 = resolution.query
-      .getSlide("flex-wrap-and-baseline")
+      .get("chip-1").box!;
+    const chip2 = resolution
+      .slide("flex-wrap-and-baseline")
       .get("wrap-panel")
-      .get("chip-2")
-      .observe().box!;
-    const chip3 = resolution.query
-      .getSlide("flex-wrap-and-baseline")
+      .get("chip-2").box!;
+    const chip3 = resolution
+      .slide("flex-wrap-and-baseline")
       .get("wrap-panel")
-      .get("chip-3")
-      .observe().box!;
+      .get("chip-3").box!;
     assert.equal(chip1.y, chip2.y, author);
     assert.ok(chip3.y > chip1.y, author);
     assert.equal(chip3.x, chip1.x, author);
 
-    const baseLarge = resolution.query
-      .getSlide("flex-wrap-and-baseline")
+    const baseLarge = resolution
+      .slide("flex-wrap-and-baseline")
       .get("baseline-row")
-      .get("base-large")
-      .observe().box!;
-    const baseShape = resolution.query
-      .getSlide("flex-wrap-and-baseline")
+      .get("base-large").box!;
+    const baseShape = resolution
+      .slide("flex-wrap-and-baseline")
       .get("baseline-row")
       .get("base-passthrough")
-      .get("base-boxed")
-      .observe().box!;
-    const baseSmall = resolution.query
-      .getSlide("flex-wrap-and-baseline")
+      .get("base-boxed").box!;
+    const baseSmall = resolution
+      .slide("flex-wrap-and-baseline")
       .get("baseline-row")
-      .get("base-small")
-      .observe().box!;
+      .get("base-small").box!;
     assert.ok(baseShape.y > baseLarge.y, author);
     assert.ok(baseSmall.y > baseShape.y, author);
 
-    const escapedRelative = resolution.query
-      .getSlide("flex-wrap-and-baseline")
+    const escapedRelative = resolution
+      .slide("flex-wrap-and-baseline")
       .get("relative-cb")
       .get("static-nested")
-      .get("escaped-to-relative")
-      .observe().box!;
+      .get("escaped-to-relative").box!;
     // Anchored relative to relative-cb (x=24, y=244, width=592, height=92), right: 14, bottom: 12.
     assert.deepEqual(
       escapedRelative,
@@ -958,36 +932,37 @@ export const layoutBlockFlexPositiveScenario: CapabilityScenario = {
       author,
     );
 
-    // Page 3: Static ancestor escape to Slide canvas + canvas overflow warning with retained PNG & PPTX.
+    // Page 3: Static ancestor escape to Slide canvas + overflowing Box retained at declared coordinates.
     const page3 = preview.pages[2]!;
-    assert.deepEqual(page3.diagnostics, [], author);
+    assert.deepEqual(page3.errors, [], author);
     assert.ok(page3.png !== undefined, author);
-    const escapedSlide = resolution.query
-      .getSlide("canvas-overflow-and-escape")
+    const escapedSlide = resolution
+      .slide("canvas-overflow-and-escape")
       .get("static-outer-box")
-      .get("escaped-to-slide")
-      .observe().box!;
+      .get("escaped-to-slide").box!;
     assert.deepEqual(
       escapedSlide,
       { x: 32, y: 32, width: 180, height: 54 },
       author,
     );
-    const overflowBox = resolution.query
-      .getSlide("canvas-overflow-and-escape")
-      .get("overflowing-box")
-      .observe().box!;
+    const overflowLocator = resolution
+      .slide("canvas-overflow-and-escape")
+      .get("overflowing-box");
     assert.deepEqual(
-      overflowBox,
+      overflowLocator.box,
+      { x: 520, y: 260, width: 180, height: 120 },
+      author,
+    );
+    assert.deepEqual(
+      overflowLocator.bounds,
       { x: 520, y: 260, width: 180, height: 120 },
       author,
     );
     assert.ok(
-      resolution.report.diagnostics.some(
-        (d) =>
-          d.severity === "warning" &&
-          d.code === "overflow" &&
-          d.path.includes("box[overflowing-box]"),
-      ),
+      overflowLocator.bounds!.x + overflowLocator.bounds!.width >
+        resolution.report.dimensions.width &&
+        overflowLocator.bounds!.y + overflowLocator.bounds!.height >
+          resolution.report.dimensions.height,
       author,
     );
     const nativeOverflow = validation.slides[2]?.objects.find(
@@ -1008,7 +983,7 @@ export type LayoutRejectionCase = {
 export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
   {
     id: "flex-direction-on-block-container",
-    expectedCode: "invalid-layout-context",
+    expectedCode: "invalid-structure",
     expectedPathSubstring: "box[bad-block]",
     jsx() {
       return createElement(
@@ -1037,7 +1012,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "position-offset-on-static-element",
-    expectedCode: "invalid-layout-context",
+    expectedCode: "invalid-structure",
     expectedPathSubstring: "shape[static-offset]",
     jsx() {
       return createElement(
@@ -1048,9 +1023,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
           { id: "s1" },
           createElement(Shape, {
             id: "static-offset",
-            width: 80,
-            height: 40,
-            style: { left: 10 },
+            style: { width: 80, height: 40, left: 10 },
           }),
         ),
       );
@@ -1060,9 +1033,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
         slide({ id: "s1" }).append(
           shape({
             id: "static-offset",
-            width: 80,
-            height: 40,
-            style: { left: 10 },
+            style: { width: 80, height: 40, left: 10 },
           }),
         ),
       );
@@ -1070,7 +1041,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "baseline-on-wrapping-flex-row",
-    expectedCode: "unsupported-baseline-context",
+    expectedCode: "invalid-structure",
     expectedPathSubstring: "box[wrap-baseline]",
     jsx() {
       return createElement(
@@ -1123,7 +1094,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "multi-child-box-in-baseline-chain",
-    expectedCode: "unsupported-baseline-context",
+    expectedCode: "invalid-structure",
     expectedPathSubstring: "box[multi-child-box]",
     jsx() {
       return createElement(
@@ -1188,7 +1159,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "min-width-greater-than-max-width",
-    expectedCode: "invalid-layout-style",
+    expectedCode: "invalid-style",
     expectedPathSubstring: "box[bad-bounds]",
     jsx() {
       return createElement(
@@ -1217,7 +1188,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
   },
   {
     id: "non-text-shape-in-baseline-row",
-    expectedCode: "unsupported-baseline-context",
+    expectedCode: "invalid-structure",
     expectedPathSubstring: "shape[no-text-shape]",
     jsx() {
       return createElement(
@@ -1238,9 +1209,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
             },
             createElement(Shape, {
               id: "no-text-shape",
-              width: 60,
-              height: 30,
-              fill: "#2563EB",
+              style: { width: 60, height: 30, background: "#2563EB" },
             }),
           ),
         ),
@@ -1259,9 +1228,7 @@ export const layoutBlockFlexRejectionCases: readonly LayoutRejectionCase[] = [
           }).append(
             shape({
               id: "no-text-shape",
-              width: 60,
-              height: 30,
-              fill: "#2563EB",
+              style: { width: 60, height: 30, background: "#2563EB" },
             }),
           ),
         ),

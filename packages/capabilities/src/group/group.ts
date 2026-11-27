@@ -10,11 +10,12 @@ import {
   type EmitContext,
   type EmitOutput,
   type ObjectCapabilityModule,
-  type ObjectObservation,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
+  type ObjectResolution,
+  type Rect,
   type ResolvedObject,
   type ThemeScope,
 } from "@pptxdk/core/capability";
@@ -34,7 +35,6 @@ import {
 import { groupCodegen } from "./group-codegen.ts";
 import {
   groupDeclarationPropsKeys,
-  groupDeclarationPropsSchema,
   groupStyleSchema,
 } from "./group-declaration.ts";
 import { groupImportHandler } from "./group-import.ts";
@@ -64,12 +64,12 @@ type MotionNativeMember = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
-  readonly box?: NonNullable<ObjectObservation["box"]>;
+  readonly box?: NonNullable<ResolvedObject["box"]>;
   readonly members?: readonly MotionNativeMember[];
 };
 
 function motionMembers(
-  objects: readonly ObjectObservation[],
+  objects: readonly ResolvedObject[],
 ): readonly MotionNativeMember[] {
   return objects.map((object) => ({
     id: object.id,
@@ -83,7 +83,7 @@ function motionMembers(
   }));
 }
 
-function bounds(members: readonly ObjectObservation[]): {
+function bounds(members: readonly ResolvedObject[]): {
   readonly pixels: { x: number; y: number; width: number; height: number };
   readonly emu: EmuBox;
 } {
@@ -163,6 +163,8 @@ type ResolvedGroupModel = {
   readonly emu: EmuBox;
   readonly angle: number;
   readonly rotation?: number;
+  readonly flipH: boolean;
+  readonly flipV: boolean;
 };
 
 function roundSvgNumber(value: number): string {
@@ -182,6 +184,8 @@ function emitGroupModel(
       emitContext.childrenXml,
       model.rotation,
       nativeLinkXml(emitContext.nativeLink),
+      model.flipH,
+      model.flipV,
     ),
   };
 }
@@ -191,10 +195,16 @@ function paintGroupModel(
   paintContext: PaintContext,
 ): PaintOutput {
   const childrenSvg = paintContext.childrenSvg ?? "";
-  const cx = roundSvgNumber(model.box.x + model.box.width / 2);
-  const cy = roundSvgNumber(model.box.y + model.box.height / 2);
+  const cxNum = model.box.x + model.box.width / 2;
+  const cyNum = model.box.y + model.box.height / 2;
+  const cx = roundSvgNumber(cxNum);
+  const cy = roundSvgNumber(cyNum);
+  const transform =
+    model.flipH || model.flipV
+      ? `translate(${cx} ${cy}) rotate(${roundSvgNumber(model.angle)}) scale(${model.flipH ? -1 : 1} ${model.flipV ? -1 : 1}) translate(${roundSvgNumber(-cxNum)} ${roundSvgNumber(-cyNum)})`
+      : `rotate(${roundSvgNumber(model.angle)} ${cx} ${cy})`;
   return {
-    svg: `<g transform="rotate(${roundSvgNumber(model.angle)} ${cx} ${cy})">${childrenSvg}</g>`,
+    svg: `<g transform="${transform}">${childrenSvg}</g>`,
   };
 }
 
@@ -259,27 +269,22 @@ export const groupCapability = {
       );
     }
     const rotation = rawRotation as number | undefined;
-
-    let explicitBox:
-      | {
-          readonly x: number;
-          readonly y: number;
-          readonly width: number;
-          readonly height: number;
-        }
-      | undefined;
-    if (input.props["bounds"] !== undefined) {
-      const parsedBounds = groupDeclarationPropsSchema
-        .unwrap()
-        .shape.bounds.safeParse(input.props["bounds"]);
-      if (!parsedBounds.success) {
-        throw new CapabilityError(
-          "invalid-group-geometry",
-          parsedBounds.error.issues[0]?.message ?? "Invalid Group bounds",
-        );
-      }
-      explicitBox = parsedBounds.data;
+    const rawFlipH = styleRecord["flipH"];
+    if (rawFlipH !== undefined && typeof rawFlipH !== "boolean") {
+      throw new CapabilityError(
+        "invalid-visual-style",
+        "flipH must be a boolean",
+      );
     }
+    const rawFlipV = styleRecord["flipV"];
+    if (rawFlipV !== undefined && typeof rawFlipV !== "boolean") {
+      throw new CapabilityError(
+        "invalid-visual-style",
+        "flipV must be a boolean",
+      );
+    }
+    const flipH = Boolean(rawFlipH);
+    const flipV = Boolean(rawFlipV);
 
     const theme = context.theme.with(
       input.props["theme"] as ThemeScope | undefined,
@@ -304,12 +309,10 @@ export const groupCapability = {
       children: input.children,
       theme,
       emitsObject: true,
-      layoutMode: "when-styled",
       childComposition: "members",
       restrictsMemberContinuity: true,
       observesLayout: false,
       propagatesBaseline: false,
-      checksCanvasOverflow: false,
     };
 
     const native: BoundObjectNativeCollaboration = {
@@ -326,11 +329,129 @@ export const groupCapability = {
       link !== undefined
         ? { native }
         : {}),
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const resolvedChildren = resolveContext.resolveChildren(input.children);
         const geometry = bounds(resolvedChildren.objects);
-        const outputGeometry =
-          resolveContext.layoutBox ?? explicitBox ?? geometry.pixels;
+        const layoutBox = resolveContext.layoutBox;
+        const position = contract.layoutStyle.position;
+        const isPositioned = position === "relative" || position === "absolute";
+        const hasExplicitWidth =
+          contract.layoutStyle.width !== undefined ||
+          ((contract.layoutStyle.left !== undefined ||
+            contract.layoutStyle.inset !== undefined) &&
+            (contract.layoutStyle.right !== undefined ||
+              contract.layoutStyle.inset !== undefined));
+        const hasExplicitHeight =
+          contract.layoutStyle.height !== undefined ||
+          ((contract.layoutStyle.top !== undefined ||
+            contract.layoutStyle.inset !== undefined) &&
+            (contract.layoutStyle.bottom !== undefined ||
+              contract.layoutStyle.inset !== undefined));
+        const hasLayoutWidth =
+          hasExplicitWidth ||
+          contract.layoutStyle.flex !== undefined ||
+          contract.layoutStyle.flexGrow !== undefined ||
+          contract.layoutStyle.flexBasis !== undefined;
+        const hasLayoutHeight = hasExplicitHeight;
+
+        let outputGeometry: Rect;
+        if (isPositioned) {
+          const memberBounds = geometry.pixels;
+          if (layoutBox !== undefined) {
+            const resolvedWidth =
+              hasExplicitWidth || layoutBox.width > 0
+                ? layoutBox.width
+                : memberBounds.width > 0
+                  ? Math.max(
+                      memberBounds.width,
+                      memberBounds.x + memberBounds.width - layoutBox.x,
+                    )
+                  : 0;
+            const resolvedHeight =
+              hasExplicitHeight || layoutBox.height > 0
+                ? layoutBox.height
+                : memberBounds.height > 0
+                  ? Math.max(
+                      memberBounds.height,
+                      memberBounds.y + memberBounds.height - layoutBox.y,
+                    )
+                  : 0;
+            outputGeometry = {
+              x: layoutBox.x,
+              y: layoutBox.y,
+              width: resolvedWidth,
+              height: resolvedHeight,
+            };
+          } else {
+            outputGeometry = memberBounds;
+          }
+        } else {
+          const memberBounds = geometry.pixels;
+          if (
+            layoutBox !== undefined &&
+            hasLayoutWidth &&
+            hasLayoutHeight &&
+            layoutBox.width > 0 &&
+            layoutBox.height > 0
+          ) {
+            outputGeometry = layoutBox;
+          } else if (
+            layoutBox !== undefined &&
+            layoutBox.width > 0 &&
+            layoutBox.height > 0
+          ) {
+            const x = hasLayoutWidth
+              ? layoutBox.x
+              : memberBounds.width > 0
+                ? Math.min(layoutBox.x, memberBounds.x)
+                : layoutBox.x;
+            const y = hasLayoutHeight
+              ? layoutBox.y
+              : memberBounds.height > 0
+                ? Math.min(layoutBox.y, memberBounds.y)
+                : layoutBox.y;
+            const right = hasLayoutWidth
+              ? layoutBox.x + layoutBox.width
+              : memberBounds.width > 0
+                ? Math.max(
+                    layoutBox.x + layoutBox.width,
+                    memberBounds.x + memberBounds.width,
+                  )
+                : layoutBox.x + layoutBox.width;
+            const bottom = hasLayoutHeight
+              ? layoutBox.y + layoutBox.height
+              : memberBounds.height > 0
+                ? Math.max(
+                    layoutBox.y + layoutBox.height,
+                    memberBounds.y + memberBounds.height,
+                  )
+                : layoutBox.y + layoutBox.height;
+            outputGeometry = {
+              x,
+              y,
+              width: right - x,
+              height: bottom - y,
+            };
+          } else if (
+            layoutBox !== undefined &&
+            (hasLayoutWidth || hasLayoutHeight)
+          ) {
+            outputGeometry = {
+              x: hasLayoutWidth ? layoutBox.x : memberBounds.x,
+              y: hasLayoutHeight ? layoutBox.y : memberBounds.y,
+              width:
+                hasLayoutWidth && layoutBox.width > 0
+                  ? layoutBox.width
+                  : memberBounds.width,
+              height:
+                hasLayoutHeight && layoutBox.height > 0
+                  ? layoutBox.height
+                  : memberBounds.height,
+            };
+          } else {
+            outputGeometry = memberBounds;
+          }
+        }
         if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
           throw new CapabilityError(
             "invalid-group-geometry",
@@ -374,12 +495,14 @@ export const groupCapability = {
           emu: outputEmu,
           angle,
           ...(rotation === undefined ? {} : { rotation }),
+          flipH,
+          flipV,
         };
         const transform: PreviewTransform = {
           box: outputGeometry,
           angle,
-          flipH: false,
-          flipV: false,
+          flipH,
+          flipV,
         };
         return {
           observation: {

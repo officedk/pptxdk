@@ -90,13 +90,7 @@ export type SlideImportHandler = {
 };
 
 export type ImportedPlaceholderSpPr = {
-  readonly x?: number;
-  readonly y?: number;
-  readonly width?: number;
-  readonly height?: number;
   readonly geometry?: Geometry;
-  readonly flipH?: boolean;
-  readonly flipV?: boolean;
   readonly style?: Record<string, unknown>;
 };
 

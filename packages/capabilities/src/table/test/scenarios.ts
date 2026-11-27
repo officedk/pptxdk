@@ -82,16 +82,17 @@ export const tablePositiveScenario: CapabilityScenario = {
       { width: 640, height: 360 },
       createElement(
         Slide,
-        { id: "tracks-merges-and-fills", background: "#F8FAFC" },
+        { id: "tracks-merges-and-fills", style: { background: "#F8FAFC" } },
         createElement(
           Table,
           {
             id: "pricing-table",
-            x: 32,
-            y: 36,
-            width: 576,
             columns: [130, "auto", "1fr"],
             style: {
+              position: "absolute",
+              left: 32,
+              top: 36,
+              width: 576,
               fontFamily: jostFont,
               fontSize: 15,
               color: "#0F172A",
@@ -103,7 +104,7 @@ export const tablePositiveScenario: CapabilityScenario = {
               id: "header",
               style: {
                 height: 46,
-                backgroundColor: "#1E293B",
+                background: "#1E293B",
                 color: "#FFFFFF",
               },
             },
@@ -115,9 +116,7 @@ export const tablePositiveScenario: CapabilityScenario = {
                 style: {
                   fontWeight: "bold",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
-                  borderStyle: "solid",
+                  border: { color: "#0F172A", width: 2, style: "solid" },
                 },
               },
               createElement(
@@ -132,11 +131,10 @@ export const tablePositiveScenario: CapabilityScenario = {
                 id: "page-badge",
                 style: {
                   fontFamily: notoFont,
-                  backgroundColor: "#334155",
+                  background: "#334155",
                   color: "#E2E8F0",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
+                  border: { color: "#0F172A", width: 2 },
                 },
               },
               createElement(
@@ -150,20 +148,19 @@ export const tablePositiveScenario: CapabilityScenario = {
           ),
           createElement(
             Row,
-            { id: "tier-pro", style: { backgroundColor: "#FFFFFF" } },
+            { id: "tier-pro", style: { background: "#FFFFFF" } },
             createElement(
               Cell,
               {
                 id: "tier-name",
                 rowSpan: 2,
                 style: {
-                  backgroundColor: "#EFF6FF",
+                  background: "#EFF6FF",
                   color: "#1D4ED8",
                   fontWeight: "bold",
                   verticalAlign: "middle",
                   padding: [6, 10],
-                  borderColor: "#3B82F6",
-                  borderWidth: 2,
+                  border: { color: "#3B82F6", width: 2 },
                 },
               },
               createElement(P, { style: { align: "center" } }, "Pro\nTier"),
@@ -174,8 +171,7 @@ export const tablePositiveScenario: CapabilityScenario = {
                 id: "pro-metric",
                 style: {
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
               "Auto Width",
@@ -185,11 +181,10 @@ export const tablePositiveScenario: CapabilityScenario = {
               {
                 id: "pro-price",
                 style: {
-                  backgroundColor: "#F1F5F9",
+                  background: "#F1F5F9",
                   verticalAlign: "bottom",
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
               createElement(
@@ -206,15 +201,14 @@ export const tablePositiveScenario: CapabilityScenario = {
           ),
           createElement(
             Row,
-            { id: "tier-notes", style: { backgroundColor: "#FFFFFF" } },
+            { id: "tier-notes", style: { background: "#FFFFFF" } },
             createElement(
               Cell,
               {
                 id: "notes-label",
                 style: {
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
               "Summary",
@@ -224,12 +218,11 @@ export const tablePositiveScenario: CapabilityScenario = {
               {
                 id: "notes-detail",
                 style: {
-                  backgroundColor: "#FEF3C7",
+                  background: "#FEF3C7",
                   color: "#92400E",
                   verticalAlign: "top",
                   padding: [6, 10],
-                  borderColor: "#D97706",
-                  borderWidth: 1,
+                  border: { color: "#D97706", width: 1 },
                 },
               },
               "Includes SSO & audit",
@@ -239,15 +232,23 @@ export const tablePositiveScenario: CapabilityScenario = {
       ),
       createElement(
         Slide,
-        { id: "wrapping-and-width-constraint", background: "#FFFFFF" },
+        {
+          id: "wrapping-and-width-constraint",
+          style: { background: "#FFFFFF" },
+        },
         createElement(
           Table,
           {
             id: "wide-table",
-            x: 28,
-            y: 44,
             columns: [270],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#065F46" },
+            style: {
+              position: "absolute",
+              left: 28,
+              top: 44,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#065F46",
+            },
           },
           createElement(
             Row,
@@ -258,9 +259,8 @@ export const tablePositiveScenario: CapabilityScenario = {
                 id: "wide-cell",
                 style: {
                   padding: [10, 12],
-                  backgroundColor: "#ECFDF5",
-                  borderColor: "#10B981",
-                  borderWidth: 2,
+                  background: "#ECFDF5",
+                  border: { color: "#10B981", width: 2 },
                 },
               },
               wrappingCopy,
@@ -271,10 +271,15 @@ export const tablePositiveScenario: CapabilityScenario = {
           Table,
           {
             id: "narrow-table",
-            x: 332,
-            y: 44,
             columns: [130],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#991B1B" },
+            style: {
+              position: "absolute",
+              left: 332,
+              top: 44,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#991B1B",
+            },
           },
           createElement(
             Row,
@@ -285,9 +290,8 @@ export const tablePositiveScenario: CapabilityScenario = {
                 id: "narrow-cell",
                 style: {
                   padding: [10, 12],
-                  backgroundColor: "#FEF2F2",
-                  borderColor: "#EF4444",
-                  borderWidth: 2,
+                  background: "#FEF2F2",
+                  border: { color: "#EF4444", width: 2 },
                 },
               },
               wrappingCopy,
@@ -299,14 +303,18 @@ export const tablePositiveScenario: CapabilityScenario = {
   },
   document() {
     return deck({ width: 640, height: 360 }).append(
-      slide({ id: "tracks-merges-and-fills", background: "#F8FAFC" }).append(
+      slide({
+        id: "tracks-merges-and-fills",
+        style: { background: "#F8FAFC" },
+      }).append(
         table({
           id: "pricing-table",
-          x: 32,
-          y: 36,
-          width: 576,
           columns: [130, "auto", "1fr"],
           style: {
+            position: "absolute",
+            left: 32,
+            top: 36,
+            width: 576,
             fontFamily: jostFont,
             fontSize: 15,
             color: "#0F172A",
@@ -314,7 +322,7 @@ export const tablePositiveScenario: CapabilityScenario = {
         }).append(
           row({
             id: "header",
-            style: { height: 46, backgroundColor: "#1E293B", color: "#FFFFFF" },
+            style: { height: 46, background: "#1E293B", color: "#FFFFFF" },
           }).append(
             cell(
               paragraph("Q1 Plan Overview", { style: { align: "center" } }),
@@ -324,9 +332,7 @@ export const tablePositiveScenario: CapabilityScenario = {
                 style: {
                   fontWeight: "bold",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
-                  borderStyle: "solid",
+                  border: { color: "#0F172A", width: 2, style: "solid" },
                 },
               },
             ),
@@ -338,35 +344,32 @@ export const tablePositiveScenario: CapabilityScenario = {
                 id: "page-badge",
                 style: {
                   fontFamily: notoFont,
-                  backgroundColor: "#334155",
+                  background: "#334155",
                   color: "#E2E8F0",
                   padding: [6, 10],
-                  borderColor: "#0F172A",
-                  borderWidth: 2,
+                  border: { color: "#0F172A", width: 2 },
                 },
               },
             ),
           ),
-          row({ id: "tier-pro", style: { backgroundColor: "#FFFFFF" } }).append(
+          row({ id: "tier-pro", style: { background: "#FFFFFF" } }).append(
             cell(paragraph("Pro\nTier", { style: { align: "center" } }), {
               id: "tier-name",
               rowSpan: 2,
               style: {
-                backgroundColor: "#EFF6FF",
+                background: "#EFF6FF",
                 color: "#1D4ED8",
                 fontWeight: "bold",
                 verticalAlign: "middle",
                 padding: [6, 10],
-                borderColor: "#3B82F6",
-                borderWidth: 2,
+                border: { color: "#3B82F6", width: 2 },
               },
             }),
             cell("Auto Width", {
               id: "pro-metric",
               style: {
                 padding: [6, 10],
-                borderColor: "#CBD5E1",
-                borderWidth: 1,
+                border: { color: "#CBD5E1", width: 1 },
               },
             }),
             cell(
@@ -382,36 +385,33 @@ export const tablePositiveScenario: CapabilityScenario = {
               {
                 id: "pro-price",
                 style: {
-                  backgroundColor: "#F1F5F9",
+                  background: "#F1F5F9",
                   verticalAlign: "bottom",
                   padding: [6, 10],
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
             ),
           ),
           row({
             id: "tier-notes",
-            style: { backgroundColor: "#FFFFFF" },
+            style: { background: "#FFFFFF" },
           }).append(
             cell("Summary", {
               id: "notes-label",
               style: {
                 padding: [6, 10],
-                borderColor: "#CBD5E1",
-                borderWidth: 1,
+                border: { color: "#CBD5E1", width: 1 },
               },
             }),
             cell("Includes SSO & audit", {
               id: "notes-detail",
               style: {
-                backgroundColor: "#FEF3C7",
+                background: "#FEF3C7",
                 color: "#92400E",
                 verticalAlign: "top",
                 padding: [6, 10],
-                borderColor: "#D97706",
-                borderWidth: 1,
+                border: { color: "#D97706", width: 1 },
               },
             }),
           ),
@@ -419,42 +419,50 @@ export const tablePositiveScenario: CapabilityScenario = {
       ),
       slide({
         id: "wrapping-and-width-constraint",
-        background: "#FFFFFF",
+        style: { background: "#FFFFFF" },
       }).append(
         table({
           id: "wide-table",
-          x: 28,
-          y: 44,
           columns: [270],
-          style: { fontFamily: jostFont, fontSize: 15, color: "#065F46" },
+          style: {
+            position: "absolute",
+            left: 28,
+            top: 44,
+            fontFamily: jostFont,
+            fontSize: 15,
+            color: "#065F46",
+          },
         }).append(
           row({ id: "wide-row" }).append(
             cell(wrappingCopy, {
               id: "wide-cell",
               style: {
                 padding: [10, 12],
-                backgroundColor: "#ECFDF5",
-                borderColor: "#10B981",
-                borderWidth: 2,
+                background: "#ECFDF5",
+                border: { color: "#10B981", width: 2 },
               },
             }),
           ),
         ),
         table({
           id: "narrow-table",
-          x: 332,
-          y: 44,
           columns: [130],
-          style: { fontFamily: jostFont, fontSize: 15, color: "#991B1B" },
+          style: {
+            position: "absolute",
+            left: 332,
+            top: 44,
+            fontFamily: jostFont,
+            fontSize: 15,
+            color: "#991B1B",
+          },
         }).append(
           row({ id: "narrow-row" }).append(
             cell(wrappingCopy, {
               id: "narrow-cell",
               style: {
                 padding: [10, 12],
-                backgroundColor: "#FEF2F2",
-                borderColor: "#EF4444",
-                borderWidth: 2,
+                background: "#FEF2F2",
+                border: { color: "#EF4444", width: 2 },
               },
             }),
           ),
@@ -464,8 +472,8 @@ export const tablePositiveScenario: CapabilityScenario = {
   },
   assert({ author, resolution, preview, validation }) {
     assert.equal(preview.pages.length, 2, author);
-    assert.deepEqual(preview.pages[0]?.diagnostics, [], author);
-    assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
+    assert.deepEqual(preview.pages[0]?.errors, [], author);
+    assert.deepEqual(preview.pages[1]?.errors, [], author);
 
     const p1 = preview.pages[0];
     const p2 = preview.pages[1];
@@ -494,36 +502,29 @@ export const tablePositiveScenario: CapabilityScenario = {
     );
 
     // Verify sub-part locators match formal table layout geometry.
-    const pricingQuery = resolution.query
-      .getSlide("tracks-merges-and-fills")
+    const pricingLocator = resolution
+      .slide("tracks-merges-and-fills")
       .get("pricing-table");
-    const headerSpanBox = pricingQuery
-      .get("header")
-      .get("title-span")
-      .observe().box!;
-    const tierSpanBox = pricingQuery
-      .get("tier-pro")
-      .get("tier-name")
-      .observe().box!;
-    const notesDetailBox = pricingQuery
+    const headerSpanBox = pricingLocator.get("header").get("title-span").box!;
+    const tierSpanBox = pricingLocator.get("tier-pro").get("tier-name").box!;
+    const notesDetailBox = pricingLocator
       .get("tier-notes")
-      .get("notes-detail")
-      .observe().box!;
+      .get("notes-detail").box!;
 
-    const reportTable1 = resolution.report.slides[0]?.objects[0]?.table;
+    const reportTable1 = pricingLocator.objects[0]?.table;
     assert.ok(reportTable1 !== undefined, author);
     assert.equal(
       headerSpanBox.width,
-      reportTable1.columnWidths[0]! + reportTable1.columnWidths[1]!,
+      reportTable1.columns[0]! + reportTable1.columns[1]!,
       author,
     );
     assert.equal(headerSpanBox.height, 46, author);
     assert.equal(
       tierSpanBox.height,
-      reportTable1.rowHeights[1]! + reportTable1.rowHeights[2]!,
+      reportTable1.rows[1]!.height + reportTable1.rows[2]!.height,
       author,
     );
-    assert.equal(notesDetailBox.width, reportTable1.columnWidths[2], author);
+    assert.equal(notesDetailBox.width, reportTable1.columns[2], author);
 
     // Sample rendered PNG pixels inside header navy cell and amber detail cell.
     const png1 = PNG.sync.read(Buffer.from(p1.png!));
@@ -547,19 +548,15 @@ export const tablePositiveScenario: CapabilityScenario = {
     );
 
     // Page 2: constrained narrow column causes wrapping and noticeably taller row height.
-    const slide2Query = resolution.query.getSlide(
-      "wrapping-and-width-constraint",
-    );
-    const wideBox = slide2Query
+    const slide2Locator = resolution.slide("wrapping-and-width-constraint");
+    const wideBox = slide2Locator
       .get("wide-table")
       .get("wide-row")
-      .get("wide-cell")
-      .observe().box!;
-    const narrowBox = slide2Query
+      .get("wide-cell").box!;
+    const narrowBox = slide2Locator
       .get("narrow-table")
       .get("narrow-row")
-      .get("narrow-cell")
-      .observe().box!;
+      .get("narrow-cell").box!;
     assert.equal(wideBox.width, 270, author);
     assert.equal(narrowBox.width, 130, author);
     assert.ok(
@@ -582,13 +579,13 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
   id: "table-rich-text-borders-and-overset",
   capability: "table",
   description:
-    "Dual-author Table scenario covering dashed/dotted borders, multiscript/BiDi, justify, bullet & numbered lists, underline/line-through, textShadow, letterSpacing, slideNumber, and fixed-height overset clipping with build warning and zero preview diagnostics.",
+    "Dual-author Table scenario covering dashed/dotted borders, multiscript/BiDi, justify, bullet & numbered lists, underline/line-through, textShadow, letterSpacing, slideNumber, and fixed-height overset clipping with measured textMetrics.fits === false and zero preview errors.",
   visualCheckpoints: [
     "Page 1 (borders-and-rich-text): white canvas; 3-column table with dashed border cell (underline, letterSpacing, bullet & numbered lists), dotted border cell (line-through, textShadow, justify), and solid border Arabic RTL cell.",
     "Page 2 (overset-cell-clipping): white canvas; fixed-height (24px) row with 4 lines of red text clipped cleanly to cell bounds so pixels below the cell remain pure white.",
   ],
   nativeCheckpoints: [
-    "Open exported PPTX and verify native <a:prstDash val='dash'/'dot'/> borders, rich text formatting, and preserved overset cell text with overset warning in build report.",
+    "Open exported PPTX and verify native <a:prstDash val='dash'/'dot'/> borders, rich text formatting, and preserved overset cell text with textMetrics.fits === false.",
   ],
   jsx() {
     return createElement(
@@ -596,15 +593,20 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
       { width: 640, height: 360 },
       createElement(
         Slide,
-        { id: "borders-and-rich-text", background: "#FFFFFF" },
+        { id: "borders-and-rich-text", style: { background: "#FFFFFF" } },
         createElement(
           Table,
           {
             id: "rich-tbl",
-            x: 24,
-            y: 28,
             columns: [200, 200, 170],
-            style: { fontFamily: jostFont, fontSize: 13, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 28,
+              fontFamily: jostFont,
+              fontSize: 13,
+              color: "#0F172A",
+            },
           },
           createElement(
             Row,
@@ -615,10 +617,8 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 id: "dashed-list-cell",
                 style: {
                   padding: 8,
-                  backgroundColor: "#F8FAFC",
-                  borderColor: "#1E293B",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  background: "#F8FAFC",
+                  border: { color: "#1E293B", width: 2, style: "dashed" },
                 },
               },
               createElement(
@@ -650,10 +650,8 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 id: "dotted-shadow-cell",
                 style: {
                   padding: 8,
-                  backgroundColor: "#EFF6FF",
-                  borderColor: "#2563EB",
-                  borderWidth: 2,
-                  borderStyle: "dotted",
+                  background: "#EFF6FF",
+                  border: { color: "#2563EB", width: 2, style: "dotted" },
                 },
               },
               createElement(
@@ -684,9 +682,7 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 style: {
                   fontFamily: arabicFont,
                   padding: 8,
-                  borderColor: "#0F766E",
-                  borderWidth: 1,
-                  borderStyle: "solid",
+                  border: { color: "#0F766E", width: 1, style: "solid" },
                 },
               },
               "مرحبا بالعالم",
@@ -701,10 +697,10 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 id: "quad-padding-cell",
                 style: {
                   padding: [4, 8, 6, 10],
-                  borderColor: "#334155",
+                  border: { color: "#334155" },
                 },
               },
-              "4-tuple pad + borderColor only",
+              "4-tuple pad + border color only",
             ),
             createElement(
               Cell,
@@ -712,10 +708,10 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 id: "width-only-border-cell",
                 style: {
                   padding: 6,
-                  borderWidth: 2,
+                  border: { color: "#000000", width: 2 },
                 },
               },
-              "borderWidth only",
+              "border width 2",
             ),
             createElement(
               Cell,
@@ -730,15 +726,20 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
       ),
       createElement(
         Slide,
-        { id: "overset-cell-clipping", background: "#FFFFFF" },
+        { id: "overset-cell-clipping", style: { background: "#FFFFFF" } },
         createElement(
           Table,
           {
             id: "overset-tbl",
-            x: 32,
-            y: 36,
             columns: [180],
-            style: { fontFamily: jostFont, fontSize: 15, color: "#DC2626" },
+            style: {
+              position: "absolute",
+              left: 32,
+              top: 36,
+              fontFamily: jostFont,
+              fontSize: 15,
+              color: "#DC2626",
+            },
           },
           createElement(
             Row,
@@ -749,8 +750,7 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 id: "overset-cell",
                 style: {
                   padding: 2,
-                  borderColor: "#0F172A",
-                  borderWidth: 1,
+                  border: { color: "#0F172A", width: 1 },
                 },
               },
               "OVERFLOW_1\nOVERFLOW_2\nOVERFLOW_3\nOVERFLOW_4",
@@ -762,13 +762,21 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
   },
   document() {
     return deck({ width: 640, height: 360 }).append(
-      slide({ id: "borders-and-rich-text", background: "#FFFFFF" }).append(
+      slide({
+        id: "borders-and-rich-text",
+        style: { background: "#FFFFFF" },
+      }).append(
         table({
           id: "rich-tbl",
-          x: 24,
-          y: 28,
           columns: [200, 200, 170],
-          style: { fontFamily: jostFont, fontSize: 13, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 28,
+            fontFamily: jostFont,
+            fontSize: 13,
+            color: "#0F172A",
+          },
         }).append(
           row({ id: "rich-row" }).append(
             cell(
@@ -790,10 +798,8 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 id: "dashed-list-cell",
                 style: {
                   padding: 8,
-                  backgroundColor: "#F8FAFC",
-                  borderColor: "#1E293B",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  background: "#F8FAFC",
+                  border: { color: "#1E293B", width: 2, style: "dashed" },
                 },
               },
             ),
@@ -818,10 +824,8 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
                 id: "dotted-shadow-cell",
                 style: {
                   padding: 8,
-                  backgroundColor: "#EFF6FF",
-                  borderColor: "#2563EB",
-                  borderWidth: 2,
-                  borderStyle: "dotted",
+                  background: "#EFF6FF",
+                  border: { color: "#2563EB", width: 2, style: "dotted" },
                 },
               },
             ),
@@ -830,25 +834,23 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
               style: {
                 fontFamily: arabicFont,
                 padding: 8,
-                borderColor: "#0F766E",
-                borderWidth: 1,
-                borderStyle: "solid",
+                border: { color: "#0F766E", width: 1, style: "solid" },
               },
             }),
           ),
           row({ id: "shorthand-row" }).append(
-            cell("4-tuple pad + borderColor only", {
+            cell("4-tuple pad + border color only", {
               id: "quad-padding-cell",
               style: {
                 padding: [4, 8, 6, 10],
-                borderColor: "#334155",
+                border: { color: "#334155" },
               },
             }),
-            cell("borderWidth only", {
+            cell("border width 2", {
               id: "width-only-border-cell",
               style: {
                 padding: 6,
-                borderWidth: 2,
+                border: { color: "#000000", width: 2 },
               },
             }),
             cell("Plain", {
@@ -858,21 +860,28 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
           ),
         ),
       ),
-      slide({ id: "overset-cell-clipping", background: "#FFFFFF" }).append(
+      slide({
+        id: "overset-cell-clipping",
+        style: { background: "#FFFFFF" },
+      }).append(
         table({
           id: "overset-tbl",
-          x: 32,
-          y: 36,
           columns: [180],
-          style: { fontFamily: jostFont, fontSize: 15, color: "#DC2626" },
+          style: {
+            position: "absolute",
+            left: 32,
+            top: 36,
+            fontFamily: jostFont,
+            fontSize: 15,
+            color: "#DC2626",
+          },
         }).append(
           row({ id: "fixed-row", style: { height: 24 } }).append(
             cell("OVERFLOW_1\nOVERFLOW_2\nOVERFLOW_3\nOVERFLOW_4", {
               id: "overset-cell",
               style: {
                 padding: 2,
-                borderColor: "#0F172A",
-                borderWidth: 1,
+                border: { color: "#0F172A", width: 1 },
               },
             }),
           ),
@@ -882,18 +891,18 @@ export const tableRichTextBordersAndOversetScenario: CapabilityScenario = {
   },
   assert({ author, resolution, pptx, preview }) {
     assert.equal(preview.pages.length, 2, author);
-    assert.deepEqual(preview.pages[0]?.diagnostics, [], author);
-    assert.deepEqual(preview.pages[1]?.diagnostics, [], author);
+    assert.deepEqual(preview.pages[0]?.errors, [], author);
+    assert.deepEqual(preview.pages[1]?.errors, [], author);
 
-    // Overset build warning continues to appear in resolution.report.diagnostics.
+    const oversetMetrics = resolution
+      .slide("overset-cell-clipping")
+      .get("overset-tbl")
+      .get("fixed-row")
+      .get("overset-cell").textMetrics;
+    assert.equal(oversetMetrics?.status, "measured", author);
+    assert.equal(oversetMetrics.fits, false, author);
     assert.ok(
-      resolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" &&
-          diag.code === "overset" &&
-          diag.path ===
-            "deck/slide[overset-cell-clipping]/table[overset-tbl]/row[fixed-row]/cell[overset-cell]",
-      ),
+      oversetMetrics.content.height > oversetMetrics.available.height,
       author,
     );
 
@@ -946,14 +955,18 @@ export const tableRejectionScenario: CapabilityScenario = {
           Table,
           {
             id: "bad-text-tbl",
-            x: 20,
-            y: 20,
             columns: [140],
-            style: { fontFamily: jostFont, fontSize: 14 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              fontFamily: jostFont,
+              fontSize: 14,
+            },
           },
           createElement(
             Row,
-            { id: "r1" },
+            { id: "r1", style: { height: 28 } },
             createElement(Cell, { id: "missing-glyph-cell" }, "汉"),
           ),
         ),
@@ -965,10 +978,14 @@ export const tableRejectionScenario: CapabilityScenario = {
           Table,
           {
             id: "bad-font-tbl",
-            x: 20,
-            y: 20,
             columns: [140],
-            style: { fontFamily: "Aptos", fontSize: 14 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              fontFamily: "Aptos",
+              fontSize: 14,
+            },
           },
           createElement(
             Row,
@@ -984,10 +1001,14 @@ export const tableRejectionScenario: CapabilityScenario = {
           Table,
           {
             id: "ok-tbl",
-            x: 24,
-            y: 40,
             columns: [120, 120],
-            style: { fontFamily: jostFont, fontSize: 15 },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 40,
+              fontFamily: jostFont,
+              fontSize: 15,
+            },
           },
           createElement(
             Row,
@@ -996,11 +1017,9 @@ export const tableRejectionScenario: CapabilityScenario = {
               Cell,
               {
                 style: {
-                  backgroundColor: "#EFF6FF",
+                  background: "#EFF6FF",
                   padding: [6, 10],
-                  borderColor: "#2563EB",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  border: { color: "#2563EB", width: 2, style: "dashed" },
                 },
               },
               "Valid",
@@ -1010,8 +1029,7 @@ export const tableRejectionScenario: CapabilityScenario = {
               {
                 style: {
                   padding: [6, 10],
-                  borderColor: "#2563EB",
-                  borderWidth: 2,
+                  border: { color: "#2563EB", width: 2 },
                 },
               },
               "Sibling",
@@ -1026,12 +1044,16 @@ export const tableRejectionScenario: CapabilityScenario = {
       slide({ id: "missing-glyph-cell-page" }).append(
         table({
           id: "bad-text-tbl",
-          x: 20,
-          y: 20,
           columns: [140],
-          style: { fontFamily: jostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: jostFont,
+            fontSize: 14,
+          },
         }).append(
-          row({ id: "r1" }).append(
+          row({ id: "r1", style: { height: 28 } }).append(
             cell("汉", {
               id: "missing-glyph-cell",
             }),
@@ -1041,10 +1063,14 @@ export const tableRejectionScenario: CapabilityScenario = {
       slide({ id: "unsupported-font-cell-page" }).append(
         table({
           id: "bad-font-tbl",
-          x: 20,
-          y: 20,
           columns: [140],
-          style: { fontFamily: "Aptos", fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: "Aptos",
+            fontSize: 14,
+          },
         }).append(
           row({ id: "r1", style: { height: 28 } }).append(
             cell("No Font Data", {
@@ -1056,26 +1082,27 @@ export const tableRejectionScenario: CapabilityScenario = {
       slide({ id: "valid-table-sibling" }).append(
         table({
           id: "ok-tbl",
-          x: 24,
-          y: 40,
           columns: [120, 120],
-          style: { fontFamily: jostFont, fontSize: 15 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 40,
+            fontFamily: jostFont,
+            fontSize: 15,
+          },
         }).append(
           row({ id: "r1" }).append(
             cell("Valid", {
               style: {
-                backgroundColor: "#EFF6FF",
+                background: "#EFF6FF",
                 padding: [6, 10],
-                borderColor: "#2563EB",
-                borderWidth: 2,
-                borderStyle: "dashed",
+                border: { color: "#2563EB", width: 2, style: "dashed" },
               },
             }),
             cell("Sibling", {
               style: {
                 padding: [6, 10],
-                borderColor: "#2563EB",
-                borderWidth: 2,
+                border: { color: "#2563EB", width: 2 },
               },
             }),
           ),
@@ -1084,18 +1111,25 @@ export const tableRejectionScenario: CapabilityScenario = {
     );
   },
   assert({ author, preview }) {
-    const expectedPaths = [
-      /table\[bad-text-tbl\]\/row\[r1\]\/cell\[missing-glyph-cell\]/,
-      /table\[bad-font-tbl\]\/row\[r1\]\/cell\[unmeasured-font-cell\]/,
-    ];
-    expectedPaths.forEach((pattern, index) => {
+    const expectedErrors = [
+      {
+        code: "preview-missing-glyph",
+        pattern: /table\[bad-text-tbl\]\/row\[r1\]\/cell\[missing-glyph-cell\]/,
+      },
+      {
+        code: "preview-missing-font",
+        pattern:
+          /table\[bad-font-tbl\]\/row\[r1\]\/cell\[unmeasured-font-cell\]/,
+      },
+    ] as const;
+    expectedErrors.forEach(({ code, pattern }, index) => {
       const page = preview.pages[index]!;
       assert.equal(page.png, undefined, `${author}: page ${index + 1}`);
-      assert.equal(page.diagnostics[0]?.severity, "error", author);
-      assert.match(page.diagnostics[0]?.path ?? "", pattern, author);
+      assert.equal(page.errors[0]?.code, code, author);
+      assert.match(page.errors[0]?.path ?? "", pattern, author);
     });
     const validPage = preview.pages[2]!;
-    assert.deepEqual(validPage.diagnostics, [], author);
+    assert.deepEqual(validPage.errors, [], author);
     assert.ok(validPage.png !== undefined, author);
   },
 };

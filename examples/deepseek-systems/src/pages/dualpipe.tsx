@@ -87,10 +87,11 @@ export function DualPipePage() {
       >
         {/* Forward stream row */}
         <Text
-          x={68}
-          y={180}
-          width={124}
           style={{
+            position: "absolute",
+            left: 68,
+            top: 180,
+            width: 124,
             padding: 0,
             fontSize: 11,
             color: colors.steel,
@@ -113,29 +114,32 @@ export function DualPipePage() {
           return (
             <Shape
               key={idx}
-              x={x}
-              y={172}
-              width={b.w}
-              height={34}
-              fill={fill}
-              style={{ padding: [0, 2] }}
-              text={b.label}
-              textStyle={{
+              style={{
+                position: "absolute",
+                left: x,
+                top: 172,
+                width: b.w,
+                height: 34,
+                background: fill,
+                padding: [0, 2],
                 fontSize: 10.5,
                 color: colors.surface,
                 align: "center",
                 verticalAlign: "middle",
               }}
-            />
+            >
+              {b.label}
+            </Shape>
           );
         })}
 
         {/* Reverse stream row */}
         <Text
-          x={68}
-          y={226}
-          width={124}
           style={{
+            position: "absolute",
+            left: 68,
+            top: 226,
+            width: 124,
             padding: 0,
             fontSize: 11,
             color: colors.steel,
@@ -158,31 +162,36 @@ export function DualPipePage() {
           return (
             <Shape
               key={idx}
-              x={x}
-              y={218}
-              width={b.w}
-              height={34}
-              fill={fill}
-              style={{ padding: [0, 2] }}
-              text={b.label}
-              textStyle={{
+              style={{
+                position: "absolute",
+                left: x,
+                top: 218,
+                width: b.w,
+                height: 34,
+                background: fill,
+                padding: [0, 2],
                 fontSize: 10.5,
                 color: colors.surface,
                 align: "center",
                 verticalAlign: "middle",
               }}
-            />
+            >
+              {b.label}
+            </Shape>
           );
         })}
 
         {/* Explanation of zero-bubble B = E + W split */}
         <Shape
-          x={68}
-          y={268}
-          width={588}
-          height={76}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 268,
+            width: 588,
+            height: 76,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <SemanticTag
           x={82}
@@ -193,10 +202,11 @@ export function DualPipePage() {
           tone="copper"
         />
         <Text
-          x={300}
-          y={283}
-          width={344}
           style={{
+            position: "absolute",
+            left: 300,
+            top: 283,
+            width: 344,
             padding: 0,
             fontSize: 11,
             color: colors.steel,
@@ -206,10 +216,11 @@ export function DualPipePage() {
           权重梯度 W 可延后异步填充空隙，使非重叠气泡项减去 3W
         </Text>
         <Text
-          x={82}
-          y={312}
-          width={560}
           style={{
+            position: "absolute",
+            left: 82,
+            top: 312,
+            width: 560,
             padding: 0,
             fontSize: 11,
             color: colors.muted,
@@ -242,10 +253,12 @@ export function DualPipePage() {
                 y={174 + rIdx * 48}
                 width={122}
                 height={36}
-                fill={rIdx === 0 ? colors.computeSoft : colors.commSoft}
+                background={rIdx === 0 ? colors.computeSoft : colors.commSoft}
                 shapeStyle={{
-                  borderColor: rIdx === 0 ? colors.compute : colors.comm,
-                  borderWidth: 1,
+                  border: {
+                    color: rIdx === 0 ? colors.compute : colors.comm,
+                    width: 1,
+                  },
                 }}
                 enter={fade({ duration: 320 })}
                 text={row.lane}
@@ -266,7 +279,7 @@ export function DualPipePage() {
                   y={174 + rIdx * 48}
                   width={item.w}
                   height={36}
-                  fill={item.fill}
+                  background={item.fill}
                   enter={wipe({ from: "left", duration: 340 })}
                   text={item.label}
                   textStyle={{
@@ -283,19 +296,23 @@ export function DualPipePage() {
 
         {/* Dedicated SM Warp specialization callout */}
         <Shape
-          x={710}
-          y={272}
-          width={504}
-          height={72}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 710,
+            top: 272,
+            width: 504,
+            height: 72,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <Text
-          x={724}
-          y={282}
-          width={476}
-          height={20}
           style={{
+            position: "absolute",
+            left: 724,
+            top: 282,
+            width: 476,
+            height: 20,
             fontSize: 12,
             color: colors.commText,
             textWrap: "nowrap",
@@ -304,11 +321,12 @@ export function DualPipePage() {
           20 个通信 SM 专用化 (Warp Specialization)：
         </Text>
         <Text
-          x={724}
-          y={304}
-          width={476}
-          height={34}
           style={{
+            position: "absolute",
+            left: 724,
+            top: 304,
+            width: 476,
+            height: 34,
             fontSize: 10.5,
             lineHeight: 15,
             color: colors.muted,
@@ -332,11 +350,12 @@ export function DualPipePage() {
       >
         <Table
           id="dualpipe-table"
-          x={66}
-          y={438}
-          width={792}
           columns={[124, 280, 128, 132, 128]}
           style={{
+            position: "absolute",
+            left: 66,
+            top: 438,
+            width: 792,
             fontFamily: "body",
             fontSize: 11.5,
             color: colors.ink,
@@ -345,7 +364,7 @@ export function DualPipePage() {
           <Row
             style={{
               height: 36,
-              backgroundColor: colors.steel,
+              background: colors.steel,
               color: colors.surface,
               verticalAlign: "middle",
             }}
@@ -370,7 +389,7 @@ export function DualPipePage() {
           <Row
             style={{
               height: 38,
-              backgroundColor: colors.surface,
+              background: colors.surface,
               color: colors.ink,
               verticalAlign: "middle",
             }}
@@ -378,9 +397,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 color: colors.steel,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>1F1B 基准</P>
@@ -388,10 +406,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 color: colors.muted,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>(PP - 1)(F + B)</P>
@@ -399,9 +416,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>1x</P>
@@ -409,9 +425,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP</P>
@@ -419,9 +434,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP</P>
@@ -431,7 +445,7 @@ export function DualPipePage() {
           <Row
             style={{
               height: 38,
-              backgroundColor: colors.paper,
+              background: colors.paper,
               color: colors.ink,
               verticalAlign: "middle",
             }}
@@ -439,9 +453,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 color: colors.steel,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>ZB1P 零气泡</P>
@@ -449,10 +462,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 color: colors.muted,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>(PP - 1)(F + B - 2W)</P>
@@ -460,9 +472,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>1x</P>
@@ -470,9 +481,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP</P>
@@ -480,9 +490,8 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP</P>
@@ -492,7 +501,7 @@ export function DualPipePage() {
           <Row
             style={{
               height: 42,
-              backgroundColor: colors.computeSoft,
+              background: colors.computeSoft,
               color: colors.compute,
               verticalAlign: "middle",
             }}
@@ -500,8 +509,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>DualPipe (V3)</P>
@@ -509,10 +517,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>(PP/2 - 1)(F&amp;B + B - 3W)</P>
@@ -520,10 +527,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>2x</P>
@@ -531,10 +537,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP + 1</P>
@@ -542,10 +547,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP</P>
@@ -555,7 +559,7 @@ export function DualPipePage() {
           <Row
             style={{
               height: 42,
-              backgroundColor: colors.commSoft,
+              background: colors.commSoft,
               color: colors.commText,
               verticalAlign: "middle",
             }}
@@ -563,8 +567,7 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>DualPipeV (V 形)</P>
@@ -572,10 +575,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P>(PP/2 - 1)(F&amp;B + B - 3W)</P>
@@ -583,10 +585,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>1x</P>
@@ -594,10 +595,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP + 1</P>
@@ -605,10 +605,9 @@ export function DualPipePage() {
             <Cell
               style={{
                 padding: [6, 8],
-                borderColor: colors.line,
-                borderWidth: 1,
                 fontFamily: "metric",
                 fontWeight: 700,
+                border: { color: colors.line, width: 1 },
               }}
             >
               <P style={{ align: "right" }}>PP / 2</P>
@@ -649,20 +648,33 @@ export function DualPipePage() {
         tone="comm"
       />
       <Shape
-        x={892}
-        y={570}
-        width={340}
-        height={90}
-        fill={colors.surface}
-        style={{ borderColor: colors.line, borderWidth: 1 }}
-      />
-      <Shape x={892} y={570} width={4} height={90} fill={colors.steel} />
-      <Text
-        x={908}
-        y={580}
-        width={312}
-        height={20}
         style={{
+          position: "absolute",
+          left: 892,
+          top: 570,
+          width: 340,
+          height: 90,
+          background: colors.surface,
+          border: { color: colors.line, width: 1 },
+        }}
+      />
+      <Shape
+        style={{
+          position: "absolute",
+          left: 892,
+          top: 570,
+          width: 4,
+          height: 90,
+          background: colors.steel,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 908,
+          top: 580,
+          width: 312,
+          height: 20,
           fontSize: 12.5,
           color: colors.steel,
           textWrap: "nowrap",
@@ -671,11 +683,12 @@ export function DualPipePage() {
         为什么训练过程能做到零张量并行 (TP = 0)？
       </Text>
       <Text
-        x={908}
-        y={602}
-        width={312}
-        height={48}
         style={{
+          position: "absolute",
+          left: 908,
+          top: 602,
+          width: 312,
+          height: 48,
           fontSize: 11,
           lineHeight: 15.5,
           color: colors.muted,

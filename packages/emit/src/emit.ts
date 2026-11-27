@@ -4,10 +4,12 @@ import {
   BuildError,
   CapabilityError,
   buildOptionsSchema,
+  capabilityErrorToDiagnostic,
   formatBaseline,
   targets,
+  toBuildDiagnostic,
+  type BuildDiagnostic,
   type BuildOptions,
-  type BuildQuery,
   type BuildReport,
   type ResourceObservation,
 } from "@pptxdk/core/build";
@@ -19,7 +21,6 @@ import type {
   CapabilityResourceClaim,
   CapabilitySharedPackagePart,
   CapabilitySlidePackagePart,
-  Diagnostic,
   EmitContext,
   EmitOptions,
   EmitOutput,
@@ -32,7 +33,7 @@ import type {
   SlideEmitContext,
   Target,
 } from "@pptxdk/core/capability";
-import { createBuildQuery } from "@pptxdk/core/query";
+import { createBuildQuery, type SlideLocatorIndex } from "@pptxdk/core/query";
 import {
   getInternalResolution,
   type InternalResolution,
@@ -110,7 +111,6 @@ type PackageContext = {
 
 type DocumentEmitState = DocumentPackageState & {
   readonly usedExtensions: Set<Extension>;
-  readonly warnings: Diagnostic[];
   readonly resourceClaims: ReadonlyMap<
     string,
     {
@@ -138,11 +138,16 @@ type DocumentEmitState = DocumentPackageState & {
 };
 
 type SlideEmitState = PartPackageState & {
-  readonly diagnostics: Diagnostic[];
+  readonly diagnostics: BuildDiagnostic[];
 };
 
-function diagnostic(path: string, code: string, message: string): Diagnostic {
-  return { severity: "error", path, code, message };
+function diagnostic(
+  path: string,
+  code: string,
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+): BuildDiagnostic {
+  return toBuildDiagnostic(path, code, message, details);
 }
 
 function allocateTextFieldId(document: DocumentPackageState): string {
@@ -163,7 +168,7 @@ function readValueAtPath(root: unknown, path: readonly PropertyKey[]): unknown {
 function mapBuildOptionsIssue(
   rawOptions: unknown,
   issue: z.core.$ZodIssue,
-): Diagnostic {
+): BuildDiagnostic {
   const [head, second, third] = issue.path;
   if (head === undefined) {
     if (issue.code === "unrecognized_keys") {
@@ -171,6 +176,7 @@ function mapBuildOptionsIssue(
         "build",
         "unknown-parameter",
         `Build options contain unknown parameter ${issue.keys[0]}`,
+        { prop: String(issue.keys[0]), scope: "options" },
       );
     }
     return diagnostic(
@@ -184,6 +190,7 @@ function mapBuildOptionsIssue(
       "build.embedFonts",
       "unsupported-font-embedding",
       "embedFonts currently only supports 'full' or 'subset'",
+      { field: "embedFonts", mechanism: "embedFonts" },
     );
   }
   if (head === "signal") {
@@ -191,6 +198,7 @@ function mapBuildOptionsIssue(
       "build.signal",
       "invalid-options",
       "Build options signal must be an AbortSignal",
+      { field: "signal" },
     );
   }
   if (head === "target") {
@@ -200,12 +208,14 @@ function mapBuildOptionsIssue(
           "build.target",
           "unknown-parameter",
           `Target contains unknown parameter ${issue.keys[0]}`,
+          { prop: String(issue.keys[0]), scope: "options", field: "target" },
         );
       }
       return diagnostic(
         "build.target",
         "invalid-target",
         "Target must be an object",
+        { field: "target" },
       );
     }
     if (second === "name") {
@@ -213,6 +223,7 @@ function mapBuildOptionsIssue(
         "build.target",
         "invalid-target",
         "Target requires a non-empty name",
+        { field: "target.name" },
       );
     }
     if (second === "format") {
@@ -220,6 +231,7 @@ function mapBuildOptionsIssue(
         "build.target",
         "unsupported-format",
         `This build only emits ${formatBaseline}`,
+        { field: "target.format", expected: formatBaseline },
       );
     }
     if (second === "extensions") {
@@ -228,16 +240,23 @@ function mapBuildOptionsIssue(
           "build.target",
           "invalid-target",
           "Target extensions must be an array",
+          { field: "target.extensions" },
         );
       }
       if (issue.code === "custom") {
-        return diagnostic("build.target", "duplicate-extension", issue.message);
+        return diagnostic(
+          "build.target",
+          "duplicate-extension",
+          issue.message,
+          { field: "target.extensions" },
+        );
       }
       const badExtension = readValueAtPath(rawOptions, issue.path);
       return diagnostic(
         "build.target",
         "unsupported-extension",
         `Unsupported target extension ${String(badExtension)}`,
+        { field: "target.extensions", extension: String(badExtension) },
       );
     }
   }
@@ -1111,7 +1130,7 @@ function finalizePresentationContributions(document: DocumentEmitState): void {
           } catch (error) {
             if (error instanceof CapabilityError) {
               throw new BuildError([
-                diagnostic(error.path ?? item.path, error.code, error.message),
+                capabilityErrorToDiagnostic(error, item.path),
               ]);
             }
             throw new BuildError([
@@ -1254,7 +1273,6 @@ function createDocumentEmitState(
   );
   return {
     usedExtensions: new Set(),
-    warnings: [...internal.warnings],
     resourceClaims: internal.resourceClaims,
     resources: new Map(),
     resourceTypes: new Map(),
@@ -1283,13 +1301,16 @@ function checkExtensions(
   extensions: readonly Extension[],
   target: Target,
   usedExtensions: Set<Extension>,
-  diagnostics: Diagnostic[],
+  diagnostics: BuildDiagnostic[],
   path: string,
 ): void {
   for (const extension of extensions) {
     if (!target.extensions.includes(extension)) {
       diagnostics.push(
-        diagnostic(path, "forbidden-mechanism", `Target forbids ${extension}`),
+        diagnostic(path, "forbidden-mechanism", `Target forbids ${extension}`, {
+          target: target.name,
+          extension,
+        }),
       );
     } else {
       usedExtensions.add(extension);
@@ -1392,13 +1413,7 @@ function emitLayer(
   } catch (error) {
     slideEmit.diagnostics.push(
       error instanceof CapabilityError
-        ? diagnostic(
-            error.path === undefined
-              ? layer.path
-              : `${layer.path}/${error.path}`,
-            error.code,
-            error.message,
-          )
+        ? capabilityErrorToDiagnostic(error, layer.path, true)
         : diagnostic(
             layer.path,
             "capability-failure",
@@ -1410,7 +1425,7 @@ function emitLayer(
   return layer.childComposition === "members" ? ownXml : ownXml + siblingXml;
 }
 
-const emittedQueries = new WeakMap<BuildReport, BuildQuery>();
+const emittedQueries = new WeakMap<BuildReport, SlideLocatorIndex>();
 
 function maxResolvedObjectId(layers: readonly ResolvedObjectLayer[]): number {
   let maxId = 1;
@@ -1425,12 +1440,12 @@ function maxResolvedObjectId(layers: readonly ResolvedObjectLayer[]): number {
 }
 
 /**
- * Returns the BuildQuery enriched with emitted package resources for a BuildReport produced by `emit()`.
+ * Returns the slide locator index enriched with emitted package resources for a BuildReport produced by `emit()`.
  */
 export function emittedBuildQuery(
   report: BuildReport,
-  fallbackQuery: BuildQuery,
-): BuildQuery {
+  fallbackQuery: SlideLocatorIndex,
+): SlideLocatorIndex {
   return emittedQueries.get(report) ?? fallbackQuery;
 }
 
@@ -1478,7 +1493,7 @@ function emitMasterOrLayoutCapabilities(
     } catch (error) {
       partEmit.diagnostics.push(
         error instanceof CapabilityError
-          ? diagnostic(error.path ?? cap.path, error.code, error.message)
+          ? capabilityErrorToDiagnostic(error, cap.path)
           : diagnostic(
               cap.path,
               "capability-failure",
@@ -1539,16 +1554,20 @@ export function emit(
   const docEmit = createDocumentEmitState(internal);
   let sectionXml = "";
   if (internal.sectionsEmitter !== undefined) {
-    if (
-      !internal.sectionsEmitter.extensions.every((ext) =>
-        target.extensions.includes(ext),
-      )
-    ) {
+    const forbiddenExtensions = internal.sectionsEmitter.extensions.filter(
+      (ext) => !target.extensions.includes(ext),
+    );
+    if (forbiddenExtensions.length > 0) {
       throw new BuildError([
         diagnostic(
           "deck/sections",
           "forbidden-mechanism",
           "Current target forbids p14 section mechanism",
+          {
+            target: target.name,
+            extension: forbiddenExtensions[0],
+            mechanism: "sections",
+          },
         ),
       ]);
     }
@@ -1926,7 +1945,7 @@ export function emit(
       } catch (error) {
         slideEmit.diagnostics.push(
           error instanceof CapabilityError
-            ? diagnostic(error.path ?? slideCap.path, error.code, error.message)
+            ? capabilityErrorToDiagnostic(error, slideCap.path)
             : diagnostic(
                 slideCap.path,
                 "capability-failure",
@@ -2040,28 +2059,28 @@ export function emit(
     { level: 6, mtime: new Date("2020-01-01T00:00:00Z") },
   );
 
-  // Preserve slide observation identity from resolution.report.slides so WeakMap-backed
-  // observation queries (such as observeMotion) remain bound across resolve and emit.
+  // Preserve slide identity from resolution.report.slides so WeakMap-backed
+  // slide queries (such as motionSchedule) remain bound across resolve and emit.
   const report: BuildReport = Object.freeze({
     evidence: "generation",
     ...(typeof internal.title === "string" ? { title: internal.title } : {}),
+    dimensions: resolution.report.dimensions,
     target: Object.freeze({
       name: target.name,
       format: target.format,
       extensions: Object.freeze([...target.extensions]),
     }),
     extensions: Object.freeze([...docEmit.usedExtensions]),
+    fonts: resolution.report.fonts,
     ...(resolution.report.masters === undefined
       ? {}
       : { masters: resolution.report.masters }),
     slides: resolution.report.slides,
-    diagnostics: Object.freeze(
-      docEmit.warnings.map((warning) => Object.freeze({ ...warning })),
-    ),
   });
   const query = createBuildQuery(
     internal.slides.map((slide, index) => ({
       observation: report.slides[index]!,
+      dimensions: report.dimensions,
       content: slide.content,
       resources: emittedSlides[index]!.resourceObservations,
     })),

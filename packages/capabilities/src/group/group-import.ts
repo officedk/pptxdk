@@ -29,73 +29,59 @@ import { textBoxImportHandler } from "../text/text-import.ts";
 import {
   createGroupNode,
   type GroupDeclarationProps,
+  type GroupStyle,
 } from "./group-declaration.ts";
 
-function nodeBoundsEmu(node: CommonNode):
-  | {
-      readonly x: number;
-      readonly y: number;
-      readonly width: number;
-      readonly height: number;
-    }
-  | undefined {
-  const props = node.props as {
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number;
-    readonly bounds?: {
-      readonly x: number;
-      readonly y: number;
-      readonly width: number;
-      readonly height: number;
-    };
-  };
-  if (props.bounds !== undefined) {
-    return {
-      x: pxToEmu(props.bounds.x),
-      y: pxToEmu(props.bounds.y),
-      width: pxToEmu(props.bounds.width),
-      height: pxToEmu(props.bounds.height),
-    };
-  }
+type PxBox = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
+function readNodeStyleBox(node: CommonNode): PxBox | undefined {
+  const style = (
+    node.props as { readonly style?: Readonly<Record<string, unknown>> }
+  ).style;
   if (
-    typeof props.x === "number" &&
-    typeof props.y === "number" &&
-    typeof props.width === "number" &&
-    typeof props.height === "number"
+    style !== undefined &&
+    typeof style["left"] === "number" &&
+    typeof style["top"] === "number" &&
+    typeof style["width"] === "number" &&
+    typeof style["height"] === "number"
   ) {
     return {
-      x: pxToEmu(props.x),
-      y: pxToEmu(props.y),
-      width: pxToEmu(props.width),
-      height: pxToEmu(props.height),
+      x: style["left"],
+      y: style["top"],
+      width: style["width"],
+      height: style["height"],
     };
+  }
+  return undefined;
+}
+
+function nodeBoundsPx(node: CommonNode): PxBox | undefined {
+  const styleBox = readNodeStyleBox(node);
+  if (styleBox !== undefined) {
+    return styleBox;
   }
   if (node.type === "group") {
     const childNodes = node.children.filter(
       (child): child is CommonNode => child instanceof CommonNode,
     );
-    return memberUnionEmu(childNodes);
+    return memberUnionPx(childNodes);
   }
   return undefined;
 }
 
-function memberUnionEmu(members: readonly CommonNode[]):
-  | {
-      readonly x: number;
-      readonly y: number;
-      readonly width: number;
-      readonly height: number;
-    }
-  | undefined {
+function memberUnionPx(members: readonly CommonNode[]): PxBox | undefined {
   if (members.length === 0) return undefined;
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxRight = Number.NEGATIVE_INFINITY;
   let maxBottom = Number.NEGATIVE_INFINITY;
   for (const member of members) {
-    const box = nodeBoundsEmu(member);
+    const box = nodeBoundsPx(member);
     if (box === undefined) return undefined;
     minX = Math.min(minX, box.x);
     minY = Math.min(minY, box.y);
@@ -116,36 +102,71 @@ function applyMemberMapper(
   node: CommonNode,
   memberMapper: BoxCoordinateMapper,
 ): void {
-  const props = node.props as {
-    readonly x?: number;
-    readonly y?: number;
-    readonly width?: number;
-    readonly height?: number;
-  };
-  if (
-    typeof props.x === "number" &&
-    typeof props.y === "number" &&
-    typeof props.width === "number" &&
-    typeof props.height === "number"
-  ) {
-    node.set(
-      memberMapper({
-        x: props.x,
-        y: props.y,
-        width: props.width,
-        height: props.height,
-      }),
-    );
+  const box = readNodeStyleBox(node);
+  if (box !== undefined) {
+    const mapped = memberMapper(box);
+    node.style({
+      position: "absolute",
+      left: mapped.x,
+      top: mapped.y,
+      width: mapped.width,
+      height: mapped.height,
+    });
   }
 }
 
 /**
- * Reads a Transitional `<p:grpSp>` recursively into an editable `GroupNode`,
- * applying affine `(chOff, chExt) -> (off, ext)` coordinate mapping for external groups.
+ * Converts slide-space coordinates computed in phase 1 into CSS containing-block-relative
+ * coordinates. Only positioned groups establish a containing block for their descendants;
+ * unpositioned groups inherit the nearest positioned ancestor's origin.
  */
-export function readGroupSp(
+function relativizeToContainingBlock(
+  nodes: readonly CommonNode[],
+  originX: number,
+  originY: number,
+): void {
+  for (const node of nodes) {
+    const style = (
+      node.props as { readonly style?: Readonly<Record<string, unknown>> }
+    ).style;
+    const isPositioned =
+      style !== undefined &&
+      (style["position"] === "absolute" || style["position"] === "relative") &&
+      typeof style["left"] === "number" &&
+      typeof style["top"] === "number";
+
+    if (node.type === "group") {
+      const childNodes = node.children.filter(
+        (child): child is CommonNode => child instanceof CommonNode,
+      );
+      if (isPositioned) {
+        const groupOriginX = style["left"] as number;
+        const groupOriginY = style["top"] as number;
+        if (originX !== 0 || originY !== 0) {
+          node.style({
+            left: groupOriginX - originX,
+            top: groupOriginY - originY,
+          });
+        }
+        relativizeToContainingBlock(childNodes, groupOriginX, groupOriginY);
+      } else {
+        relativizeToContainingBlock(childNodes, originX, originY);
+      }
+      continue;
+    }
+
+    if (isPositioned && (originX !== 0 || originY !== 0)) {
+      node.style({
+        left: (style["left"] as number) - originX,
+        top: (style["top"] as number) - originY,
+      });
+    }
+  }
+}
+
+function readGroupSpSlideSpace(
   context: ShapeTreeImportContext,
-  parentMapper: BoxCoordinateMapper = identityMapper,
+  parentMapper: BoxCoordinateMapper,
 ): ShapeTreeImportOutcome {
   const { cursor, part, slideIndex } = context;
   const diagnostics: ImportDiagnostic[] = [];
@@ -237,30 +258,8 @@ export function readGroupSp(
     return { diagnostics };
   }
 
-  if (parsedXfrm.success) {
-    if (parsedXfrm.data.flipH === true) {
-      diagnostics.push({
-        code: "unsupported-mechanism",
-        category: "unsupported",
-        disposition: "omitted",
-        location: { ...location, xpath: `${xfrm.xpath}/@flipH` },
-        namespaceUri: A_NS,
-        localName: "flipH",
-        mechanismHint: "group-flipH",
-      });
-    }
-    if (parsedXfrm.data.flipV === true) {
-      diagnostics.push({
-        code: "unsupported-mechanism",
-        category: "unsupported",
-        disposition: "omitted",
-        location: { ...location, xpath: `${xfrm.xpath}/@flipV` },
-        namespaceUri: A_NS,
-        localName: "flipV",
-        mechanismHint: "group-flipV",
-      });
-    }
-  }
+  const flipH = parsedXfrm.success && parsedXfrm.data.flipH === true;
+  const flipV = parsedXfrm.success && parsedXfrm.data.flipV === true;
 
   const rotate =
     parsedXfrm.success &&
@@ -323,7 +322,7 @@ export function readGroupSp(
     };
 
     if (childCursor.localName === "grpSp") {
-      const outcome = readGroupSp(childContext, memberMapper);
+      const outcome = readGroupSpSlideSpace(childContext, memberMapper);
       if (outcome.diagnostics !== undefined) {
         diagnostics.push(...outcome.diagnostics);
       }
@@ -412,36 +411,59 @@ export function readGroupSp(
     width: extW,
     height: extH,
   });
-  const unionEmu = memberUnionEmu(members);
-  const preserveExplicitGroupBox =
+  const unionPx = memberUnionPx(members);
+  const matchesMemberUnion =
+    unionPx !== undefined &&
+    Math.abs(mappedGroupBox.x - unionPx.x) <= 1e-3 &&
+    Math.abs(mappedGroupBox.y - unionPx.y) <= 1e-3 &&
+    Math.abs(mappedGroupBox.width - unionPx.width) <= 1e-3 &&
+    Math.abs(mappedGroupBox.height - unionPx.height) <= 1e-3;
+  const isPositionedGroup =
     pxToEmu(mappedGroupBox.width) > 0 &&
     pxToEmu(mappedGroupBox.height) > 0 &&
-    (unionEmu === undefined ||
-      unionEmu.x !== pxToEmu(mappedGroupBox.x) ||
-      unionEmu.y !== pxToEmu(mappedGroupBox.y) ||
-      unionEmu.width !== pxToEmu(mappedGroupBox.width) ||
-      unionEmu.height !== pxToEmu(mappedGroupBox.height));
+    !matchesMemberUnion;
+
+  const groupStyle: GroupStyle = {
+    ...(isPositionedGroup
+      ? {
+          position: "absolute" as const,
+          left: mappedGroupBox.x,
+          top: mappedGroupBox.y,
+          width: mappedGroupBox.width,
+          height: mappedGroupBox.height,
+        }
+      : {}),
+    ...(rotate === undefined ? {} : { rotate }),
+    ...(flipH ? { flipH: true } : {}),
+    ...(flipV ? { flipV: true } : {}),
+  };
 
   const props: GroupDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(link === undefined ? {} : { link }),
-    ...(preserveExplicitGroupBox
-      ? {
-          bounds: {
-            x: mappedGroupBox.x,
-            y: mappedGroupBox.y,
-            width: mappedGroupBox.width,
-            height: mappedGroupBox.height,
-          },
-        }
-      : {}),
-    ...(rotate === undefined ? {} : { style: { rotate } }),
+    ...(Object.keys(groupStyle).length === 0 ? {} : { style: groupStyle }),
   };
 
   const node = createGroupNode(props);
   node.append(...members);
   attachDeferredSlideLink(node, deferredSlideLink, context);
   return { node, diagnostics };
+}
+
+/**
+ * Reads a Transitional `<p:grpSp>` recursively into an editable `GroupNode`,
+ * applying affine `(chOff, chExt) -> (off, ext)` coordinate mapping and
+ * converting positioned group descendants to containing-block-relative coordinates.
+ */
+export function readGroupSp(
+  context: ShapeTreeImportContext,
+  parentMapper: BoxCoordinateMapper = identityMapper,
+): ShapeTreeImportOutcome {
+  const outcome = readGroupSpSlideSpace(context, parentMapper);
+  if (outcome.node !== undefined && parentMapper === identityMapper) {
+    relativizeToContainingBlock([outcome.node], 0, 0);
+  }
+  return outcome;
 }
 
 export const groupImportHandler: ShapeTreeImportHandler = {

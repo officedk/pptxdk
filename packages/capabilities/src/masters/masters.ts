@@ -1,6 +1,7 @@
 import {
   defaultColorMap,
   defaultTheme,
+  resolvePlaceholderBoxFromLayers,
   visualStyleSchema,
   type ColorMap,
   type ColorMapOverride,
@@ -56,7 +57,10 @@ type ResolvedPlaceholderVisualEntry = {
 
 const readMasterPlaceholderVisuals: PlaceholderVisualReader = (args) =>
   readPlaceholderSpPrVisuals(args, {
-    readAppearance: readSpPrAppearance,
+    readAppearance: (spPr, pkg, fallbackUnits, location, diagnostics) =>
+      readSpPrAppearance(spPr, pkg, fallbackUnits, location, diagnostics, {
+        preservePlaceholderClears: true,
+      }),
     allowedStyleKeys: supportedPlaceholderVisualStyleKeys,
   });
 
@@ -96,30 +100,28 @@ function importDeckMasters(context: DeckImportContext): DeckImportOutcome {
 function resolvePlaceholderVisualEntries(
   placeholders: PlaceholderMap | undefined,
   theme: ThemeContext,
+  dimensions: { readonly width: number; readonly height: number },
 ): readonly ResolvedPlaceholderVisualEntry[] {
   if (placeholders === undefined) return [];
   const entries: ResolvedPlaceholderVisualEntry[] = [];
   for (const [key, spec] of Object.entries(placeholders)) {
+    const resolvedBox = resolvePlaceholderBoxFromLayers([spec], dimensions);
     const hasBox =
-      spec.x !== undefined &&
-      spec.y !== undefined &&
-      spec.width !== undefined &&
-      spec.height !== undefined;
+      typeof resolvedBox.x === "number" &&
+      typeof resolvedBox.y === "number" &&
+      typeof resolvedBox.width === "number" &&
+      typeof resolvedBox.height === "number";
     const styleRecord = spec.style as
       | Readonly<Record<string, unknown>>
       | undefined;
     const hasRotate = hasLocalDeclaration(styleRecord, "rotate");
-    const hasFlipH = spec.flipH === true;
-    const hasFlipV = spec.flipV === true;
+    const hasFlipH = hasLocalDeclaration(styleRecord, "flipH");
+    const hasFlipV = hasLocalDeclaration(styleRecord, "flipV");
     const hasGeometryOrRadius =
       spec.geometry !== undefined ||
       hasLocalDeclaration(styleRecord, "borderRadius");
-    const hasFill =
-      hasLocalDeclaration(styleRecord, "backgroundColor") ||
-      hasLocalDeclaration(styleRecord, "backgroundImage");
-    const hasBorder =
-      hasLocalDeclaration(styleRecord, "borderColor") &&
-      spec.style?.borderWidth !== 0;
+    const hasFill = hasLocalDeclaration(styleRecord, "background");
+    const hasBorder = hasLocalDeclaration(styleRecord, "border");
     const hasEffects =
       hasLocalDeclaration(styleRecord, "boxShadow") ||
       hasLocalDeclaration(styleRecord, "softEdge");
@@ -139,10 +141,10 @@ function resolvePlaceholderVisualEntries(
 
     const box = hasBox
       ? {
-          x: spec.x,
-          y: spec.y,
-          width: spec.width,
-          height: spec.height,
+          x: resolvedBox.x as number,
+          y: resolvedBox.y as number,
+          width: resolvedBox.width as number,
+          height: resolvedBox.height as number,
         }
       : { x: 0, y: 0, width: 100, height: 100 };
     const visual = resolveVisualModel({
@@ -150,8 +152,6 @@ function resolvePlaceholderVisualEntries(
       style: styleRecord ?? {},
       box,
       ...(spec.geometry === undefined ? {} : { geometry: spec.geometry }),
-      ...(hasFlipH ? { flipH: true } : {}),
-      ...(hasFlipV ? { flipV: true } : {}),
       layoutOnlyWhenInvisible: !hasBox,
     });
     entries.push({
@@ -480,6 +480,7 @@ export const mastersCapability: SlideCapabilityModule & {
     const entries = resolvePlaceholderVisualEntries(
       placeholders,
       context.theme,
+      context.dimensions,
     );
     return {
       resolveSlide() {

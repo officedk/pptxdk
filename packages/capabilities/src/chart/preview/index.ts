@@ -1,8 +1,4 @@
-import type {
-  GeometryBox,
-  PaintContext,
-  PaintOutput,
-} from "@pptxdk/core/capability";
+import type { Rect, PaintContext, PaintOutput } from "@pptxdk/core/capability";
 
 import { parseTextContent } from "../../shared/text-service.ts";
 import { textOnlyChartStyle, type ParsedChart } from "../chart-model.ts";
@@ -31,7 +27,7 @@ import { assertNever, type PlottedPointAnchor } from "./types.ts";
  */
 export function drawChartPreview(
   parsed: ParsedChart,
-  box: GeometryBox,
+  box: Rect,
   context: PaintContext,
 ): PaintOutput {
   const baseChartTextStyle = textOnlyChartStyle(parsed.style);

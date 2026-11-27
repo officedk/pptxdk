@@ -12,6 +12,10 @@ import type {
   PlaceholderMap,
 } from "#/placeholders.ts";
 import type { QueryContentNode } from "#/query.ts";
+import {
+  buildDiagnosticSchema,
+  type BuildDiagnostic,
+} from "#/stage-options.ts";
 import type {
   ColorMap,
   ColorMapOverride,
@@ -20,18 +24,17 @@ import type {
   ThemeOverride,
 } from "#/theme.ts";
 import type {
-  Diagnostic,
   EmitContext,
   EmitOutput,
   EmittedSlideLayoutSpec,
   EmittedSlideMasterSpec,
   Extension,
-  GeometryBox,
   MastersEmitDriver,
   PaintContext,
   PaintOutput,
   PptxRelationship,
   PreviewTransform,
+  Rect,
   Resolution,
   ResolvedLink,
   SlideCapabilityModule,
@@ -42,7 +45,9 @@ import type {
   SlidePaintOutput,
 } from "#/types.ts";
 
+export { buildDiagnosticSchema };
 export type {
+  BuildDiagnostic,
   EmittedSlideLayoutSpec,
   EmittedSlideMasterSpec,
   MastersEmitDriver,
@@ -61,13 +66,14 @@ export type ResolvedSectionRecord = {
 
 export type ResolvedObjectLayer = {
   readonly declarationType: string;
+  readonly authorId?: string;
   readonly sourceOrder: readonly number[];
   readonly zIndex: number;
   readonly path: string;
   readonly objectId: number;
   readonly paintObjectId: number;
   readonly theme: ThemeContext;
-  readonly box?: GeometryBox;
+  readonly box?: Rect;
   readonly transform?: PreviewTransform;
   readonly emitsObject: boolean;
   readonly hasObservation: boolean;
@@ -178,7 +184,6 @@ export type InternalResolution = {
       readonly characters: string;
     }
   >;
-  readonly warnings: readonly Diagnostic[];
 };
 
 // Keep resolved pipeline internals out of the public Resolution object and unreachable from author code.

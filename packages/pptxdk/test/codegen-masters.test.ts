@@ -69,27 +69,37 @@ function buildDualMasterFixtures() {
     placeholders: {
       title: {
         type: "ctrTitle",
-        x: 60,
-        y: 80,
-        width: 840,
-        height: 80,
-        style: { fontSize: "28pt", color: "#0F172A" },
+        style: {
+          position: "absolute",
+          left: 60,
+          top: 80,
+          width: 840,
+          height: 80,
+          fontSize: "28pt",
+          color: "#0F172A",
+        },
       },
       "body-1": {
         type: "body",
         idx: 1,
-        x: 60,
-        y: 190,
-        width: 390,
-        height: 220,
+        style: {
+          position: "absolute",
+          left: 60,
+          top: 190,
+          width: 390,
+          height: 220,
+        },
       },
       "body-2": {
         type: "body",
         idx: 2,
-        x: 490,
-        y: 190,
-        width: 390,
-        height: 220,
+        style: {
+          position: "absolute",
+          left: 490,
+          top: 190,
+          width: 390,
+          height: 220,
+        },
       },
     },
   });
@@ -109,20 +119,27 @@ function buildDualMasterFixtures() {
     placeholders: {
       title: {
         type: "title",
-        x: 72,
-        y: 56,
-        width: 816,
-        height: 64,
-        style: { fontSize: "26pt", color: "#134E4A" },
+        style: {
+          position: "absolute",
+          left: 72,
+          top: 56,
+          width: 816,
+          height: 64,
+          fontSize: "26pt",
+          color: "#134E4A",
+        },
       },
       content: {
         type: "obj",
         explicitType: false,
         idx: 1,
-        x: 72,
-        y: 144,
-        width: 816,
-        height: 320,
+        style: {
+          position: "absolute",
+          left: 72,
+          top: 144,
+          width: 816,
+          height: 320,
+        },
       },
     },
   });
@@ -141,10 +158,13 @@ function buildDualMasterFixtures() {
     }).append(
       text("Primary Header Badge", {
         id: "m1-badge",
-        x: 24,
-        y: 16,
-        width: 240,
-        height: 24,
+        style: {
+          position: "absolute",
+          left: 24,
+          top: 16,
+          width: 240,
+          height: 24,
+        },
       }),
       slideLayout(m1TitleLayout),
       slideLayout(m1IdleLayout),
@@ -157,10 +177,13 @@ function buildDualMasterFixtures() {
     }).append(
       text("Secondary Shared Watermark", {
         id: "m2-watermark",
-        x: 24,
-        y: 492,
-        width: 280,
-        height: 28,
+        style: {
+          position: "absolute",
+          left: 24,
+          top: 492,
+          width: 280,
+          height: 28,
+        },
       }),
       slideLayout(m2UnusedReportLayout),
     ),
@@ -209,7 +232,16 @@ function buildDualMasterFixtures() {
       },
       createElement(
         Text,
-        { id: "m1-badge", x: 24, y: 16, width: 240, height: 24 },
+        {
+          id: "m1-badge",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 16,
+            width: 240,
+            height: 24,
+          },
+        },
         "Primary Header Badge",
       ),
       createElement(SlideLayout, { layout: m1TitleLayout }),
@@ -225,7 +257,16 @@ function buildDualMasterFixtures() {
       },
       createElement(
         Text,
-        { id: "m2-watermark", x: 24, y: 492, width: 280, height: 28 },
+        {
+          id: "m2-watermark",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 492,
+            width: 280,
+            height: 28,
+          },
+        },
         "Secondary Shared Watermark",
       ),
       createElement(SlideLayout, { layout: m2UnusedReportLayout }),
@@ -356,10 +397,6 @@ describe("pptxdk masters & placeholders codegen acceptance", () => {
     const reactDoc = await expandDocument(reactElement);
 
     const builtOriginal = await build(vanillaDoc);
-    assert.deepEqual(
-      builtOriginal.report.diagnostics.filter((d) => d.severity === "error"),
-      [],
-    );
     const importedDual = importPptx(builtOriginal.pptx);
     assert.deepEqual(importedDual.report.diagnostics, []);
 
@@ -500,7 +537,10 @@ ${prsLayout2}
 ${prsMaster2}
 
 const cover = slide({ id: "prs-cover", layout: master2BlankLayout }).append(
-  text("From PRS Master 2", { id: "t1", x: 64, y: 64, width: 400, height: 48 }),
+  text("From PRS Master 2", {
+    id: "t1",
+    style: { position: "absolute", left: 64, top: 64, width: 400, height: 48 },
+  }),
 );
 
 export default deck({ width: 960, height: 540 }).append(master2, cover);
@@ -583,27 +623,37 @@ export default deck({ width: 960, height: 540 }).append(master2, cover);
       placeholders: {
         title: {
           type: "ctrTitle",
-          x: 60,
-          y: 80,
-          width: 720,
-          height: 60,
-          style: { fontSize: "28pt", color: "#111827" },
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 80,
+            width: 720,
+            height: 60,
+            fontSize: "28pt",
+            color: "#111827",
+          },
         },
         "body-1": {
           type: "body",
           idx: 1,
-          x: 60,
-          y: 180,
-          width: 340,
-          height: 180,
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 180,
+            width: 340,
+            height: 180,
+          },
         },
         "body-2": {
           type: "body",
           idx: 2,
-          x: 440,
-          y: 180,
-          width: 340,
-          height: 180,
+          style: {
+            position: "absolute",
+            left: 440,
+            top: 180,
+            width: 340,
+            height: 180,
+          },
         },
       },
     });
@@ -641,8 +691,8 @@ export default deck({ width: 960, height: 540 }).append(master2, cover);
 
       const originalSource = first.files[first.entry] as string;
       const editedSource = originalSource.replace(
-        'fontSize: "28pt", color: "#111827"',
-        'fontSize: "40pt", color: "#111827"',
+        'fontSize: "28pt"',
+        'fontSize: "40pt"',
       );
       assert.notEqual(
         editedSource,

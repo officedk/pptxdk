@@ -106,16 +106,29 @@ describe("public theme entry", () => {
         style={{ fontFamily: "major", fontSize: 20, color: "ink" }}
       >
         <Slide id="theme">
-          <Text id="measured" x={0} y={0} width={400} height="auto">
+          <Text
+            id="measured"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 400,
+              height: "auto",
+            }}
+          >
             中文 A é
           </Text>
           <Text
             id="minor-font"
-            x={0}
-            y={60}
-            width={400}
-            height="auto"
-            style={{ fontFamily: "minor", fontSize: 18 }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 60,
+              width: 400,
+              height: "auto",
+              fontFamily: "minor",
+              fontSize: 18,
+            }}
           >
             Minor font
           </Text>
@@ -161,38 +174,61 @@ describe("public theme entry", () => {
         })}
       >
         <Slide id="theme-defaults">
-          <Text id="default-text" x={0} y={0} width={220} height="auto">
+          <Text
+            id="default-text"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 220,
+              height: "auto",
+            }}
+          >
             Default text
           </Text>
           <Text
             id="explicit-minor"
-            x={0}
-            y={50}
-            width={220}
-            height="auto"
-            style={{ fontFamily: "minor" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 50,
+              width: 220,
+              height: "auto",
+              fontFamily: "minor",
+            }}
           >
             Default text
           </Text>
           <Shape
             id="default-shape-text"
-            x={0}
-            y={100}
-            width={180}
-            height={48}
-            text="Shape text"
-          />
-          <Table id="default-table" columns={[160]} x={0} y={160}>
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 100,
+              width: 180,
+              height: 48,
+            }}
+          >
+            Shape text
+          </Shape>
+          <Table
+            id="default-table"
+            columns={[160]}
+            style={{ position: "absolute", left: 0, top: 160 }}
+          >
             <Row>
               <Cell>Cell text</Cell>
             </Row>
           </Table>
           <Chart
             id="default-chart"
-            x={200}
-            y={160}
-            width={300}
-            height={180}
+            style={{
+              position: "absolute",
+              left: 200,
+              top: 160,
+              width: 300,
+              height: 180,
+            }}
             groups={[
               {
                 kind: "column",
@@ -276,30 +312,36 @@ describe("public theme entry", () => {
               <Group id="local-group" style={{ fontSize: 18 }}>
                 <Text
                   id="local-text"
-                  width={300}
-                  height="auto"
-                  style={{ fontSize: 20 }}
+                  style={{ width: 300, height: "auto", fontSize: 20 }}
                 >
                   Local scope
                 </Text>
                 <Shape
                   id="local-shape"
-                  x={0}
-                  y={60}
-                  width={180}
-                  height={60}
-                  fill="ink"
-                  text="Shape text"
-                />
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 60,
+                    width: 180,
+                    height: 60,
+                    background: "ink",
+                  }}
+                >
+                  Shape text
+                </Shape>
               </Group>
             </TestMotionScope>
-            <Table id="local-table" columns={[180]} x={0} y={150}>
+            <Table
+              id="local-table"
+              columns={[180]}
+              style={{ position: "absolute", left: 0, top: 150 }}
+            >
               <Row>
                 <Cell
                   style={{
                     color: "ink",
-                    backgroundColor: "ink",
-                    borderColor: "accent1",
+                    background: "ink",
+                    border: { color: "accent1" },
                   }}
                 >
                   Cell text
@@ -308,11 +350,15 @@ describe("public theme entry", () => {
             </Table>
             <Chart
               id="local-chart"
-              x={200}
-              y={150}
-              width={220}
-              height={120}
-              style={{ fontFamily: "major", color: "ink" }}
+              style={{
+                position: "absolute",
+                left: 200,
+                top: 150,
+                width: 220,
+                height: 120,
+                fontFamily: "major",
+                color: "ink",
+              }}
               axes={{
                 category: {
                   kind: "category",
@@ -354,23 +400,35 @@ describe("public theme entry", () => {
                 fonts: { major: cjkFont },
               }}
             >
-              <Text id="nested-text" width={150} height="auto">
+              <Text id="nested-text" style={{ width: 150, height: "auto" }}>
                 Nested scope
               </Text>
               <Shape
                 id="nested-shape"
-                x={0}
-                y={30}
-                width={40}
-                height={20}
-                fill="brand"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 30,
+                  width: 40,
+                  height: 20,
+                  background: "brand",
+                }}
               />
             </Box>
-            <Text id="outer-after" width={300} height="auto">
+            <Text id="outer-after" style={{ width: 300, height: "auto" }}>
               Outer scope again
             </Text>
           </Box>
-          <Text id="sibling-text" x={0} y={300} width={300} height="auto">
+          <Text
+            id="sibling-text"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 300,
+              width: 300,
+              height: "auto",
+            }}
+          >
             Global scope
           </Text>
         </Slide>
@@ -382,16 +440,28 @@ describe("public theme entry", () => {
           }}
           style={{ fontSize: 18 }}
         >
-          <Text id="slide-text" x={0} y={0} width={300} height="auto">
+          <Text
+            id="slide-text"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: "auto",
+            }}
+          >
             Slide defaults
           </Text>
           <Text
             id="slide-minor"
-            x={0}
-            y={60}
-            width={300}
-            height="auto"
-            style={{ fontFamily: "minor" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 60,
+              width: 300,
+              height: "auto",
+              fontFamily: "minor",
+            }}
           >
             Slide minor default
           </Text>
@@ -491,24 +561,60 @@ describe("public theme entry", () => {
         })}
       >
         <Slide id="colors">
-          <Shape id="alias" x={0} y={0} width={80} height={40} fill="brand" />
-          <Shape id="pale" x={90} y={0} width={80} height={40} fill="pale" />
-          <Shape id="deep" x={180} y={0} width={80} height={40} fill="deep" />
+          <Shape
+            id="alias"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 80,
+              height: 40,
+              background: "brand",
+            }}
+          />
+          <Shape
+            id="pale"
+            style={{
+              position: "absolute",
+              left: 90,
+              top: 0,
+              width: 80,
+              height: 40,
+              background: "pale",
+            }}
+          />
+          <Shape
+            id="deep"
+            style={{
+              position: "absolute",
+              left: 180,
+              top: 0,
+              width: 80,
+              height: 40,
+              background: "deep",
+            }}
+          />
           <Shape
             id="alpha"
-            x={270}
-            y={0}
-            width={80}
-            height={40}
-            fill={{ color: "brand", alpha: 0.5 }}
+            style={{
+              position: "absolute",
+              left: 270,
+              top: 0,
+              width: 80,
+              height: 40,
+              background: { color: "brand", alpha: 0.5 },
+            }}
           />
           <Shape
             id="short-alpha"
-            x={360}
-            y={0}
-            width={80}
-            height={40}
-            fill="#1234"
+            style={{
+              position: "absolute",
+              left: 360,
+              top: 0,
+              width: 80,
+              height: 40,
+              background: "#1234",
+            }}
           />
         </Slide>
       </Deck>,
@@ -539,38 +645,52 @@ describe("public theme entry", () => {
         <Slide id="local-alias" theme={{ colors: { ink: "#C00000" } }}>
           <Text
             id="alias-text"
-            x={0}
-            y={0}
-            width={180}
-            height={40}
-            style={{ color: "chain" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 180,
+              height: 40,
+              color: "chain",
+            }}
           >
             Alias text
           </Text>
           <Shape
             id="alias-shape"
-            x={0}
-            y={50}
-            width={100}
-            height={30}
-            fill="chain"
-            text="Alias shape"
-            textStyle={{ color: "chain" }}
-          />
-          <Table id="alias-table" columns={[140]} x={0} y={90}>
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 50,
+              width: 100,
+              height: 30,
+              background: "chain",
+              color: "chain",
+            }}
+          >
+            Alias shape
+          </Shape>
+          <Table
+            id="alias-table"
+            columns={[140]}
+            style={{ position: "absolute", left: 0, top: 90 }}
+          >
             <Row style={{ height: 36 }}>
-              <Cell style={{ color: "chain", backgroundColor: "chain" }}>
+              <Cell style={{ color: "chain", background: "chain" }}>
                 Alias cell
               </Cell>
             </Row>
           </Table>
           <Chart
             id="alias-chart"
-            x={160}
-            y={90}
-            width={240}
-            height={150}
-            style={{ color: "chain" }}
+            style={{
+              position: "absolute",
+              left: 160,
+              top: 90,
+              width: 240,
+              height: 150,
+              color: "chain",
+            }}
             groups={[
               {
                 kind: "column",
@@ -586,11 +706,14 @@ describe("public theme entry", () => {
           >
             <Shape
               id="same-name-shape"
-              x={0}
-              y={0}
-              width={80}
-              height={30}
-              fill="ink"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 80,
+                height: 30,
+                background: "ink",
+              }}
             />
           </Box>
         </Slide>
@@ -634,11 +757,14 @@ describe("public theme entry", () => {
         <Slide id="font-token-once">
           <Text
             id="font-token-once"
-            x={0}
-            y={0}
-            width={300}
-            height={120}
-            style={{ fontFamily: "body" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: 120,
+              fontFamily: "body",
+            }}
           >
             Bare text
             <P style={{ fontFamily: "body" }}>Paragraph text</P>
@@ -675,27 +801,42 @@ describe("public theme entry", () => {
         style={{ align: "center", spacingAfter: 16 }}
       >
         <Slide id="deck-paragraph-defaults">
-          <Text id="deck-auto" x={0} y={0} width={280} height="auto">
+          <Text
+            id="deck-auto"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 280,
+              height: "auto",
+            }}
+          >
             <P>First paragraph</P>
             <P>Second paragraph</P>
           </Text>
           <Text
             id="deck-zero-gap"
-            x={300}
-            y={0}
-            width={280}
-            height="auto"
-            style={{ spacingAfter: 0 }}
+            style={{
+              position: "absolute",
+              left: 300,
+              top: 0,
+              width: 280,
+              height: "auto",
+              spacingAfter: 0,
+            }}
           >
             <P>First paragraph</P>
             <P>Second paragraph</P>
           </Text>
           <Chart
             id="deck-paragraph-chart"
-            x={0}
-            y={160}
-            width={280}
-            height={160}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 160,
+              width: 280,
+              height: 160,
+            }}
             groups={[
               {
                 kind: "column",
@@ -709,7 +850,16 @@ describe("public theme entry", () => {
           id="slide-paragraph-defaults"
           style={{ align: "right", spacingAfter: 12 }}
         >
-          <Text id="slide-default" x={0} y={0} width={280} height={100}>
+          <Text
+            id="slide-default"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 280,
+              height: 100,
+            }}
+          >
             <P>First paragraph</P>
             <P>Second paragraph</P>
           </Text>
@@ -719,7 +869,16 @@ describe("public theme entry", () => {
             id="paragraph-box"
             style={{ width: 600, height: 260, align: "left", spacingAfter: 8 }}
           >
-            <Text id="box-auto" x={0} y={0} width={280} height="auto">
+            <Text
+              id="box-auto"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 280,
+                height: "auto",
+              }}
+            >
               <P>First paragraph</P>
               <P style={{ align: "right", spacingAfter: 4 }}>
                 Second paragraph override
@@ -727,17 +886,29 @@ describe("public theme entry", () => {
             </Text>
             <Text
               id="box-zero-gap"
-              x={300}
-              y={0}
-              width={280}
-              height="auto"
-              style={{ spacingAfter: 0 }}
+              style={{
+                position: "absolute",
+                left: 300,
+                top: 0,
+                width: 280,
+                height: "auto",
+                spacingAfter: 0,
+              }}
             >
               <P>First paragraph</P>
               <P>Second paragraph</P>
             </Text>
           </Box>
-          <Text id="box-sibling" x={0} y={280} width={280} height={100}>
+          <Text
+            id="box-sibling"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 280,
+              width: 280,
+              height: 100,
+            }}
+          >
             <P>First paragraph</P>
             <P>Second paragraph</P>
           </Text>
@@ -750,7 +921,16 @@ describe("public theme entry", () => {
               spacingAfter: 10,
             }}
           >
-            <Text id="second-box-default" x={0} y={0} width={280} height={100}>
+            <Text
+              id="second-box-default"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 280,
+                height: 100,
+              }}
+            >
               <P>First paragraph</P>
               <P>Second paragraph</P>
             </Text>
@@ -761,7 +941,16 @@ describe("public theme entry", () => {
             id="paragraph-group"
             style={{ align: "justify", spacingAfter: 20 }}
           >
-            <Text id="group-default" x={0} y={0} width={280} height={100}>
+            <Text
+              id="group-default"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 280,
+                height: 100,
+              }}
+            >
               <P>First paragraph</P>
               <P>Second paragraph</P>
             </Text>
@@ -836,7 +1025,16 @@ describe("public theme entry", () => {
             id="text-only-group"
             style={{ align: "center", spacingAfter: 8 }}
           >
-            <Text id="group-child" x={10} y={20} width={120} height={40}>
+            <Text
+              id="group-child"
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 20,
+                width: 120,
+                height: 40,
+              }}
+            >
               <P>First paragraph</P>
               <P>Second paragraph</P>
             </Text>
@@ -868,11 +1066,14 @@ describe("public theme entry", () => {
     }) => (
       <Text
         id="leaf"
-        x={10}
-        y={20}
-        width={300}
-        height="auto"
-        {...(style === undefined ? {} : { style })}
+        style={{
+          position: "absolute",
+          left: 10,
+          top: 20,
+          width: 300,
+          height: "auto",
+          ...style,
+        }}
       >
         <P>First paragraph</P>
         <P>Second paragraph</P>
@@ -920,11 +1121,14 @@ describe("public theme entry", () => {
             </Group>
             <Text
               id="sibling"
-              x={10}
-              y={120}
-              width={300}
-              height="auto"
-              style={{ color: "caption" }}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 120,
+                width: 300,
+                height: "auto",
+                color: "caption",
+              }}
             >
               <P>Outside the Group</P>
             </Text>
@@ -1020,7 +1224,10 @@ describe("public theme entry", () => {
             style={{ width: 100, height: 50 }}
             theme={scope as ThemeScope}
           >
-            <Text id="sample" width={80} height="auto" style={{ color: "ink" }}>
+            <Text
+              id="sample"
+              style={{ width: 80, height: "auto", color: "ink" }}
+            >
               Sample
             </Text>
           </Box>
@@ -1035,7 +1242,7 @@ describe("public theme entry", () => {
     ]) {
       await assert.rejects(build(scopedDeck(scope)), (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-theme-scope");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[invalid-scope]/box[scope]",
@@ -1048,7 +1255,7 @@ describe("public theme entry", () => {
       build(scopedDeck({ colors: { ink: "missing-token" } })),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-color");
+        assert.equal(error.diagnostics[0]?.code, "invalid-style");
         assert.equal(
           error.diagnostics[0]?.path,
           "deck/slide[invalid-scope]/box[scope]/text[sample]",
@@ -1068,7 +1275,17 @@ describe("public theme entry", () => {
             style={{ width: 100, height: 50 }}
             theme={{ colors: { ink: color } }}
           >
-            <Shape id="sample" x={0} y={0} width={80} height={40} fill="ink" />
+            <Shape
+              id="sample"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 80,
+                height: 40,
+                background: "ink",
+              }}
+            />
           </Box>
         </Slide>
       </Deck>
@@ -1100,7 +1317,16 @@ describe("public theme entry", () => {
           theme={{ fonts: { major: italicFont } }}
           style={{ fontStyle: "italic" }}
         >
-          <Text id="italic" x={0} y={0} width={300} height="auto">
+          <Text
+            id="italic"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: "auto",
+            }}
+          >
             Local font resource{" "}
             <Span style={{ fontFamily: "major" }}>inline resource</Span>
           </Text>
@@ -1145,31 +1371,40 @@ describe("public theme entry", () => {
         <Slide id="font-slots">
           <Text
             id="theme-major"
-            x={0}
-            y={0}
-            width={300}
-            height="auto"
-            style={{ fontFamily: "major" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: "auto",
+              fontFamily: "major",
+            }}
           >
             Major Run
           </Text>
           <Text
             id="theme-minor"
-            x={0}
-            y={50}
-            width={300}
-            height="auto"
-            style={{ fontFamily: "minor" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 50,
+              width: 300,
+              height: "auto",
+              fontFamily: "minor",
+            }}
           >
             Minor Run
           </Text>
           <Text
             id="direct-family"
-            x={0}
-            y={100}
-            width={300}
-            height={40}
-            style={{ fontFamily: "Direct Family Face" }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 100,
+              width: 300,
+              height: 40,
+              fontFamily: "Direct Family Face",
+            }}
           >
             Direct Family Run
           </Text>

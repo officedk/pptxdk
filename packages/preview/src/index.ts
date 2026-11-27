@@ -2,16 +2,15 @@ import { createRequire } from "node:module";
 
 import {
   CapabilityError,
-  type BuildQuery,
   type Resolution,
   type ResolutionReport,
+  type SlideLocator,
 } from "@pptxdk/core/build";
 import type {
-  GeometryBox,
-  LayoutObservation,
-  ObjectObservation,
   PreviewTransform,
-  PreviewWarning,
+  Rect,
+  ResolvedLayout,
+  ResolvedObject,
 } from "@pptxdk/core/capability";
 import {
   getInternalResolution,
@@ -22,48 +21,48 @@ import type { Resvg as ResvgClass } from "@resvg/resvg-js";
 import {
   PreviewPageRangeError,
   paintOptionsSchema,
-  previewDiagnosticSchema,
+  previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
-  previewSeveritySchema,
+  previewPlaceholderSchema,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
   type PaintOptions,
-  type PreviewDiagnostic,
+  type PreviewError,
   type PreviewOptions,
-  type PreviewSeverity,
+  type PreviewPlaceholder,
   type ScreenGeometry,
   type ScreenPoint,
 } from "#/options.ts";
 
-export type { PreviewTransform, PreviewWarning };
+export type { PreviewTransform };
 export {
   PreviewPageRangeError,
   paintOptionsSchema,
-  previewDiagnosticSchema,
+  previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
-  previewSeveritySchema,
+  previewPlaceholderSchema,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
 };
 export type {
   PaintOptions,
-  PreviewDiagnostic,
+  PreviewError,
   PreviewOptions,
-  PreviewSeverity,
+  PreviewPlaceholder,
   ScreenGeometry,
   ScreenPoint,
 };
 
-export type PreviewNodeObservation = ObjectObservation & {
-  readonly path: string | undefined;
+export type PreviewNode = Omit<ResolvedObject, "corners"> & {
+  readonly path: string;
+  readonly bounds?: Rect;
   readonly corners?: readonly ScreenPoint[];
-  readonly screenBox?: GeometryBox;
 };
 
 export type PreviewPageResult = {
@@ -71,9 +70,10 @@ export type PreviewPageResult = {
   readonly page: number;
   readonly svg?: string;
   readonly png?: Uint8Array;
-  readonly nodes: readonly PreviewNodeObservation[];
-  readonly layouts: readonly LayoutObservation[];
-  readonly diagnostics: readonly PreviewDiagnostic[];
+  readonly nodes: readonly PreviewNode[];
+  readonly layouts: readonly ResolvedLayout[];
+  readonly errors: readonly PreviewError[];
+  readonly placeholders: readonly PreviewPlaceholder[];
 };
 
 export type PaintResult = {
@@ -82,19 +82,25 @@ export type PaintResult = {
 
 export type PreviewResult = {
   readonly report: ResolutionReport;
-  readonly query: BuildQuery;
   readonly pages: readonly PreviewPageResult[];
+  readonly slides: readonly SlideLocator[];
+  slide(id: string): SlideLocator;
 };
 
 const defaultCanvasBackground =
   '<rect width="100%" height="100%" fill="white"/>';
+
+function roundScreenMetric(value: number): number {
+  const rounded = Math.round(value * 1e9) / 1e9;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
 
 /**
  * Computes transformed screen corners and axis-aligned screen bounds for a layout box.
  * Applies the local object transform first, followed by enclosing group transforms outward.
  */
 export function screenGeometry(
-  box: GeometryBox,
+  box: Rect,
   transforms: readonly PreviewTransform[],
 ): ScreenGeometry {
   const corners: { x: number; y: number }[] = [
@@ -114,15 +120,23 @@ export function screenGeometry(
       point.y = cy + x * Math.sin(angle) + y * Math.cos(angle);
     }
   }
-  const left = Math.min(...corners.map((point) => point.x));
-  const top = Math.min(...corners.map((point) => point.y));
+  const rounded = corners.map((point) =>
+    Object.freeze({
+      x: roundScreenMetric(point.x),
+      y: roundScreenMetric(point.y),
+    }),
+  );
+  const left = Math.min(...rounded.map((point) => point.x));
+  const top = Math.min(...rounded.map((point) => point.y));
+  const right = Math.max(...rounded.map((point) => point.x));
+  const bottom = Math.max(...rounded.map((point) => point.y));
   return {
-    corners: Object.freeze(corners.map((point) => Object.freeze({ ...point }))),
+    corners: Object.freeze(rounded),
     screenBox: Object.freeze({
       x: left,
       y: top,
-      width: Math.max(...corners.map((point) => point.x)) - left,
-      height: Math.max(...corners.map((point) => point.y)) - top,
+      width: roundScreenMetric(right - left),
+      height: roundScreenMetric(bottom - top),
     }),
   };
 }
@@ -158,10 +172,148 @@ function maxPaintObjectId(layers: readonly ResolvedObjectLayer[]): number {
   return maxId;
 }
 
+function toPreviewError(
+  error: unknown,
+  path: string,
+  fallbackCapability: string,
+): PreviewError {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof CapabilityError) {
+    const details = error.details ?? {};
+    const field =
+      typeof details["field"] === "string" && details["field"] !== ""
+        ? details["field"]
+        : undefined;
+    const fieldSpread = field === undefined ? {} : { field };
+    const rawFont = details["font"];
+    const fontRecord =
+      typeof rawFont === "object" && rawFont !== null
+        ? (rawFont as Readonly<Record<string, unknown>>)
+        : undefined;
+    const family =
+      typeof fontRecord?.["family"] === "string"
+        ? fontRecord["family"]
+        : "unknown";
+    const weight =
+      typeof fontRecord?.["weight"] === "number" ? fontRecord["weight"] : 400;
+    const style: "normal" | "italic" =
+      fontRecord?.["style"] === "italic" ? "italic" : "normal";
+
+    switch (error.code) {
+      case "preview-missing-font":
+        return Object.freeze({
+          code: "preview-missing-font",
+          path,
+          ...fieldSpread,
+          message,
+          font: Object.freeze({ family, weight, style }),
+        });
+      case "preview-unsupported-font": {
+        const optionalWeight =
+          typeof fontRecord?.["weight"] === "number"
+            ? fontRecord["weight"]
+            : undefined;
+        const optionalStyle: "normal" | "italic" | undefined =
+          fontRecord?.["style"] === "italic" ||
+          fontRecord?.["style"] === "normal"
+            ? fontRecord["style"]
+            : undefined;
+        const reason =
+          typeof details["reason"] === "string" ? details["reason"] : undefined;
+        return Object.freeze({
+          code: "preview-unsupported-font",
+          path,
+          ...fieldSpread,
+          message,
+          font: Object.freeze({
+            family,
+            ...(optionalWeight === undefined ? {} : { weight: optionalWeight }),
+            ...(optionalStyle === undefined ? {} : { style: optionalStyle }),
+          }),
+          ...(reason === undefined ? {} : { reason }),
+        });
+      }
+      case "preview-missing-glyph": {
+        const rawChars = details["characters"];
+        const characters = Array.isArray(rawChars)
+          ? rawChars.filter((item): item is string => typeof item === "string")
+          : [];
+        return Object.freeze({
+          code: "preview-missing-glyph",
+          path,
+          ...fieldSpread,
+          message,
+          font: Object.freeze({ family, weight, style }),
+          characters: Object.freeze(characters),
+        });
+      }
+      case "preview-corrupt-image": {
+        const rawFormat = details["format"];
+        const format =
+          rawFormat === "png" || rawFormat === "jpeg" || rawFormat === "gif"
+            ? rawFormat
+            : undefined;
+        return Object.freeze({
+          code: "preview-corrupt-image",
+          path,
+          ...fieldSpread,
+          message,
+          ...(format === undefined ? {} : { format }),
+        });
+      }
+      case "preview-unsupported-capability": {
+        const capability =
+          typeof details["capability"] === "string"
+            ? details["capability"]
+            : fallbackCapability;
+        return Object.freeze({
+          code: "preview-unsupported-capability",
+          path,
+          ...fieldSpread,
+          message,
+          capability,
+        });
+      }
+    }
+  }
+  return Object.freeze({
+    code: "preview-unsupported-capability",
+    path,
+    message,
+    capability: fallbackCapability,
+  });
+}
+
+function recordPaintPlaceholders(
+  placeholders: PreviewPlaceholder[],
+  records:
+    | readonly {
+        readonly id?: string;
+        readonly path?: string;
+        readonly url: string;
+      }[]
+    | undefined,
+  defaultPath: string,
+  defaultId?: string,
+): void {
+  if (records === undefined) return;
+  for (const item of records) {
+    const id = item.id ?? defaultId;
+    placeholders.push(
+      Object.freeze({
+        ...(id === undefined ? {} : { id }),
+        path: item.path ?? defaultPath,
+        url: item.url,
+      }),
+    );
+  }
+}
+
 function paintLayer(
   layer: ResolvedObjectLayer,
   pageNumber: number,
-  diagnostics: PreviewDiagnostic[],
+  errors: PreviewError[],
+  placeholders: PreviewPlaceholder[],
   nodePaths: Map<number, string>,
   transforms: Map<number, PreviewTransform>,
   paintIdOffset = 0,
@@ -174,7 +326,8 @@ function paintLayer(
             paintLayer(
               child,
               pageNumber,
-              diagnostics,
+              errors,
+              placeholders,
               nodePaths,
               transforms,
               paintIdOffset,
@@ -188,7 +341,8 @@ function paintLayer(
               paintLayer(
                 child,
                 pageNumber,
-                diagnostics,
+                errors,
+                placeholders,
                 nodePaths,
                 transforms,
                 paintIdOffset,
@@ -225,44 +379,31 @@ function paintLayer(
         ...(childrenSvg === undefined ? {} : { childrenSvg }),
       });
       recordNodeIdentity();
-      for (const warning of output.warnings ?? []) {
-        diagnostics.push(
-          Object.freeze({
-            severity: "warning",
-            page: pageNumber,
-            path:
-              warning.path === undefined
-                ? layer.path
-                : `${layer.path}/${warning.path}`,
-            message: warning.message,
-          }),
-        );
-      }
+      recordPaintPlaceholders(
+        placeholders,
+        output.placeholders,
+        layer.path,
+        layer.authorId,
+      );
       return output.svg;
     } catch (error) {
       recordNodeIdentity();
-      diagnostics.push(
-        Object.freeze({
-          severity: "error",
-          page: pageNumber,
-          path:
-            error instanceof CapabilityError && error.path !== undefined
-              ? `${layer.path}/${error.path}`
-              : layer.path,
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      const errorPath =
+        error instanceof CapabilityError && error.path !== undefined
+          ? `${layer.path}/${error.path}`
+          : layer.path;
+      errors.push(toPreviewError(error, errorPath, layer.declarationType));
       return "";
     }
   }
 
   recordNodeIdentity();
-  diagnostics.push(
+  errors.push(
     Object.freeze({
-      severity: "error",
-      page: pageNumber,
+      code: "preview-unsupported-capability",
       path: layer.path,
       message: `Preview does not support ${layer.declarationType}`,
+      capability: layer.declarationType,
     }),
   );
   return "";
@@ -293,7 +434,8 @@ export function paint(
       throw new Error("Missing resolved slide observation for paint");
     }
 
-    const diagnostics: PreviewDiagnostic[] = [];
+    const errors: PreviewError[] = [];
+    const placeholders: PreviewPlaceholder[] = [];
     const nodePaths = new Map<number, string>();
     const transforms = new Map<number, PreviewTransform>();
 
@@ -307,7 +449,8 @@ export function paint(
         paintLayer(
           layer,
           pageNumber,
-          diagnostics,
+          errors,
+          placeholders,
           nodePaths,
           transforms,
           masterOffset,
@@ -326,7 +469,8 @@ export function paint(
         paintLayer(
           layer,
           pageNumber,
-          diagnostics,
+          errors,
+          placeholders,
           nodePaths,
           transforms,
           layoutOffset,
@@ -341,7 +485,14 @@ export function paint(
 
     const layers = slide.layers
       .map((layer) =>
-        paintLayer(layer, pageNumber, diagnostics, nodePaths, transforms),
+        paintLayer(
+          layer,
+          pageNumber,
+          errors,
+          placeholders,
+          nodePaths,
+          transforms,
+        ),
       )
       .join("");
 
@@ -369,39 +520,26 @@ export function paint(
           ) {
             shapeTreeCapSvg += previewOutput.svg;
           }
-          for (const warning of previewOutput.warnings ?? []) {
-            diagnostics.push(
-              Object.freeze({
-                severity: "warning",
-                page: pageNumber,
-                path:
-                  warning.path === undefined
-                    ? slideCap.path
-                    : `${slideCap.path}/${warning.path}`,
-                message: warning.message,
-              }),
-            );
-          }
-        } catch (error) {
-          diagnostics.push(
-            Object.freeze({
-              severity: "error",
-              page: pageNumber,
-              path:
-                error instanceof CapabilityError && error.path !== undefined
-                  ? error.path
-                  : slideCap.path,
-              message: error instanceof Error ? error.message : String(error),
-            }),
+          recordPaintPlaceholders(
+            placeholders,
+            previewOutput.placeholders,
+            slideCap.path,
+            slide.authorId,
           );
+        } catch (error) {
+          const errorPath =
+            error instanceof CapabilityError && error.path !== undefined
+              ? error.path
+              : slideCap.path;
+          errors.push(toPreviewError(error, errorPath, slideCap.declaration));
         }
       } else if (slideCap.slot === "background" && slideCap.hasSlideProps) {
-        diagnostics.push(
+        errors.push(
           Object.freeze({
-            severity: "error",
-            page: pageNumber,
+            code: "preview-unsupported-capability",
             path: slideCap.path,
             message: `Preview does not support ${slideCap.declaration}`,
+            capability: slideCap.declaration,
           }),
         );
       }
@@ -420,36 +558,48 @@ export function paint(
         if (inheritedOutput.svg !== "") {
           background = inheritedOutput.svg;
         }
+        recordPaintPlaceholders(
+          placeholders,
+          inheritedOutput.placeholders,
+          slide.inheritedBackground.path,
+        );
       } catch (error) {
-        diagnostics.push(
-          Object.freeze({
-            severity: "error",
-            page: pageNumber,
-            path:
-              error instanceof CapabilityError && error.path !== undefined
-                ? error.path
-                : slide.inheritedBackground.path,
-            message: error instanceof Error ? error.message : String(error),
-          }),
+        const errorPath =
+          error instanceof CapabilityError && error.path !== undefined
+            ? error.path
+            : slide.inheritedBackground.path;
+        errors.push(
+          toPreviewError(
+            error,
+            errorPath,
+            slide.inheritedBackground.declaration,
+          ),
         );
       }
     }
 
-    const nodes: PreviewNodeObservation[] = [];
+    const nodes: PreviewNode[] = [];
     const collect = (
-      objects: readonly ObjectObservation[],
+      objects: readonly ResolvedObject[],
       ancestors: readonly PreviewTransform[] = [],
     ): void => {
       for (const object of objects) {
         const own = transforms.get(object.id);
         const chain = own === undefined ? ancestors : [own, ...ancestors];
+        const screen =
+          object.box === undefined
+            ? undefined
+            : screenGeometry(object.box, chain);
         nodes.push(
           Object.freeze({
             ...object,
-            ...(object.box === undefined
+            ...(screen === undefined
               ? {}
-              : screenGeometry(object.box, chain)),
-            path: nodePaths.get(object.id),
+              : {
+                  corners: screen.corners,
+                  bounds: screen.screenBox,
+                }),
+            path: nodePaths.get(object.id) ?? object.path,
           }),
         );
         if (object.members !== undefined) collect(object.members, chain);
@@ -457,15 +607,17 @@ export function paint(
     };
     collect(slideObservation.objects);
 
-    const pageDiagnostics = Object.freeze([...diagnostics]);
-    if (pageDiagnostics.some((item) => item.severity === "error")) {
+    const pageErrors = Object.freeze([...errors]);
+    const pagePlaceholders = Object.freeze([...placeholders]);
+    if (pageErrors.length > 0) {
       pages.push(
         Object.freeze({
           id: slide.id,
           page: pageNumber,
           nodes: Object.freeze(nodes),
           layouts: slideObservation.layouts ?? Object.freeze([]),
-          diagnostics: pageDiagnostics,
+          errors: pageErrors,
+          placeholders: pagePlaceholders,
         }),
       );
       continue;
@@ -497,7 +649,8 @@ export function paint(
         png,
         nodes: Object.freeze(nodes),
         layouts: slideObservation.layouts ?? Object.freeze([]),
-        diagnostics: pageDiagnostics,
+        errors: pageErrors,
+        placeholders: pagePlaceholders,
       }),
     );
   }

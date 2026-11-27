@@ -11,7 +11,7 @@ import {
   fade,
   font,
   formatBaseline,
-  observeMotion,
+  motionSchedule,
   resolve,
   targets,
   transitions,
@@ -73,19 +73,26 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
   it("isolates Resolution from subsequent editable document edits across emit and paint", async () => {
     const label = text("Before edit", {
       id: "headline",
-      x: 20,
-      y: 20,
-      width: 220,
-      height: 40,
-      style: { fontFamily: jostFont, fontSize: 16 },
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 220,
+        height: 40,
+        fontFamily: jostFont,
+        fontSize: 16,
+      },
     });
     const card = shape({
       id: "card",
-      x: 20,
-      y: 80,
-      width: 120,
-      height: 50,
-      fill: "#1D4ED8",
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 80,
+        width: 120,
+        height: 50,
+        background: "#1D4ED8",
+      },
     });
     const doc = deck({ width: 320, height: 180 }).append(
       slide({ id: "s1", background: "#F8FAFC" }).append(label, card),
@@ -93,13 +100,13 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
 
     const firstResolution = resolve(doc);
     assert.equal(
-      firstResolution.query.getSlide("s1").get("headline").observe().text,
+      firstResolution.slide("s1").get("headline").text,
       "Before edit",
     );
 
     // Mutate the editable document after resolve().
     label.content("After edit");
-    card.set({ fill: "#DC2626" });
+    card.style({ background: "#DC2626" });
     doc.append(slide({ id: "s2" }));
 
     const firstEmit = emit(firstResolution);
@@ -131,21 +138,27 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
       slide({ id: "p1", background: "#FFFFFF" }).append(
         shape({
           id: "s1",
-          x: 10,
-          y: 10,
-          width: 50,
-          height: 40,
-          fill: "#111111",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 50,
+            height: 40,
+            background: "#111111",
+          },
         }),
       ),
       slide({ id: "p2", background: "#FFFFFF" }).append(
         shape({
           id: "s2",
-          x: 10,
-          y: 10,
-          width: 50,
-          height: 40,
-          fill: "#222222",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 50,
+            height: 40,
+            background: "#222222",
+          },
         }),
       ),
     );
@@ -172,11 +185,12 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     const previewResult = await preview(doc, { pages: [2] });
     assert.deepEqual(Object.keys(previewResult).toSorted(), [
       "pages",
-      "query",
       "report",
+      "slide",
+      "slides",
     ]);
     assert.equal(previewResult.report.slides.length, 2);
-    assert.equal(previewResult.query.slides.length, 2);
+    assert.equal(previewResult.slides.length, 2);
     assert.deepEqual(
       previewResult.pages.map((page) => page.id),
       ["p2"],
@@ -197,21 +211,28 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
         { id: "shared", background: "#F1F5F9" },
         createElement(Shape, {
           id: "card",
-          x: 24,
-          y: 24,
-          width: 120,
-          height: 72,
-          fill: "#0F766E",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 120,
+            height: 72,
+            background: "#0F766E",
+          },
         }),
         createElement(
           Text,
           {
             id: "label",
-            x: 24,
-            y: 112,
-            width: 160,
-            height: 32,
-            style: { fontFamily: jostFont, fontSize: 16 },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 112,
+              width: 160,
+              height: 32,
+              fontFamily: jostFont,
+              fontSize: 16,
+            },
           },
           "Shared stage",
         ),
@@ -221,19 +242,26 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
       slide({ id: "shared", background: "#F1F5F9" }).append(
         shape({
           id: "card",
-          x: 24,
-          y: 24,
-          width: 120,
-          height: 72,
-          fill: "#0F766E",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 120,
+            height: 72,
+            background: "#0F766E",
+          },
         }),
         text("Shared stage", {
           id: "label",
-          x: 24,
-          y: 112,
-          width: 160,
-          height: 32,
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 112,
+            width: 160,
+            height: 32,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
         }),
       ),
     );
@@ -278,7 +306,10 @@ await import("@officedk/pptxdk/node");
 
 const doc = vanillaEntry.deck({ width: 320, height: 180 }).append(
   vanillaEntry.slide({ id: "s1" }).append(
-    vanillaEntry.shape({ id: "box", x: 10, y: 10, width: 40, height: 40 }),
+    vanillaEntry.shape({
+      id: "box",
+      style: { position: "absolute", left: 10, top: 10, width: 40, height: 40 },
+    }),
   ),
 );
 const resolution = resolve(doc);
@@ -391,7 +422,19 @@ const { shapeCapability, createShapeNode } = await import("@pptxdk/capabilities/
 
 const d = createDeckNode({ width: 320, height: 180 });
 const s = createSlideNode({ id: "s1" });
-s.append(createShapeNode({ id: "box", x: 10, y: 10, width: 40, height: 40, fill: "#2563EB" }));
+s.append(
+  createShapeNode({
+    id: "box",
+    style: {
+      position: "absolute",
+      left: 10,
+      top: 10,
+      width: 40,
+      height: 40,
+      background: "#2563EB",
+    },
+  }),
+);
 d.append(s);
 
 const resolution = createResolver([shapeCapability])({ children: [d] });
@@ -468,12 +511,12 @@ process.stdout.write("ok");
       customNoPaintBackground,
     ]);
 
-    // Invalid root CommonNode throws BuildError ("document-root").
+    // Invalid root CommonNode throws BuildError ("invalid-structure").
     assert.throws(
       () => resolveCustom(slide({ id: "not-a-deck" })),
       (error: unknown) => {
         assert(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "document-root");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         return true;
       },
     );
@@ -485,11 +528,14 @@ process.stdout.write("ok");
       slide({ id: "s2" }).append(
         shape({
           id: "ok",
-          x: 10,
-          y: 10,
-          width: 60,
-          height: 40,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 60,
+            height: 40,
+            background: "#2563EB",
+          },
         }),
       ),
     );
@@ -504,14 +550,30 @@ process.stdout.write("ok");
     assert.equal(painted.pages[0]?.svg, undefined);
     assert.equal(painted.pages[0]?.png, undefined);
     assert.deepEqual(
-      painted.pages[0]?.diagnostics.map((diag) => diag.message),
+      painted.pages[0]?.errors.map((err) => ({
+        code: err.code,
+        capability:
+          err.code === "preview-unsupported-capability"
+            ? err.capability
+            : undefined,
+        message: err.message,
+      })),
       [
-        "Preview does not support custom-opaque",
-        "Preview does not support custom-opaque-bg",
+        {
+          code: "preview-unsupported-capability",
+          capability: "custom-opaque",
+          message: "Preview does not support custom-opaque",
+        },
+        {
+          code: "preview-unsupported-capability",
+          capability: "custom-opaque-bg",
+          message: "Preview does not support custom-opaque-bg",
+        },
       ],
     );
     assert.ok(painted.pages[1]?.png !== undefined);
-    assert.deepEqual(painted.pages[1]?.diagnostics, []);
+    assert.deepEqual(painted.pages[1]?.errors, []);
+    assert.deepEqual(painted.pages[1]?.placeholders, []);
   });
 
   it("splits ResolutionReport from BuildReport, rejects target on resolve, validates target on emit, and emits one Resolution to two targets", async () => {
@@ -527,22 +589,25 @@ process.stdout.write("ok");
       }).append(
         shape({
           id: "hero",
-          x: 20,
-          y: 20,
-          width: 100,
-          height: 50,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 100,
+            height: 50,
+            background: "#2563EB",
+          },
           enter: fade(),
         }),
       ),
     );
 
-    // Runtime callers passing target to resolve() must fail immediately with unknown-parameter.
+    // Runtime callers passing target to resolve() must fail immediately with unknown-prop.
     assert.throws(
       () => resolve(doc, { target: targets.baselineOnly } as never),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "unknown-parameter",
+        error.diagnostics[0]?.code === "unknown-prop",
     );
 
     const resolution = resolve(doc);
@@ -587,7 +652,7 @@ process.stdout.write("ok");
     assert.deepEqual(firstEmit.report.extensions, ["p14"]);
     assert.equal(firstEmit.report.title, "Multi-target Deck");
     assert.equal(firstEmit.report.slides, resolution.report.slides);
-    assert.ok(observeMotion(firstEmit.report.slides[0]!) !== undefined);
+    assert.ok(motionSchedule(firstEmit.report.slides[0]!) !== undefined);
 
     assert.deepEqual(secondEmit.report.target, {
       name: targets.transitional.name,
@@ -596,7 +661,7 @@ process.stdout.write("ok");
     });
     assert.deepEqual(secondEmit.report.extensions, ["p14"]);
     assert.equal(secondEmit.report.slides, resolution.report.slides);
-    assert.ok(observeMotion(secondEmit.report.slides[0]!) !== undefined);
+    assert.ok(motionSchedule(secondEmit.report.slides[0]!) !== undefined);
 
     const firstFile = await validatePptx(firstEmit.pptx, {
       allowedExtensions: ["p14"],
@@ -614,11 +679,14 @@ process.stdout.write("ok");
         slide({ id: "intro", background: "#FFFFFF" }).append(
           shape({
             id: "box-1",
-            x: 20,
-            y: 20,
-            width: 80,
-            height: 50,
-            fill: "#2563EB",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 50,
+              background: "#2563EB",
+            },
           }),
         ),
         slide({
@@ -631,11 +699,15 @@ process.stdout.write("ok");
         }).append(
           text("Morph target", {
             id: "label-1",
-            x: 20,
-            y: 20,
-            width: 160,
-            height: 40,
-            style: { fontFamily: jostFont, fontSize: 16 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 160,
+              height: 40,
+              fontFamily: jostFont,
+              fontSize: 16,
+            },
           }),
         ),
       ),
@@ -651,7 +723,8 @@ process.stdout.write("ok");
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 2);
     for (const page of painted.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
+      assert.deepEqual(page.placeholders, []);
       assert.ok(typeof page.svg === "string" && page.svg.length > 0);
       assert.ok(page.png instanceof Uint8Array && page.png.byteLength > 0);
     }
@@ -664,7 +737,8 @@ process.stdout.write("ok");
     assert.equal("target" in previewResult.report, false);
     assert.equal(previewResult.pages.length, 2);
     for (const page of previewResult.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
+      assert.deepEqual(page.placeholders, []);
       assert.ok(page.png instanceof Uint8Array && page.png.byteLength > 0);
     }
 
@@ -672,7 +746,7 @@ process.stdout.write("ok");
       () => emit(resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+        error.diagnostics.some((diag) => diag.code === "target-violation"),
     );
 
     const emitted = emit(resolution, { target: targets.transitional });
@@ -686,10 +760,13 @@ process.stdout.write("ok");
       slide({ id: "c15-slide", background: "#FFFFFF" }).append(
         chart({
           id: "rings",
-          x: 20,
-          y: 20,
-          width: 320,
-          height: 200,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 320,
+            height: 200,
+          },
           groups: [
             {
               kind: "doughnut",
@@ -710,7 +787,7 @@ process.stdout.write("ok");
       () => emit(c15Resolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+        error.diagnostics.some((diag) => diag.code === "target-violation"),
     );
     assert.throws(
       () =>
@@ -723,7 +800,7 @@ process.stdout.write("ok");
         }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((diag) => diag.code === "forbidden-mechanism"),
+        error.diagnostics.some((diag) => diag.code === "target-violation"),
     );
     const c15Emitted = emit(c15Resolution, {
       target: targets.transitional,
@@ -746,21 +823,39 @@ process.stdout.write("ok");
       () => resolve(invalidParseDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-transition-duration",
+        error.diagnostics[0]?.code === "invalid-prop",
     );
 
     // 2. Author ID conflict
     const duplicateIdDoc = deck({ width: 320, height: 180 }).append(
       slide({ id: "dup-slide" }).append(
-        shape({ id: "dup", x: 10, y: 10, width: 40, height: 40 }),
-        shape({ id: "dup", x: 60, y: 10, width: 40, height: 40 }),
+        shape({
+          id: "dup",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 40,
+            height: 40,
+          },
+        }),
+        shape({
+          id: "dup",
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 10,
+            width: 40,
+            height: 40,
+          },
+        }),
       ),
     );
     assert.throws(
       () => resolve(duplicateIdDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "duplicate-author-id",
+        error.diagnostics[0]?.code === "duplicate-id",
     );
 
     // 3. Morph continuity object kind mismatch (sp vs graphicFrame)
@@ -771,10 +866,13 @@ process.stdout.write("ok");
         shape({
           id: "hero-shape",
           morphKey: hero,
-          x: 20,
-          y: 20,
-          width: 80,
-          height: 50,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 80,
+            height: 50,
+          },
         }),
       ),
       slide({
@@ -784,10 +882,13 @@ process.stdout.write("ok");
         chart({
           id: "hero-chart",
           morphKey: hero,
-          x: 20,
-          y: 20,
-          width: 200,
-          height: 150,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 200,
+            height: 150,
+          },
           groups: [
             {
               kind: "column",
@@ -802,7 +903,7 @@ process.stdout.write("ok");
       () => resolve(morphMismatchDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "morph-object-kind-mismatch",
+        error.diagnostics[0]?.code === "invalid-continuity",
     );
 
     // 4. Layout error
@@ -826,7 +927,7 @@ process.stdout.write("ok");
       () => resolve(invalidLayoutDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-layout-style",
+        error.diagnostics[0]?.code === "invalid-style",
     );
   });
 
@@ -838,22 +939,27 @@ process.stdout.write("ok");
       slide({ id: "restricted-slide", background: "#FFFFFF" }).append(
         text("Licensed text", {
           id: "licensed-text",
-          x: 20,
-          y: 20,
-          width: 240,
-          height: 48,
-          style: { fontFamily: restrictedFont, fontSize: 18, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 240,
+            height: 48,
+            fontFamily: restrictedFont,
+            fontSize: 18,
+            color: "#0F172A",
+          },
         }),
       ),
     );
 
-    // Passing embedFonts to resolve() must fail immediately with unknown-parameter.
+    // Passing embedFonts to resolve() must fail immediately with unknown-prop.
     for (const mode of ["full", "subset"] as const) {
       assert.throws(
         () => resolve(restrictedDoc, { embedFonts: mode } as never),
         (error: unknown) =>
           error instanceof BuildError &&
-          error.diagnostics[0]?.code === "unknown-parameter",
+          error.diagnostics[0]?.code === "unknown-prop",
       );
     }
 
@@ -861,7 +967,8 @@ process.stdout.write("ok");
     const resolution = resolve(restrictedDoc);
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 1);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.deepEqual(painted.pages[0]?.placeholders, []);
     assert.ok(painted.pages[0]?.svg?.includes("<path"));
     assert.ok(
       painted.pages[0]?.png instanceof Uint8Array &&
@@ -870,7 +977,8 @@ process.stdout.write("ok");
 
     const previewed = await preview(restrictedDoc);
     assert.equal(previewed.pages.length, 1);
-    assert.deepEqual(previewed.pages[0]?.diagnostics, []);
+    assert.deepEqual(previewed.pages[0]?.errors, []);
+    assert.deepEqual(previewed.pages[0]?.placeholders, []);
     assert.ok(
       previewed.pages[0]?.png instanceof Uint8Array &&
         previewed.pages[0].png.byteLength > 0,
@@ -884,9 +992,14 @@ process.stdout.write("ok");
     for (const mode of ["full", "subset"] as const) {
       assert.throws(
         () => emit(resolution, { embedFonts: mode }),
-        (error: unknown) =>
-          error instanceof BuildError &&
-          error.diagnostics[0]?.code === "font-embedding-restricted",
+        (error: unknown) => {
+          if (!(error instanceof BuildError)) return false;
+          const diag = error.diagnostics[0];
+          return (
+            diag?.code === "font-unavailable" &&
+            diag.reason === "license-restricted"
+          );
+        },
       );
     }
 
@@ -898,11 +1011,15 @@ process.stdout.write("ok");
       slide({ id: "no-subset-slide", background: "#FFFFFF" }).append(
         text("Full only", {
           id: "full-only-text",
-          x: 20,
-          y: 20,
-          width: 240,
-          height: 48,
-          style: { fontFamily: noSubsetFont, fontSize: 18 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 240,
+            height: 48,
+            fontFamily: noSubsetFont,
+            fontSize: 18,
+          },
         }),
       ),
     );
@@ -913,9 +1030,14 @@ process.stdout.write("ok");
     assert.deepEqual((await validatePptx(fullEmitted.pptx)).errors, []);
     assert.throws(
       () => emit(noSubsetResolution, { embedFonts: "subset" }),
-      (error: unknown) =>
-        error instanceof BuildError &&
-        error.diagnostics[0]?.code === "font-subsetting-forbidden",
+      (error: unknown) => {
+        if (!(error instanceof BuildError)) return false;
+        const diag = error.diagnostics[0];
+        return (
+          diag?.code === "font-unavailable" &&
+          diag.reason === "subsetting-forbidden"
+        );
+      },
     );
   });
 
@@ -971,11 +1093,16 @@ const doc = createDeckNode({ width: 640, height: 360 });
 const s1 = createSlideNode({ id: "table-and-chart" });
 const tbl = createTableNode({
   id: "tbl",
-  x: 20,
-  y: 20,
-  width: 240,
   columns: [120, 120],
-  style: { fontFamily: jost, fontSize: 16, color: "#111827" },
+  style: {
+    position: "absolute",
+    left: 20,
+    top: 20,
+    width: 240,
+    fontFamily: jost,
+    fontSize: 16,
+    color: "#111827",
+  },
 });
 const row1 = createRowNode({ style: { height: 40 } });
 row1.append(createCellNode({}).content("Alpha"), createCellNode({}).content("Beta"));
@@ -984,13 +1111,17 @@ s1.append(
   tbl,
   createChartNode({
     id: "cht",
-    x: 280,
-    y: 20,
-    width: 320,
-    height: 240,
     title: "Sales",
     legend: "bottom",
-    style: { fontFamily: jost, fontSize: 14 },
+    style: {
+      position: "absolute",
+      left: 280,
+      top: 20,
+      width: 320,
+      height: 240,
+      fontFamily: jost,
+      fontSize: 14,
+    },
     groups: [
       {
         kind: "column",
@@ -1009,7 +1140,7 @@ if (emitted.pptx.byteLength === 0) {
 }
 const painted = paint(resolution);
 const page = painted.pages[0];
-if (!page || page.diagnostics.some((diag) => diag.severity === "error")) {
+if (!page || page.errors.length > 0 || page.placeholders.length > 0) {
   throw new Error("Expected clean page paint without errors");
 }
 if (!page.png || page.png.byteLength === 0 || !page.svg?.includes("<path")) {

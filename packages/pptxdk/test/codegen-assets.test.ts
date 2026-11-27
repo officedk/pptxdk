@@ -420,20 +420,27 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
           ],
           {
             id: "font-headline",
-            x: 24,
-            y: 20,
-            width: 360,
-            height: 60,
-            style: { fontSize: 20, color: "#0F172A" },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 20,
+              width: 360,
+              height: 60,
+              fontSize: 20,
+              color: "#0F172A",
+            },
           },
         ),
         image({
           id: "hero-cropped",
           src: new Uint8Array(heroPng),
-          x: 24,
-          y: 100,
-          width: 120,
-          height: 120,
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 100,
+            width: 120,
+            height: 120,
+          },
           crop: { left: 0.5 },
           geometry: preset("roundRect", { adj: 15000 }),
           link: { url: "https://pptxdk.example.com/docs" },
@@ -441,20 +448,27 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
         image({
           id: "watermark-gif",
           src: localGifPath,
-          x: 170,
-          y: 100,
-          width: 60,
-          height: 60,
-          flipH: true,
-          style: { rotate: 15, opacity: 0.9 },
+          style: {
+            position: "absolute",
+            left: 170,
+            top: 100,
+            width: 60,
+            height: 60,
+            flipH: true,
+            rotate: 15,
+            opacity: 0.9,
+          },
         }),
         image({
           id: "external-pic",
           src: { externalUrl },
-          x: 260,
-          y: 100,
-          width: 140,
-          height: 90,
+          style: {
+            position: "absolute",
+            left: 260,
+            top: 100,
+            width: 140,
+            height: 90,
+          },
         }),
       ),
       slide({
@@ -465,20 +479,24 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
         image({
           id: "shared-png-reuse",
           src: new Uint8Array(heroPng),
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 60,
+          },
         }),
         text("Card Fill", {
           id: "card-gradient-fill",
-          x: 200,
-          y: 40,
-          width: 240,
-          height: 80,
           style: {
+            position: "absolute",
+            left: 200,
+            top: 40,
+            width: 240,
+            height: 80,
             color: "#FFFFFF",
-            backgroundImage: vanillaLinearGradient(
+            background: vanillaLinearGradient(
               90,
               "#0F172A",
               darker("accent1", 0.2),
@@ -543,11 +561,15 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
             Text,
             {
               id: "font-headline",
-              x: 24,
-              y: 20,
-              width: 360,
-              height: 60,
-              style: { fontSize: 20, color: "#0F172A" },
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 20,
+                width: 360,
+                height: 60,
+                fontSize: 20,
+                color: "#0F172A",
+              },
             },
             createElement(
               P,
@@ -572,10 +594,13 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
           createElement(Image, {
             id: "hero-cropped",
             src: new Uint8Array(heroPng),
-            x: 24,
-            y: 100,
-            width: 120,
-            height: 120,
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 100,
+              width: 120,
+              height: 120,
+            },
             crop: { left: 0.5 },
             geometry: preset("roundRect", { adj: 15000 }),
             link: { url: "https://pptxdk.example.com/docs" },
@@ -583,20 +608,27 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
           createElement(Image, {
             id: "watermark-gif",
             src: new Uint8Array(watermarkGif),
-            x: 170,
-            y: 100,
-            width: 60,
-            height: 60,
-            flipH: true,
-            style: { rotate: 15, opacity: 0.9 },
+            style: {
+              position: "absolute",
+              left: 170,
+              top: 100,
+              width: 60,
+              height: 60,
+              flipH: true,
+              rotate: 15,
+              opacity: 0.9,
+            },
           }),
           createElement(Image, {
             id: "external-pic",
             src: { externalUrl },
-            x: 260,
-            y: 100,
-            width: 140,
-            height: 90,
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 100,
+              width: 140,
+              height: 90,
+            },
           }),
         ),
         createElement(
@@ -609,22 +641,26 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
           createElement(Image, {
             id: "shared-png-reuse",
             src: new Uint8Array(heroPng),
-            x: 40,
-            y: 40,
-            width: 120,
-            height: 60,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 120,
+              height: 60,
+            },
           }),
           createElement(
             Text,
             {
               id: "card-gradient-fill",
-              x: 200,
-              y: 40,
-              width: 240,
-              height: 80,
               style: {
+                position: "absolute",
+                left: 200,
+                top: 40,
+                width: 240,
+                height: 80,
                 color: "#FFFFFF",
-                backgroundImage: linearGradient(
+                background: linearGradient(
                   90,
                   "#0F172A",
                   darker("accent1", 0.2),
@@ -742,10 +778,13 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
         image({
           id: "cropped-hero",
           src: heroPng,
-          x: 20,
-          y: 20,
-          width: 60,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 60,
+          },
           crop: { left: 0.5 },
         }),
       ),
@@ -768,8 +807,8 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
           // 1. Healthy preview renders expected cropped blue pixels on slide 1 & teal bg on slide 2.
           const healthyPreview = await previewFromSource(entryPath);
           assert.equal(healthyPreview.pages.length, 2);
-          assert.deepEqual(healthyPreview.pages[0]?.diagnostics, []);
-          assert.deepEqual(healthyPreview.pages[1]?.diagnostics, []);
+          assert.deepEqual(healthyPreview.pages[0]?.errors, []);
+          assert.deepEqual(healthyPreview.pages[1]?.errors, []);
           assert.ok(healthyPreview.pages[0]?.png !== undefined);
           assert.ok(healthyPreview.pages[1]?.png !== undefined);
 
@@ -789,20 +828,17 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
 
           const corruptPreview = await previewFromSource(entryPath);
           assert.equal(corruptPreview.pages[0]?.png, undefined);
-          assert.equal(
-            corruptPreview.pages[0]?.diagnostics[0]?.severity,
-            "error",
-          );
+          assert.ok((corruptPreview.pages[0]?.errors.length ?? 0) > 0);
           assert.match(
-            corruptPreview.pages[0]?.diagnostics[0]?.path ?? "",
+            corruptPreview.pages[0]?.errors[0]?.path ?? "",
             /image\[cropped-hero\]/u,
           );
           assert.match(
-            corruptPreview.pages[0]?.diagnostics[0]?.message ?? "",
+            corruptPreview.pages[0]?.errors[0]?.message ?? "",
             /decode PNG/iu,
           );
           assert.ok(corruptPreview.pages[1]?.png !== undefined);
-          assert.deepEqual(corruptPreview.pages[1]?.diagnostics, []);
+          assert.deepEqual(corruptPreview.pages[1]?.errors, []);
 
           // 3. Missing image asset file -> buildFromSource fails locating the missing resource path.
           await rm(assetDiskPath);
@@ -841,20 +877,24 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
         image({
           id: "shared-img",
           src: new Uint8Array(sharedPng),
-          x: 40,
-          y: 40,
-          width: 120,
-          height: 60,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 120,
+            height: 60,
+          },
         }),
         text("Shared Asset Text", {
           id: "shared-txt",
-          x: 40,
-          y: 120,
-          width: 300,
-          height: 60,
           style: {
+            position: "absolute",
+            left: 40,
+            top: 120,
+            width: 300,
+            height: 60,
             fontFamily: sharedFont,
-            backgroundImage: { image: new Uint8Array(sharedPng) },
+            background: { image: new Uint8Array(sharedPng) },
           },
         }),
       ),
@@ -879,11 +919,15 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
       slide({ id: "unembedded" }).append(
         text("Unembedded Family", {
           id: "plain-text",
-          x: 24,
-          y: 24,
-          width: 280,
-          height: 60,
-          style: { fontFamily: "MissingPreviewFamily", fontSize: 18 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 280,
+            height: 60,
+            fontFamily: "MissingPreviewFamily",
+            fontSize: 18,
+          },
         }),
       ),
     );
@@ -913,7 +957,7 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
         const noExtraFontPreview = await previewFromSource(entryPath);
         assert.equal(noExtraFontPreview.pages[0]?.png, undefined);
         assert.ok(
-          (noExtraFontPreview.pages[0]?.diagnostics.length ?? 0) > 0,
+          (noExtraFontPreview.pages[0]?.errors.length ?? 0) > 0,
           "preview reports missing outline font when no extra font environment is provided",
         );
       });
@@ -925,11 +969,12 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
       slide({ id: "with-extra-font" }).append(
         text("Observed With Extra Font", {
           id: "sub-text",
-          x: 24,
-          y: 24,
-          width: 280,
-          height: 60,
           style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 280,
+            height: 60,
             fontFamily: font(
               "MissingPreviewFamily",
               [{ weight: 400, style: "normal", data: jostRegularSource }],
@@ -946,7 +991,7 @@ describe("pptxdk asset codegen acceptance (images, backgrounds, embedded and une
     ]);
     await withRelocatedConsumerProject(subGenerated, async ({ entryPath }) => {
       const previewWithExtraFont = await previewFromSource(entryPath);
-      assert.deepEqual(previewWithExtraFont.pages[0]?.diagnostics, []);
+      assert.deepEqual(previewWithExtraFont.pages[0]?.errors, []);
       assert.ok(previewWithExtraFont.pages[0]?.png instanceof Uint8Array);
 
       const builtUnembedded = await buildFromSource(entryPath);

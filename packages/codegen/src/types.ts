@@ -42,14 +42,39 @@ export const codegenDiagnosticCodeSchema = z.enum([
 ]);
 export type CodegenDiagnosticCode = z.infer<typeof codegenDiagnosticCodeSchema>;
 
-export const codegenDiagnosticSchema = z
-  .object({
-    severity: z.literal("error"),
+export const codegenDiagnosticSchema = z.discriminatedUnion("code", [
+  z.strictObject({
+    code: z.literal("invalid-document"),
     path: z.string(),
-    code: codegenDiagnosticCodeSchema,
     message: z.string(),
-  })
-  .readonly();
+    field: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("invalid-options"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+  }),
+  z.strictObject({
+    code: z.literal("unsupported-declaration"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    declaration: z.string(),
+  }),
+  z.strictObject({
+    code: z.literal("unsupported-slide-property"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string(),
+  }),
+  z.strictObject({
+    code: z.literal("unexpressible-value"),
+    path: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+  }),
+]);
 export type CodegenDiagnostic = z.infer<typeof codegenDiagnosticSchema>;
 
 /** Structured error thrown when an editable document cannot be expressed in generated source. */

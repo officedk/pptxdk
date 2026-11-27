@@ -34,7 +34,8 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
+      slides: resolution.slides,
+      slide: (id: string) => resolution.slide(id),
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -85,20 +86,22 @@ describe("Table static preview positive and negative behaviors", () => {
         colSpan: 2,
         style: {
           fontFamily: jostFont,
-          backgroundColor: "#1E3A8A",
+          background: "#1E3A8A",
           color: "#FFFFFF",
           fontWeight: "bold",
-          borderColor: "#0F172A",
-          borderWidth: 2,
-          borderStyle: "solid",
+          border: { color: "#0F172A", width: 2, style: "solid" },
         },
       },
     );
     const doc = deck({ width: 520, height: 300 }).append(
       slide({
         id: "table-slide",
-        background: "#F8FAFC",
-        style: { display: "flex", padding: 20, alignItems: "stretch" },
+        style: {
+          background: "#F8FAFC",
+          display: "flex",
+          padding: 20,
+          alignItems: "stretch",
+        },
       }).append(
         table({
           id: "pricing",
@@ -121,31 +124,28 @@ describe("Table static preview positive and negative behaviors", () => {
               {
                 id: "page-cell",
                 style: {
-                  backgroundColor: "#DBEAFE",
-                  borderColor: "#1D4ED8",
-                  borderWidth: 2,
+                  background: "#DBEAFE",
+                  border: { color: "#1D4ED8", width: 2 },
                 },
               },
             ),
           ),
-          row({ id: "body-row", style: { backgroundColor: "#FFFFFF" } }).append(
+          row({ id: "body-row", style: { background: "#FFFFFF" } }).append(
             cell("Merged\nRows", {
               id: "span-cell",
               rowSpan: 2,
               style: {
                 fontFamily: jostFont,
                 verticalAlign: "bottom",
-                backgroundColor: "#FEF3C7",
-                borderColor: "#D97706",
-                borderWidth: 1,
+                background: "#FEF3C7",
+                border: { color: "#D97706", width: 1 },
               },
             }),
             cell("AutoCol", {
               id: "auto-cell",
               style: {
                 fontFamily: jostFont,
-                borderColor: "#CBD5E1",
-                borderWidth: 1,
+                border: { color: "#CBD5E1", width: 1 },
               },
             }),
             cell(
@@ -158,8 +158,7 @@ describe("Table static preview positive and negative behaviors", () => {
               {
                 id: "wrap-cell",
                 style: {
-                  borderColor: "#CBD5E1",
-                  borderWidth: 1,
+                  border: { color: "#CBD5E1", width: 1 },
                 },
               },
             ),
@@ -168,9 +167,8 @@ describe("Table static preview positive and negative behaviors", () => {
             cell("", {
               id: "empty-cell",
               style: {
-                backgroundColor: "#ECFDF5",
-                borderColor: "#10B981",
-                borderWidth: 1,
+                background: "#ECFDF5",
+                border: { color: "#10B981", width: 1 },
               },
             }),
             cell("Tail", {
@@ -178,8 +176,7 @@ describe("Table static preview positive and negative behaviors", () => {
               style: {
                 fontFamily: jostFont,
                 verticalAlign: "top",
-                borderColor: "#CBD5E1",
-                borderWidth: 1,
+                border: { color: "#CBD5E1", width: 1 },
               },
             }),
           ),
@@ -190,25 +187,25 @@ describe("Table static preview positive and negative behaviors", () => {
     const first = await previewDoc(doc);
     assert.deepEqual((await validatePptx(first.pptx)).errors, []);
     const page = first.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     expect(page.svg).toContain("<path");
 
     const rendered = PNG.sync.read(Buffer.from(page.png));
-    const tableObs = first.report.slides[0]?.objects[0]?.table;
+    const tableObs = first.slide("table-slide").get("pricing")
+      .objects[0]?.table;
     assert.ok(tableObs !== undefined);
     // Stretched height should expand auto rows to fill 260px (300 - 40 padding).
-    const totalHeight = tableObs.rowHeights.reduce((a, b) => a + b, 0);
+    const totalHeight = tableObs.rows.reduce((a, r) => a + r.height, 0);
     expect(totalHeight).toBeCloseTo(260, 1);
 
     // Sample pixel inside hero-cell (#1E3A8A) and span-cell (#FEF3C7) and empty-cell (#ECFDF5).
-    const heroBox = first.query
-      .getSlide("table-slide")
+    const heroBox = first
+      .slide("table-slide")
       .get("pricing")
       .get("header-row")
-      .get("hero-cell")
-      .observe().box!;
+      .get("hero-cell").box!;
     const heroPixel =
       (Math.round(heroBox.y + 4) * rendered.width + Math.round(heroBox.x + 6)) *
       4;
@@ -217,12 +214,11 @@ describe("Table static preview positive and negative behaviors", () => {
       [0x1e, 0x3a, 0x8a, 255],
     );
 
-    const emptyBox = first.query
-      .getSlide("table-slide")
+    const emptyBox = first
+      .slide("table-slide")
       .get("pricing")
       .get("tail-row")
-      .get("empty-cell")
-      .observe().box!;
+      .get("empty-cell").box!;
     const emptyPixel =
       (Math.round(emptyBox.y + emptyBox.height / 2) * rendered.width +
         Math.round(emptyBox.x + emptyBox.width / 2)) *
@@ -236,7 +232,7 @@ describe("Table static preview positive and negative behaviors", () => {
     const prevPng = page.png.slice();
     const prevSvg = page.svg;
     const prevPptx = first.pptx.slice();
-    editableCell.style({ backgroundColor: "#047857" });
+    editableCell.style({ background: "#047857" });
     editableCell.content("South Q2");
 
     const second = await previewDoc(doc);
@@ -257,25 +253,29 @@ describe("Table static preview positive and negative behaviors", () => {
         { width: 320, height: 180 },
         createElement(
           Slide,
-          { id: "jsx-tbl", background: "#FFFFFF" },
+          { id: "jsx-tbl", style: { background: "#FFFFFF" } },
           createElement(
             Table,
             {
               id: "t1",
-              x: 20,
-              y: 20,
-              width: 240,
               columns: [100, "1fr"],
-              style: { fontFamily: jostFont, fontSize: 14 },
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 240,
+                fontFamily: jostFont,
+                fontSize: 14,
+              },
             },
             createElement(
               Row,
-              { id: "r1", style: { height: 34, backgroundColor: "#E0F2FE" } },
+              { id: "r1", style: { height: 34, background: "#E0F2FE" } },
               createElement(
                 Cell,
                 {
                   id: "c1",
-                  style: { borderColor: "#0284C7", borderWidth: 1 },
+                  style: { border: { color: "#0284C7", width: 1 } },
                 },
                 "JSX Cell",
               ),
@@ -283,7 +283,7 @@ describe("Table static preview positive and negative behaviors", () => {
                 Cell,
                 {
                   id: "c2",
-                  style: { borderColor: "#0284C7", borderWidth: 1 },
+                  style: { border: { color: "#0284C7", width: 1 } },
                 },
                 "Value",
               ),
@@ -293,7 +293,7 @@ describe("Table static preview positive and negative behaviors", () => {
       ),
     );
     const jsxResult = await previewDoc(jsxDoc);
-    assert.deepEqual(jsxResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(jsxResult.pages[0]?.errors, []);
     assert.ok(jsxResult.pages[0]?.png !== undefined);
   });
 
@@ -303,32 +303,37 @@ describe("Table static preview positive and negative behaviors", () => {
       slide({ id: "cropped" }).append(
         shape({
           id: "badge",
-          x: 20,
-          y: 20,
-          width: 80,
-          height: 40,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 80,
+            height: 40,
+            background: "#2563EB",
+          },
         }),
         table({
           id: "tbl",
-          x: 20,
-          y: 80,
-          width: 260,
           columns: [120, "1fr"],
-          style: { fontFamily: jostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 80,
+            width: 260,
+            fontFamily: jostFont,
+            fontSize: 14,
+          },
         }).append(
           row({ id: "r1" }).append(
             cell("Metric", {
               style: {
-                backgroundColor: "#F1F5F9",
-                borderColor: "#334155",
-                borderWidth: 1,
+                background: "#F1F5F9",
+                border: { color: "#334155", width: 1 },
               },
             }),
             cell("100%", {
               style: {
-                borderColor: "#334155",
-                borderWidth: 1,
+                border: { color: "#334155", width: 1 },
               },
             }),
           ),
@@ -336,7 +341,7 @@ describe("Table static preview positive and negative behaviors", () => {
       ),
     );
     const result = await croppedPreview(doc);
-    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.deepEqual(result.pages[0]?.errors, []);
     assert.ok(result.pages[0]?.png !== undefined);
     expect(result.pages[0]?.svg).toContain("<path");
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
@@ -370,18 +375,18 @@ const resolveTrimmed = createResolver([shapeCapability, tableCapability]);
 const res = paint(resolveTrimmed(
   createDeckNode({ width: 300, height: 160 }).append(
     createSlideNode({ id: "s1" }).append(
-      createShapeNode({ id: "s", x: 10, y: 10, width: 40, height: 40, fill: "#DC2626" }),
-      createTableNode({ id: "t", x: 60, y: 10, width: 180, columns: [90, 90], style: { fontFamily: jost, fontSize: 14 } }).append(
+      createShapeNode({ id: "s", style: { position: "absolute", left: 10, top: 10, width: 40, height: 40, background: "#DC2626" } }),
+      createTableNode({ id: "t", columns: [90, 90], style: { position: "absolute", left: 60, top: 10, width: 180, fontFamily: jost, fontSize: 14 } }).append(
         createRowNode({}).append(
-          createCellNode({ style: { borderColor: "#000000" } }).content("A"),
+          createCellNode({ style: { border: { color: "#000000" } } }).content("A"),
           createCellNode({}).content("B"),
         )
       )
     )
   )
 ));
-if (!res.pages[0]?.png || res.pages[0].diagnostics.length !== 0) {
-  throw new Error(JSON.stringify(res.pages[0]?.diagnostics));
+if (!res.pages[0]?.png || res.pages[0].errors.length !== 0) {
+  throw new Error(JSON.stringify(res.pages[0]?.errors));
 }
 process.stdout.write("ok");
 `,
@@ -392,16 +397,21 @@ process.stdout.write("ok");
     assert.equal(isolated.stdout, "ok");
   });
 
-  it("renders dashed/dotted cell borders, full cell rich text (BiDi, justify, lists, decorations, textShadow, letterSpacing), and clips fixed-height overset cells with zero preview diagnostics", async () => {
+  it("renders dashed/dotted cell borders, full cell rich text (BiDi, justify, lists, decorations, textShadow, letterSpacing), and clips fixed-height overset cells with zero preview errors", async () => {
     const resolveWith = createResolver(documentCapabilities);
     const doc = deck({ width: 520, height: 300 }).append(
-      slide({ id: "table-parity", background: "#FFFFFF" }).append(
+      slide({ id: "table-parity", style: { background: "#FFFFFF" } }).append(
         table({
           id: "parity-tbl",
-          x: 20,
-          y: 20,
           columns: [160, 160, 140],
-          style: { fontFamily: jostFont, fontSize: 13, color: "#0F172A" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            fontFamily: jostFont,
+            fontSize: 13,
+            color: "#0F172A",
+          },
         }).append(
           row({ id: "styled-row" }).append(
             cell(
@@ -423,9 +433,7 @@ process.stdout.write("ok");
                 id: "dashed-cell",
                 style: {
                   padding: 6,
-                  borderColor: "#1E293B",
-                  borderWidth: 2,
-                  borderStyle: "dashed",
+                  border: { color: "#1E293B", width: 2, style: "dashed" },
                 },
               },
             ),
@@ -450,9 +458,7 @@ process.stdout.write("ok");
                 id: "dotted-cell",
                 style: {
                   padding: 6,
-                  borderColor: "#2563EB",
-                  borderWidth: 2,
-                  borderStyle: "dotted",
+                  border: { color: "#2563EB", width: 2, style: "dotted" },
                 },
               },
             ),
@@ -461,27 +467,29 @@ process.stdout.write("ok");
               style: {
                 fontFamily: arabicFont,
                 padding: 6,
-                borderColor: "#0F766E",
-                borderWidth: 1,
-                borderStyle: "solid",
+                border: { color: "#0F766E", width: 1, style: "solid" },
               },
             }),
           ),
         ),
         table({
           id: "overset-tbl",
-          x: 20,
-          y: 160,
           columns: [140],
-          style: { fontFamily: jostFont, fontSize: 15, color: "#DC2626" },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 160,
+            fontFamily: jostFont,
+            fontSize: 15,
+            color: "#DC2626",
+          },
         }).append(
           row({ id: "short-row", style: { height: 22 } }).append(
             cell("LINE1\nLINE2\nLINE3\nLINE4\nLINE5", {
               id: "overset-cell",
               style: {
                 padding: 2,
-                borderColor: "#0F172A",
-                borderWidth: 1,
+                border: { color: "#0F172A", width: 1 },
               },
             }),
           ),
@@ -490,21 +498,22 @@ process.stdout.write("ok");
     );
 
     const resolution = resolveWith(doc);
+    const oversetCellMetrics = resolution
+      .slide("table-parity")
+      .get("overset-tbl")
+      .get("short-row")
+      .get("overset-cell").textMetrics;
+    assert.equal(oversetCellMetrics?.status, "measured");
+    assert.equal(oversetCellMetrics.fits, false);
     assert.ok(
-      resolution.report.diagnostics.some(
-        (diag) =>
-          diag.severity === "warning" &&
-          diag.code === "overset" &&
-          diag.path ===
-            "deck/slide[table-parity]/table[overset-tbl]/row[short-row]/cell[overset-cell]",
-      ),
+      oversetCellMetrics.content.height > oversetCellMetrics.available.height,
     );
     const { pptx } = emit(resolution);
     assert.deepEqual((await validatePptx(pptx)).errors, []);
 
     const preview = paint(resolution);
     const page = preview.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
     expect(page.svg).toContain('stroke-dasharray="8 6"');
@@ -529,33 +538,43 @@ process.stdout.write("ok");
     const cases: readonly {
       readonly label: string;
       readonly node: ReturnType<typeof table>;
-      readonly expected: RegExp;
+      readonly expectedCode: "preview-missing-glyph" | "preview-missing-font";
+      readonly expectedMessage: RegExp;
     }[] = [
       {
         label: "missing-glyph-arabic-cell",
         node: table({
           id: "bad-tbl",
-          x: 10,
-          y: 10,
           columns: [120],
-          style: { fontFamily: jostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            fontFamily: jostFont,
+            fontSize: 14,
+          },
         }).append(
-          row({ id: "bad-row" }).append(
+          row({ id: "bad-row", style: { height: 30 } }).append(
             cell("مرحبا", {
               id: "bad-cell",
             }),
           ),
         ),
-        expected: /glyph/i,
+        expectedCode: "preview-missing-glyph",
+        expectedMessage: /glyph/i,
       },
       {
         label: "unmeasured-font-on-fixed-row",
         node: table({
           id: "bad-tbl",
-          x: 10,
-          y: 10,
           columns: [120],
-          style: { fontFamily: "Aptos", fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            fontFamily: "Aptos",
+            fontSize: 14,
+          },
         }).append(
           row({ id: "bad-row", style: { height: 30 } }).append(
             cell("Missing face", {
@@ -563,7 +582,8 @@ process.stdout.write("ok");
             }),
           ),
         ),
-        expected: /measurement|font/i,
+        expectedCode: "preview-missing-font",
+        expectedMessage: /font/i,
       },
     ];
 
@@ -574,14 +594,18 @@ process.stdout.write("ok");
           slide({ id: "good-page" }).append(
             table({
               id: "ok-tbl",
-              x: 10,
-              y: 10,
               columns: [120],
-              style: { fontFamily: jostFont, fontSize: 14 },
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                fontFamily: jostFont,
+                fontSize: 14,
+              },
             }).append(
               row().append(
                 cell("Valid", {
-                  style: { borderColor: "#0F172A", borderWidth: 1 },
+                  style: { border: { color: "#0F172A", width: 1 } },
                 }),
               ),
             ),
@@ -596,66 +620,94 @@ process.stdout.write("ok");
       assert.equal(result.pages[0]?.png, undefined, item.label);
       assert.equal(result.pages[0]?.svg, undefined, item.label);
       assert.equal(
-        result.pages[0]?.diagnostics[0]?.severity,
-        "error",
+        result.pages[0]?.errors[0]?.code,
+        item.expectedCode,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.path ?? "",
+        result.pages[0]?.errors[0]?.path ?? "",
         /table\[bad-tbl\]\/row\[bad-row\]\/cell\[bad-cell\]/,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.message ?? "",
-        item.expected,
+        result.pages[0]?.errors[0]?.message ?? "",
+        item.expectedMessage,
         item.label,
       );
       assert.ok(result.pages[1]?.png !== undefined, item.label);
-      assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+      assert.deepEqual(result.pages[1]?.errors, [], item.label);
     }
   });
 
-  it("emits table-height-underflow and table-height-overflow build warnings while painting cleanly", async () => {
+  it("applies CSS table target height and min-content height without sibling overlap and paints cleanly", async () => {
     const resolveWith = createResolver(documentCapabilities);
-    const doc = deck({ width: 320, height: 220 }).append(
-      slide({ id: "height-warnings", background: "#FFFFFF" }).append(
+    const doc = deck({ width: 320, height: 280 }).append(
+      slide({
+        id: "height-sizing",
+        style: {
+          background: "#FFFFFF",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          padding: 16,
+        },
+      }).append(
         table({
-          id: "underflow-tbl",
-          x: 16,
-          y: 16,
+          id: "underflow-auto-tbl",
+          columns: [140],
+          style: { fontFamily: jostFont, fontSize: 13, height: 90 },
+        }).append(
+          row({ id: "auto-r" }).append(
+            cell("Expands", {
+              style: { border: { color: "#0F172A", width: 1 } },
+            }),
+          ),
+        ),
+        table({
+          id: "underflow-explicit-tbl",
           columns: [140],
           style: { fontFamily: jostFont, fontSize: 13, height: 90 },
         }).append(
           row({ style: { height: 28 } }).append(
             cell("Short", {
-              style: { borderColor: "#0F172A", borderWidth: 1 },
+              style: { border: { color: "#0F172A", width: 1 } },
             }),
           ),
         ),
         table({
           id: "overflow-tbl",
-          x: 16,
-          y: 120,
           columns: [140],
           style: { fontFamily: jostFont, fontSize: 13, height: 20 },
         }).append(
           row({ style: { height: 50 } }).append(
-            cell("Tall", { style: { borderColor: "#0F172A", borderWidth: 1 } }),
+            cell("Tall", { style: { border: { color: "#0F172A", width: 1 } } }),
           ),
         ),
+        shape({
+          id: "after-overflow",
+          style: { width: 140, height: 20, background: "#2563EB" },
+        }),
       ),
     );
     const resolution = resolveWith(doc);
-    const warningCodes = resolution.report.diagnostics
-      .filter((d) => d.severity === "warning")
-      .map((d) => d.code);
-    assert.ok(warningCodes.includes("table-height-underflow"));
-    assert.ok(warningCodes.includes("table-height-overflow"));
+    const pageLocator = resolution.slide("height-sizing");
+    const autoBox = pageLocator.get("underflow-auto-tbl").box!;
+    const explicitBox = pageLocator.get("underflow-explicit-tbl").box!;
+    const overflowBox = pageLocator.get("overflow-tbl").box!;
+    const siblingBox = pageLocator.get("after-overflow").box!;
+
+    assert.equal(autoBox.height, 90);
+    assert.equal(explicitBox.height, 28);
+    assert.equal(overflowBox.height, 50);
+    assert.ok(
+      siblingBox.y >= overflowBox.y + overflowBox.height,
+      `Sibling at y=${siblingBox.y} must not overlap expanded table ending at ${overflowBox.y + overflowBox.height}`,
+    );
 
     const emitted = emit(resolution);
     assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
     const painted = paint(resolution);
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
   });
 });

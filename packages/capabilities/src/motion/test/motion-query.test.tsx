@@ -11,8 +11,7 @@ import {
   Step,
   Text,
   useMotionScope,
-  observeMotion,
-  type MotionObservation,
+  motionSchedule,
 } from "@pptxdk/capabilities";
 import { BuildQueryError } from "@pptxdk/core";
 import { Deck, Slide } from "@pptxdk/react";
@@ -21,6 +20,7 @@ import { createElement, Fragment } from "react";
 import { describe, it } from "vitest";
 
 import { build } from "../../../test/test-helpers.ts";
+import type { ResolvedMotion } from "../motion-api.ts";
 
 function KnownRelationsDeck() {
   const source = useMotionScope();
@@ -41,12 +41,15 @@ function KnownRelationsDeck() {
           { scope: source, publishEnd: source.cue("ready") },
           createElement(Shape, {
             id: "source",
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
-            fill: "#123456",
             enter: fade({ duration: 100 }),
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 10,
+              height: 10,
+              background: "#123456",
+            },
           }),
         ),
         createElement(
@@ -56,11 +59,14 @@ function KnownRelationsDeck() {
             Text,
             {
               id: "paragraph-parts",
-              x: 0,
-              y: 20,
-              width: 100,
-              height: 30,
               enter: fade({ by: "paragraph", duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 20,
+                width: 100,
+                height: 30,
+              },
             },
             createElement(P, null, "first"),
             createElement(P, null, "second"),
@@ -71,12 +77,15 @@ function KnownRelationsDeck() {
           { scope: touching, startAt: source.end },
           createElement(Shape, {
             id: "touching",
-            x: 40,
-            y: 0,
-            width: 10,
-            height: 10,
-            fill: "#abcdef",
             enter: fade({ duration: 10 }),
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 0,
+              width: 10,
+              height: 10,
+              background: "#abcdef",
+            },
           }),
         ),
         createElement(
@@ -87,12 +96,15 @@ function KnownRelationsDeck() {
           },
           createElement(Shape, {
             id: "follower",
-            x: 20,
-            y: 0,
-            width: 10,
-            height: 10,
-            fill: "#654321",
             enter: [fade({ duration: 50 }), fade({ duration: 30 })],
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 0,
+              width: 10,
+              height: 10,
+              background: "#654321",
+            },
           }),
         ),
       ),
@@ -135,11 +147,14 @@ function DeclarationClosureDeck() {
             { n: 1 },
             createElement(Shape, {
               id: "closure-click",
-              x: 0,
-              y: 0,
-              width: 10,
-              height: 10,
               enter: fade({ duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 10,
+                height: 10,
+              },
             }),
           ),
           createElement(
@@ -150,11 +165,14 @@ function DeclarationClosureDeck() {
               { n: 1 },
               createElement(Shape, {
                 id: "closure-deep-one-click",
-                x: 15,
-                y: 0,
-                width: 10,
-                height: 10,
                 enter: fade({ duration: 100 }),
+                style: {
+                  position: "absolute",
+                  left: 15,
+                  top: 0,
+                  width: 10,
+                  height: 10,
+                },
               }),
             ),
             createElement(
@@ -165,11 +183,14 @@ function DeclarationClosureDeck() {
                 { n: 1 },
                 createElement(Shape, {
                   id: "closure-deep-two-click",
-                  x: 30,
-                  y: 0,
-                  width: 10,
-                  height: 10,
                   enter: fade({ duration: 100 }),
+                  style: {
+                    position: "absolute",
+                    left: 30,
+                    top: 0,
+                    width: 10,
+                    height: 10,
+                  },
                 }),
               ),
               createElement(
@@ -180,11 +201,14 @@ function DeclarationClosureDeck() {
                   { n: 1 },
                   createElement(Shape, {
                     id: "closure-deep-three-click",
-                    x: 45,
-                    y: 0,
-                    width: 10,
-                    height: 10,
                     enter: fade({ duration: 100 }),
+                    style: {
+                      position: "absolute",
+                      left: 45,
+                      top: 0,
+                      width: 10,
+                      height: 10,
+                    },
                   }),
                 ),
                 createElement(MotionScope, {
@@ -219,11 +243,14 @@ function MixedIntervalsDeck() {
             Text,
             {
               id: "unknown-words",
-              x: 0,
-              y: 0,
-              width: 100,
-              height: 20,
               enter: fade({ by: "word", duration: 100 }),
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 20,
+              },
             },
             "first second",
           ),
@@ -233,34 +260,43 @@ function MixedIntervalsDeck() {
           { scope: follower, startAt: words.end },
           createElement(Shape, {
             id: "unknown-start-finite-end",
-            x: 40,
-            y: 0,
-            width: 10,
-            height: 10,
-            fill: "#123456",
             enter: fade({ duration: 80 }),
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 0,
+              width: 10,
+              height: 10,
+              background: "#123456",
+            },
           }),
         ),
         createElement(Shape, {
           id: "known-finite",
-          x: 0,
-          y: 30,
-          width: 10,
-          height: 10,
-          fill: "#123456",
           enter: fade({ duration: 100 }),
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 30,
+            width: 10,
+            height: 10,
+            background: "#123456",
+          },
         }),
         createElement(Shape, {
           id: "no-natural-end",
-          x: 20,
-          y: 30,
-          width: 10,
-          height: 10,
-          fill: "#654321",
           emphasis: repeat(
             breathe({ period: 200, from: "#123456", to: "#654321" }),
             "forever",
           ),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 30,
+            width: 10,
+            height: 10,
+            background: "#654321",
+          },
         }),
       ),
     ),
@@ -279,12 +315,15 @@ function ClickStepsDeck() {
         { n: 1 },
         createElement(Shape, {
           id: "first-click",
-          x: 0,
-          y: 0,
-          width: 10,
-          height: 10,
-          fill: "#123456",
           enter: fade({ duration: 100 }),
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 10,
+            height: 10,
+            background: "#123456",
+          },
         }),
       ),
       createElement(
@@ -292,12 +331,15 @@ function ClickStepsDeck() {
         { n: 2 },
         createElement(Shape, {
           id: "second-click",
-          x: 20,
-          y: 0,
-          width: 10,
-          height: 10,
-          fill: "#654321",
           enter: fade({ duration: 100 }),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 0,
+            width: 10,
+            height: 10,
+            background: "#654321",
+          },
         }),
       ),
     ),
@@ -328,11 +370,14 @@ function EmptyIntervalDeck({
               Text,
               {
                 id: "unknown-source",
-                x: 0,
-                y: 0,
-                width: 100,
-                height: 20,
                 enter: fade({ by: "word", duration: 100 }),
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 100,
+                  height: 20,
+                },
               },
               "first second",
             ),
@@ -342,12 +387,15 @@ function EmptyIntervalDeck({
             { scope: source },
             createElement(Shape, {
               id: "known-source",
-              x: 0,
-              y: 0,
-              width: 10,
-              height: 10,
-              fill: "#123456",
               enter: fade({ duration: sourceDuration }),
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 10,
+                height: 10,
+                background: "#123456",
+              },
             }),
           ),
       createElement(MotionScope, {
@@ -359,12 +407,15 @@ function EmptyIntervalDeck({
         { scope: finite, startAt: source.end },
         createElement(Shape, {
           id: "finite-interval",
-          x: 20,
-          y: 0,
-          width: 10,
-          height: 10,
-          fill: "#654321",
           enter: fade({ duration: 100 }),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 0,
+            width: 10,
+            height: 10,
+            background: "#654321",
+          },
         }),
       ),
       createElement(
@@ -372,15 +423,18 @@ function EmptyIntervalDeck({
         { scope: infinite, startAt: source.end },
         createElement(Shape, {
           id: "unbounded-interval",
-          x: 40,
-          y: 0,
-          width: 10,
-          height: 10,
-          fill: "#abcdef",
           emphasis: repeat(
             breathe({ period: 200, from: "#123456", to: "#654321" }),
             "forever",
           ),
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 0,
+            width: 10,
+            height: 10,
+            background: "#abcdef",
+          },
         }),
       ),
       createElement(
@@ -388,12 +442,15 @@ function EmptyIntervalDeck({
         { scope: overlapping, startAt: after(source.end, 50) },
         createElement(Shape, {
           id: "overlapping-interval",
-          x: 60,
-          y: 0,
-          width: 10,
-          height: 10,
-          fill: "#fedcba",
           enter: fade({ duration: 40 }),
+          style: {
+            position: "absolute",
+            left: 60,
+            top: 0,
+            width: 10,
+            height: 10,
+            background: "#fedcba",
+          },
         }),
       ),
     ),
@@ -423,12 +480,15 @@ function DeclaredScopeClosureDeck() {
           { n: 1 },
           createElement(Shape, {
             id: "click-member",
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
-            fill: "#123456",
             enter: fade({ duration: 100 }),
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 10,
+              height: 10,
+              background: "#123456",
+            },
           }),
         ),
       ),
@@ -447,15 +507,18 @@ function WordMotionDeck() {
         Text,
         {
           id: "word-text",
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 20,
           enter: fade({
             by: "word",
             duration: 100,
             easing: { accelerate: 0.2 },
           }),
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 20,
+          },
         },
         "first second",
       ),
@@ -463,15 +526,13 @@ function WordMotionDeck() {
   );
 }
 
-describe("observeMotion", () => {
+describe("motionSchedule", () => {
   it("treats proven empty half-open intervals as non-overlapping", async () => {
     for (const sourceDuration of [100, 800, 3000]) {
       const result = await build(
         createElement(EmptyIntervalDeck, { sourceDuration }),
       );
-      const step = observeMotion(
-        result.query.getSlide("empty-interval").observation,
-      )?.steps[0];
+      const step = motionSchedule(result.slide("empty-interval"))?.steps[0];
       assert.ok(step);
       const empty = step.scopes.find(({ members }) => members.length === 0);
       const finite = step.effects.find(
@@ -498,9 +559,8 @@ describe("observeMotion", () => {
     }
 
     const unknownResult = await build(createElement(EmptyIntervalDeck));
-    const unknownStep = observeMotion(
-      unknownResult.query.getSlide("empty-interval").observation,
-    )?.steps[0];
+    const unknownStep = motionSchedule(unknownResult.slide("empty-interval"))
+      ?.steps[0];
     assert.ok(unknownStep);
     const empty = unknownStep.scopes.find(
       ({ members }) => members.length === 0,
@@ -540,9 +600,7 @@ describe("observeMotion", () => {
     const result = await build(createElement(DeclarationClosureDeck));
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
-    const motion = observeMotion(
-      result.query.getSlide("motion-declaration-closure").observation,
-    );
+    const motion = motionSchedule(result.slide("motion-declaration-closure"));
     const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
     const click = motion?.steps.find(
       ({ trigger, number }) => trigger === "click" && number === 1,
@@ -681,8 +739,8 @@ describe("observeMotion", () => {
 
   it("preserves effect instances and named cue declarations and queries precise relationships", async () => {
     const result = await build(createElement(KnownRelationsDeck));
-    const slide = result.query.getSlide("motion-relations");
-    const motion = observeMotion(slide.observation);
+    const slide = result.slide("motion-relations");
+    const motion = motionSchedule(slide);
 
     assert.equal(motion?.evidence, "generation");
     assert.equal(motion?.steps.length, 1);
@@ -775,8 +833,8 @@ describe("observeMotion", () => {
 
   it("coverage results retain items with unknown completion and no natural completion", async () => {
     const result = await build(createElement(MixedIntervalsDeck));
-    const slide = result.query.getSlide("motion-coverage");
-    const motion = observeMotion(slide.observation);
+    const slide = result.slide("motion-coverage");
+    const motion = motionSchedule(slide);
     const step = motion?.steps[0];
     assert.ok(step);
     assert.deepEqual(step.effects.map(({ end }) => end.state).sort(), [
@@ -828,9 +886,7 @@ describe("observeMotion", () => {
 
   it("preserves cross-step declaration closures and distinguishes structural parent-child from current step schedule", async () => {
     const result = await build(createElement(DeclaredScopeClosureDeck));
-    const motion = observeMotion(
-      result.query.getSlide("scope-closure").observation,
-    );
+    const motion = motionSchedule(result.slide("scope-closure"));
     const automatic = motion?.steps.find(({ trigger }) => trigger === "auto");
     const click = motion?.steps.find(
       ({ trigger, number }) => trigger === "click" && number === 1,
@@ -882,7 +938,7 @@ describe("observeMotion", () => {
     );
     const reportMotion = result.report.slides[0]?.capabilities?.[
       "motion"
-    ] as MotionObservation;
+    ] as ResolvedMotion;
     const reportParent = reportMotion.scopes?.find(
       ({ id }) => id === automaticParent.ref.id,
     );
@@ -914,9 +970,7 @@ describe("observeMotion", () => {
 
   it("exposes only effect observation fields and freezes their nested values", async () => {
     const result = await build(createElement(WordMotionDeck));
-    const step = observeMotion(
-      result.query.getSlide("word-projection").observation,
-    )?.steps[0];
+    const step = motionSchedule(result.slide("word-projection"))?.steps[0];
     assert.ok(step);
     const effect = step.effects.find(
       ({ target }) => target.authorId === "word-text",
@@ -951,12 +1005,8 @@ describe("observeMotion", () => {
   it("returns different clocks across steps and throws query errors on cross-build references", async () => {
     const first = await build(createElement(ClickStepsDeck));
     const second = await build(createElement(ClickStepsDeck));
-    const firstMotion = observeMotion(
-      first.query.getSlide("motion-steps").observation,
-    );
-    const secondMotion = observeMotion(
-      second.query.getSlide("motion-steps").observation,
-    );
+    const firstMotion = motionSchedule(first.slide("motion-steps"));
+    const secondMotion = motionSchedule(second.slide("motion-steps"));
     assert.equal(firstMotion?.steps.length, 2);
     assert.equal(secondMotion?.steps.length, 2);
     const firstStep = firstMotion?.steps[0];
@@ -989,19 +1039,15 @@ describe("observeMotion", () => {
       (error: unknown) =>
         error instanceof BuildQueryError && error.code === "foreign-reference",
     );
-    assert.equal(
-      observeMotion(first.query.getSlide("motion-steps").observation),
-      firstMotion,
-    );
+    assert.equal(motionSchedule(first.slide("motion-steps")), firstMotion);
     assert.throws(
       () =>
-        observeMotion({
-          ...first.query.getSlide("motion-steps").observation,
+        motionSchedule({
+          ...first.report.slides[0]!,
           capabilities: {
-            ...first.query.getSlide("motion-steps").observation.capabilities,
+            ...first.report.slides[0]!.capabilities,
             motion: {
-              ...(first.query.getSlide("motion-steps").observation
-                .capabilities?.["motion"] as object),
+              ...(first.report.slides[0]!.capabilities?.["motion"] as object),
             },
           },
         }),

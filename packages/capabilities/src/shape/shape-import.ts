@@ -363,6 +363,7 @@ type ImportedShapeRun =
 type ImportedShapeParagraph = {
   readonly runs: readonly ImportedShapeRun[];
   readonly style: ParagraphStyle;
+  readonly defRunStyle?: ParsedRunStyle;
 };
 
 function readLineSpacing(
@@ -401,6 +402,7 @@ function readShapeParagraph(
   let lineHeight: number | undefined;
   let spacingAfter: number | undefined;
   let list: TextList | undefined;
+  let defRunStyle: ParsedRunStyle | undefined;
   let level = 0;
 
   const pPr = pCursor.child(A_NS, "pPr");
@@ -474,6 +476,11 @@ function readShapeParagraph(
         }
       }
     }
+
+    const defRPr = pPr.child(A_NS, "defRPr");
+    if (defRPr !== undefined) {
+      defRunStyle = readShapeRunProperties(defRPr, location, diagnostics);
+    }
   }
 
   const runs: ImportedShapeRun[] = [];
@@ -531,12 +538,7 @@ function readShapeParagraph(
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "endParaRPr") {
-      child.consumeAttr("lang");
-      child.consumeAttr("sz");
-      child.consumeAttr("b");
-      child.consumeAttr("i");
-      child.consumeAttr("dirty");
-      child.consumeAttr("smtClean");
+      readShapeRunProperties(child, location, diagnostics);
       continue;
     }
     diagnostics.push({
@@ -557,7 +559,11 @@ function readShapeParagraph(
     ...(list === undefined ? {} : { list }),
   };
 
-  return { runs, style: pStyle };
+  return {
+    runs,
+    style: pStyle,
+    ...(defRunStyle === undefined ? {} : { defRunStyle }),
+  };
 }
 
 function readShapeTxBody(
@@ -736,66 +742,85 @@ export function readShapeSp(
     singleParagraph.runs[0]!.kind === "text"
       ? singleParagraph.runs[0]!
       : undefined;
+  const hasStyledEmptyParagraph =
+    isSingleEmptyParagraph && singleParagraph.defRunStyle !== undefined;
   const hasEffectiveText =
     (singlePlainRun !== undefined && singlePlainRun.text !== "") ||
     (importedText !== undefined &&
       singlePlainRun === undefined &&
       !isSingleEmptyParagraph &&
       importedText.paragraphs.length > 0);
+  const hasEffectiveTextBody = hasEffectiveText || hasStyledEmptyParagraph;
+  const emptyParagraphTextStyle =
+    hasStyledEmptyParagraph && singleParagraph !== undefined
+      ? (() => {
+          const { list: _list, ...restPStyle } = singleParagraph.style;
+          return {
+            ...restPStyle,
+            ...singleParagraph.defRunStyle,
+          };
+        })()
+      : undefined;
 
-  const shapeStyle: NonNullable<ShapeDeclarationProps["style"]> = {
-    ...visuals.style,
-    ...(hasEffectiveText && importedText?.paddingTop !== undefined
-      ? { paddingTop: importedText.paddingTop }
-      : {}),
-    ...(hasEffectiveText && importedText?.paddingRight !== undefined
-      ? { paddingRight: importedText.paddingRight }
-      : {}),
-    ...(hasEffectiveText && importedText?.paddingBottom !== undefined
-      ? { paddingBottom: importedText.paddingBottom }
-      : {}),
-    ...(hasEffectiveText && importedText?.paddingLeft !== undefined
-      ? { paddingLeft: importedText.paddingLeft }
-      : {}),
-    ...(hasEffectiveText && importedText?.verticalAlign !== undefined
-      ? { verticalAlign: importedText.verticalAlign }
-      : {}),
-    ...(hasEffectiveText && importedText?.textWrap !== undefined
-      ? { textWrap: importedText.textWrap }
-      : {}),
-  };
+  const { border: rawBorder, ...restVisualStyle } = visuals.style;
+  const effectiveVisualStyle =
+    rawBorder === "none" ? restVisualStyle : visuals.style;
 
-  const singleTextStyle: TextStyle | undefined =
+  const singlePlainTextStyle: Omit<ParagraphStyle, "list"> | undefined =
     hasEffectiveText &&
     singlePlainRun !== undefined &&
     singleParagraph !== undefined
-      ? {
-          ...singleParagraph.style,
-          ...singlePlainRun.style,
-        }
+      ? (() => {
+          const { list: _list, ...restPStyle } = singleParagraph.style;
+          return {
+            ...restPStyle,
+            ...singlePlainRun.style,
+          };
+        })()
       : undefined;
+
+  const shapeStyle: NonNullable<ShapeDeclarationProps["style"]> = {
+    position: "absolute",
+    left: mappedBox.x,
+    top: mappedBox.y,
+    width: mappedBox.width,
+    height: mappedBox.height,
+    ...effectiveVisualStyle,
+    ...(hasEffectiveTextBody && importedText?.paddingTop !== undefined
+      ? { paddingTop: importedText.paddingTop }
+      : {}),
+    ...(hasEffectiveTextBody && importedText?.paddingRight !== undefined
+      ? { paddingRight: importedText.paddingRight }
+      : {}),
+    ...(hasEffectiveTextBody && importedText?.paddingBottom !== undefined
+      ? { paddingBottom: importedText.paddingBottom }
+      : {}),
+    ...(hasEffectiveTextBody && importedText?.paddingLeft !== undefined
+      ? { paddingLeft: importedText.paddingLeft }
+      : {}),
+    ...(hasEffectiveTextBody && importedText?.verticalAlign !== undefined
+      ? { verticalAlign: importedText.verticalAlign }
+      : {}),
+    ...(hasEffectiveTextBody && importedText?.textWrap !== undefined
+      ? { textWrap: importedText.textWrap }
+      : {}),
+    ...singlePlainTextStyle,
+    ...emptyParagraphTextStyle,
+  };
 
   const props: ShapeDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(link === undefined ? {} : { link }),
     ...(visuals.geometry === undefined ? {} : { geometry: visuals.geometry }),
-    ...(visuals.transform.flipH ? { flipH: true } : {}),
-    ...(visuals.transform.flipV ? { flipV: true } : {}),
-    x: mappedBox.x,
-    y: mappedBox.y,
-    width: mappedBox.width,
-    height: mappedBox.height,
-    ...(Object.keys(shapeStyle).length === 0 ? {} : { style: shapeStyle }),
-    ...(hasEffectiveText && singlePlainRun !== undefined
-      ? { text: singlePlainRun.text }
-      : {}),
-    ...(singleTextStyle !== undefined && Object.keys(singleTextStyle).length > 0
-      ? { textStyle: singleTextStyle }
-      : {}),
+    style: shapeStyle,
   };
 
   const node = createShapeNode(props);
-  if (
+  if (hasStyledEmptyParagraph) {
+    node.content("");
+  } else if (hasEffectiveText && singlePlainRun !== undefined) {
+    node.content(singlePlainRun.text);
+  } else if (
     hasEffectiveText &&
     importedText !== undefined &&
     singlePlainRun === undefined &&

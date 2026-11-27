@@ -1,6 +1,5 @@
 import {
   authorIdSchema,
-  colorValueSchema,
   layoutStyleSchema,
   linkTargetSchema,
   textStyleSchema,
@@ -14,7 +13,7 @@ import { motionPropsSchema } from "../motion/motion-schemas.ts";
 import { geometrySchema } from "../shared/geometry.ts";
 import { optionalNameSchema } from "../shared/identity.ts";
 import { morphKeySchema } from "../shared/morph-api.ts";
-import { lineEndStyleSchema } from "../shared/visual.ts";
+import { shapeBorderValueSchema } from "../shared/visual.ts";
 
 export const shapeCoordinateSchema = z
   .number()
@@ -34,8 +33,8 @@ export const shapeSizeSchema = z
 const shapeStyleObjectSchema = z.strictObject({
   ...layoutStyleSchema.unwrap().shape,
   ...visualStyleSchema.unwrap().shape,
-  ...lineEndStyleSchema.unwrap().shape,
   ...textStyleSchema.unwrap().shape,
+  border: shapeBorderValueSchema.optional(),
 });
 
 export const shapeStyleSchema = shapeStyleObjectSchema.readonly();
@@ -49,18 +48,7 @@ const shapeDeclarationPropsObjectSchema = z.strictObject({
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   geometry: geometrySchema.optional(),
-  flipH: z.boolean().optional(),
-  flipV: z.boolean().optional(),
-  x: shapeCoordinateSchema.optional(),
-  y: shapeCoordinateSchema.optional(),
-  width: shapeSizeSchema.optional(),
-  height: shapeSizeSchema.optional(),
   style: shapeStyleSchema.optional(),
-  fill: colorValueSchema.optional(),
-  /** Directly writes native text into this shape without creating an additional text box; mutually exclusive with children. */
-  text: z.string().optional(),
-  /** Shape text uses shared text services and can still be emitted when text box capability is omitted. */
-  textStyle: textStyleSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
   motion: motionPropsShape.motion,

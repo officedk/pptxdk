@@ -91,15 +91,14 @@ function createDirectVanillaDeck() {
         name: "Preset Round",
         link: { url: "https://example.com" },
         geometry: preset("roundRect", { adj: 20000 }),
-        x: 24,
-        y: 24,
-        width: 150,
-        height: 80,
-        fill: "#2563EB",
         style: {
-          borderColor: "#1E293B",
-          borderWidth: 2,
-          borderStyle: "dashed",
+          position: "absolute",
+          left: 24,
+          top: 24,
+          width: 150,
+          height: 80,
+          background: "#2563EB",
+          border: { color: "#1E293B", width: 2, style: "dashed" },
         },
       }),
       shape({
@@ -107,21 +106,27 @@ function createDirectVanillaDeck() {
         name: undefined,
         morphKey: morphScope.handle("card"),
         geometry: "ellipse",
-        x: 250,
-        y: 160,
-        width: 80,
-        height: 60,
-        fill: "#0284C7",
+        style: {
+          position: "absolute",
+          left: 250,
+          top: 160,
+          width: 80,
+          height: 60,
+          background: "#0284C7",
+        },
       }),
       shape({
         id: "preset-arc",
         name: "Preset BlockArc",
         geometry: blockArc({ startAngle: 0, endAngle: 180, thickness: 0.3 }),
-        x: 200,
-        y: 24,
-        width: 100,
-        height: 100,
-        fill: "#10B981",
+        style: {
+          position: "absolute",
+          left: 200,
+          top: 24,
+          width: 100,
+          height: 100,
+          background: "#10B981",
+        },
       }),
       shape({
         id: "single-bezier",
@@ -131,16 +136,16 @@ function createDirectVanillaDeck() {
           fill: true,
           stroke: true,
         }),
-        x: 330,
-        y: 24,
-        width: 120,
-        height: 100,
-        fill: "#F59E0B",
-        flipH: true,
-        flipV: true,
         style: {
-          borderColor: "#78350F",
-          borderWidth: 2,
+          position: "absolute",
+          left: 330,
+          top: 24,
+          width: 120,
+          height: 100,
+          background: "#F59E0B",
+          flipH: true,
+          flipV: true,
+          border: { color: "#78350F", width: 2 },
           rotate: 15,
         },
       }),
@@ -148,29 +153,32 @@ function createDirectVanillaDeck() {
         id: "composite-custom",
         name: "Composite Custom",
         geometry: compositeCustomGeometry,
-        x: 480,
-        y: 24,
-        width: 120,
-        height: 96,
-        fill: "#0EA5E9",
         style: {
-          borderColor: "#0369A1",
-          borderWidth: 2,
+          position: "absolute",
+          left: 480,
+          top: 24,
+          width: 120,
+          height: 96,
+          background: "#0EA5E9",
+          border: { color: "#0369A1", width: 2 },
         },
       }),
       shape({
         id: "arrow-connector",
         name: "Arrow Connector",
         geometry: "line",
-        x: 640,
-        y: 64,
-        width: 180,
-        height: 2,
         style: {
-          borderColor: "#DC2626",
-          borderWidth: 3,
-          startArrow: "oval",
-          endArrow: "triangle",
+          position: "absolute",
+          left: 640,
+          top: 64,
+          width: 180,
+          height: 2,
+          border: {
+            color: "#DC2626",
+            width: 3,
+            startArrow: "oval",
+            endArrow: "triangle",
+          },
         },
       }),
     ),
@@ -184,12 +192,15 @@ function createDirectVanillaDeck() {
           id: "outer-hex",
           name: "Outer Hex",
           geometry: "hexagon",
-          x: 40,
-          y: 50,
-          width: 90,
-          height: 60,
-          fill: "#2563EB",
-          flipH: true,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 50,
+            width: 90,
+            height: 60,
+            background: "#2563EB",
+            flipH: true,
+          },
         }),
         group({
           id: "inner-cluster",
@@ -200,13 +211,16 @@ function createDirectVanillaDeck() {
             id: "inner-diamond",
             name: "Inner Diamond",
             geometry: "diamond",
-            x: 160,
-            y: 60,
-            width: 80,
-            height: 60,
-            fill: "#10B981",
-            flipV: true,
-            style: { rotate: 30 },
+            style: {
+              position: "absolute",
+              left: 160,
+              top: 60,
+              width: 80,
+              height: 60,
+              background: "#10B981",
+              flipV: true,
+              rotate: 30,
+            },
           }),
         ),
       ),
@@ -222,25 +236,20 @@ function createDirectVanillaDeck() {
           flexWrap: "wrap",
           gap: 12,
           padding: 12,
-          backgroundColor: "#F1F5F9",
-          borderColor: "#94A3B8",
-          borderWidth: 1,
+          background: "#F1F5F9",
+          border: { color: "#94A3B8", width: 1 },
           borderRadius: 6,
         },
       }).append(
         shape({
           id: "flex-a",
           name: "Flex A",
-          width: 120,
-          height: 44,
-          fill: "#3B82F6",
+          style: { width: 120, height: 44, background: "#3B82F6" },
         }),
         shape({
           id: "flex-b",
           name: "Flex B",
-          width: 120,
-          height: 44,
-          fill: "#22C55E",
+          style: { width: 120, height: 44, background: "#22C55E" },
         }),
       ),
       box({
@@ -259,39 +268,43 @@ function createDirectVanillaDeck() {
         shape({
           id: "grid-a",
           name: "Grid A",
-          height: 44,
-          fill: "#F97316",
+          style: { height: 44, background: "#F97316" },
         }),
         shape({
           id: "grid-b",
           name: "Grid B",
-          height: 44,
-          fill: "#A855F7",
+          style: { height: 44, background: "#A855F7" },
         }),
       ),
     ),
     slide({ id: "shape-text-slide" }).append(
-      shape({
+      shape("Rounded", {
         id: "shorthand-shape",
         name: "Shorthand Shape",
         geometry: "roundRect",
-        x: 24,
-        y: 24,
-        width: 180,
-        height: 80,
-        fill: "#1E293B",
-        text: "Rounded",
-        textStyle: { fontSize: 16, color: "#FFFFFF" },
+        style: {
+          position: "absolute",
+          left: 24,
+          top: 24,
+          width: 180,
+          height: 80,
+          background: "#1E293B",
+          fontSize: 16,
+          color: "#FFFFFF",
+        },
       }),
       shape({
         id: "rich-shape",
         name: "Rich Shape",
         geometry: "diamond",
-        x: 240,
-        y: 24,
-        width: 200,
-        height: 90,
-        fill: "#7C3AED",
+        style: {
+          position: "absolute",
+          left: 240,
+          top: 24,
+          width: 200,
+          height: 90,
+          background: "#7C3AED",
+        },
       }).append("Rich Text"),
       group({
         id: "text-cluster",
@@ -300,10 +313,13 @@ function createDirectVanillaDeck() {
         text("Group Label", {
           id: "inner-label",
           name: "Inner Label",
-          x: 40,
-          y: 160,
-          width: 120,
-          height: 32,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 160,
+            width: 120,
+            height: 32,
+          },
         }),
       ),
     ),
@@ -324,36 +340,41 @@ async function createDirectReactDeck() {
           name: "Preset Round",
           link: { url: "https://example.com" },
           geometry: preset("roundRect", { adj: 20000 }),
-          x: 24,
-          y: 24,
-          width: 150,
-          height: 80,
-          fill: "#2563EB",
           style: {
-            borderColor: "#1E293B",
-            borderWidth: 2,
-            borderStyle: "dashed",
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 150,
+            height: 80,
+            background: "#2563EB",
+            border: { color: "#1E293B", width: 2, style: "dashed" },
           },
         }),
         createElement(Shape, {
           id: "morph-badge",
           morphKey: morphScope.handle("card"),
           geometry: "ellipse",
-          x: 250,
-          y: 160,
-          width: 80,
-          height: 60,
-          fill: "#0284C7",
+          style: {
+            position: "absolute",
+            left: 250,
+            top: 160,
+            width: 80,
+            height: 60,
+            background: "#0284C7",
+          },
         }),
         createElement(Shape, {
           id: "preset-arc",
           name: "Preset BlockArc",
           geometry: blockArc({ startAngle: 0, endAngle: 180, thickness: 0.3 }),
-          x: 200,
-          y: 24,
-          width: 100,
-          height: 100,
-          fill: "#10B981",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 24,
+            width: 100,
+            height: 100,
+            background: "#10B981",
+          },
         }),
         createElement(Shape, {
           id: "single-bezier",
@@ -363,16 +384,16 @@ async function createDirectReactDeck() {
             fill: true,
             stroke: true,
           }),
-          x: 330,
-          y: 24,
-          width: 120,
-          height: 100,
-          fill: "#F59E0B",
-          flipH: true,
-          flipV: true,
           style: {
-            borderColor: "#78350F",
-            borderWidth: 2,
+            position: "absolute",
+            left: 330,
+            top: 24,
+            width: 120,
+            height: 100,
+            background: "#F59E0B",
+            flipH: true,
+            flipV: true,
+            border: { color: "#78350F", width: 2 },
             rotate: 15,
           },
         }),
@@ -380,29 +401,32 @@ async function createDirectReactDeck() {
           id: "composite-custom",
           name: "Composite Custom",
           geometry: compositeCustomGeometry,
-          x: 480,
-          y: 24,
-          width: 120,
-          height: 96,
-          fill: "#0EA5E9",
           style: {
-            borderColor: "#0369A1",
-            borderWidth: 2,
+            position: "absolute",
+            left: 480,
+            top: 24,
+            width: 120,
+            height: 96,
+            background: "#0EA5E9",
+            border: { color: "#0369A1", width: 2 },
           },
         }),
         createElement(Shape, {
           id: "arrow-connector",
           name: "Arrow Connector",
           geometry: "line",
-          x: 640,
-          y: 64,
-          width: 180,
-          height: 2,
           style: {
-            borderColor: "#DC2626",
-            borderWidth: 3,
-            startArrow: "oval",
-            endArrow: "triangle",
+            position: "absolute",
+            left: 640,
+            top: 64,
+            width: 180,
+            height: 2,
+            border: {
+              color: "#DC2626",
+              width: 3,
+              startArrow: "oval",
+              endArrow: "triangle",
+            },
           },
         }),
       ),
@@ -420,12 +444,15 @@ async function createDirectReactDeck() {
             id: "outer-hex",
             name: "Outer Hex",
             geometry: "hexagon",
-            x: 40,
-            y: 50,
-            width: 90,
-            height: 60,
-            fill: "#2563EB",
-            flipH: true,
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 50,
+              width: 90,
+              height: 60,
+              background: "#2563EB",
+              flipH: true,
+            },
           }),
           createElement(
             Group,
@@ -438,13 +465,16 @@ async function createDirectReactDeck() {
               id: "inner-diamond",
               name: "Inner Diamond",
               geometry: "diamond",
-              x: 160,
-              y: 60,
-              width: 80,
-              height: 60,
-              fill: "#10B981",
-              flipV: true,
-              style: { rotate: 30 },
+              style: {
+                position: "absolute",
+                left: 160,
+                top: 60,
+                width: 80,
+                height: 60,
+                background: "#10B981",
+                flipV: true,
+                rotate: 30,
+              },
             }),
           ),
         ),
@@ -462,25 +492,20 @@ async function createDirectReactDeck() {
               flexWrap: "wrap",
               gap: 12,
               padding: 12,
-              backgroundColor: "#F1F5F9",
-              borderColor: "#94A3B8",
-              borderWidth: 1,
+              background: "#F1F5F9",
+              border: { color: "#94A3B8", width: 1 },
               borderRadius: 6,
             },
           },
           createElement(Shape, {
             id: "flex-a",
             name: "Flex A",
-            width: 120,
-            height: 44,
-            fill: "#3B82F6",
+            style: { width: 120, height: 44, background: "#3B82F6" },
           }),
           createElement(Shape, {
             id: "flex-b",
             name: "Flex B",
-            width: 120,
-            height: 44,
-            fill: "#22C55E",
+            style: { width: 120, height: 44, background: "#22C55E" },
           }),
         ),
         createElement(
@@ -501,43 +526,51 @@ async function createDirectReactDeck() {
           createElement(Shape, {
             id: "grid-a",
             name: "Grid A",
-            height: 44,
-            fill: "#F97316",
+            style: { height: 44, background: "#F97316" },
           }),
           createElement(Shape, {
             id: "grid-b",
             name: "Grid B",
-            height: 44,
-            fill: "#A855F7",
+            style: { height: 44, background: "#A855F7" },
           }),
         ),
       ),
       createElement(
         Slide,
         { id: "shape-text-slide" },
-        createElement(Shape, {
-          id: "shorthand-shape",
-          name: "Shorthand Shape",
-          geometry: "roundRect",
-          x: 24,
-          y: 24,
-          width: 180,
-          height: 80,
-          fill: "#1E293B",
-          text: "Rounded",
-          textStyle: { fontSize: 16, color: "#FFFFFF" },
-        }),
+        createElement(
+          Shape,
+          {
+            id: "shorthand-shape",
+            name: "Shorthand Shape",
+            geometry: "roundRect",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 180,
+              height: 80,
+              background: "#1E293B",
+              fontSize: 16,
+              color: "#FFFFFF",
+            },
+          },
+          "Rounded",
+        ),
         createElement(
           Shape,
           {
             id: "rich-shape",
             name: "Rich Shape",
             geometry: "diamond",
-            x: 240,
-            y: 24,
-            width: 200,
-            height: 90,
-            fill: "#7C3AED",
+            style: {
+              position: "absolute",
+              left: 240,
+              top: 24,
+              width: 200,
+              height: 90,
+              background: "#7C3AED",
+            },
           },
           createElement(P, null, createElement(Span, null, "Rich Text")),
         ),
@@ -552,10 +585,13 @@ async function createDirectReactDeck() {
             {
               id: "inner-label",
               name: "Inner Label",
-              x: 40,
-              y: 160,
-              width: 120,
-              height: 32,
+              style: {
+                position: "absolute",
+                left: 40,
+                top: 160,
+                width: 120,
+                height: 32,
+              },
             },
             "Group Label",
           ),
@@ -614,10 +650,6 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
     const directReact = await createDirectReactDeck();
 
     const originalBuilt = await build(directVanilla);
-    assert.deepEqual(
-      originalBuilt.report.diagnostics.filter((d) => d.severity === "error"),
-      [],
-    );
     const importedResult = importPptx(originalBuilt.pptx);
     assert.deepEqual(importedResult.report.diagnostics, []);
 
@@ -738,7 +770,7 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
           { pages: [1, 2] },
         );
         const page1 = previewed.pages[0]!;
-        assert.deepEqual(page1.diagnostics, []);
+        assert.deepEqual(page1.errors, []);
         assert.ok(page1.png instanceof Uint8Array);
 
         for (const name of [
@@ -749,14 +781,8 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
           "Arrow Connector",
         ]) {
           const node = page1.nodes.find((n) => n.name === name);
-          assert.ok(
-            node?.screenBox !== undefined,
-            `${item.label} ${name} screenBox`,
-          );
-          const paintedPixels = countPaintedPixelsInBox(
-            page1.png,
-            node.screenBox,
-          );
+          assert.ok(node?.bounds !== undefined, `${item.label} ${name} bounds`);
+          const paintedPixels = countPaintedPixelsInBox(page1.png, node.bounds);
           assert.ok(
             paintedPixels > 10,
             `${item.label} ${name} should paint visible pixels in preview, got ${paintedPixels}`,
@@ -764,18 +790,12 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
         }
 
         const page2 = previewed.pages[1]!;
-        assert.deepEqual(page2.diagnostics, []);
+        assert.deepEqual(page2.errors, []);
         assert.ok(page2.png instanceof Uint8Array);
         for (const name of ["Outer Hex", "Inner Diamond", "Flex A", "Grid A"]) {
           const node = page2.nodes.find((n) => n.name === name);
-          assert.ok(
-            node?.screenBox !== undefined,
-            `${item.label} ${name} screenBox`,
-          );
-          const paintedPixels = countPaintedPixelsInBox(
-            page2.png,
-            node.screenBox,
-          );
+          assert.ok(node?.bounds !== undefined, `${item.label} ${name} bounds`);
+          const paintedPixels = countPaintedPixelsInBox(page2.png, node.bounds);
           assert.ok(
             paintedPixels > 10,
             `${item.label} ${name} should paint visible pixels in preview, got ${paintedPixels}`,
@@ -794,21 +814,27 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
           id: "target-shape",
           name: "Target Shape",
           geometry: preset("roundRect", { adj: 20000 }),
-          x: 24,
-          y: 40,
-          width: 100,
-          height: 80,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 40,
+            width: 100,
+            height: 80,
+            background: "#2563EB",
+          },
         }),
         shape({
           id: "sibling-shape",
           name: "Sibling Shape",
           geometry: "ellipse",
-          x: 200,
-          y: 40,
-          width: 100,
-          height: 80,
-          fill: "#16A34A",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 40,
+            width: 100,
+            height: 80,
+            background: "#16A34A",
+          },
         }),
       ),
     );
@@ -819,11 +845,14 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
           id: "sibling-shape",
           name: "Sibling Shape",
           geometry: "ellipse",
-          x: 200,
-          y: 40,
-          width: 100,
-          height: 80,
-          fill: "#16A34A",
+          style: {
+            position: "absolute",
+            left: 200,
+            top: 40,
+            width: 100,
+            height: 80,
+            background: "#16A34A",
+          },
         }),
       ),
     );
@@ -844,11 +873,10 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
         (n) => n.authorId === "sibling-shape",
       )!;
       assert.ok(
-        countPaintedPixelsInBox(completePage.png!, targetNode.screenBox!) > 100,
+        countPaintedPixelsInBox(completePage.png!, targetNode.bounds!) > 100,
       );
       assert.ok(
-        countPaintedPixelsInBox(completePage.png!, siblingNode.screenBox!) >
-          100,
+        countPaintedPixelsInBox(completePage.png!, siblingNode.bounds!) > 100,
       );
 
       const omittedGen = codegen(omittedTargetDoc, { target: "vanilla" });
@@ -862,11 +890,11 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
         undefined,
       );
       assert.equal(
-        countPaintedPixelsInBox(omittedPage.png!, targetNode.screenBox!),
+        countPaintedPixelsInBox(omittedPage.png!, targetNode.bounds!),
         0,
       );
       assert.ok(
-        countPaintedPixelsInBox(omittedPage.png!, siblingNode.screenBox!) > 100,
+        countPaintedPixelsInBox(omittedPage.png!, siblingNode.bounds!) > 100,
       );
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -966,8 +994,8 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
         const initDiamond = initialSlide2.nodes.find(
           (n) => n.name === "Inner Diamond",
         )!;
-        const initHexScreen = initHex.screenBox!;
-        const initDiamondScreen = initDiamond.screenBox!;
+        const initHexScreen = initHex.bounds!;
+        const initDiamondScreen = initDiamond.bounds!;
 
         await writeCodegenFiles(editedDir, generated.files);
         const editedEntryPath = join(editedDir, generated.entry);
@@ -1001,14 +1029,14 @@ describe("pptxdk geometry, layout container, and group codegen acceptance", () =
         )!;
 
         assert.notDeepEqual(
-          nextHex.screenBox,
+          nextHex.bounds,
           initHexScreen,
-          `${target}: Outer Hex screenBox should transform with Outer Cluster`,
+          `${target}: Outer Hex bounds should transform with Outer Cluster`,
         );
         assert.notDeepEqual(
-          nextDiamond.screenBox,
+          nextDiamond.bounds,
           initDiamondScreen,
-          `${target}: Inner Diamond screenBox should transform with Outer Cluster`,
+          `${target}: Inner Diamond bounds should transform with Outer Cluster`,
         );
       } finally {
         await rm(dir, { recursive: true, force: true });

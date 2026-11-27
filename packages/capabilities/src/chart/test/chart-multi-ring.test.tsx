@@ -7,7 +7,7 @@ import {
   deck,
   slide,
 } from "@pptxdk/capabilities/document";
-import { fade } from "@pptxdk/capabilities/motion";
+import { fade, motionSchedule } from "@pptxdk/capabilities/motion";
 import { BuildError } from "@pptxdk/core";
 import { Deck, Slide } from "@pptxdk/react";
 import {
@@ -23,10 +23,7 @@ import { build, build as buildDocument } from "../../../test/test-helpers.ts";
 const sharedCategories = ["Direct", "Partner", "Direct"] as const;
 
 const sharedRings: ChartProps = {
-  x: 0,
-  y: 0,
-  width: 720,
-  height: 420,
+  style: { position: "absolute", left: 0, top: 0, width: 720, height: 420 },
   title: "Shared category rings",
   legend: "right",
   groups: [
@@ -57,10 +54,7 @@ const sharedRings: ChartProps = {
 };
 
 const independentRings: ChartProps = {
-  x: 0,
-  y: 0,
-  width: 720,
-  height: 420,
+  style: { position: "absolute", left: 0, top: 0, width: 720, height: 420 },
   title: "Independent category rings",
   legend: "right",
   groups: [
@@ -336,56 +330,51 @@ describe("multi-ring doughnut charts", () => {
         <Slide id="multi-ring-motion">
           <Chart
             id="series-motion"
-            x={0}
-            y={0}
-            width={360}
-            height={240}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 360,
+              height: 240,
+            }}
             enter={fade({ by: "series", duration: 100 })}
             groups={independentRings.groups ?? []}
           />
           <Chart
             id="category-motion"
-            x={0}
-            y={260}
-            width={360}
-            height={240}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 260,
+              width: 360,
+              height: 240,
+            }}
             enter={fade({ by: "category", duration: 100 })}
             groups={independentRings.groups ?? []}
           />
         </Slide>
       </Deck>,
     );
-    const motion = result.report.slides[0]?.capabilities?.["motion"] as
-      | {
-          steps: {
-            effects: {
-              target: {
-                authorId?: string;
-                range?: {
-                  step: string;
-                  seriesIndex: number;
-                  categoryIndex: number;
-                };
-              };
-            }[];
-          }[];
-        }
-      | undefined;
+    const motion = motionSchedule(result.slides[0]!);
     const effects = motion?.steps[0]?.effects ?? [];
     const seriesRanges = effects
       .filter(({ target }) => target.authorId === "series-motion")
       .map(({ target }) => target.range)
-      .filter((range) => range?.step === "series");
+      .filter((range) => range?.type === "chart" && range.step === "series");
     const categoryRanges = effects
       .filter(({ target }) => target.authorId === "category-motion")
       .map(({ target }) => target.range)
-      .filter((range) => range?.step === "category");
+      .filter((range) => range?.type === "chart" && range.step === "category");
     assert.deepEqual(
-      seriesRanges.map((range) => range?.seriesIndex),
+      seriesRanges.map((range) =>
+        range?.type === "chart" ? range.seriesIndex : undefined,
+      ),
       [0, 1, 2],
     );
     assert.deepEqual(
-      categoryRanges.map((range) => range?.categoryIndex),
+      categoryRanges.map((range) =>
+        range?.type === "chart" ? range.categoryIndex : undefined,
+      ),
       [0, 1, 2, 3],
     );
 
@@ -399,10 +388,13 @@ describe("multi-ring doughnut charts", () => {
         <Slide id="ring-format">
           <Chart
             id="ring-format"
-            x={0}
-            y={0}
-            width={640}
-            height={420}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 640,
+              height: 420,
+            }}
             groups={[
               {
                 kind: "doughnut",
@@ -469,7 +461,7 @@ describe("multi-ring doughnut charts", () => {
     for (const [id, code, series] of [
       [
         "ring-explosion-overflow",
-        "invalid-chart-option",
+        "invalid-prop",
         {
           name: "S",
           categories: ["A"],
@@ -479,7 +471,7 @@ describe("multi-ring doughnut charts", () => {
       ],
       [
         "ring-leader-lines-without-labels",
-        "invalid-data-labels",
+        "invalid-prop",
         {
           name: "S",
           categories: ["A"],
@@ -494,10 +486,13 @@ describe("multi-ring doughnut charts", () => {
             <Slide id={id}>
               <Chart
                 id={id}
-                x={0}
-                y={0}
-                width={200}
-                height={120}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 120,
+                }}
                 groups={[
                   {
                     kind: "doughnut",
@@ -519,7 +514,9 @@ describe("multi-ring doughnut charts", () => {
   });
 
   it("rejects independent categories outside doughnut and malformed per-ring domains", async () => {
-    const base = { x: 0, y: 0, width: 200, height: 120 } as const;
+    const base = {
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
+    } as const;
     const invalidCases: {
       readonly id: string;
       readonly code?: string;
@@ -579,7 +576,7 @@ describe("multi-ring doughnut charts", () => {
       },
       {
         id: "group-level-categories",
-        code: "unknown-parameter",
+        code: "unknown-prop",
         props: {
           ...base,
           groups: [
@@ -616,7 +613,7 @@ describe("multi-ring doughnut charts", () => {
       },
       {
         id: "shared-ring-categories",
-        code: "unknown-parameter",
+        code: "unknown-prop",
         props: {
           ...base,
           groups: [
@@ -648,7 +645,7 @@ describe("multi-ring doughnut charts", () => {
         },
       },
     ];
-    for (const { id, code = "invalid-data", props } of invalidCases) {
+    for (const { id, code = "invalid-prop", props } of invalidCases) {
       await assert.rejects(
         build(
           <Deck>

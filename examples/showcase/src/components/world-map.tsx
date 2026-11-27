@@ -44,12 +44,15 @@ function Region({
           {regionBars[story.region].map(([bx, by, bw, bh], barIndex) => (
             <Shape
               key={barIndex}
-              x={x + bx * scale}
-              y={y + by * scale}
-              width={bw * scale}
-              height={bh * scale}
               geometry={preset("roundRect")}
-              fill={colors.soft}
+              style={{
+                position: "absolute",
+                left: x + bx * scale,
+                top: y + by * scale,
+                width: bw * scale,
+                height: bh * scale,
+                background: colors.soft,
+              }}
               emphasis={fillColor({
                 from: colors.soft,
                 to: colors.accent,
@@ -65,18 +68,22 @@ function Region({
           enter={wipe({ from: "left", duration: motion.reveal })}
         >
           <Shape
-            x={legendX}
-            y={legendY + 5}
-            width={30}
-            height={4}
-            fill={colors.accent}
+            style={{
+              position: "absolute",
+              left: legendX,
+              top: legendY + 5,
+              width: 30,
+              height: 4,
+              background: colors.accent,
+            }}
           />
           <Text
-            x={legendX + 46}
-            y={legendY - 4}
-            width={230}
-            height={36}
             style={{
+              position: "absolute",
+              left: legendX + 46,
+              top: legendY - 4,
+              width: 230,
+              height: 36,
               fontSize: 24,
               fontFamily: "medium",
               fontWeight: 500,
@@ -86,11 +93,16 @@ function Region({
             {story.title}
           </Text>
           <Text
-            x={legendX + 46}
-            y={legendY + 35}
-            width={230}
-            height={42}
-            style={{ fontSize: 15, lineHeight: 20, color: colors.muted }}
+            style={{
+              position: "absolute",
+              left: legendX + 46,
+              top: legendY + 35,
+              width: 230,
+              height: 42,
+              fontSize: 15,
+              lineHeight: 20,
+              color: colors.muted,
+            }}
           >
             {story.description}
           </Text>

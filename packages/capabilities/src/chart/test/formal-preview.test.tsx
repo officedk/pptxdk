@@ -22,7 +22,7 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
   return async (document: CommonNode) => {
     const resolution = resolveWith(document);
     return {
-      query: resolution.query,
+      resolution,
       ...emit(resolution),
       ...paint(resolution),
     };
@@ -52,13 +52,17 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       slide({ id: "column-defaults", background: "#FFFFFF" }).append(
         chart({
           id: "sales",
-          x: 24,
-          y: 20,
-          width: 592,
-          height: 320,
           title: "Quarterly sales",
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 20,
+            width: 592,
+            height: 320,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -82,7 +86,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     const page = result.pages[0]!;
     assert.ok(page.png !== undefined);
     assert.ok(page.svg !== undefined);
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
 
     const files = unzipSync(result.pptx);
     const chartXml = strFromU8(files["ppt/charts/chart1.xml"]!);
@@ -107,13 +111,17 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
           { id: "column-defaults", background: "#FFFFFF" },
           createElement(Chart, {
             id: "sales",
-            x: 24,
-            y: 20,
-            width: 592,
-            height: 320,
             title: "Quarterly sales",
             legend: "bottom",
-            style: { fontFamily: jostFont, fontSize: 16 },
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 20,
+              width: 592,
+              height: 320,
+              fontFamily: jostFont,
+              fontSize: 16,
+            },
             groups: [
               {
                 kind: "column",
@@ -141,13 +149,17 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
 
     const salesChart = chart({
       id: "sales",
-      x: 24,
-      y: 20,
-      width: 592,
-      height: 320,
       title: "Quarterly sales",
       legend: "bottom",
-      style: { fontFamily: jostFont, fontSize: 16 },
+      style: {
+        position: "absolute",
+        left: 24,
+        top: 20,
+        width: 592,
+        height: 320,
+        fontFamily: jostFont,
+        fontSize: 16,
+      },
       groups: [
         {
           kind: "column",
@@ -236,17 +248,20 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         ],
       });
       const res = await previewDoc(doc);
-      assert.deepEqual(res.pages[0]?.diagnostics, []);
+      assert.deepEqual(res.pages[0]?.errors, []);
       assert.ok(res.pages[0]?.png !== undefined);
     }
 
     // 4. Untitled chart at top edge (0, 0) keeps highest value label unclipped.
-    salesChart.set({
-      title: undefined,
-      x: 0,
-      y: 0,
+    salesChart.style({
+      position: "absolute",
+      left: 0,
+      top: 0,
       width: 640,
       height: 360,
+    });
+    salesChart.set({
+      title: undefined,
       legend: false,
       groups: [
         {
@@ -258,7 +273,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       ],
     });
     const edgeResult = await previewDoc(doc);
-    assert.deepEqual(edgeResult.pages[0]?.diagnostics, []);
+    assert.deepEqual(edgeResult.pages[0]?.errors, []);
     assert.ok(edgeResult.pages[0]?.png !== undefined);
     const edgePixels = PNG.sync.read(Buffer.from(edgeResult.pages[0].png));
     let labelPixelsInsideTopBand = 0;
@@ -281,11 +296,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     const previewDoc = runDocPreview(documentCapabilities);
     const baseProps = {
       id: "parity",
-      x: 20,
-      y: 20,
-      width: 560,
-      height: 300,
-      style: { fontFamily: jostFont, fontSize: 14 },
+      style: {
+        position: "absolute",
+        left: 20,
+        top: 20,
+        width: 560,
+        height: 300,
+        fontFamily: jostFont,
+        fontSize: 14,
+      },
     } as const;
 
     const parityCases: readonly {
@@ -467,11 +486,14 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         label: "omitted-font-size-fallback",
         node: chart({
           id: "parity",
-          x: 20,
-          y: 20,
-          width: 400,
-          height: 240,
-          style: { fontFamily: jostFont },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 240,
+            fontFamily: jostFont,
+          },
           groups: [
             {
               kind: "column",
@@ -504,11 +526,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         label: "too-small-plot-adaptive",
         node: chart({
           id: "parity",
-          x: 20,
-          y: 20,
-          width: 40,
-          height: 40,
-          style: { fontFamily: jostFont, fontSize: 16 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 40,
+            height: 40,
+            fontFamily: jostFont,
+            fontSize: 16,
+          },
           groups: [
             {
               kind: "column",
@@ -709,7 +735,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         [],
         item.label,
       );
-      assert.deepEqual(result.pages[0]?.diagnostics, [], item.label);
+      assert.deepEqual(result.pages[0]?.errors, [], item.label);
       assert.ok(result.pages[0]?.png !== undefined, item.label);
       assert.ok(result.pages[0]?.svg !== undefined, item.label);
     }
@@ -721,11 +747,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       slide({ id: "data-label-fields", background: "#FFFFFF" }).append(
         chart({
           id: "col-labels",
-          x: 20,
-          y: 20,
-          width: 290,
-          height: 300,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 290,
+            height: 300,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -747,11 +777,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "scatter-labels",
-          x: 330,
-          y: 20,
-          width: 290,
-          height: 300,
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 330,
+            top: 20,
+            width: 290,
+            height: 300,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "scatter",
@@ -777,7 +811,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
 
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
-    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.deepEqual(result.pages[0]?.errors, []);
     assert.ok(result.pages[0]?.png !== undefined);
     const files = unzipSync(result.pptx);
     const chart1 = strFromU8(files["ppt/charts/chart1.xml"]!);
@@ -794,12 +828,16 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       slide({ id: "pie-doughnut", background: "#FFFFFF" }).append(
         chart({
           id: "pie-single-full",
-          x: 16,
-          y: 20,
-          width: 190,
-          height: 150,
           title: "Full 360",
-          style: { fontFamily: jostFont, fontSize: 11 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 20,
+            width: 190,
+            height: 150,
+            fontFamily: jostFont,
+            fontSize: 11,
+          },
           groups: [
             {
               kind: "pie",
@@ -818,12 +856,16 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "pie-leader-explosion",
-          x: 220,
-          y: 20,
-          width: 200,
-          height: 150,
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 20,
+            width: 200,
+            height: 150,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "pie",
@@ -859,12 +901,16 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "doughnut-multi-ring",
-          x: 432,
-          y: 20,
-          width: 192,
-          height: 300,
           legend: "bottom",
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 432,
+            top: 20,
+            width: 192,
+            height: 300,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "doughnut",
@@ -901,7 +947,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
 
     const result = await previewDoc(pieDoc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
-    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.deepEqual(result.pages[0]?.errors, []);
     assert.ok(result.pages[0]?.png !== undefined);
     assert.ok(result.pages[0]?.svg !== undefined);
     const png = PNG.sync.read(Buffer.from(result.pages[0].png));
@@ -924,11 +970,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       slide({ id: "trendlines", background: "#FFFFFF" }).append(
         chart({
           id: "col-trendlines",
-          x: 16,
-          y: 16,
-          width: 300,
-          height: 160,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            width: 300,
+            height: 160,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "column",
@@ -965,11 +1015,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "scatter-trendlines",
-          x: 324,
-          y: 16,
-          width: 300,
-          height: 160,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 324,
+            top: 16,
+            width: 300,
+            height: 160,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "scatter",
@@ -1009,11 +1063,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "bar-trendline",
-          x: 16,
-          y: 186,
-          width: 300,
-          height: 158,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 186,
+            width: 300,
+            height: 158,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "bar",
@@ -1042,7 +1100,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
 
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
-    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.deepEqual(result.pages[0]?.errors, []);
     assert.ok(result.pages[0]?.png !== undefined);
     const png = PNG.sync.read(Buffer.from(result.pages[0].png));
     let redCount = 0;
@@ -1064,11 +1122,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       slide({ id: "error-bars", background: "#FFFFFF" }).append(
         chart({
           id: "col-err",
-          x: 16,
-          y: 16,
-          width: 300,
-          height: 160,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 16,
+            width: 300,
+            height: 160,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "column",
@@ -1106,11 +1168,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "line-err-stddev",
-          x: 324,
-          y: 16,
-          width: 300,
-          height: 160,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 324,
+            top: 16,
+            width: 300,
+            height: 160,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "line",
@@ -1145,11 +1211,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "scatter-err-xy",
-          x: 16,
-          y: 186,
-          width: 300,
-          height: 158,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 16,
+            top: 186,
+            width: 300,
+            height: 158,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "scatter",
@@ -1182,11 +1252,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
         }),
         chart({
           id: "bar-err",
-          x: 324,
-          y: 186,
-          width: 300,
-          height: 158,
-          style: { fontFamily: jostFont, fontSize: 10 },
+          style: {
+            position: "absolute",
+            left: 324,
+            top: 186,
+            width: 300,
+            height: 158,
+            fontFamily: jostFont,
+            fontSize: 10,
+          },
           groups: [
             {
               kind: "bar",
@@ -1211,7 +1285,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
 
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
-    assert.deepEqual(result.pages[0]?.diagnostics, []);
+    assert.deepEqual(result.pages[0]?.errors, []);
     assert.ok(result.pages[0]?.png !== undefined);
     const png = PNG.sync.read(Buffer.from(result.pages[0].png));
     let redCount = 0;
@@ -1235,11 +1309,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     const validColumnChart = (id: string) =>
       chart({
         id,
-        x: 20,
-        y: 20,
-        width: 280,
-        height: 150,
-        style: { fontFamily: jostFont, fontSize: 12 },
+        style: {
+          position: "absolute",
+          left: 20,
+          top: 20,
+          width: 280,
+          height: 150,
+          fontFamily: jostFont,
+          fontSize: 12,
+        },
         groups: [
           {
             kind: "column",
@@ -1252,18 +1330,23 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     const rejectionCases: readonly {
       readonly label: string;
       readonly node: ReturnType<typeof chart>;
+      readonly code: "preview-missing-glyph" | "preview-missing-font";
       readonly expected: RegExp;
     }[] = [
       {
         label: "missing-glyph",
         node: chart({
           id: "bad",
-          x: 20,
-          y: 20,
-          width: 400,
-          height: 240,
           title: "汉",
-          style: { fontFamily: jostFont, fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 240,
+            fontFamily: jostFont,
+            fontSize: 14,
+          },
           groups: [
             {
               kind: "column",
@@ -1272,17 +1355,21 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
             },
           ],
         }),
+        code: "preview-missing-glyph",
         expected: /glyph/i,
       },
       {
         label: "missing-font-file",
         node: chart({
           id: "bad",
-          x: 20,
-          y: 20,
-          width: 400,
-          height: 240,
-          style: { fontSize: 14 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 240,
+            fontSize: 14,
+          },
           groups: [
             {
               kind: "column",
@@ -1291,6 +1378,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
             },
           ],
         }),
+        code: "preview-missing-font",
         expected: /font file/i,
       },
     ];
@@ -1309,23 +1397,19 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       );
       assert.equal(result.pages[0]?.png, undefined, item.label);
       assert.equal(result.pages[0]?.svg, undefined, item.label);
-      assert.equal(
-        result.pages[0]?.diagnostics[0]?.severity,
-        "error",
-        item.label,
-      );
+      assert.equal(result.pages[0]?.errors[0]?.code, item.code, item.label);
       assert.match(
-        result.pages[0]?.diagnostics[0]?.path ?? "",
+        result.pages[0]?.errors[0]?.path ?? "",
         /chart\[bad\]/,
         item.label,
       );
       assert.match(
-        result.pages[0]?.diagnostics[0]?.message ?? "",
+        result.pages[0]?.errors[0]?.message ?? "",
         item.expected,
         item.label,
       );
       assert.ok(result.pages[1]?.png !== undefined, item.label);
-      assert.deepEqual(result.pages[1]?.diagnostics, [], item.label);
+      assert.deepEqual(result.pages[1]?.errors, [], item.label);
     }
   });
 
@@ -1335,10 +1419,6 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
       slide({ id: "styled-chart-text", background: "#FFFFFF" }).append(
         chart({
           id: "styled-title-chart",
-          x: 20,
-          y: 20,
-          width: 600,
-          height: 320,
           title: {
             text: "Underlined Title",
             style: {
@@ -1373,7 +1453,15 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
               },
             },
           },
-          style: { fontFamily: jostFont, fontSize: 12 },
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 600,
+            height: 320,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
           groups: [
             {
               kind: "column",
@@ -1396,7 +1484,7 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     const result = await previewDoc(doc);
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
     const page = result.pages[0]!;
-    assert.deepEqual(page.diagnostics, []);
+    assert.deepEqual(page.errors, []);
     assert.ok(page.png !== undefined);
     const svg = page.svg ?? "";
     expect(svg).toContain("<feDropShadow");

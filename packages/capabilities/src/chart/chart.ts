@@ -3,6 +3,7 @@ import {
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
+  type CapabilityFontUsageClaim,
   type CapabilityInput,
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
@@ -10,14 +11,14 @@ import {
   type ColorValue,
   type EmitContext,
   type EmitOutput,
-  type GeometryBox,
+  type Rect,
   type LayoutStyle,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ResolvedObject,
+  type ObjectResolution,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -36,6 +37,7 @@ import { resolvePlaceholderGeometry } from "../shared/style-inheritance.ts";
 import {
   writeChartTextProperties,
   writeChartTitle,
+  type MissingGlyphIssue,
   type TextResourceClaim,
 } from "../shared/text-service.ts";
 import type { TextStyle } from "../shared/text-service.ts";
@@ -893,11 +895,11 @@ function displayBlanksAs(
 
 type ResolvedChartModel = {
   readonly parsed: ParsedChart;
-  readonly box: GeometryBox;
+  readonly box: Rect;
   readonly name: string;
   readonly textStyles: ChartTextStyleXml;
   readonly fontUses: readonly FontEmbeddingUse[];
-  readonly missingGlyphErrors: readonly string[];
+  readonly missingGlyphErrors: readonly MissingGlyphIssue[];
   readonly placeholder?: NativePlaceholderRef;
 };
 
@@ -910,10 +912,11 @@ function emitChartModel(
     (embedFonts === "full" || embedFonts === "subset") &&
     model.missingGlyphErrors.length > 0
   ) {
-    throw new CapabilityError(
-      "font-missing-glyph",
-      model.missingGlyphErrors[0]!,
-    );
+    const issue = model.missingGlyphErrors[0]!;
+    throw new CapabilityError("font-missing-glyph", issue.message, undefined, {
+      font: issue.font,
+      characters: issue.characters,
+    });
   }
   const workbook = chartWorkbook(model.parsed);
   const relationshipId = emitContext.registerPackagePart({
@@ -1239,14 +1242,9 @@ export const chartCapability = {
       placeholder === undefined
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
-    const rawWidth =
-      contract.layoutStyle.width ??
-      (input.props["width"] as number | undefined) ??
-      placeholderGeometry?.width;
+    const rawWidth = placeholderGeometry?.width ?? contract.layoutStyle.width;
     const rawHeight =
-      contract.layoutStyle.height ??
-      (input.props["height"] as number | undefined) ??
-      placeholderGeometry?.height;
+      placeholderGeometry?.height ?? contract.layoutStyle.height;
     const declaredWidth =
       rawWidth !== undefined
         ? parseChartExtentBySchema(rawWidth, "width")
@@ -1255,8 +1253,8 @@ export const chartCapability = {
       rawHeight !== undefined
         ? parseChartExtentBySchema(rawHeight, "height")
         : undefined;
-    const rawX = placeholderGeometry?.x ?? input.props["x"];
-    const rawY = placeholderGeometry?.y ?? input.props["y"];
+    const rawX = placeholderGeometry?.x;
+    const rawY = placeholderGeometry?.y;
     const declaredX =
       rawX !== undefined ? parseChartCoordinateBySchema(rawX, "x") : undefined;
     const declaredY =
@@ -1338,7 +1336,7 @@ export const chartCapability = {
           minContentHeight: declaredHeight ?? 0,
         };
       },
-      resolve(resolveContext: ObjectResolveContext): ResolvedObject {
+      resolve(resolveContext: ObjectResolveContext): ObjectResolution {
         const x = resolveContext.layoutBox?.x ?? declaredX ?? 0;
         const y = resolveContext.layoutBox?.y ?? declaredY ?? 0;
         const width =
@@ -1349,7 +1347,7 @@ export const chartCapability = {
           resolveContext.layoutBox?.height ??
           declaredHeight ??
           width * (9 / 16);
-        const box: GeometryBox = { x, y, width, height };
+        const box: Rect = { x, y, width, height };
 
         if (parsed.plotArea !== undefined) {
           if (
@@ -1391,7 +1389,7 @@ export const chartCapability = {
           textStyles,
           resourceClaims,
           fontUses,
-          warnings,
+          fontUsages,
           missingGlyphErrors,
         } = chartResourceClaims(parsed, resolveContext.theme);
         validateChartColors(parsed, resolveContext.theme);
@@ -1423,7 +1421,7 @@ export const chartCapability = {
           extensions: usesCategoryLabelRange ? ["c15"] : [],
           ...(annotations.length === 0 ? {} : { annotations }),
           resourceClaims,
-          ...(warnings.length === 0 ? {} : { warnings }),
+          ...(fontUsages.length === 0 ? {} : { fontUsages }),
           emit(emitContext: EmitContext): EmitOutput {
             return primaryMechanism.emit(resolvedModel, emitContext);
           },
@@ -1816,11 +1814,8 @@ function chartResourceClaims(
   readonly textStyles: ChartTextStyleXml;
   readonly resourceClaims: readonly TextResourceClaim[];
   readonly fontUses: readonly FontEmbeddingUse[];
-  readonly warnings: readonly {
-    readonly code: string;
-    readonly message: string;
-  }[];
-  readonly missingGlyphErrors: readonly string[];
+  readonly fontUsages: readonly CapabilityFontUsageClaim[];
+  readonly missingGlyphErrors: readonly MissingGlyphIssue[];
 } {
   const categoryLabels = new Map<string, readonly string[]>();
   for (const group of parsed.groups) {
@@ -1885,20 +1880,8 @@ function chartResourceClaims(
     ...use,
     path: "Chart.style",
   }));
-  const warnings: { readonly code: string; readonly message: string }[] = [];
-  const missingGlyphErrors: string[] = [...chart.missingGlyphErrors];
-  const warningKeys = new Set<string>();
-  const addWarnings = (
-    items: readonly { readonly code: string; readonly message: string }[],
-  ) => {
-    for (const item of items) {
-      const key = `${item.code}\u0000${item.message}`;
-      if (warningKeys.has(key)) continue;
-      warningKeys.add(key);
-      warnings.push(item);
-    }
-  };
-  addWarnings(chart.warnings);
+  const fontUsages: CapabilityFontUsageClaim[] = [...chart.fontUsages];
+  const missingGlyphErrors: MissingGlyphIssue[] = [...chart.missingGlyphErrors];
   const textStyles: {
     chart: string;
     title?: string;
@@ -1920,7 +1903,7 @@ function chartResourceClaims(
     fontUses.push(
       ...output.fontUses.map((use) => ({ ...use, path: "Chart.title" })),
     );
-    addWarnings(output.warnings);
+    fontUsages.push(...output.fontUsages);
     missingGlyphErrors.push(...output.missingGlyphErrors);
   }
   for (const { name, spec } of parsed.axes) {
@@ -1942,7 +1925,7 @@ function chartResourceClaims(
           path: `Chart.axes.${name}.style`,
         })),
       );
-      addWarnings(output.warnings);
+      fontUsages.push(...output.fontUsages);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
     const axisTitle = titleParts(spec.title);
@@ -1965,7 +1948,7 @@ function chartResourceClaims(
           path: `Chart.axes.${name}.title`,
         })),
       );
-      addWarnings(output.warnings);
+      fontUsages.push(...output.fontUsages);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
   }
@@ -1991,7 +1974,7 @@ function chartResourceClaims(
           path: `Chart.groups[${groupIndex}].dataLabels.style`,
         })),
       );
-      addWarnings(output.warnings);
+      fontUsages.push(...output.fontUsages);
       missingGlyphErrors.push(...output.missingGlyphErrors);
     }
     const groupLabelStyle =
@@ -2032,22 +2015,16 @@ function chartResourceClaims(
             path: "Chart.dataLabels.point.style",
           })),
         );
-        addWarnings(output.warnings);
+        fontUsages.push(...output.fontUsages);
         missingGlyphErrors.push(...output.missingGlyphErrors);
       }
     }
   }
-  const uniqueWarnings = new Map(
-    warnings.map((warning) => [
-      `${warning.code}\u0000${warning.message}`,
-      warning,
-    ]),
-  );
   return {
     textStyles,
     resourceClaims,
     fontUses,
-    warnings: [...uniqueWarnings.values()],
+    fontUsages,
     missingGlyphErrors,
   };
 }

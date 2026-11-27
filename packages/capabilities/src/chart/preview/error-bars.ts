@@ -1,4 +1,4 @@
-import type { GeometryBox, ThemeContext } from "@pptxdk/core/capability";
+import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 
 import type { ParsedChart } from "../chart-model.ts";
 import type { ChartErrorBars } from "../chart-types.ts";
@@ -127,7 +127,7 @@ function renderSingleErrorBarSvg(options: {
   readonly crossCoord: number;
   readonly axisScale: ValueAxisScale;
   readonly horizontal: boolean;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly endCap: boolean;
   readonly strokeAttr: string;
 }): string {
@@ -191,7 +191,7 @@ export function renderErrorBarsSvg(options: {
   readonly parsed: ParsedChart;
   readonly anchors: readonly PlottedPointAnchor[];
   readonly scales: ReadonlyMap<string, AxisScale>;
-  readonly plotRect: GeometryBox;
+  readonly plotRect: Rect;
   readonly theme: ThemeContext;
 }): string {
   const { parsed, anchors, scales, plotRect, theme } = options;

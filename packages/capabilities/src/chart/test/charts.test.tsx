@@ -13,7 +13,7 @@ import {
   slide as documentSlide,
 } from "@pptxdk/capabilities/document";
 import { font } from "@pptxdk/capabilities/font";
-import { fade, spin } from "@pptxdk/capabilities/motion";
+import { fade, motionSchedule, spin } from "@pptxdk/capabilities/motion";
 import { Step } from "@pptxdk/capabilities/motion-elements";
 import { BuildError } from "@pptxdk/core";
 import { Deck, Slide } from "@pptxdk/react";
@@ -45,11 +45,12 @@ describe("native Cartesian charts", () => {
         <Slide id="chart-text-visual">
           <Chart
             id="chart-text-visual"
-            x={0}
-            y={0}
-            width={240}
-            height={160}
             style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 160,
               fontFamily: "Aptos",
               fontSize: "12pt",
               letterSpacing: 1.25,
@@ -142,11 +143,14 @@ describe("native Cartesian charts", () => {
         <Slide id="value-axis-font">
           <Chart
             id="value-axis-font"
-            x={0}
-            y={0}
-            width={200}
-            height={120}
-            style={{ fontFamily: primaryFont }}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 120,
+              fontFamily: primaryFont,
+            }}
             axes={{
               category: { kind: "category" },
               value: { kind: "value", style: { fontFamily: sameFont } },
@@ -177,11 +181,14 @@ describe("native Cartesian charts", () => {
           <Slide id="value-axis-font-conflict">
             <Chart
               id="value-axis-font-conflict"
-              x={0}
-              y={0}
-              width={200}
-              height={120}
-              style={{ fontFamily: primaryFont }}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 200,
+                height: 120,
+                fontFamily: primaryFont,
+              }}
               axes={{
                 category: { kind: "category" },
                 value: {
@@ -202,7 +209,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "conflicting-resource");
+        assert.equal(error.diagnostics[0]?.code, "duplicate-id");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /chart\[value-axis-font-conflict\]/u,
@@ -219,10 +226,13 @@ describe("native Cartesian charts", () => {
           <Chart
             id="entering-chart"
             name="entering-chart"
-            x={0}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             enter={fade({ duration: 700 })}
             emphasis={spin({ duration: 250, from: 180 })}
             groups={[
@@ -237,10 +247,13 @@ describe("native Cartesian charts", () => {
             <Chart
               id="click-chart"
               name="click-chart"
-              x={220}
-              y={0}
-              width={200}
-              height={120}
+              style={{
+                position: "absolute",
+                left: 220,
+                top: 0,
+                width: 200,
+                height: 120,
+              }}
               enter={fade({ duration: 300 })}
               groups={[
                 {
@@ -254,10 +267,13 @@ describe("native Cartesian charts", () => {
           <Chart
             id="disabled-chart"
             name="disabled-chart"
-            x={440}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 440,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             enter={fade()}
             motion={false}
             groups={[
@@ -273,8 +289,26 @@ describe("native Cartesian charts", () => {
     );
     const [entering, clicking, disabled] =
       result.report.slides[0]?.objects ?? [];
-    assert.deepEqual(result.report.slides[0]?.capabilities?.["motion"], {
-      steps: [
+    const schedule = motionSchedule(result.slide("chart-motion"));
+    assert.ok(schedule !== undefined);
+    assert.deepEqual(
+      schedule.steps.map((step) => ({
+        trigger: step.trigger,
+        ...(step.number === undefined ? {} : { number: step.number }),
+        effects: step.effects.map((effect) => ({
+          target: effect.target,
+          kind: effect.kind,
+          preset: effect.preset,
+          durationMs: effect.durationMs,
+          delayMs: effect.delayMs,
+          startMs: effect.startMs,
+          endMs: effect.endMs,
+          ...("from" in effect && effect.from !== undefined
+            ? { from: effect.from }
+            : {}),
+        })),
+      })),
+      [
         {
           trigger: "auto",
           effects: [
@@ -327,7 +361,7 @@ describe("native Cartesian charts", () => {
           ],
         },
       ],
-    });
+    );
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -364,10 +398,13 @@ describe("native Cartesian charts", () => {
           <Slide id="invalid-chart-motion">
             <Chart
               id="invalid-motion"
-              x={0}
-              y={0}
-              width={200}
-              height={120}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 200,
+                height: 120,
+              }}
               enter={fade({ duration: 0 })}
               groups={[
                 {
@@ -382,7 +419,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-duration");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /chart\[invalid-motion\]/u,
@@ -399,10 +436,13 @@ describe("native Cartesian charts", () => {
           <Chart
             id="sales"
             name="sales"
-            x={32}
-            y={48}
-            width={560}
-            height={360}
+            style={{
+              position: "absolute",
+              left: 32,
+              top: 48,
+              width: 560,
+              height: 360,
+            }}
             legend="right"
             plotArea={{ left: 56, top: 24, width: 440, height: 290 }}
             axes={{
@@ -439,7 +479,17 @@ describe("native Cartesian charts", () => {
       kind: "chart",
       name: "sales",
       authorId: "sales",
+      path: "deck/slide[quarterly-sales]/chart[sales]",
       box: { x: 32, y: 48, width: 560, height: 360 },
+      bounds: { x: 32, y: 48, width: 560, height: 360 },
+    });
+    const salesLoc = result.slide("quarterly-sales").get("sales");
+    assert.deepEqual(salesLoc.box, { x: 32, y: 48, width: 560, height: 360 });
+    assert.deepEqual(salesLoc.bounds, {
+      x: 32,
+      y: 48,
+      width: 560,
+      height: 360,
     });
 
     const parts = unzipSync(result.pptx);
@@ -556,10 +606,13 @@ describe("native Cartesian charts", () => {
         <Slide id="chart-types">
           <Chart
             id="column"
-            x={0}
-            y={0}
-            width={300}
-            height={200}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 300,
+              height: 200,
+            }}
             legend="top"
             plotArea={{ left: 24, top: 16, width: 260, height: 160 }}
             axes={{
@@ -605,10 +658,13 @@ describe("native Cartesian charts", () => {
           />
           <Chart
             id="bar"
-            x={0}
-            y={210}
-            width={300}
-            height={200}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 210,
+              width: 300,
+              height: 200,
+            }}
             groups={[
               {
                 kind: "bar",
@@ -629,11 +685,16 @@ describe("native Cartesian charts", () => {
           />
           <Chart
             id="line"
-            x={310}
-            y={0}
-            width={300}
-            height={200}
-            style={{ fontFamily: "Aptos", fontSize: "12pt", color: "#224466" }}
+            style={{
+              position: "absolute",
+              left: 310,
+              top: 0,
+              width: 300,
+              height: 200,
+              fontFamily: "Aptos",
+              fontSize: "12pt",
+              color: "#224466",
+            }}
             groups={[
               {
                 kind: "line",
@@ -649,10 +710,13 @@ describe("native Cartesian charts", () => {
           />
           <Chart
             id="area"
-            x={310}
-            y={210}
-            width={300}
-            height={200}
+            style={{
+              position: "absolute",
+              left: 310,
+              top: 210,
+              width: 300,
+              height: 200,
+            }}
             legend={false}
             groups={[
               {
@@ -670,10 +734,13 @@ describe("native Cartesian charts", () => {
         <Slide id="second-page">
           <Chart
             id="second-page-chart"
-            x={0}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             groups={[
               {
                 kind: "column",
@@ -785,10 +852,13 @@ describe("native Cartesian charts", () => {
           <Chart
             id="pie"
             name="pie"
-            x={20}
-            y={20}
-            width={350}
-            height={350}
+            style={{
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 350,
+              height: 350,
+            }}
             enter={fade({ duration: 500 })}
             legend="top"
             groups={[
@@ -816,10 +886,13 @@ describe("native Cartesian charts", () => {
           <Chart
             id="doughnut"
             name="doughnut"
-            x={410}
-            y={20}
-            width={350}
-            height={350}
+            style={{
+              position: "absolute",
+              left: 410,
+              top: 20,
+              width: 350,
+              height: 350,
+            }}
             legend={false}
             groups={[
               {
@@ -954,10 +1027,13 @@ describe("native Cartesian charts", () => {
               <Chart
                 key={`${kind}-${label}`}
                 id={`${kind}-${label}`}
-                x={0}
-                y={0}
-                width={200}
-                height={120}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 120,
+                }}
                 groups={[
                   kind === "pie"
                     ? {
@@ -1031,10 +1107,13 @@ describe("native Cartesian charts", () => {
               <Slide id={testId}>
                 <Chart
                   id={testId}
-                  x={0}
-                  y={0}
-                  width={200}
-                  height={120}
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    width: 200,
+                    height: 120,
+                  }}
                   groups={[
                     kind === "pie"
                       ? {
@@ -1062,7 +1141,7 @@ describe("native Cartesian charts", () => {
           ),
           (error: unknown) => {
             assert.ok(error instanceof BuildError);
-            assert.equal(error.diagnostics[0]?.code, "invalid-chart-option");
+            assert.equal(error.diagnostics[0]?.code, "invalid-prop");
             assert.match(
               error.diagnostics[0]?.path ?? "",
               new RegExp(`chart\\[${testId}\\]`, "u"),
@@ -1085,10 +1164,7 @@ describe("native Cartesian charts", () => {
       { name: "T", values: [3, 4] },
     ];
     const base = {
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 120,
+      style: { position: "absolute", left: 0, top: 0, width: 200, height: 120 },
     } as const;
     const invalidCases: {
       readonly id: string;
@@ -1098,7 +1174,7 @@ describe("native Cartesian charts", () => {
     }[] = [
       {
         id: "pie-series-count",
-        code: "invalid-data",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [{ kind: "pie", data, series: twoSeries }],
@@ -1106,7 +1182,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "pie-negative-value",
-        code: "invalid-data",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [
@@ -1120,7 +1196,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "pie-angle-overflow",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [{ kind: "pie", data, series, firstSliceAngle: 360.1 }],
@@ -1128,7 +1204,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "doughnut-hole-underflow",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [{ kind: "doughnut", data, series, holeSize: 9.9 }],
@@ -1136,7 +1212,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "doughnut-hole-overflow",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [{ kind: "doughnut", data, series, holeSize: 90.1 }],
@@ -1144,7 +1220,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "pie-explosion-underflow",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [{ kind: "pie", data, series, explosion: -1 }],
@@ -1152,7 +1228,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "pie-explosion-overflow",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [{ kind: "pie", data, series, explosion: 4_294_967_296 }],
@@ -1160,7 +1236,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "pie-hole-size",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [
@@ -1175,7 +1251,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "doughnut-stacking",
-        code: "invalid-chart-option",
+        code: "invalid-prop",
         props: {
           ...base,
           groups: [
@@ -1190,7 +1266,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "doughnut-label-position",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           "Office does not allow dLblPos for doughnutChart series data labels",
         props: {
@@ -1207,7 +1283,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "pie-inside-base-label-position",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           'Office does not allow dLblPos="inBase" for pieChart series data labels',
         props: {
@@ -1224,7 +1300,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "column-best-fit-label-position",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           'Office does not allow dLblPos="bestFit" for barChart series data labels',
         props: {
@@ -1241,7 +1317,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "stacked-column-outside-end-label-position",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           'Office does not allow dLblPos="outEnd" for stacked barChart series data labels',
         props: {
@@ -1259,7 +1335,7 @@ describe("native Cartesian charts", () => {
       },
       {
         id: "line-invalid-data-label-position",
-        code: "invalid-data-labels",
+        code: "invalid-prop",
         message:
           'Office does not allow dLblPos="bestFit" for lineChart series data labels',
         props: {
@@ -1307,10 +1383,13 @@ describe("native Cartesian charts", () => {
         <Slide id="chart-label-position-context">
           <Chart
             id="line-label-position"
-            x={0}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             groups={[
               {
                 kind: "line",
@@ -1322,10 +1401,13 @@ describe("native Cartesian charts", () => {
           />
           <Chart
             id="clustered-label-position"
-            x={220}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 220,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             groups={[
               {
                 kind: "column",
@@ -1337,10 +1419,13 @@ describe("native Cartesian charts", () => {
           />
           <Chart
             id="doughnut-label-position"
-            x={440}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 440,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             groups={[
               {
                 kind: "doughnut",
@@ -1424,10 +1509,13 @@ describe("native Cartesian charts", () => {
         <Slide id="invalid-workbook-relation">
           <Chart
             id="missing-workbook-relation"
-            x={0}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             groups={[
               {
                 kind: "line",
@@ -1465,10 +1553,13 @@ describe("native Cartesian charts", () => {
         <Slide id="renamed-chart-sheet">
           <Chart
             id="renamed-chart-sheet"
-            x={0}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             groups={[
               {
                 kind: "line",
@@ -1518,10 +1609,13 @@ describe("native Cartesian charts", () => {
             <Slide id={id}>
               <Chart
                 id={id}
-                x={0}
-                y={0}
-                width={200}
-                height={120}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 120,
+                }}
                 axes={{
                   category: { kind: "category" },
                   value: { kind: "value", ...valueAxis },
@@ -1555,10 +1649,13 @@ describe("native Cartesian charts", () => {
         <Slide id="maximum-axis-line-width">
           <Chart
             id="maximum-axis-line-width"
-            x={0}
-            y={0}
-            width={200}
-            height={120}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 120,
+            }}
             axes={{
               category: { kind: "category" },
               value: { kind: "value", line: { width: maximumWidth } },
@@ -1589,10 +1686,13 @@ describe("native Cartesian charts", () => {
           <Slide id="sparse-chart-data">
             <Chart
               id="sparse-values"
-              x={0}
-              y={0}
-              width={200}
-              height={120}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 200,
+                height: 120,
+              }}
               groups={[
                 {
                   kind: "column",
@@ -1606,7 +1706,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-data");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /chart\[sparse-values\]/u,
@@ -1629,10 +1729,13 @@ describe("native Cartesian charts", () => {
             <Slide id={`category-axis-${option}`}>
               <Chart
                 id="category-axis-option"
-                x={0}
-                y={0}
-                width={200}
-                height={120}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 200,
+                  height: 120,
+                }}
                 axes={{
                   category: { kind: "category", [option]: value },
                   value: { kind: "value" },
@@ -1650,7 +1753,7 @@ describe("native Cartesian charts", () => {
         ),
         (error: unknown) => {
           assert.ok(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-axis");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.match(
             error.diagnostics[0]?.path ?? "",
             /chart\[category-axis-option\]/u,
@@ -1743,10 +1846,13 @@ describe("native Cartesian charts", () => {
           <Slide id="invalid-data">
             <Chart
               id="mismatched"
-              x={0}
-              y={0}
-              width={200}
-              height={120}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 200,
+                height: 120,
+              }}
               groups={[
                 {
                   kind: "column",
@@ -1764,7 +1870,7 @@ describe("native Cartesian charts", () => {
           error.diagnostics.map(({ code, path }) => ({ code, path })),
           [
             {
-              code: "invalid-data",
+              code: "invalid-prop",
               path: "deck/slide[invalid-data]/chart[mismatched]",
             },
           ],
@@ -1774,10 +1880,7 @@ describe("native Cartesian charts", () => {
     );
 
     const invalidLineProps: ChartProps = {
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
+      style: { position: "absolute", left: 0, top: 0, width: 100, height: 100 },
       groups: [
         {
           kind: "line",
@@ -1796,7 +1899,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-chart-option");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(error.diagnostics[0]?.path ?? "", /chart\[1\]/u);
         return true;
       },
@@ -1816,11 +1919,15 @@ describe("native Cartesian charts", () => {
           <Slide id="single-chart-parse">
             <Chart
               id="piloted-chart"
-              x={50}
-              y={50}
-              width={400}
-              height={300}
-              style={{ fontSize: 14, color: "#333333" }}
+              style={{
+                position: "absolute",
+                left: 50,
+                top: 50,
+                width: 400,
+                height: 300,
+                fontSize: 14,
+                color: "#333333",
+              }}
               groups={[
                 {
                   kind: "column",
@@ -1857,10 +1964,8 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-text-wrap">
             <Chart
-              width={200}
-              height={150}
               // @ts-expect-error -- textWrap is explicitly rejected on Chart
-              style={{ textWrap: "wrap" }}
+              style={{ width: 200, height: 150, textWrap: "wrap" }}
               groups={[
                 {
                   kind: "column",
@@ -1874,7 +1979,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unknown-style");
+        assert.equal(error.diagnostics[0]?.code, "unknown-prop");
         return true;
       },
     );
@@ -1885,10 +1990,8 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-unknown-style">
             <Chart
-              width={200}
-              height={150}
               // @ts-expect-error -- testing unknown style property
-              style={{ unknownProp: "forbidden" }}
+              style={{ width: 200, height: 150, unknownProp: "forbidden" }}
               groups={[
                 {
                   kind: "column",
@@ -1902,7 +2005,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unknown-style");
+        assert.equal(error.diagnostics[0]?.code, "unknown-prop");
         return true;
       },
     );
@@ -1913,8 +2016,7 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-unknown-param">
             <Chart
-              width={200}
-              height={150}
+              style={{ width: 200, height: 150 }}
               // @ts-expect-error -- testing unknown parameter
               unknownParameter="forbidden"
               groups={[
@@ -1930,7 +2032,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "unknown-parameter");
+        assert.equal(error.diagnostics[0]?.code, "unknown-prop");
         return true;
       },
     );
@@ -1941,9 +2043,7 @@ describe("native Cartesian charts", () => {
         <Deck width={960} height={540}>
           <Slide id="chart-padding">
             <Chart
-              width={200}
-              height={150}
-              style={{ padding: 10 }}
+              style={{ width: 200, height: 150, padding: 10 }}
               groups={[
                 {
                   kind: "column",
@@ -1957,7 +2057,7 @@ describe("native Cartesian charts", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-layout-context");
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
         return true;
       },
     );
@@ -1965,10 +2065,13 @@ describe("native Cartesian charts", () => {
   it("produces the same native chart from the React and command entries", async () => {
     const config: ChartProps = {
       id: "dual-entry-chart",
-      x: 12,
-      y: 16,
-      width: 420,
-      height: 260,
+      style: {
+        position: "absolute",
+        left: 12,
+        top: 16,
+        width: 420,
+        height: 260,
+      },
       title: { text: "Dual entry", style: { fontSize: "14pt" } },
       displayBlanksAs: "zero",
       axes: {

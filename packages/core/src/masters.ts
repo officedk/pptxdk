@@ -1,16 +1,20 @@
 import { z } from "zod";
 
 import {
+  footerPlaceholderStyleSchema,
   placeholderSizeSchema,
   slideBackgroundSchema,
+  slideStyleSchema,
   xml10StringSchema,
   type SlideBackground,
+  type SlideStyle,
 } from "#/author-schemas.ts";
-import { CapabilityError } from "#/diagnostics.ts";
+import { BuildError, zodIssueToBuildDiagnostic } from "#/diagnostics.ts";
 import {
   masterPlaceholderMapSchema,
   masterTextStylesSchema,
   placeholderMapSchema,
+  placeholderRoleSchema,
   type EmptyPlaceholderMap,
   type MasterPlaceholderMap,
   type MasterTextStyles,
@@ -19,14 +23,13 @@ import {
 import {
   colorMapOverrideSchema,
   colorMapSchema,
-  textStyleSchema,
   themeOverrideSchema,
   type ColorMapOverride,
-  type TextStyle,
   type Theme,
   type ThemeInput,
   type ThemeOverride,
 } from "#/theme.ts";
+import type { ResolvedObject } from "#/types.ts";
 
 /** OOXML `<p:hf>` header/footer visibility flags on SlideMaster and SlideLayout (ECMA-376 §19.3.1.24). */
 export const headerFooterSchema = z
@@ -42,14 +45,10 @@ export type HeaderFooter = z.infer<typeof headerFooterSchema>;
 /** Geometry, placeholder metadata, and default text/style for a `dt`, `ftr`, or `sldNum` slot. */
 export const footerPlaceholderSpecSchema = z
   .strictObject({
-    x: z.number().finite().optional(),
-    y: z.number().finite().optional(),
-    width: z.number().finite().positive().optional(),
-    height: z.number().finite().positive().optional(),
     idx: z.number().int().nonnegative().optional(),
     size: placeholderSizeSchema.optional(),
     text: xml10StringSchema.optional(),
-    style: textStyleSchema.optional(),
+    style: footerPlaceholderStyleSchema.optional(),
     visible: z.boolean().optional(),
   })
   .readonly();
@@ -116,6 +115,7 @@ export const slideMasterDataPropsSchema = z
     placeholders: masterPlaceholderMapSchema.optional(),
     textStyles: masterTextStylesSchema.optional(),
     colorMap: colorMapSchema.optional(),
+    style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
     footerPlaceholders: footerPlaceholdersSchema.optional(),
@@ -128,7 +128,7 @@ export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
 
 export type SlideMasterProps = SlideMasterDataProps & {
   readonly theme?: ThemeInput | Theme | undefined;
-  readonly style?: TextStyle | undefined;
+  readonly style?: SlideStyle | undefined;
   readonly placeholders?: MasterPlaceholderMap | undefined;
   readonly textStyles?: MasterTextStyles | undefined;
 };
@@ -146,6 +146,7 @@ export const slideLayoutDataPropsSchema = z
     placeholders: placeholderMapSchema.optional(),
     colorMapOverride: colorMapOverrideSchema.optional(),
     themeOverride: themeOverrideSchema.optional(),
+    style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
     footerPlaceholders: footerPlaceholdersSchema.optional(),
@@ -166,7 +167,28 @@ export type SlideLayoutDataProps<
   readonly placeholders?: P | undefined;
 };
 
-export const slideLayoutObservationSchema = z
+const rectObservationSchema = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  })
+  .readonly();
+
+export const resolvedPlaceholderSchema = z
+  .object({
+    key: z.string().min(1),
+    type: placeholderRoleSchema,
+    idx: z.number().int().nonnegative().optional(),
+    size: placeholderSizeSchema.optional(),
+    box: rectObservationSchema.optional(),
+    style: z.record(z.string(), z.unknown()).readonly().optional(),
+  })
+  .readonly();
+export type ResolvedPlaceholder = z.infer<typeof resolvedPlaceholderSchema>;
+
+export const resolvedSlideLayoutSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().optional(),
@@ -178,29 +200,30 @@ export const slideLayoutObservationSchema = z
     showMasterPlaceholderAnimations: z.boolean().optional(),
     colorMapOverride: colorMapOverrideSchema.optional(),
     themeOverride: themeOverrideSchema.optional(),
+    style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
+    objects: z.array(z.custom<ResolvedObject>()).readonly(),
+    placeholders: z.array(resolvedPlaceholderSchema).readonly(),
     capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
   })
   .readonly();
-export type SlideLayoutObservation = z.infer<
-  typeof slideLayoutObservationSchema
->;
+export type ResolvedSlideLayout = z.infer<typeof resolvedSlideLayoutSchema>;
 
-export const slideMasterObservationSchema = z
+export const resolvedMasterSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
     colorMap: colorMapSchema.optional(),
     headerFooter: headerFooterSchema.optional(),
+    objects: z.array(z.custom<ResolvedObject>()).readonly(),
+    placeholders: z.array(resolvedPlaceholderSchema).readonly(),
     capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
-    layouts: z.array(slideLayoutObservationSchema).readonly(),
+    layouts: z.array(resolvedSlideLayoutSchema).readonly(),
   })
   .readonly();
-export type SlideMasterObservation = z.infer<
-  typeof slideMasterObservationSchema
->;
+export type ResolvedMaster = z.infer<typeof resolvedMasterSchema>;
 
 const slideLayoutDefinitionSymbol = Symbol.for(
   "@pptxdk/core/slide-layout-definition",
@@ -221,6 +244,7 @@ export type SlideLayoutDefinition<P extends PlaceholderMap = PlaceholderMap> = {
   readonly placeholders?: P | undefined;
   readonly colorMapOverride?: ColorMapOverride | undefined;
   readonly themeOverride?: ThemeOverride | undefined;
+  readonly style?: SlideStyle | undefined;
   readonly background?: SlideBackground | undefined;
   readonly headerFooter?: HeaderFooter | undefined;
   readonly footerPlaceholders?: FooterPlaceholders | undefined;
@@ -255,10 +279,14 @@ export function defineSlideLayout<
   const parsed = slideLayoutDataPropsSchema.safeParse(spec);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    throw new CapabilityError(
-      "invalid-slide-layout",
-      first?.message ?? "Invalid slide layout specification",
-    );
+    throw new BuildError([
+      zodIssueToBuildDiagnostic(
+        "slide-layout",
+        "invalid-slide-layout",
+        first?.message ?? "Invalid slide layout specification",
+        first,
+      ),
+    ]);
   }
   const normalized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed.data)) {
@@ -300,6 +328,7 @@ export function defineSlideLayout<
     ...(frozenProps.themeOverride === undefined
       ? {}
       : { themeOverride: frozenProps.themeOverride }),
+    ...(frozenProps.style === undefined ? {} : { style: frozenProps.style }),
     ...(frozenProps.background === undefined
       ? {}
       : { background: frozenProps.background }),

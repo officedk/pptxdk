@@ -42,12 +42,15 @@ export function Fp8KernelsPage() {
       >
         {/* Step 1: Tile & Block Quantization */}
         <Shape
-          x={68}
-          y={170}
-          width={576}
-          height={166}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 170,
+            width: 576,
+            height: 166,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <SemanticTag
           x={84}
@@ -59,11 +62,12 @@ export function Fp8KernelsPage() {
           solid
         />
         <Text
-          x={252}
-          y={186}
-          width={376}
-          height={20}
           style={{
+            position: "absolute",
+            left: 252,
+            top: 186,
+            width: 376,
+            height: 20,
             fontSize: 11.5,
             color: colors.muted,
             textWrap: "nowrap",
@@ -74,20 +78,33 @@ export function Fp8KernelsPage() {
 
         {/* Activation 1x128 Tile visual */}
         <Shape
-          x={84}
-          y={216}
-          width={272}
-          height={104}
-          fill={colors.surface}
-          style={{ borderColor: colors.compute, borderWidth: 1 }}
-        />
-        <Shape x={84} y={216} width={272} height={4} fill={colors.compute} />
-        <Text
-          x={98}
-          y={226}
-          width={244}
-          height={20}
           style={{
+            position: "absolute",
+            left: 84,
+            top: 216,
+            width: 272,
+            height: 104,
+            background: colors.surface,
+            border: { color: colors.compute, width: 1 },
+          }}
+        />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 216,
+            width: 272,
+            height: 4,
+            background: colors.compute,
+          }}
+        />
+        <Text
+          style={{
+            position: "absolute",
+            left: 98,
+            top: 226,
+            width: 244,
+            height: 20,
             fontSize: 12.5,
             color: colors.compute,
             textWrap: "nowrap",
@@ -99,34 +116,35 @@ export function Fp8KernelsPage() {
         {[0, 1, 2].map((row) => (
           <Shape
             key={row}
-            x={98}
-            y={250 + row * 20}
-            width={168}
-            height={16}
-            fill={row === 1 ? colors.copperSoft : colors.computeSoft}
             style={{
+              position: "absolute",
+              left: 98,
+              top: 250 + row * 20,
+              width: 168,
+              height: 16,
+              background: row === 1 ? colors.copperSoft : colors.computeSoft,
               padding: 0,
-              borderColor: row === 1 ? colors.copper : colors.compute,
-              borderWidth: 1,
-            }}
-            text={
-              row === 1
-                ? "Token 离群切片 (独立 Scale)"
-                : "1 x 128 E4M3 Elements"
-            }
-            textStyle={{
+              border: {
+                color: row === 1 ? colors.copper : colors.compute,
+                width: 1,
+              },
               fontSize: 9.5,
               color: row === 1 ? colors.copperText : colors.compute,
               align: "center",
               verticalAlign: "middle",
             }}
-          />
+          >
+            {row === 1
+              ? "Token 离群切片 (独立 Scale)"
+              : "1 x 128 E4M3 Elements"}
+          </Shape>
         ))}
         <Text
-          x={274}
-          y={252}
-          width={76}
           style={{
+            position: "absolute",
+            left: 274,
+            top: 252,
+            width: 76,
             padding: 0,
             fontSize: 10.5,
             lineHeight: 15,
@@ -138,20 +156,33 @@ export function Fp8KernelsPage() {
 
         {/* Weight 128x128 Block visual */}
         <Shape
-          x={372}
-          y={216}
-          width={256}
-          height={104}
-          fill={colors.surface}
-          style={{ borderColor: colors.comm, borderWidth: 1 }}
-        />
-        <Shape x={372} y={216} width={256} height={4} fill={colors.comm} />
-        <Text
-          x={386}
-          y={226}
-          width={228}
-          height={20}
           style={{
+            position: "absolute",
+            left: 372,
+            top: 216,
+            width: 256,
+            height: 104,
+            background: colors.surface,
+            border: { color: colors.comm, width: 1 },
+          }}
+        />
+        <Shape
+          style={{
+            position: "absolute",
+            left: 372,
+            top: 216,
+            width: 256,
+            height: 4,
+            background: colors.comm,
+          }}
+        />
+        <Text
+          style={{
+            position: "absolute",
+            left: 386,
+            top: 226,
+            width: 228,
+            height: 20,
             fontSize: 12.5,
             color: colors.commText,
             textWrap: "nowrap",
@@ -163,13 +194,13 @@ export function Fp8KernelsPage() {
           [0, 1].map((c) => (
             <Shape
               key={`${r}-${c}`}
-              x={386 + c * 74}
-              y={252 + r * 28}
-              width={68}
-              height={23}
-              fill={r === 0 && c === 1 ? colors.comm : colors.commSoft}
-              text="128x128"
-              textStyle={{
+              style={{
+                position: "absolute",
+                left: 386 + c * 74,
+                top: 252 + r * 28,
+                width: 68,
+                height: 23,
+                background: r === 0 && c === 1 ? colors.comm : colors.commSoft,
                 fontFamily: "metric",
                 fontSize: 10,
                 fontWeight: 700,
@@ -177,15 +208,18 @@ export function Fp8KernelsPage() {
                 align: "center",
                 verticalAlign: "middle",
               }}
-            />
+            >
+              128x128
+            </Shape>
           )),
         )}
         <Text
-          x={538}
-          y={252}
-          width={82}
-          height={54}
           style={{
+            position: "absolute",
+            left: 538,
+            top: 252,
+            width: 82,
+            height: 54,
             fontSize: 10.5,
             lineHeight: 15,
             color: colors.muted,
@@ -196,12 +230,15 @@ export function Fp8KernelsPage() {
 
         {/* Step 2: Tensor Core WGMMA -> CUDA Core FP32 Register Promotion */}
         <Shape
-          x={68}
-          y={350}
-          width={576}
-          height={178}
-          fill={colors.paper}
-          style={{ borderColor: colors.line, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 68,
+            top: 350,
+            width: 576,
+            height: 178,
+            background: colors.paper,
+            border: { color: colors.line, width: 1 },
+          }}
         />
         <SemanticTag
           x={84}
@@ -213,11 +250,12 @@ export function Fp8KernelsPage() {
           solid
         />
         <Text
-          x={280}
-          y={366}
-          width={348}
-          height={20}
           style={{
+            position: "absolute",
+            left: 280,
+            top: 366,
+            width: 348,
+            height: 20,
             fontSize: 11.5,
             color: colors.muted,
             textWrap: "nowrap",
@@ -228,40 +266,53 @@ export function Fp8KernelsPage() {
 
         {/* Pipeline flow boxes inside Step 2 */}
         <Shape
-          x={84}
-          y={400}
-          width={162}
-          height={72}
-          fill={colors.surface}
-          style={{ borderColor: colors.compute, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 84,
+            top: 400,
+            width: 162,
+            height: 72,
+            background: colors.surface,
+            border: { color: colors.compute, width: 1 },
+          }}
         />
         <Text
-          x={94}
-          y={408}
-          width={142}
-          height={20}
-          style={{ fontSize: 12, color: colors.compute, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 94,
+            top: 408,
+            width: 142,
+            height: 20,
+            fontSize: 12,
+            color: colors.compute,
+            textWrap: "nowrap",
+          }}
         >
           FP8 WGMMA 指令流
         </Text>
         <Text
-          x={94}
-          y={430}
-          width={142}
-          height={34}
-          style={{ fontSize: 10.5, lineHeight: 15, color: colors.muted }}
+          style={{
+            position: "absolute",
+            left: 94,
+            top: 430,
+            width: 142,
+            height: 34,
+            fontSize: 10.5,
+            lineHeight: 15,
+            color: colors.muted,
+          }}
         >
           沿内积维度连续执行 4 次 MMA (Nc = 128 元素)
         </Text>
 
         <Shape
-          x={252}
-          y={424}
-          width={24}
-          height={24}
-          fill={colors.slot}
-          text="+"
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 252,
+            top: 424,
+            width: 24,
+            height: 24,
+            background: colors.slot,
             fontFamily: "metric",
             fontSize: 14,
             fontWeight: 700,
@@ -269,22 +320,28 @@ export function Fp8KernelsPage() {
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          +
+        </Shape>
 
         <Shape
-          x={282}
-          y={400}
-          width={168}
-          height={72}
-          fill={colors.copperSoft}
-          style={{ borderColor: colors.copper, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 282,
+            top: 400,
+            width: 168,
+            height: 72,
+            background: colors.copperSoft,
+            border: { color: colors.copper, width: 1 },
+          }}
         />
         <Text
-          x={292}
-          y={408}
-          width={148}
-          height={20}
           style={{
+            position: "absolute",
+            left: 292,
+            top: 408,
+            width: 148,
+            height: 20,
             fontSize: 12,
             color: colors.copperText,
             textWrap: "nowrap",
@@ -293,23 +350,28 @@ export function Fp8KernelsPage() {
           CUDA Core FP32 提升
         </Text>
         <Text
-          x={292}
-          y={430}
-          width={148}
-          height={34}
-          style={{ fontSize: 10.5, lineHeight: 15, color: colors.copperText }}
+          style={{
+            position: "absolute",
+            left: 292,
+            top: 430,
+            width: 148,
+            height: 34,
+            fontSize: 10.5,
+            lineHeight: 15,
+            color: colors.copperText,
+          }}
         >
           乘以双向反量化缩放因子并累加至 FP32 主寄存器
         </Text>
 
         <Shape
-          x={456}
-          y={424}
-          width={24}
-          height={24}
-          fill={colors.slot}
-          text="="
-          textStyle={{
+          style={{
+            position: "absolute",
+            left: 456,
+            top: 424,
+            width: 24,
+            height: 24,
+            background: colors.slot,
             fontFamily: "metric",
             fontSize: 14,
             fontWeight: 700,
@@ -317,42 +379,58 @@ export function Fp8KernelsPage() {
             align: "center",
             verticalAlign: "middle",
           }}
-        />
+        >
+          =
+        </Shape>
 
         <Shape
-          x={486}
-          y={400}
-          width={142}
-          height={72}
-          fill={colors.commSoft}
-          style={{ borderColor: colors.comm, borderWidth: 1 }}
+          style={{
+            position: "absolute",
+            left: 486,
+            top: 400,
+            width: 142,
+            height: 72,
+            background: colors.commSoft,
+            border: { color: colors.comm, width: 1 },
+          }}
         />
         <Text
-          x={496}
-          y={408}
-          width={122}
-          height={20}
-          style={{ fontSize: 12, color: colors.commText, textWrap: "nowrap" }}
+          style={{
+            position: "absolute",
+            left: 496,
+            top: 408,
+            width: 122,
+            height: 20,
+            fontSize: 12,
+            color: colors.commText,
+            textWrap: "nowrap",
+          }}
         >
           WGMMA 流水重叠
         </Text>
         <Text
-          x={496}
-          y={430}
-          width={122}
-          height={34}
-          style={{ fontSize: 10.5, lineHeight: 15, color: colors.commText }}
+          style={{
+            position: "absolute",
+            left: 496,
+            top: 430,
+            width: 122,
+            height: 34,
+            fontSize: 10.5,
+            lineHeight: 15,
+            color: colors.commText,
+          }}
         >
           Tensor Core 与 CUDA Core 异构并发无停顿
         </Text>
 
         {/* Bottom note inside left panel */}
         <Text
-          x={84}
-          y={484}
-          width={544}
-          height={36}
           style={{
+            position: "absolute",
+            left: 84,
+            top: 484,
+            width: 544,
+            height: 36,
             fontSize: 11,
             lineHeight: 16,
             color: colors.steel,
@@ -364,10 +442,11 @@ export function Fp8KernelsPage() {
 
         <Rule x={68} y={536} width={576} />
         <Text
-          x={68}
-          y={542}
-          width={576}
           style={{
+            position: "absolute",
+            left: 68,
+            top: 542,
+            width: 576,
             padding: 0,
             fontSize: 10.5,
             color: colors.muted,
@@ -392,15 +471,6 @@ export function Fp8KernelsPage() {
       >
         <Chart
           id="fp8-kernels-chart"
-          x={696}
-          y={168}
-          width={520}
-          height={240}
-          style={{
-            fontFamily: "body",
-            fontSize: 10.5,
-            color: colors.ink,
-          }}
           legend="top"
           axes={{
             category: {
@@ -446,12 +516,23 @@ export function Fp8KernelsPage() {
               },
             },
           ]}
+          style={{
+            position: "absolute",
+            left: 696,
+            top: 168,
+            width: 520,
+            height: 240,
+            fontFamily: "body",
+            fontSize: 10.5,
+            color: colors.ink,
+          }}
         />
         <Text
-          x={698}
-          y={416}
-          width={516}
           style={{
+            position: "absolute",
+            left: 698,
+            top: 416,
+            width: 516,
             padding: 0,
             fontSize: 11,
             lineHeight: 16,
@@ -498,19 +579,32 @@ export function Fp8KernelsPage() {
 
       {/* Right bottom engineering insight box */}
       <Shape
-        x={680}
-        y={578}
-        width={552}
-        height={82}
-        fill={colors.surface}
-        style={{ borderColor: colors.line, borderWidth: 1 }}
-      />
-      <Shape x={680} y={578} width={4} height={82} fill={colors.compute} />
-      <Text
-        x={698}
-        y={586}
-        width={520}
         style={{
+          position: "absolute",
+          left: 680,
+          top: 578,
+          width: 552,
+          height: 82,
+          background: colors.surface,
+          border: { color: colors.line, width: 1 },
+        }}
+      />
+      <Shape
+        style={{
+          position: "absolute",
+          left: 680,
+          top: 578,
+          width: 4,
+          height: 82,
+          background: colors.compute,
+        }}
+      />
+      <Text
+        style={{
+          position: "absolute",
+          left: 698,
+          top: 586,
+          width: 520,
           padding: 0,
           fontSize: 13,
           color: colors.steel,
@@ -520,10 +614,11 @@ export function Fp8KernelsPage() {
         DeepGEMM 运行时 JIT 编译设计亮点：
       </Text>
       <Text
-        x={698}
-        y={608}
-        width={520}
         style={{
+          position: "absolute",
+          left: 698,
+          top: 608,
+          width: 520,
           padding: 0,
           fontSize: 11,
           lineHeight: 16,

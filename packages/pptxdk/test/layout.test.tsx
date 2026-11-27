@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { build, BuildError, fade, font } from "@officedk/pptxdk";
+import {
+  build,
+  BuildError,
+  fade,
+  font,
+  motionSchedule,
+} from "@officedk/pptxdk";
 import {
   Box,
   Chart,
@@ -92,17 +98,20 @@ describe("public layout entry", () => {
           <Shape
             id="front"
             name="front"
-            height={30}
             enter={fade()}
-            style={{ aspectRatio: 2, zIndex: 1 }}
+            style={{ height: 30, aspectRatio: 2, zIndex: 1 }}
           />
           <Shape
             id="back"
             name="back"
-            width={100}
-            height={40}
             enter={fade()}
-            style={{ gridColumn: 2, gridRow: 1, zIndex: -1 }}
+            style={{
+              width: 100,
+              height: 40,
+              gridColumn: 2,
+              gridRow: 1,
+              zIndex: -1,
+            }}
           />
           <Shape
             id="hidden"
@@ -138,13 +147,8 @@ describe("public layout entry", () => {
       slideXml.indexOf('name="back"') < slideXml.indexOf('name="front"'),
     );
     assert.equal(slideXml.includes('name="hidden"'), false);
-    const motion = result.report.slides[0]?.capabilities?.["motion"] as {
-      readonly steps: readonly {
-        readonly effects: readonly {
-          readonly target: { readonly authorId?: string };
-        }[];
-      }[];
-    };
+    const motion = motionSchedule(result.slide("slide-grid"));
+    assert.ok(motion !== undefined);
     assert.deepEqual(
       motion.steps[0]?.effects.map(({ target }) => target.authorId),
       ["front", "back"],
@@ -256,7 +260,7 @@ describe("public layout entry", () => {
           >
             <Box
               id="sidebar"
-              style={{ width: 300, height: 624, backgroundColor: "#172033" }}
+              style={{ width: 300, height: 624, background: "#172033" }}
             />
             <Box
               id="grid"
@@ -267,13 +271,10 @@ describe("public layout entry", () => {
                 gridTemplateColumns: "1fr 1fr",
                 gridAutoRows: "1fr",
                 gap: 18,
-                backgroundColor: "#EFF3F8",
+                background: "#EFF3F8",
               }}
             >
-              <Box
-                id="card-a"
-                style={{ backgroundColor: "#FFFFFF", padding: 18 }}
-              >
+              <Box id="card-a" style={{ background: "#FFFFFF", padding: 18 }}>
                 <Text
                   id="card-a-text"
                   style={{ fontFamily: cjkFont, fontSize: 20 }}
@@ -281,10 +282,7 @@ describe("public layout entry", () => {
                   A
                 </Text>
               </Box>
-              <Box
-                id="card-b"
-                style={{ backgroundColor: "#FFFFFF", padding: 18 }}
-              >
+              <Box id="card-b" style={{ background: "#FFFFFF", padding: 18 }}>
                 <Text
                   id="card-b-text"
                   style={{ fontFamily: cjkFont, fontSize: 20 }}
@@ -360,7 +358,7 @@ describe("public layout entry", () => {
           >
             <Box
               id="sidebar"
-              style={{ width: 300, height: 624, backgroundColor: "#172033" }}
+              style={{ width: 300, height: 624, background: "#172033" }}
             />
             <Box
               id="grid"
@@ -373,14 +371,14 @@ describe("public layout entry", () => {
                 gridTemplateColumns: "1fr 1fr",
                 gridTemplateRows: "100px",
                 gridAutoRows: "auto",
-                backgroundColor: "#EFF3F8",
+                background: "#EFF3F8",
               }}
             >
               <Box
                 id="spanning-card"
                 style={{
                   gridColumn: "span 2",
-                  backgroundColor: "#FFFFFF",
+                  background: "#FFFFFF",
                 }}
               />
               <Box
@@ -395,17 +393,11 @@ describe("public layout entry", () => {
                   gap: 10,
                   gridTemplateColumns: "1fr 1fr",
                   gridTemplateRows: "1fr",
-                  backgroundColor: "#DDE5EF",
+                  background: "#DDE5EF",
                 }}
               >
-                <Box
-                  id="nested-cell-a"
-                  style={{ backgroundColor: "#FFFFFF" }}
-                />
-                <Box
-                  id="nested-cell-b"
-                  style={{ backgroundColor: "#FFFFFF" }}
-                />
+                <Box id="nested-cell-a" style={{ background: "#FFFFFF" }} />
+                <Box id="nested-cell-b" style={{ background: "#FFFFFF" }} />
               </Box>
             </Box>
           </Box>
@@ -467,7 +459,7 @@ describe("public layout entry", () => {
               width: 400,
               height: 300,
               padding: 40,
-              backgroundColor: "#EFF3F8",
+              background: "#EFF3F8",
             }}
           >
             <Box
@@ -479,10 +471,10 @@ describe("public layout entry", () => {
                 padding: 20,
                 gridTemplateColumns: "1fr",
                 gridTemplateRows: "1fr",
-                backgroundColor: "#DDE5EF",
+                background: "#DDE5EF",
               }}
             >
-              <Box id="static-grid-item" style={{ backgroundColor: "#FFFFFF" }}>
+              <Box id="static-grid-item" style={{ background: "#FFFFFF" }}>
                 <Shape
                   id="item-absolute"
                   style={{
@@ -514,7 +506,7 @@ describe("public layout entry", () => {
               top: 50,
               width: 300,
               height: 200,
-              backgroundColor: "#EFF3F8",
+              background: "#EFF3F8",
             }}
           >
             <Box
@@ -526,7 +518,7 @@ describe("public layout entry", () => {
                 height: 100,
                 gridTemplateColumns: "1fr",
                 gridTemplateRows: "1fr",
-                backgroundColor: "#DDE5EF",
+                background: "#DDE5EF",
               }}
             >
               <Shape
@@ -614,7 +606,7 @@ describe("public layout entry", () => {
             >
               WWWW
             </Text>
-            <Shape id="after-min-content" width={20} height={20} />
+            <Shape id="after-min-content" style={{ width: 20, height: 20 }} />
           </Box>
         </Slide>
       </Deck>,
@@ -704,7 +696,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "unsupported-grid-positioning",
+        error.diagnostics[0]?.code === "invalid-style",
     );
     await assert.rejects(
       build(
@@ -716,7 +708,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "unsupported-grid-alignment",
+        error.diagnostics[0]?.code === "invalid-style",
     );
   });
 
@@ -735,10 +727,10 @@ describe("public layout entry", () => {
                 height: 60,
               }}
             >
-              <Shape id="group-a" width={20} height={20} />
-              <Shape id="group-b" width={20} height={20} />
+              <Shape id="group-a" style={{ width: 20, height: 20 }} />
+              <Shape id="group-b" style={{ width: 20, height: 20 }} />
             </Group>
-            <Shape id="after-group" width={30} height={30} />
+            <Shape id="after-group" style={{ width: 30, height: 30 }} />
           </Box>
         </Slide>
       </Deck>,
@@ -766,44 +758,50 @@ describe("public layout entry", () => {
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
-  it("writes padding into bodyPr and participates in text height and baseline for Text and Shape.text", async () => {
+  it("writes padding into bodyPr and participates in text height and baseline for Text and Shape children", async () => {
     const result = await build(
       <Deck width={320} height={160}>
         <Slide id="text-insets">
           <Box style={{ display: "flex", alignItems: "baseline", width: 300 }}>
             <Text
               id="plain-text"
-              width={80}
-              height="auto"
-              style={{ fontFamily: cjkFont, fontSize: 20 }}
+              style={{
+                width: 80,
+                height: "auto",
+                fontFamily: cjkFont,
+                fontSize: 20,
+              }}
             >
               AB
             </Text>
             <Text
               id="padded-text"
-              width={80}
-              height="auto"
-              style={{ fontFamily: cjkFont, fontSize: 20, padding: [10, 4] }}
+              style={{
+                width: 80,
+                height: "auto",
+                fontFamily: cjkFont,
+                fontSize: 20,
+                padding: [10, 4],
+              }}
             >
               AB
             </Text>
             <Shape
               id="padded-shape"
-              width={100}
-              height={50}
-              text="中文中文中文"
-              textStyle={{
+              style={{
+                width: 100,
+                height: 50,
                 fontFamily: cjkFont,
                 fontSize: 20,
                 verticalAlign: "top",
-              }}
-              style={{
                 paddingTop: 2,
                 paddingRight: 3,
                 paddingBottom: 4,
                 paddingLeft: 5,
               }}
-            />
+            >
+              中文中文中文
+            </Shape>
           </Box>
         </Slide>
       </Deck>,
@@ -840,12 +838,13 @@ describe("public layout entry", () => {
       bodyPrFor("padded-shape"),
       /lIns="47625" tIns="19050" rIns="28575" bIns="38100"/u,
     );
-    assert.ok(
-      result.report.diagnostics.some(
-        ({ code, path }) =>
-          code === "overset" && path.endsWith("shape[padded-shape]"),
-      ),
-    );
+    const paddedShapeMetrics = result
+      .slide("text-insets")
+      .get("padded-shape").textMetrics;
+    assert.equal(paddedShapeMetrics?.status, "measured");
+    if (paddedShapeMetrics?.status === "measured") {
+      assert.equal(paddedShapeMetrics.fits, false);
+    }
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
 
@@ -865,8 +864,8 @@ describe("public layout entry", () => {
               rowGap: 5,
             }}
           >
-            <Shape id="first" height={20} />
-            <Shape id="span" height={10} style={{ gridColumn: "span 2" }} />
+            <Shape id="first" style={{ height: 20 }} />
+            <Shape id="span" style={{ height: 10, gridColumn: "span 2" }} />
           </Box>
         </Slide>
       </Deck>,
@@ -900,7 +899,7 @@ describe("public layout entry", () => {
           gridAutoRows: "auto 72px",
           columnGap: 12,
           rowGap: 12,
-          backgroundColor: "#ffffff",
+          background: "#ffffff",
         }}
       >
         <Box
@@ -908,7 +907,7 @@ describe("public layout entry", () => {
           style={{
             gridColumn: "2 / span 2",
             gridRow: 1,
-            backgroundColor: "#2b579a",
+            background: "#2b579a",
           }}
         >
           <Text style={{ fontFamily: cjkFont, fontSize: 18, color: "#ffffff" }}>
@@ -920,7 +919,7 @@ describe("public layout entry", () => {
           style={{
             gridColumn: 1,
             gridRow: "1 / span 3",
-            backgroundColor: "#e8f4fd",
+            background: "#e8f4fd",
           }}
         >
           <Text style={{ fontFamily: cjkFont, fontSize: 14 }}>Lead</Text>
@@ -930,7 +929,7 @@ describe("public layout entry", () => {
           style={{
             gridColumn: 2,
             gridRow: 2,
-            backgroundColor: "#e8f4fd",
+            background: "#e8f4fd",
           }}
         >
           <Text style={{ fontFamily: cjkFont, fontSize: 14 }}>North 42%</Text>
@@ -940,7 +939,7 @@ describe("public layout entry", () => {
           style={{
             gridColumn: 3,
             gridRow: 2,
-            backgroundColor: "#e8f4fd",
+            background: "#e8f4fd",
           }}
         >
           <Text
@@ -955,7 +954,7 @@ describe("public layout entry", () => {
           style={{
             gridColumn: "2 / span 2",
             gridRow: 3,
-            backgroundColor: "#e8f4fd",
+            background: "#e8f4fd",
           }}
         />
       </Box>
@@ -1030,7 +1029,15 @@ describe("public layout entry", () => {
       width: 236,
       height: 72,
     });
-    assert.deepEqual(result.report.diagnostics, []);
+    assert.equal(
+      result
+        .slide("grid-auto-wide")
+        .get("wide-grid")
+        .get("wide-notes")
+        .get("wide-notes-text").textMetrics?.status,
+      "measured",
+    );
+    assert.equal(result.report.fonts[0]?.hasResource, true);
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -1163,8 +1170,8 @@ describe("public layout entry", () => {
       height: 40,
     });
     assert.deepEqual(
-      result.report.diagnostics.map(({ code }) => code),
-      ["grid-overflow"],
+      result.report.slides[2]?.layouts?.[0]?.rowHeights,
+      [20, 40, 60, 40],
     );
     assert.equal(result.report.slides[2]?.layouts?.[0]?.box.height, 140);
 
@@ -1209,8 +1216,7 @@ describe("public layout entry", () => {
           >
             <Shape
               id="zero-fr-spanning"
-              height={100}
-              style={{ gridColumn: 1, gridRow: "1 / span 2" }}
+              style={{ height: 100, gridColumn: 1, gridRow: "1 / span 2" }}
             />
             <Shape id="zero-fr-second" style={{ gridColumn: 2, gridRow: 2 }} />
           </Box>
@@ -1239,13 +1245,11 @@ describe("public layout entry", () => {
       height: 20,
     });
     assert.deepEqual(
-      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
-      [
-        {
-          code: "grid-item-overflow",
-          path: "deck/slide[grid-auto-zero-fr-span]/box[zero-fr-span-grid]/shape[zero-fr-spanning]",
-        },
-      ],
+      result
+        .slide("grid-auto-zero-fr-span")
+        .get("zero-fr-span-grid")
+        .get("zero-fr-spanning").gridArea,
+      { x: 0, y: 0, width: 100, height: 40 },
     );
 
     const file = await validatePptx(result.pptx);
@@ -1284,28 +1288,23 @@ describe("public layout entry", () => {
           >
             <Shape
               id="growth-span"
-              height={210}
-              style={{ gridColumn: 1, gridRow: "1 / span 4" }}
+              style={{ height: 210, gridColumn: 1, gridRow: "1 / span 4" }}
             />
             <Shape
               id="growth-auto-explicit"
-              height={10}
-              style={{ gridColumn: 2, gridRow: 1 }}
+              style={{ height: 10, gridColumn: 2, gridRow: 1 }}
             />
             <Shape
               id="growth-auto-implicit"
-              height={10}
-              style={{ gridColumn: 2, gridRow: 2 }}
+              style={{ height: 10, gridColumn: 2, gridRow: 2 }}
             />
             <Shape
               id="growth-fr-implicit"
-              height={10}
-              style={{ gridColumn: 2, gridRow: 3 }}
+              style={{ height: 10, gridColumn: 2, gridRow: 3 }}
             />
             <Shape
               id="growth-fixed-implicit"
-              height={10}
-              style={{ gridColumn: 2, gridRow: 4 }}
+              style={{ height: 10, gridColumn: 2, gridRow: 4 }}
             />
           </Box>
         </Slide>
@@ -1350,7 +1349,10 @@ describe("public layout entry", () => {
       width: 100,
       height: 10,
     });
-    assert.deepEqual(result.report.diagnostics, []);
+    assert.deepEqual(
+      result.report.slides[0]?.layouts?.[0]?.rowHeights,
+      [60, 60, 150, 30],
+    );
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -1377,7 +1379,7 @@ describe("public layout entry", () => {
     }
   });
 
-  it("retains fixed implicit rows and reports grid and text constraint failures", async () => {
+  it("retains fixed implicit rows and exposes grid track geometry and textMetrics on constraint overflow", async () => {
     const result = await build(
       <Deck width={320} height={240}>
         <Slide id="grid-auto-constraints">
@@ -1395,16 +1397,17 @@ describe("public layout entry", () => {
             <Shape id="constraint-header" />
             <Shape
               id="overset-card"
-              width={60}
-              height={30}
-              text="中文中文中文中文"
-              textStyle={{
+              style={{
+                width: 60,
+                height: 30,
                 fontFamily: cjkFont,
                 fontSize: 20,
                 verticalAlign: "top",
               }}
-            />
-            <Shape id="tall-card" height={50} />
+            >
+              中文中文中文中文
+            </Shape>
+            <Shape id="tall-card" style={{ height: 50 }} />
           </Box>
         </Slide>
         <Slide id="grid-auto-overflow">
@@ -1420,8 +1423,8 @@ describe("public layout entry", () => {
             }}
           >
             <Shape id="overflow-header" />
-            <Shape id="overflow-card" height={10} />
-            <Shape id="overflow-extra" height={10} />
+            <Shape id="overflow-card" style={{ height: 10 }} />
+            <Shape id="overflow-extra" style={{ height: 10 }} />
           </Box>
         </Slide>
       </Deck>,
@@ -1474,37 +1477,23 @@ describe("public layout entry", () => {
         },
       ],
     );
-    const diagnostic = (code: string) =>
-      result.report.diagnostics.find((item) => item.code === code);
+    const constraintGrid = result
+      .slide("grid-auto-constraints")
+      .get("constraint-grid");
+    const oversetMetrics = constraintGrid.get("overset-card").textMetrics;
+    assert.equal(oversetMetrics?.status, "measured");
+    if (oversetMetrics?.status === "measured") {
+      assert.equal(oversetMetrics.fits, false);
+    }
+    assert.deepEqual(constraintGrid.get("tall-card").gridArea, {
+      x: 0,
+      y: 50,
+      width: 300,
+      height: 30,
+    });
     assert.deepEqual(
-      {
-        severity: diagnostic("overset")?.severity,
-        path: diagnostic("overset")?.path,
-      },
-      {
-        severity: "warning",
-        path: "deck/slide[grid-auto-constraints]/box[constraint-grid]/shape[overset-card]",
-      },
-    );
-    assert.deepEqual(
-      {
-        severity: diagnostic("grid-item-overflow")?.severity,
-        path: diagnostic("grid-item-overflow")?.path,
-      },
-      {
-        severity: "warning",
-        path: "deck/slide[grid-auto-constraints]/box[constraint-grid]/shape[tall-card]",
-      },
-    );
-    assert.deepEqual(
-      {
-        severity: diagnostic("grid-overflow")?.severity,
-        path: diagnostic("grid-overflow")?.path,
-      },
-      {
-        severity: "warning",
-        path: "deck/slide[grid-auto-overflow]/box[overflow-grid]",
-      },
+      result.report.slides[1]?.layouts?.[0]?.rowHeights,
+      [20, 30, 30],
     );
 
     const file = await validatePptx(result.pptx);
@@ -1546,7 +1535,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-grid-tracks" &&
+        error.diagnostics[0]?.code === "invalid-style" &&
         error.diagnostics[0]?.message.includes("fit-content"),
     );
     await assert.rejects(
@@ -1559,7 +1548,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-grid-tracks",
+        error.diagnostics[0]?.code === "invalid-style",
     );
     await assert.rejects(
       build(
@@ -1571,7 +1560,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-layout-context",
+        error.diagnostics[0]?.code === "invalid-structure",
     );
   });
 
@@ -1616,12 +1605,10 @@ describe("public layout entry", () => {
               gridTemplateRows: "100px 100px",
             }}
           >
-            <Shape id="tall-grid-item" height={180} />
+            <Shape id="tall-grid-item" style={{ height: 180 }} />
             <Shape
               id="minimum-grid-item"
-              width={20}
-              height={10}
-              style={{ minHeight: 180 }}
+              style={{ width: 20, height: 10, minHeight: 180 }}
             />
           </Box>
         </Slide>
@@ -1641,17 +1628,17 @@ describe("public layout entry", () => {
         { x: 0, y: 100, width: 20, height: 180 },
       ],
     );
+    const trueOverflowGrid = result
+      .slide("grid-true-overflow")
+      .get("true-overflow-grid");
     assert.deepEqual(
-      result.report.diagnostics.map(({ path, code }) => ({ path, code })),
       [
-        {
-          path: "deck/slide[grid-true-overflow]/box[true-overflow-grid]/shape[tall-grid-item]",
-          code: "grid-item-overflow",
-        },
-        {
-          path: "deck/slide[grid-true-overflow]/box[true-overflow-grid]/shape[minimum-grid-item]",
-          code: "grid-item-overflow",
-        },
+        trueOverflowGrid.get("tall-grid-item").gridArea,
+        trueOverflowGrid.get("minimum-grid-item").gridArea,
+      ],
+      [
+        { x: 0, y: 0, width: 300, height: 100 },
+        { x: 0, y: 100, width: 300, height: 100 },
       ],
     );
 
@@ -1688,17 +1675,23 @@ describe("public layout entry", () => {
             </Box>
             <Shape
               id="relative"
-              width={50}
-              height={20}
-              style={{ position: "relative", left: "10%", top: "50%" }}
+              style={{
+                position: "relative",
+                left: "10%",
+                top: "50%",
+                width: 50,
+                height: 20,
+              }}
             />
             <Shape
               id="absolute-native-coordinates"
-              x={70}
-              y={30}
-              width={10}
-              height={10}
-              style={{ position: "absolute" }}
+              style={{
+                position: "absolute",
+                left: 70,
+                top: 30,
+                width: 10,
+                height: 10,
+              }}
             />
           </Box>
         </Slide>
@@ -1744,11 +1737,13 @@ describe("public layout entry", () => {
           />
           <Shape
             id="page-relative"
-            x={10}
-            y={20}
-            width={20}
-            height={10}
-            style={{ position: "relative", left: "10%", top: "10%" }}
+            style={{
+              position: "relative",
+              left: "10%",
+              top: "10%",
+              width: 20,
+              height: 10,
+            }}
           />
         </Slide>
       </Deck>,
@@ -1765,7 +1760,7 @@ describe("public layout entry", () => {
         },
         {
           id: "page-relative",
-          box: { x: 42, y: 44, width: 20, height: 10 },
+          box: { x: 32, y: 24, width: 20, height: 10 },
         },
       ],
     );
@@ -1775,16 +1770,14 @@ describe("public layout entry", () => {
           <Slide id="static-offset">
             <Shape
               id="invalid-offset"
-              width={20}
-              height={10}
-              style={{ left: 10 }}
+              style={{ left: 10, width: 20, height: 10 }}
             />
           </Slide>
         </Deck>,
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics[0]?.code === "invalid-layout-context",
+        error.diagnostics[0]?.code === "invalid-structure",
     );
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
   });
@@ -1803,7 +1796,7 @@ describe("public layout entry", () => {
               id: "block",
               style: { display: "block", width: 100, height: 100 },
             },
-            createElement(Shape, { id: "member", height: 20 }),
+            createElement(Shape, { id: "member", style: { height: 20 } }),
           ),
         ),
       ),
@@ -1840,7 +1833,7 @@ describe("public layout entry", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "invalid-layout-context" &&
+            code === "invalid-structure" &&
             path === "deck/slide[invalid-block-flex-style]/box[block]",
         ),
     );
@@ -1859,19 +1852,22 @@ describe("public layout entry", () => {
             { id: "column", style: { width: 200, height: 10 } },
             createElement(Shape, {
               id: "first",
-              height: 20,
+              style: { height: 20 },
             }),
             createElement(Shape, {
               id: "second",
-              height: 10,
+              style: { height: 10 },
             }),
           ),
           createElement(Shape, {
             id: "explicit",
-            x: 24,
-            y: 32,
-            width: 50,
-            height: 40,
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 32,
+              width: 50,
+              height: 40,
+            },
           }),
         ),
       ),
@@ -1922,7 +1918,7 @@ describe("public layout entry", () => {
     );
   });
 
-  it("overrides explicit dimensions of native objects with auto dimensions and lays out according to content", async () => {
+  it("lays out Shape with auto width and height according to parent stretch and content", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -1933,14 +1929,19 @@ describe("public layout entry", () => {
           createElement(
             Box,
             { style: { width: 100, height: 100 } },
-            createElement(Shape, {
-              id: "auto-text-shape",
-              width: 20,
-              height: 10,
-              text: "中文中文中文",
-              textStyle: { fontFamily: cjkFont, fontSize: 20 },
-              style: { width: "auto", height: "auto" },
-            }),
+            createElement(
+              Shape,
+              {
+                id: "auto-text-shape",
+                style: {
+                  width: "auto",
+                  height: "auto",
+                  fontFamily: cjkFont,
+                  fontSize: 20,
+                },
+              },
+              "中文中文中文",
+            ),
           ),
         ),
       ),
@@ -1984,8 +1985,14 @@ describe("public layout entry", () => {
                   ...(alignContent === undefined ? {} : { alignContent }),
                 },
               },
-              createElement(Shape, { id: "first", width: 60, height: 20 }),
-              createElement(Shape, { id: "second", width: 60, height: 20 }),
+              createElement(Shape, {
+                id: "first",
+                style: { width: 60, height: 20 },
+              }),
+              createElement(Shape, {
+                id: "second",
+                style: { width: 60, height: 20 },
+              }),
             ),
           ),
         ),
@@ -2020,9 +2027,9 @@ describe("public layout entry", () => {
     const makeText = (testId: string, minWidth?: number) =>
       createElement(Text, {
         id: testId,
-        width: 100,
-        height: "auto",
         style: {
+          width: 100,
+          height: "auto",
           fontFamily: cjkFont,
           fontSize: 20,
           ...(minWidth === undefined ? {} : { minWidth }),
@@ -2082,19 +2089,16 @@ describe("public layout entry", () => {
         },
       ],
     );
-    assert.deepEqual(
-      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
-      [
-        {
-          code: "overset",
-          path: "deck/slide[flex-min-content]/box[released]/text[released-a]",
-        },
-        {
-          code: "overset",
-          path: "deck/slide[flex-min-content]/box[released]/text[released-b]",
-        },
-      ],
-    );
+    for (const id of ["released-a", "released-b"]) {
+      const metrics = result
+        .slide("flex-min-content")
+        .get("released")
+        .get(id).textMetrics;
+      assert.equal(metrics?.status, "measured");
+      if (metrics?.status === "measured") {
+        assert.equal(metrics.fits, false);
+      }
+    }
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -2133,8 +2137,7 @@ describe("public layout entry", () => {
               { id: "fixed-content" },
               createElement(Shape, {
                 id: "fixed-shape",
-                width: 200,
-                height: 20,
+                style: { width: 200, height: 20 },
               }),
             ),
           ),
@@ -2149,9 +2152,7 @@ describe("public layout entry", () => {
               { id: "min-content" },
               createElement(Shape, {
                 id: "min-shape",
-                width: 20,
-                height: 20,
-                style: { minWidth: 150 },
+                style: { width: 20, height: 20, minWidth: 150 },
               }),
             ),
           ),
@@ -2166,8 +2167,7 @@ describe("public layout entry", () => {
               { id: "released-content", style: { minWidth: 0 } },
               createElement(Shape, {
                 id: "released-shape",
-                width: 200,
-                height: 20,
+                style: { width: 200, height: 20 },
               }),
             ),
           ),
@@ -2182,9 +2182,12 @@ describe("public layout entry", () => {
               { id: "margin-content" },
               createElement(Shape, {
                 id: "margin-shape",
-                width: 100,
-                height: 20,
-                style: { marginLeft: 10, marginRight: 15 },
+                style: {
+                  width: 100,
+                  height: 20,
+                  marginLeft: 10,
+                  marginRight: 15,
+                },
               }),
             ),
           ),
@@ -2234,7 +2237,7 @@ describe("public layout entry", () => {
       createElement(
         Box,
         { id, style: { flex: 1, height: 100 } },
-        createElement(Shape, { id: "card-shape", height: 20 }),
+        createElement(Shape, { id: "card-shape", style: { height: 20 } }),
       );
     const result = await build(
       createElement(
@@ -2325,7 +2328,7 @@ describe("public layout entry", () => {
               createElement(Shape, {
                 id: "group-member",
                 name: "group-member",
-                height: 20,
+                style: { height: 20 },
               }),
             ),
           ),
@@ -2383,7 +2386,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(({ code }) => code === "invalid-layout-context"),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
 
     const result = await build(
@@ -2398,9 +2401,7 @@ describe("public layout entry", () => {
             { style: { width: 100 } },
             createElement(Shape, {
               id: "block-item",
-              width: 30,
-              height: 10,
-              style: { flex: 1, alignSelf: "baseline" },
+              style: { width: 30, height: 10, flex: 1, alignSelf: "baseline" },
             }),
           ),
         ),
@@ -2414,7 +2415,7 @@ describe("public layout entry", () => {
     });
   });
 
-  it("preserves resolved dimensions and returns warnings when containers and child objects overflow", async () => {
+  it("preserves resolved dimensions and bounds when containers and child objects exceed canvas dimensions", async () => {
     const result = await build(
       createElement(
         Deck,
@@ -2425,7 +2426,7 @@ describe("public layout entry", () => {
           createElement(
             Box,
             { id: "wide-container", style: { width: 400, height: 50 } },
-            createElement(Shape, { id: "wide-shape", height: 10 }),
+            createElement(Shape, { id: "wide-shape", style: { height: 10 } }),
           ),
         ),
       ),
@@ -2433,15 +2434,19 @@ describe("public layout entry", () => {
 
     assert.equal(result.report.slides[0]?.layouts?.[0]?.box.width, 400);
     assert.equal(result.report.slides[0]?.objects[0]?.box?.width, 400);
-    assert.deepEqual(
-      result.report.diagnostics.map(({ path, code }) => ({ path, code })),
-      [
-        { path: "deck/slide[overflow]/box[wide-container]", code: "overflow" },
-        {
-          path: "deck/slide[overflow]/box[wide-container]/shape[wide-shape]",
-          code: "overflow",
-        },
-      ],
+    const wideShape = result
+      .slide("overflow")
+      .get("wide-container")
+      .get("wide-shape");
+    assert.deepEqual(wideShape.bounds, {
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 10,
+    });
+    assert.ok(
+      (wideShape.bounds?.x ?? 0) + (wideShape.bounds?.width ?? 0) >
+        result.report.dimensions.width,
     );
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
@@ -2471,13 +2476,11 @@ describe("public layout entry", () => {
             createElement(Image, {
               id: "logo",
               src: wideImage,
-              width: 30,
-              height: 20,
+              style: { width: 30, height: 20 },
             }),
             createElement(Shape, {
               id: "action",
-              width: 20,
-              height: 20,
+              style: { width: 20, height: 20 },
             }),
           ),
         ),
@@ -2541,9 +2544,12 @@ describe("public layout entry", () => {
               Text,
               {
                 id: "small-text",
-                width: 100,
-                height: 60,
-                style: { fontFamily: cjkFont, fontSize: 20 },
+                style: {
+                  width: 100,
+                  height: 60,
+                  fontFamily: cjkFont,
+                  fontSize: 20,
+                },
               },
               "中",
             ),
@@ -2551,9 +2557,12 @@ describe("public layout entry", () => {
               Text,
               {
                 id: "large-text",
-                width: 100,
-                height: 60,
-                style: { fontFamily: cjkFont, fontSize: 40 },
+                style: {
+                  width: 100,
+                  height: 60,
+                  fontFamily: cjkFont,
+                  fontSize: 40,
+                },
               },
               "中",
             ),
@@ -2599,7 +2608,10 @@ describe("public layout entry", () => {
               },
               createElement(
                 Text,
-                { id: "unmeasured-text", width: 100, height: 60 },
+                {
+                  id: "unmeasured-text",
+                  style: { width: 100, height: 60 },
+                },
                 "text",
               ),
             ),
@@ -2610,7 +2622,7 @@ describe("public layout entry", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "baseline-measurement-unavailable" &&
+            code === "font-unavailable" &&
             path ===
               "deck/slide[unmeasured-baseline]/box[1]/text[unmeasured-text]",
         ),
@@ -2639,9 +2651,12 @@ describe("public layout entry", () => {
                 Text,
                 {
                   id: "wrapped-text",
-                  width: 60,
-                  height: 20,
-                  style: { fontFamily: cjkFont, fontSize: 20 },
+                  style: {
+                    width: 60,
+                    height: 20,
+                    fontFamily: cjkFont,
+                    fontSize: 20,
+                  },
                 },
                 "中",
               ),
@@ -2651,9 +2666,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          ({ code }) => code === "unsupported-baseline-context",
-        ),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
   });
 
@@ -2679,13 +2692,11 @@ describe("public layout entry", () => {
               },
               createElement(Shape, {
                 id: "wrap-first",
-                width: 60,
-                height: 20,
+                style: { width: 60, height: 20 },
               }),
               createElement(Shape, {
                 id: "wrap-second",
-                width: 60,
-                height: 20,
+                style: { width: 60, height: 20 },
               }),
             ),
           ),
@@ -2693,9 +2704,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          ({ code }) => code === "unsupported-baseline-context",
-        ),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
 
     const column = await build(
@@ -2720,33 +2729,38 @@ describe("public layout entry", () => {
               Text,
               {
                 id: "column-small-text",
-                width: 100,
-                height: 40,
-                style: { fontFamily: "Aptos", fontSize: 20 },
+                style: {
+                  width: 100,
+                  height: 40,
+                  fontFamily: "Aptos",
+                  fontSize: 20,
+                },
               },
               "中",
             ),
             createElement(Image, {
               id: "column-image",
               src: wideImage,
-              width: 30,
-              height: 20,
+              style: { width: 30, height: 20 },
             }),
             createElement(Shape, {
               id: "column-shape",
-              width: 80,
-              height: 20,
+              style: { width: 80, height: 20 },
             }),
           ),
         ),
       ),
     );
-    assert.equal(
-      column.report.diagnostics.some(
-        ({ code }) => code === "baseline-measurement-unavailable",
-      ),
-      false,
+    assert.deepEqual(
+      column.slide("synthetic-column-baseline").get("column-small-text")
+        .textMetrics,
+      {
+        status: "unmeasured",
+        reason: "missing-font-resource",
+        fonts: [{ family: "Aptos", weight: 400, style: "normal" }],
+      },
     );
+    assert.equal(column.report.fonts[0]?.hasResource, false);
     assert.deepEqual((await validatePptx(column.pptx)).errors, []);
   });
 
@@ -2775,9 +2789,12 @@ describe("public layout entry", () => {
                 Text,
                 {
                   id: "small-text",
-                  width: 100,
-                  height: 60,
-                  style: { fontFamily: cjkFont, fontSize: 20 },
+                  style: {
+                    width: 100,
+                    height: 60,
+                    fontFamily: cjkFont,
+                    fontSize: 20,
+                  },
                 },
                 "中",
               ),
@@ -2785,17 +2802,19 @@ describe("public layout entry", () => {
                 Text,
                 {
                   id: "large-text",
-                  width: 100,
-                  height: 60,
-                  style: { fontFamily: cjkFont, fontSize: 40 },
+                  style: {
+                    width: 100,
+                    height: 60,
+                    fontFamily: cjkFont,
+                    fontSize: 40,
+                  },
                 },
                 "中",
               ),
             ),
             createElement(Shape, {
               id: "following-block",
-              width: 100,
-              height: 20,
+              style: { width: 100, height: 20 },
             }),
           ),
         ),
@@ -2834,9 +2853,7 @@ describe("public layout entry", () => {
         Text,
         {
           id: testId,
-          width: 100,
-          height: 60,
-          style: { fontFamily: cjkFont, fontSize },
+          style: { width: 100, height: 60, fontFamily: cjkFont, fontSize },
         },
         "中",
       );
@@ -2877,9 +2894,7 @@ describe("public layout entry", () => {
               ),
               createElement(Shape, {
                 id: "following-block",
-                width: 100,
-                height: 20,
-                style: { flexShrink: 0 },
+                style: { width: 100, height: 20, flexShrink: 0 },
               }),
             ),
           ),
@@ -3045,9 +3060,7 @@ describe("public layout entry", () => {
       ),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some(
-          ({ code }) => code === "unsupported-baseline-context",
-        ),
+        error.diagnostics.some(({ code }) => code === "invalid-structure"),
     );
   });
 
@@ -3073,9 +3086,12 @@ describe("public layout entry", () => {
               Text,
               {
                 id: "fixed-text",
-                width: 100,
-                height: 60,
-                style: { fontFamily: cjkFont, fontSize: 20 },
+                style: {
+                  width: 100,
+                  height: 60,
+                  fontFamily: cjkFont,
+                  fontSize: 20,
+                },
               },
               "中",
             ),
@@ -3083,9 +3099,12 @@ describe("public layout entry", () => {
               Text,
               {
                 id: "content-sized-text",
-                width: 100,
-                height: "auto",
-                style: { fontFamily: cjkFont, fontSize: 20 },
+                style: {
+                  width: 100,
+                  height: "auto",
+                  fontFamily: cjkFont,
+                  fontSize: 20,
+                },
               },
               "中",
             ),
@@ -3123,9 +3142,9 @@ describe("public layout entry", () => {
     const columnText = (testId: string, minHeight?: number) =>
       createElement(Text, {
         id: testId,
-        width: 20,
-        height: "auto",
         style: {
+          width: 20,
+          height: "auto",
           fontFamily: cjkFont,
           fontSize: 20,
           ...(minHeight === undefined ? {} : { minHeight }),
@@ -3195,19 +3214,16 @@ describe("public layout entry", () => {
         },
       ],
     );
-    assert.deepEqual(
-      result.report.diagnostics.map(({ code, path }) => ({ code, path })),
-      [
-        {
-          code: "overset",
-          path: "deck/slide[column-min-content]/box[released-column]/text[released-column-a]",
-        },
-        {
-          code: "overset",
-          path: "deck/slide[column-min-content]/box[released-column]/text[released-column-b]",
-        },
-      ],
-    );
+    for (const id of ["released-column-a", "released-column-b"]) {
+      const metrics = result
+        .slide("column-min-content")
+        .get("released-column")
+        .get(id).textMetrics;
+      assert.equal(metrics?.status, "measured");
+      if (metrics?.status === "measured") {
+        assert.equal(metrics.fits, false);
+      }
+    }
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.deepEqual(
@@ -3279,8 +3295,8 @@ describe("public layout entry", () => {
               gridTemplateRows: "minmax(0px, 1fr) 1fr",
             }}
           >
-            <Shape id="row-zero-first" width={20} height={200} />
-            <Shape id="row-zero-second" width={20} height={10} />
+            <Shape id="row-zero-first" style={{ width: 20, height: 200 }} />
+            <Shape id="row-zero-second" style={{ width: 20, height: 10 }} />
           </Box>
         </Slide>
         <Slide id="fr-row-auto-content-minimum">
@@ -3293,8 +3309,8 @@ describe("public layout entry", () => {
               gridTemplateRows: "minmax(auto, 1fr) 1fr",
             }}
           >
-            <Shape id="row-auto-first" width={20} height={200} />
-            <Shape id="row-auto-second" width={20} height={10} />
+            <Shape id="row-auto-first" style={{ width: 20, height: 200 }} />
+            <Shape id="row-auto-second" style={{ width: 20, height: 10 }} />
           </Box>
         </Slide>
       </Deck>,
@@ -3326,8 +3342,14 @@ describe("public layout entry", () => {
       ],
     );
     assert.deepEqual(
-      result.report.diagnostics.map(({ code }) => code),
-      ["grid-item-overflow", "grid-overflow", "grid-item-overflow"],
+      result.slide("fr-row-zero-minimum-overflow").get("row-zero-first")
+        .gridArea,
+      { x: 0, y: 0, width: 100, height: 50 },
+    );
+    assert.deepEqual(
+      result.slide("fr-row-auto-content-minimum").get("row-auto-first")
+        .gridArea,
+      { x: 0, y: 0, width: 100, height: 200 },
     );
 
     const file = await validatePptx(result.pptx);
@@ -3377,8 +3399,8 @@ describe("public layout entry", () => {
           gridTemplateRows: "1fr 1fr",
         }}
       >
-        <Shape id={`${testId}-first`} width={20} height={20} />
-        <Shape id={`${testId}-second`} width={20} height={20} />
+        <Shape id={`${testId}-first`} style={{ width: 20, height: 20 }} />
+        <Shape id={`${testId}-second`} style={{ width: 20, height: 20 }} />
       </Box>
     );
     const result = await build(
@@ -3413,8 +3435,14 @@ describe("public layout entry", () => {
                 gridTemplateRows: "1fr 1fr",
               }}
             >
-              <Shape id="absolute-inner-grid-first" width={20} height={20} />
-              <Shape id="absolute-inner-grid-second" width={20} height={20} />
+              <Shape
+                id="absolute-inner-grid-first"
+                style={{ width: 20, height: 20 }}
+              />
+              <Shape
+                id="absolute-inner-grid-second"
+                style={{ width: 20, height: 20 }}
+              />
             </Box>
           </Box>
         </Slide>
@@ -3429,8 +3457,14 @@ describe("public layout entry", () => {
                 gridTemplateRows: "auto auto",
               }}
             >
-              <Shape id="content-inner-grid-first" width={20} height={20} />
-              <Shape id="content-inner-grid-second" width={20} height={20} />
+              <Shape
+                id="content-inner-grid-first"
+                style={{ width: 20, height: 20 }}
+              />
+              <Shape
+                id="content-inner-grid-second"
+                style={{ width: 20, height: 20 }}
+              />
             </Box>
           </Box>
         </Slide>
@@ -3486,13 +3520,11 @@ describe("public layout entry", () => {
           >
             <Shape
               id="percent-width-in-area"
-              height={20}
-              style={{ width: "50%", margin: [0, 10] }}
+              style={{ width: "50%", height: 20, margin: [0, 10] }}
             />
             <Shape
               id="percent-height-in-area"
-              width={20}
-              style={{ height: "50%", margin: [10, 0] }}
+              style={{ width: 20, height: "50%", margin: [10, 0] }}
             />
           </Box>
         </Slide>
@@ -3508,18 +3540,22 @@ describe("public layout entry", () => {
           >
             <Shape
               id="relative-first-cell"
-              width={20}
-              height={10}
-              style={{ position: "relative", left: "10%", top: "10%" }}
-            />
-            <Shape
-              id="relative-spanning-area"
-              width={20}
-              height={10}
               style={{
                 position: "relative",
                 left: "10%",
                 top: "10%",
+                width: 20,
+                height: 10,
+              }}
+            />
+            <Shape
+              id="relative-spanning-area"
+              style={{
+                position: "relative",
+                left: "10%",
+                top: "10%",
+                width: 20,
+                height: 10,
                 gridColumn: "2 / span 2",
                 gridRow: "2 / span 2",
               }}
@@ -3567,7 +3603,15 @@ describe("public layout entry", () => {
   });
 
   it("distinguishes upper-bound measurement of natural width from precise layout allocation in Table", async () => {
-    const table = (testId: string, style: { readonly width?: number } = {}) => (
+    const table = (
+      testId: string,
+      style: {
+        readonly width?: number;
+        readonly position?: "absolute";
+        readonly left?: number;
+        readonly top?: number;
+      } = {},
+    ) => (
       <Table
         id={testId}
         columns={[80]}
@@ -3580,7 +3624,9 @@ describe("public layout entry", () => {
     );
     const result = await build(
       <Deck width={600} height={400}>
-        <Slide id="table-natural-control">{table("natural")}</Slide>
+        <Slide id="table-natural-control">
+          {table("natural", { position: "absolute", left: 0, top: 0 })}
+        </Slide>
         <Slide id="table-flex-natural">
           <Box
             style={{
@@ -3592,7 +3638,7 @@ describe("public layout entry", () => {
             }}
           >
             {table("flex-natural")}
-            <Shape id="flex-after-natural" width={100} height={20} />
+            <Shape id="flex-after-natural" style={{ width: 100, height: 20 }} />
           </Box>
         </Slide>
         <Slide id="table-block-stretch">
@@ -3611,7 +3657,10 @@ describe("public layout entry", () => {
             }}
           >
             {table("explicit", { width: 120 })}
-            <Shape id="flex-after-explicit" width={100} height={20} />
+            <Shape
+              id="flex-after-explicit"
+              style={{ width: 100, height: 20 }}
+            />
           </Box>
         </Slide>
       </Deck>,
@@ -3622,8 +3671,8 @@ describe("public layout entry", () => {
         slide?.objects.map(({ authorId: testId, box, table }) => ({
           id: testId,
           box,
-          columns: table?.columnWidths,
-          rows: table?.rowHeights,
+          columns: table?.columns,
+          rows: table?.rows.map((r) => r.height),
         })),
       ),
       [
@@ -3738,36 +3787,49 @@ describe("public layout entry", () => {
     );
   });
 
-  it("defaults Shape.text to middle anchor and provides text baseline only for valid top anchor", async () => {
+  it("defaults Shape text to middle anchor and provides text baseline only for valid top anchor", async () => {
     const ordinary = await build(
       <Deck width={400} height={200}>
         <Slide id="shape-text-effective-anchors">
           <Box style={{ display: "flex", width: 210, height: 100, gap: 10 }}>
             <Shape
               id="default-middle-shape"
-              width={100}
-              height={100}
-              text="中"
-              textStyle={{ fontFamily: cjkFont, fontSize: 20 }}
-              style={{ padding: 10 }}
-            />
+              style={{
+                width: 100,
+                height: 100,
+                padding: 10,
+                fontFamily: cjkFont,
+                fontSize: 20,
+              }}
+            >
+              中
+            </Shape>
             <Shape
               id="explicit-top-shape"
-              width={100}
-              height={100}
-              text="中"
-              textStyle={{
+              style={{
+                width: 100,
+                height: 100,
+                padding: 10,
                 fontFamily: cjkFont,
                 fontSize: 20,
                 verticalAlign: "top",
               }}
-              style={{ padding: 10 }}
-            />
+            >
+              中
+            </Shape>
           </Box>
         </Slide>
       </Deck>,
     );
-    assert.deepEqual(ordinary.report.diagnostics, []);
+    const ordinarySlide = ordinary.slide("shape-text-effective-anchors");
+    for (const id of ["default-middle-shape", "explicit-top-shape"]) {
+      const metrics = ordinarySlide.get(id).textMetrics;
+      assert.equal(metrics?.status, "measured");
+      if (metrics?.status === "measured") {
+        assert.equal(metrics.fits, true);
+      }
+    }
+    assert.equal(ordinary.report.fonts[0]?.hasResource, true);
     const ordinaryXml = strFromU8(
       unzipSync(ordinary.pptx)["ppt/slides/slide1.xml"]!,
     );
@@ -3790,9 +3852,9 @@ describe("public layout entry", () => {
           <Box style={{ display: "flex", alignItems: "baseline", width: 300 }}>
             <Text
               id="top-baseline-text"
-              width={100}
-              height={100}
               style={{
+                width: 100,
+                height: 100,
                 fontFamily: cjkFont,
                 fontSize: 20,
                 verticalAlign: "top",
@@ -3802,15 +3864,16 @@ describe("public layout entry", () => {
             </Text>
             <Shape
               id="top-baseline-shape"
-              width={100}
-              height={100}
-              text="中"
-              textStyle={{
+              style={{
+                width: 100,
+                height: 100,
                 fontFamily: cjkFont,
                 fontSize: 40,
                 verticalAlign: "top",
               }}
-            />
+            >
+              中
+            </Shape>
           </Box>
         </Slide>
       </Deck>,
@@ -3843,9 +3906,9 @@ describe("public layout entry", () => {
             >
               <Text
                 id="top-text"
-                width={100}
-                height={100}
                 style={{
+                  width: 100,
+                  height: 100,
                   fontFamily: cjkFont,
                   fontSize: 20,
                   verticalAlign: "top",
@@ -3855,11 +3918,15 @@ describe("public layout entry", () => {
               </Text>
               <Shape
                 id="middle-shape"
-                width={100}
-                height={100}
-                text="中"
-                textStyle={{ fontFamily: cjkFont, fontSize: 40 }}
-              />
+                style={{
+                  width: 100,
+                  height: 100,
+                  fontFamily: cjkFont,
+                  fontSize: 40,
+                }}
+              >
+                中
+              </Shape>
             </Box>
           </Slide>
         </Deck>,
@@ -3868,7 +3935,7 @@ describe("public layout entry", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           ({ code, path }) =>
-            code === "baseline-measurement-unavailable" &&
+            code === "invalid-structure" &&
             path.endsWith("shape[middle-shape]"),
         ),
     );

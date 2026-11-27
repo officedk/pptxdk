@@ -18,7 +18,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * Serializes `LinearGradient` and `RadialGradient` author values back into `linearGradient(...)`
- * and `radialGradient(...)` calls so gradients in `Slide.background` and `VisualStyle.backgroundImage`
+ * and `radialGradient(...)` calls so gradients in `Slide.background` and `VisualStyle.background`
  * round-trip idiomatically.
  */
 export function serializeGradientValue(
@@ -34,7 +34,7 @@ export function serializeGradientValue(
   const definedKeys = Object.keys(value).filter(
     (key) => value[key] !== undefined,
   );
-  const subPath = ctx.path.includes("@") ? undefined : "@style.backgroundImage";
+  const subPath = ctx.path.includes("@") ? undefined : "@style.background";
 
   if (type === "linear-gradient") {
     if (

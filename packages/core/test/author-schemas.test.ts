@@ -9,12 +9,15 @@ import {
   layoutStyleSchema,
   linkTargetSchema,
   paddingStyleSchema,
+  placeholderSizeSchema,
+  placeholderStyleSchema,
   type AuthorId,
   type LayoutLength,
   type LayoutSpacing,
   type LayoutStyle,
   type LinkTarget,
   type PaddingStyle,
+  type PlaceholderSize,
 } from "@pptxdk/core";
 import { parseLinkTarget, readAuthorId } from "@pptxdk/core/capability";
 import { describe, it } from "vitest";
@@ -32,7 +35,7 @@ describe("Slice 1: core author primitives & layout schemas", () => {
         () => readAuthorId(invalid, "deck/slide[1]/text[1]"),
         (error: unknown) => {
           assert(error instanceof BuildError);
-          assert.equal(error.diagnostics[0]?.code, "invalid-author-id");
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
           assert.equal(error.diagnostics[0]?.path, "deck/slide[1]/text[1]");
           return true;
         },
@@ -141,6 +144,29 @@ describe("Slice 1: core author primitives & layout schemas", () => {
       layoutStyleSchema.safeParse({ unknownLayoutProp: 1 }).success,
       false,
     );
+
+    for (const size of ["full", "half", "quarter"] as const) {
+      const parsed: PlaceholderSize = placeholderSizeSchema.parse(size);
+      assert.equal(parsed, size);
+    }
+    assert.equal(placeholderSizeSchema.safeParse("third").success, false);
+
+    const phStyle = placeholderStyleSchema.parse({
+      position: "absolute",
+      left: 60,
+      top: 100,
+      width: 480,
+      height: 320,
+      background: "#FFFFFF",
+      border: { color: "#112233", width: 1, style: "solid" },
+      boxShadow: "none",
+      flipH: true,
+      flipV: false,
+      fontSize: 18,
+    });
+    assert.equal(phStyle.left, 60);
+    assert.equal(phStyle.flipH, true);
+    assert.equal(phStyle.boxShadow, "none");
   });
 
   it("validates LinkTarget via linkTargetSchema and parseLinkTarget", () => {

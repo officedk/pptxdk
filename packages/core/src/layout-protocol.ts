@@ -1,11 +1,20 @@
-import { BuildError } from "#/diagnostics.ts";
+import { BuildError, toBuildDiagnostic } from "#/diagnostics.ts";
 import type {
   CapabilityLayoutMeasurement,
-  Diagnostic,
-  GeometryBox,
   LayoutLength,
   LayoutStyle,
+  Rect,
 } from "#/types.ts";
+
+export type LayoutGridTracks = {
+  readonly columnWidths: readonly number[];
+  readonly rowHeights: readonly number[];
+};
+
+export type LayoutCommitMetadata = {
+  readonly gridTracks?: LayoutGridTracks;
+  readonly gridArea?: Rect;
+};
 
 export type LayoutEdges = {
   readonly top: number;
@@ -17,6 +26,9 @@ export type LayoutEdges = {
 export type LayoutMeasurementRequest = {
   readonly availableWidth?: number;
   readonly widthMode?: "at-most" | "exactly";
+  readonly availableHeight?: number;
+  readonly heightMode?: "at-most" | "exactly";
+  readonly purpose?: "baseline" | "layout";
 };
 
 export type LayoutNodeMeasure = (
@@ -28,10 +40,8 @@ export type LayoutNodeSpec = {
   readonly style: LayoutStyle;
   readonly isContainer: boolean;
   readonly propagatesBaseline?: boolean;
-  readonly contractWidth?: LayoutLength;
-  readonly contractHeight?: LayoutLength;
-  readonly contractX?: number;
-  readonly contractY?: number;
+  readonly preservesIntrinsicSize?: boolean;
+  readonly contentMinimumsEnforced?: boolean;
   readonly padding?: LayoutEdges;
   readonly measure?: LayoutNodeMeasure;
 };
@@ -41,8 +51,7 @@ export type LayoutSolverNode = {
   readonly style: LayoutStyle;
   readonly isRoot: boolean;
   readonly isContainer: boolean;
-  readonly contractWidth?: LayoutLength;
-  readonly contractHeight?: LayoutLength;
+  readonly contentMinimumsEnforced?: boolean;
   readonly padding?: LayoutEdges;
   readonly children: readonly LayoutSolverNode[];
 };
@@ -89,6 +98,8 @@ export type LayoutSolverPort = {
     node: LayoutSolverNode,
     position: { readonly x: number; readonly y: number },
   ): void;
+  setGridTracks?(node: LayoutSolverNode, tracks: LayoutGridTracks): void;
+  setGridCellArea?(node: LayoutSolverNode, area: Rect): void;
 };
 
 /**
@@ -127,9 +138,7 @@ export type CustomContainerMode = {
     parentStyle: LayoutStyle,
     path: string,
   ): void;
-  createSolver(
-    warnOnce: (path: string, code: string, message: string) => void,
-  ): CustomContainerSolver;
+  createSolver(): CustomContainerSolver;
 };
 
 export type LayoutSolver = {
@@ -139,18 +148,29 @@ export type LayoutSolver = {
   }): LayoutSolverNode;
   createNode(spec: LayoutNodeSpec, parent: LayoutSolverNode): LayoutSolverNode;
   appendChild(parent: LayoutSolverNode, child: LayoutSolverNode): void;
-  requiresLooseLayout(style: LayoutStyle): boolean;
-  positionLooseGeometry(node: LayoutSolverNode): void;
-  solve(onCommit: (node: LayoutSolverNode, box: GeometryBox) => void): void;
+  solve(
+    onCommit: (
+      node: LayoutSolverNode,
+      box: Rect,
+      meta?: LayoutCommitMetadata,
+    ) => void,
+  ): void;
 };
 
 function failLayoutProtocol(
   path: string,
   code: string,
   message: string,
+  field?: string,
 ): never {
-  const diagnostic: Diagnostic = { severity: "error", path, code, message };
-  throw new BuildError([diagnostic]);
+  throw new BuildError([
+    toBuildDiagnostic(
+      path,
+      code,
+      message,
+      field === undefined ? undefined : { field },
+    ),
+  ]);
 }
 
 export function parseLayoutNumber(
@@ -163,6 +183,7 @@ export function parseLayoutNumber(
       path,
       "invalid-layout-style",
       `${name} must be a finite pixel number`,
+      `style.${name}`,
     );
   }
   return value;

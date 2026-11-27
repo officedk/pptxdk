@@ -49,18 +49,18 @@ describe("slide capabilities resolved contract", () => {
     const painted = paint(resolution);
     assert.equal(painted.pages.length, 4);
 
-    assert.deepEqual(painted.pages[0]?.diagnostics, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
     assert.ok(painted.pages[0]?.png !== undefined);
     assert.match(painted.pages[0]?.svg ?? "", /fill="white"/u);
 
-    assert.deepEqual(painted.pages[1]?.diagnostics, []);
+    assert.deepEqual(painted.pages[1]?.errors, []);
     assert.ok(painted.pages[1]?.png !== undefined);
     assert.match(painted.pages[1]?.svg ?? "", /fill="#1E293B"/u);
 
-    // Gradient and image backgrounds also render cleanly with zero diagnostics.
+    // Gradient and image backgrounds also render cleanly with zero errors.
     for (const pageIndex of [2, 3]) {
       const page = painted.pages[pageIndex]!;
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png !== undefined);
     }
     assert.match(painted.pages[2]?.svg ?? "", /<linearGradient/u);
@@ -104,7 +104,7 @@ describe("slide capabilities resolved contract", () => {
         error instanceof BuildError &&
         error.diagnostics.some(
           (diag) =>
-            diag.code === "invalid-slide-background" &&
+            diag.code === "invalid-prop" &&
             diag.path === "deck/slide[bad-bg]/background",
         ),
     );

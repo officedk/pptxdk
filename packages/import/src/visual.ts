@@ -493,6 +493,7 @@ export function readBlipFill(
 }
 
 export type ImportedLineBorder = {
+  readonly noFill?: boolean;
   readonly borderColor?: ColorValue;
   readonly borderWidth?: number;
   readonly borderStyle?: "solid" | "dashed" | "dotted";
@@ -611,7 +612,10 @@ export function readLineBorder(
     }
   }
 
-  if (hasNoFill || borderColor === undefined) {
+  if (hasNoFill) {
+    return { noFill: true };
+  }
+  if (borderColor === undefined) {
     return {};
   }
 
@@ -734,6 +738,8 @@ function readBasicPlaceholderAppearance(
 } {
   let prstGeomName: string | undefined;
   let roundRectAdj: number | undefined;
+  let hasNoFill = false;
+  let hasEmptyEffectLst = false;
   let backgroundColor: ColorValue | undefined;
   let backgroundImage: unknown;
   let opacity: number | undefined;
@@ -763,6 +769,7 @@ function readBasicPlaceholderAppearance(
         break;
       }
       case "noFill":
+        hasNoFill = true;
         break;
       case "solidFill":
         backgroundColor = readDrawingColor(child, location, diagnostics);
@@ -782,6 +789,7 @@ function readBasicPlaceholderAppearance(
         border = readLineBorder(child, location, diagnostics);
         break;
       case "effectLst":
+        hasEmptyEffectLst = child.element.children.length === 0;
         effects = readEffectList(child, location, diagnostics);
         break;
       case "extLst":
@@ -802,22 +810,32 @@ function readBasicPlaceholderAppearance(
       : parsedPrst.data
     : undefined;
 
+  const background =
+    backgroundColor ?? backgroundImage ?? (hasNoFill ? "none" : undefined);
+  const resolvedBorder =
+    border.borderColor !== undefined
+      ? {
+          color: border.borderColor,
+          ...(border.borderWidth !== undefined
+            ? { width: border.borderWidth }
+            : {}),
+          ...(border.borderStyle !== undefined
+            ? { style: border.borderStyle }
+            : {}),
+        }
+      : border.noFill === true
+        ? "none"
+        : undefined;
+  const resolvedBoxShadow =
+    effects.boxShadow ??
+    (hasEmptyEffectLst && effects.softEdge === undefined ? "none" : undefined);
   const style: Record<string, unknown> = {
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
-    ...(backgroundImage === undefined ? {} : { backgroundImage }),
-    ...(border.borderColor === undefined
-      ? {}
-      : { borderColor: border.borderColor }),
-    ...(border.borderWidth === undefined
-      ? {}
-      : { borderWidth: border.borderWidth }),
-    ...(border.borderStyle === undefined
-      ? {}
-      : { borderStyle: border.borderStyle }),
+    ...(background === undefined ? {} : { background }),
+    ...(resolvedBorder === undefined ? {} : { border: resolvedBorder }),
     ...(opacity === undefined ? {} : { opacity }),
-    ...(effects.boxShadow === undefined
+    ...(resolvedBoxShadow === undefined
       ? {}
-      : { boxShadow: effects.boxShadow }),
+      : { boxShadow: resolvedBoxShadow }),
     ...(effects.softEdge === undefined ? {} : { softEdge: effects.softEdge }),
   };
 
@@ -851,6 +869,8 @@ export function readPlaceholderSpPrVisuals(
 
   const xfrm = spPr.child(A_NS, "xfrm");
   if (xfrm !== undefined) {
+    const hasExplicitFlipH = xfrm.element.hasAttribute("flipH");
+    const hasExplicitFlipV = xfrm.element.hasAttribute("flipV");
     if (
       xfrm.child(A_NS, "off") !== undefined &&
       xfrm.child(A_NS, "ext") !== undefined
@@ -862,20 +882,23 @@ export function readPlaceholderSpPrVisuals(
         width = tf.width;
         height = tf.height;
         rotate = tf.rotate;
-        flipH = tf.flipH;
-        flipV = tf.flipV;
+        if (hasExplicitFlipH) flipH = Boolean(tf.flipH);
+        if (hasExplicitFlipV) flipV = Boolean(tf.flipV);
         fallbackUnits = { w: tf.cxEmu, h: tf.cyEmu };
       }
     } else {
-      const parsedXfrm = transformAttributesFragmentSchema.safeParse(
-        xfrm.attrsObject(["rot", "flipH", "flipV"]),
-      );
+      const rawXfrm = xfrm.attrsObject(["rot", "flipH", "flipV"]);
+      const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
       if (parsedXfrm.success) {
         if (parsedXfrm.data.rot !== undefined && parsedXfrm.data.rot !== 0) {
           rotate = parsedXfrm.data.rot / 60_000;
         }
-        if (parsedXfrm.data.flipH === true) flipH = true;
-        if (parsedXfrm.data.flipV === true) flipV = true;
+        if (hasExplicitFlipH && parsedXfrm.data.flipH !== undefined) {
+          flipH = parsedXfrm.data.flipH;
+        }
+        if (hasExplicitFlipV && parsedXfrm.data.flipV !== undefined) {
+          flipV = parsedXfrm.data.flipV;
+        }
       }
     }
   }
@@ -920,21 +943,32 @@ export function readPlaceholderSpPrVisuals(
       style[key] = value;
     }
   }
+  if (x !== undefined && y !== undefined) {
+    style["position"] = "absolute";
+    style["left"] = x;
+    style["top"] = y;
+  }
+  if (width !== undefined) {
+    style["width"] = width;
+  }
+  if (height !== undefined) {
+    style["height"] = height;
+  }
   if (borderRadius !== undefined) {
     style["borderRadius"] = borderRadius;
   }
   if (rotate !== undefined) {
     style["rotate"] = rotate;
   }
+  if (flipH !== undefined) {
+    style["flipH"] = flipH;
+  }
+  if (flipV !== undefined) {
+    style["flipV"] = flipV;
+  }
 
   return {
-    ...(x === undefined ? {} : { x }),
-    ...(y === undefined ? {} : { y }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
     ...(exportedGeometry === undefined ? {} : { geometry: exportedGeometry }),
-    ...(flipH ? { flipH: true } : {}),
-    ...(flipV ? { flipV: true } : {}),
     ...(Object.keys(style).length === 0 ? {} : { style }),
   };
 }

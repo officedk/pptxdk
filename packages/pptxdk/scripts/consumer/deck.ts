@@ -20,13 +20,15 @@ export default deck({
   }),
 }).append(
   slide({ id: "intro" }).append(
-    shape({
+    shape("Packed release", {
       id: "title",
-      x: 24,
-      y: 24,
-      width: 360,
-      height: 80,
-      text: "Packed release",
+      style: {
+        position: "absolute",
+        left: 24,
+        top: 24,
+        width: 360,
+        height: 80,
+      },
     }),
   ),
 );

@@ -157,11 +157,14 @@ describe("Transition Zod schemas", () => {
           createElement(Shape, {
             id: "hero-1",
             morphKey: hero,
-            x: 40,
-            y: 40,
-            width: 100,
-            height: 60,
-            fill: "#2563EB",
+            style: {
+              position: "absolute",
+              left: 40,
+              top: 40,
+              width: 100,
+              height: 60,
+              background: "#2563EB",
+            },
           }),
         ),
         createElement(
@@ -170,11 +173,14 @@ describe("Transition Zod schemas", () => {
           createElement(Shape, {
             id: "hero-2",
             morphKey: hero,
-            x: 240,
-            y: 80,
-            width: 140,
-            height: 80,
-            fill: "#059669",
+            style: {
+              position: "absolute",
+              left: 240,
+              top: 80,
+              width: 140,
+              height: 80,
+              background: "#059669",
+            },
           }),
         ),
         createElement(
@@ -188,11 +194,14 @@ describe("Transition Zod schemas", () => {
           },
           createElement(Shape, {
             id: "outro",
-            x: 100,
-            y: 100,
-            width: 120,
-            height: 60,
-            fill: "#D97706",
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 100,
+              width: 120,
+              height: 60,
+              background: "#D97706",
+            },
           }),
         ),
       ),
@@ -213,22 +222,28 @@ describe("Transition Zod schemas", () => {
         shape({
           id: "hero-1",
           morphKey: hero,
-          x: 40,
-          y: 40,
-          width: 100,
-          height: 60,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 100,
+            height: 60,
+            background: "#2563EB",
+          },
         }),
       ),
       slide({ id: "s2", layout: morphLayout, background: "#FFFFFF" }).append(
         shape({
           id: "hero-2",
           morphKey: hero,
-          x: 240,
-          y: 80,
-          width: 140,
-          height: 80,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 80,
+            width: 140,
+            height: 80,
+            background: "#059669",
+          },
         }),
       ),
       slide({
@@ -240,11 +255,14 @@ describe("Transition Zod schemas", () => {
       }).append(
         shape({
           id: "outro",
-          x: 100,
-          y: 100,
-          width: 120,
-          height: 60,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 100,
+            top: 100,
+            width: 120,
+            height: 60,
+            background: "#D97706",
+          },
         }),
       ),
     );
@@ -257,7 +275,7 @@ describe("Transition Zod schemas", () => {
     const impEmitted = emit(impResolution);
     const jsxPainted = paint(jsxResolution);
     for (const page of jsxPainted.pages) {
-      assert.deepEqual(page.diagnostics, []);
+      assert.deepEqual(page.errors, []);
       assert.ok(page.png instanceof Uint8Array);
     }
 
@@ -275,32 +293,41 @@ describe("Transition Zod schemas", () => {
         shape({
           id: "hero-1",
           morphKey: hero,
-          x: 40,
-          y: 40,
-          width: 100,
-          height: 60,
-          fill: "#2563EB",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 100,
+            height: 60,
+            background: "#2563EB",
+          },
         }),
       ),
       slide({ id: "s2", background: "#FFFFFF" }).append(
         shape({
           id: "hero-2",
           morphKey: hero,
-          x: 240,
-          y: 80,
-          width: 140,
-          height: 80,
-          fill: "#059669",
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 80,
+            width: 140,
+            height: 80,
+            background: "#059669",
+          },
         }),
       ),
       slide({ id: "s3", background: "#FFFFFF" }).append(
         shape({
           id: "outro",
-          x: 100,
-          y: 100,
-          width: 120,
-          height: 60,
-          fill: "#D97706",
+          style: {
+            position: "absolute",
+            left: 100,
+            top: 100,
+            width: 120,
+            height: 60,
+            background: "#D97706",
+          },
         }),
       ),
     );
@@ -349,24 +376,37 @@ describe("Transition Zod schemas", () => {
       () => emit(jsxResolution, { target: targets.baselineOnly }),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "forbidden-mechanism"),
+        error.diagnostics.some((d) => d.code === "target-violation"),
     );
 
     // Effective Morph from SlideLayout triggers Morph continuity kind-matching on the slide.
     const layoutMorphMismatch = deck({ width: 640, height: 360 }).append(
       slideMaster({ id: "m1" }).append(slideLayout(morphLayout)),
       slide({ id: "src", layout: morphLayout }).append(
-        shape({ id: "a", morphKey: hero, x: 20, y: 20, width: 60, height: 40 }),
+        shape({
+          id: "a",
+          morphKey: hero,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
+        }),
       ),
       slide({ id: "dst", layout: morphLayout }).append(
         image({
           id: "b",
           src: png1x1,
           morphKey: hero,
-          x: 20,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
       ),
     );
@@ -374,7 +414,10 @@ describe("Transition Zod schemas", () => {
       () => resolve(layoutMorphMismatch),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "morph-object-kind-mismatch"),
+        error.diagnostics.some(
+          (d) =>
+            d.code === "invalid-continuity" && d.reason === "kind-mismatch",
+        ),
     );
 
     // Effective Morph from SlideMaster triggers Morph continuity kind-matching unless overridden on Slide.
@@ -385,17 +428,30 @@ describe("Transition Zod schemas", () => {
         transition: transitions.morph({ fallback: transitions.fade() }),
       }).append(slideLayout(masterMorphLayout)),
       slide({ id: "src", layout: masterMorphLayout }).append(
-        shape({ id: "a", morphKey: hero, x: 20, y: 20, width: 60, height: 40 }),
+        shape({
+          id: "a",
+          morphKey: hero,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
+        }),
       ),
       slide({ id: "dst", layout: masterMorphLayout }).append(
         image({
           id: "b",
           src: png1x1,
           morphKey: hero,
-          x: 20,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
       ),
     );
@@ -403,7 +459,10 @@ describe("Transition Zod schemas", () => {
       () => resolve(masterMorphMismatch),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "morph-object-kind-mismatch"),
+        error.diagnostics.some(
+          (d) =>
+            d.code === "invalid-continuity" && d.reason === "kind-mismatch",
+        ),
     );
 
     // Overriding master Morph with fade on the Slide suppresses Morph continuity kind-matching.
@@ -417,7 +476,17 @@ describe("Transition Zod schemas", () => {
         layout: masterMorphLayout,
         transition: transitions.fade(),
       }).append(
-        shape({ id: "a", morphKey: hero, x: 20, y: 20, width: 60, height: 40 }),
+        shape({
+          id: "a",
+          morphKey: hero,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
+        }),
       ),
       slide({
         id: "dst",
@@ -428,10 +497,13 @@ describe("Transition Zod schemas", () => {
           id: "b",
           src: png1x1,
           morphKey: hero,
-          x: 20,
-          y: 20,
-          width: 60,
-          height: 40,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 60,
+            height: 40,
+          },
         }),
       ),
     );
@@ -487,10 +559,28 @@ describe("Transition Zod schemas", () => {
         advanceAfter: 3000,
       }).append(slideLayout(inheritedLayout), slideLayout(morphLayout)),
       slide({ id: "s1", layout: inheritedLayout }).append(
-        shape({ id: "box-1", x: 40, y: 40, width: 100, height: 60 }),
+        shape({
+          id: "box-1",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 100,
+            height: 60,
+          },
+        }),
       ),
       slide({ id: "s2", layout: morphLayout }).append(
-        shape({ id: "box-2", x: 140, y: 80, width: 100, height: 60 }),
+        shape({
+          id: "box-2",
+          style: {
+            position: "absolute",
+            left: 140,
+            top: 80,
+            width: 100,
+            height: 60,
+          },
+        }),
       ),
       slide({
         id: "s3",
@@ -501,7 +591,18 @@ describe("Transition Zod schemas", () => {
           fallback: transitions.strips({ direction: "rightUp" }),
         }),
         advanceAfter: 1500,
-      }).append(shape({ id: "box-3", x: 240, y: 120, width: 100, height: 60 })),
+      }).append(
+        shape({
+          id: "box-3",
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 120,
+            width: 100,
+            height: 60,
+          },
+        }),
+      ),
     );
 
     const initialBytes = new Uint8Array(emit(resolve(initialDoc)).pptx);

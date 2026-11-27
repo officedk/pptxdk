@@ -2,7 +2,7 @@ import {
   CapabilityError,
   type CapabilityInput,
   type Extension,
-  type ResolvedSlide,
+  type SlideResolution,
   type SlideCapabilityModule,
   type SlideEmitOutput,
 } from "@pptxdk/core/capability";
@@ -509,7 +509,7 @@ export const transitionCapability = {
           }
         : compileTransition(transitionValue, advanceAfter);
 
-    const resolved: ResolvedSlide = {
+    const resolved: SlideResolution = {
       extensions: compiled.extensions,
       ...(compiled.observation === undefined
         ? {}

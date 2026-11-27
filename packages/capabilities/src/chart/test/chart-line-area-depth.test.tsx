@@ -43,14 +43,19 @@ describe("line and area depth", () => {
         <Slide id="line-depth">
           <Chart
             id="line-depth"
-            x={24}
-            y={24}
-            width={560}
-            height={340}
             title="Quarterly trend"
             displayBlanksAs="span"
             legend="bottom"
-            style={{ fontFamily: "Aptos", fontSize: "12pt", color: "#112233" }}
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 560,
+              height: 340,
+              fontFamily: "Aptos",
+              fontSize: "12pt",
+              color: "#112233",
+            }}
             axes={{
               category: {
                 kind: "category",
@@ -204,10 +209,13 @@ describe("line and area depth", () => {
     ) =>
       documentChart({
         id,
-        x,
-        y,
-        width: 280,
-        height: 150,
+        style: {
+          position: "absolute",
+          left: x,
+          top: y,
+          width: 280,
+          height: 150,
+        },
         displayBlanksAs,
         groups: [
           {
@@ -313,10 +321,13 @@ describe("line and area depth", () => {
           documentSlide({ id }).append(
             documentChart({
               id,
-              x: 0,
-              y: 0,
-              width: 220,
-              height: 140,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 220,
+                height: 140,
+              },
               groups: [
                 {
                   kind: "area",
@@ -339,7 +350,7 @@ describe("line and area depth", () => {
       ),
       (error: unknown) => {
         assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-data");
+        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
         assert.match(
           error.diagnostics[0]?.path ?? "",
           /Chart\.groups\[0\]\.series\[0\]\.points\[2\]\.color/u,
@@ -359,10 +370,13 @@ describe("line and area depth", () => {
         <Slide id="area-point-formatting">
           <Chart
             id="area-point-formatting"
-            x={0}
-            y={0}
-            width={220}
-            height={140}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 220,
+              height: 140,
+            }}
             groups={[
               {
                 kind: "area",
@@ -410,7 +424,7 @@ describe("line and area depth", () => {
     };
     const cases: readonly [string, ChartProps][] = [
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           groups: [
             {
@@ -422,7 +436,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           groups: [
             {
@@ -436,7 +450,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           groups: [
             {
@@ -448,7 +462,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           groups: [
             {
@@ -466,7 +480,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           groups: [
             {
@@ -478,7 +492,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           groups: [
             {
@@ -490,7 +504,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-marker",
+        "invalid-prop",
         {
           groups: [
             {
@@ -504,7 +518,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-smooth",
+        "invalid-prop",
         {
           groups: [
             {
@@ -516,7 +530,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-smooth",
+        "invalid-prop",
         {
           groups: [
             {
@@ -528,7 +542,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-smooth",
+        "invalid-prop",
         {
           groups: [
             {
@@ -540,7 +554,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-chart-missing-values",
+        "invalid-prop",
         {
           displayBlanksAs: "span",
           groups: [
@@ -553,7 +567,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-chart-missing-values",
+        "invalid-prop",
         {
           displayBlanksAs: "gap",
           groups: [
@@ -567,7 +581,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-chart-missing-values",
+        "invalid-prop",
         {
           displayBlanksAs: "span",
           groups: [
@@ -581,7 +595,7 @@ describe("line and area depth", () => {
         },
       ],
       [
-        "invalid-chart-missing-values",
+        "invalid-prop",
         {
           displayBlanksAs: "gap",
           groups: [
@@ -605,10 +619,13 @@ describe("line and area depth", () => {
         <Slide id="line-reader">
           <Chart
             id="line-reader"
-            x={0}
-            y={0}
-            width={240}
-            height={160}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 160,
+            }}
             groups={[
               {
                 kind: "line",
@@ -660,10 +677,7 @@ describe("line and area depth", () => {
   it("writes line label positions and series/point overrides while keeping area labels position-free", async () => {
     const props: ChartProps = {
       id: "line-label-overrides",
-      x: 0,
-      y: 0,
-      width: 360,
-      height: 240,
+      style: { position: "absolute", left: 0, top: 0, width: 360, height: 240 },
       groups: [
         {
           kind: "line",
@@ -771,10 +785,13 @@ describe("line and area depth", () => {
         <Slide id="area-labels">
           <Chart
             id="area-labels"
-            x={0}
-            y={0}
-            width={360}
-            height={240}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 360,
+              height: 240,
+            }}
             groups={[
               {
                 kind: "area",
@@ -822,7 +839,7 @@ describe("line and area depth", () => {
             },
           ],
         } as unknown as ChartProps,
-        "invalid-data-labels",
+        "invalid-prop",
       ],
       [
         {
@@ -840,7 +857,7 @@ describe("line and area depth", () => {
             },
           ],
         },
-        "invalid-data-labels",
+        "invalid-prop",
       ],
       [
         {
@@ -858,7 +875,7 @@ describe("line and area depth", () => {
             },
           ],
         },
-        "invalid-data-labels",
+        "invalid-prop",
       ],
       [
         {
@@ -876,7 +893,7 @@ describe("line and area depth", () => {
             },
           ],
         },
-        "invalid-data-labels",
+        "invalid-prop",
       ],
       [
         {
@@ -889,7 +906,7 @@ describe("line and area depth", () => {
             },
           ],
         } as unknown as ChartProps,
-        "invalid-data-labels",
+        "invalid-prop",
       ],
     ];
     for (const [caseProps, code] of invalidCases) {

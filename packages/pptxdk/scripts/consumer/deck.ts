@@ -14,7 +14,7 @@ import {
 } from "@officedk/pptxdk/vanilla";
 
 const family = font("Jost*", [
-  { weight: 400, data: readFileSync(new URL("./Jost.ttf", import.meta.url)) },
+  { data: readFileSync(new URL("./Jost.ttf", import.meta.url)) },
 ]);
 const sharedPadding = [8, 12] as const;
 

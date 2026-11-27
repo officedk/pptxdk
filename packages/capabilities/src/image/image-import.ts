@@ -4,6 +4,7 @@ import {
   type ColorValue,
   type NativePlaceholderRef,
   type Shadow,
+  type ThemeColor,
 } from "@pptxdk/core/capability";
 import {
   A_NS,
@@ -87,7 +88,7 @@ function readColorElement(
   const colorCursor = srgb ?? scheme;
   if (colorCursor === undefined) return undefined;
 
-  let baseColor: string | undefined;
+  let baseColor: ThemeColor | undefined;
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);
     const parsed = SrgbColorSchema.safeParse(raw);

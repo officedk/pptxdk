@@ -2,7 +2,7 @@ import { Chart, Text } from "@officedk/pptxdk/react";
 
 import { MetricCard, PanelCard, Rule } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const timeSlots = [
   "12:00",
@@ -101,7 +101,11 @@ export function ProductionMetricsPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -111,7 +115,11 @@ export function ProductionMetricsPage() {
               numberFormat: "0",
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -129,7 +137,7 @@ export function ProductionMetricsPage() {
                 value: true,
                 numberFormat: "0",
                 style: {
-                  fontFamily: "body",
+                  fontFamily: fonts.body,
                   fontSize: 9.5,
                   color: colors.steel,
                 },
@@ -142,7 +150,7 @@ export function ProductionMetricsPage() {
             top: 272,
             width: 392,
             height: 292,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10,
             color: colors.ink,
           }}
@@ -201,7 +209,7 @@ export function ProductionMetricsPage() {
                 value: true,
                 numberFormat: '0.0"%"',
                 style: {
-                  fontFamily: "body",
+                  fontFamily: fonts.body,
                   fontSize: 10.5,
                   color: colors.ink,
                 },
@@ -214,7 +222,7 @@ export function ProductionMetricsPage() {
             top: 272,
             width: 308,
             height: 286,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10.5,
             color: colors.ink,
           }}
@@ -255,7 +263,11 @@ export function ProductionMetricsPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -265,7 +277,11 @@ export function ProductionMetricsPage() {
               numberFormat: '"$"0',
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -296,7 +312,11 @@ export function ProductionMetricsPage() {
                 value: true,
                 position: "outsideEnd",
                 numberFormat: '"$"0.0"K"',
-                style: { fontFamily: "body", fontSize: 9.5, color: colors.ink },
+                style: {
+                  fontFamily: fonts.body,
+                  fontSize: 9.5,
+                  color: colors.ink,
+                },
               },
             },
           ]}
@@ -306,7 +326,7 @@ export function ProductionMetricsPage() {
             top: 272,
             width: 364,
             height: 292,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10,
             color: colors.ink,
           }}

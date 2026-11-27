@@ -2,7 +2,7 @@ import { Chart, Shape, Text, wipe } from "@officedk/pptxdk/react";
 
 import { PanelCard, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 export function MlaMoeEfficiencyPage() {
   return (
@@ -34,7 +34,11 @@ export function MlaMoeEfficiencyPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 12, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 12,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -44,7 +48,11 @@ export function MlaMoeEfficiencyPage() {
               numberFormat: '0" KB"',
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 11, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 11,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -76,7 +84,7 @@ export function MlaMoeEfficiencyPage() {
                 position: "outsideEnd",
                 numberFormat: '0.0" KB"',
                 style: {
-                  fontFamily: "body",
+                  fontFamily: fonts.body,
                   fontSize: 11.5,
                   color: colors.ink,
                 },
@@ -89,7 +97,7 @@ export function MlaMoeEfficiencyPage() {
             top: 168,
             width: 544,
             height: 272,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 12,
             color: colors.ink,
           }}
@@ -207,7 +215,11 @@ export function MlaMoeEfficiencyPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 11, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 11,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -217,7 +229,11 @@ export function MlaMoeEfficiencyPage() {
               numberFormat: "#,##0",
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 11, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 11,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -252,7 +268,7 @@ export function MlaMoeEfficiencyPage() {
                 position: "outsideEnd",
                 numberFormat: '#,##0" G"',
                 style: {
-                  fontFamily: "body",
+                  fontFamily: fonts.body,
                   fontSize: 11.5,
                   color: colors.ink,
                 },
@@ -265,7 +281,7 @@ export function MlaMoeEfficiencyPage() {
             top: 168,
             width: 552,
             height: 272,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 12,
             color: colors.ink,
           }}
@@ -330,7 +346,7 @@ export function MlaMoeEfficiencyPage() {
             top: 520,
             width: 226,
             height: 30,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 18,
             fontWeight: 700,
             color: colors.ink,
@@ -372,7 +388,7 @@ export function MlaMoeEfficiencyPage() {
             top: 520,
             width: 226,
             height: 30,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 18,
             fontWeight: 700,
             color: colors.copperText,

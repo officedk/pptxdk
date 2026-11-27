@@ -33,16 +33,15 @@ function runDocPreview(modules: readonly CapabilityModule[]) {
 }
 
 describe("Box static preview positive and negative behaviors", () => {
-  it("renders transparent and visible Box containers with solid fill/border, opacity, rotate, theme overrides, and post-preview isolation", async () => {
+  it("renders transparent and visible Box containers with solid fill/border, opacity, rotate, theme colors, and post-preview isolation", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const mutableCard = box({
       id: "visible-card",
-      theme: { colors: { cardTone: "#1D4ED8" } },
       style: {
         width: 140,
         height: 80,
         padding: 12,
-        background: "cardTone",
+        background: "accent1",
         border: { color: "#0F172A", width: 2, style: "solid" },
         opacity: 0.85,
         rotate: 90,
@@ -57,7 +56,7 @@ describe("Box static preview positive and negative behaviors", () => {
     const doc = deck({
       width: 360,
       height: 200,
-      theme: { colors: { cardTone: "#991B1B" } },
+      theme: { colors: { accent1: "#1D4ED8" } },
     }).append(
       slide({ id: "boxes", background: "#FFFFFF" }).append(
         box({

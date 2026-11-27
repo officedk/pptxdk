@@ -199,6 +199,23 @@ try {
   ] as const) {
     assert.match(reactDts, pattern, `Missing ${label} in dist/react.d.ts`);
   }
+  for (const [label, pattern] of [
+    ["HexColor flat type", /type HexColor = `#\$\{string\}`;/u],
+    [
+      "ThemeColor flat type",
+      /type ThemeColor = SchemeColorName \| HexColor \| ThemeShade;/u,
+    ],
+    [
+      "ThemeFontSlot flat type",
+      /declare const themeFontSlots: readonly \["major", "minor"\];\s*type ThemeFontSlot = \(typeof themeFontSlots\)\[number\];/u,
+    ],
+    [
+      "FontReference flat type",
+      /type FontReference = ThemeFontSlot \| \(string & \{\}\) \| Font;/u,
+    ],
+  ] as const) {
+    assert.match(combinedDts, pattern, `Missing ${label} in packed .d.ts`);
+  }
   run(process.execPath, ["verify.ts"]);
   const cli = join(consumer, "node_modules", ".bin", "pptxdk");
   for (const [target, entry] of [

@@ -4,12 +4,28 @@ import { readFileSync } from "node:fs";
 import {
   build,
   BuildError,
+  CapabilityError,
+  codegen,
   darker,
+  defaultColorMap,
+  defineSlideLayout,
   defineTheme,
   font,
+  importPptx,
+  isThemeFontSlot,
   lighter,
-  type ThemeScope,
+  resolve,
+  schemeColorNames,
+  themeFontSlots,
+  type FontReference,
+  type HexColor,
+  type ImportDiagnostic,
+  type ThemeColor,
+  type ThemeFontSlot,
+  type ThemeInput,
+  type ThemeOverride,
 } from "@officedk/pptxdk";
+import { createImporter, selectCapabilities } from "@officedk/pptxdk/build";
 import {
   Box,
   Chart,
@@ -18,16 +34,20 @@ import {
   MotionScope,
   P,
   Slide,
+  SlideLayout,
+  SlideMaster,
   Shape,
   Span,
   Table,
   Row,
   Cell,
   Text,
+  linearGradient,
   useMotionScope,
 } from "@officedk/pptxdk/react";
+import * as pptxdkVanilla from "@officedk/pptxdk/vanilla";
 import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import type { ReactNode } from "react";
 import { describe, it } from "vitest";
 
@@ -100,10 +120,10 @@ describe("public theme entry", () => {
       <Deck
         theme={defineTheme({
           name: "Theme Contract",
-          colors: { ink: "accent1", accent1: "#336699" },
+          colors: { accent1: "#336699" },
           fonts: { major: cjkFont, minor: localFont },
         })}
-        style={{ fontFamily: "major", fontSize: 20, color: "ink" }}
+        style={{ fontFamily: "major", fontSize: 20, color: "accent1" }}
       >
         <Slide id="theme">
           <Text
@@ -283,18 +303,18 @@ describe("public theme entry", () => {
     assert.match(chart, /<a:schemeClr val="tx1"\/>/u);
   });
 
-  it("inherits local fonts and colors along Box, Group, and transparent MotionScope while isolating sibling instances", async () => {
+  it("inherits style fonts and colors along Box, Group, and transparent MotionScope and applies native Slide themeOverride", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
           colors: {
-            ink: "accent1",
+            dk1: "#336699",
             accent1: "#336699",
-            brand: "accent2",
+            accent2: "#C0504D",
           },
-          fonts: { major: cjkFont },
+          fonts: { major: cjkFont, minor: cjkFont },
         })}
-        style={{ fontFamily: "major", fontSize: 20, color: "ink" }}
+        style={{ fontFamily: "major", fontSize: 20, color: "dk1" }}
       >
         <Slide id="scopes">
           <Box
@@ -305,8 +325,9 @@ describe("public theme entry", () => {
               display: "flex",
               flexDirection: "column",
               fontSize: 19,
+              fontFamily: localFont,
+              color: "#C00000",
             }}
-            theme={{ colors: { ink: "#C00000" }, fonts: { major: localFont } }}
           >
             <TestMotionScope>
               <Group id="local-group" style={{ fontSize: 18 }}>
@@ -324,7 +345,7 @@ describe("public theme entry", () => {
                     top: 60,
                     width: 180,
                     height: 60,
-                    background: "ink",
+                    background: "#C00000",
                   }}
                 >
                   Shape text
@@ -339,8 +360,8 @@ describe("public theme entry", () => {
               <Row>
                 <Cell
                   style={{
-                    color: "ink",
-                    background: "ink",
+                    color: "#C00000",
+                    background: "#C00000",
                     border: { color: "accent1" },
                   }}
                 >
@@ -356,20 +377,20 @@ describe("public theme entry", () => {
                 top: 150,
                 width: 220,
                 height: 120,
-                fontFamily: "major",
-                color: "ink",
+                fontFamily: localFont,
+                color: "#C00000",
               }}
               axes={{
                 category: {
                   kind: "category",
-                  style: { fontFamily: "major", color: "ink" },
-                  line: { color: "ink" },
+                  style: { fontFamily: localFont, color: "#C00000" },
+                  line: { color: "#C00000" },
                   gridlines: { color: "accent1" },
                 },
                 value: {
                   kind: "value",
-                  style: { fontFamily: "major", color: "ink" },
-                  line: { color: { color: "ink", alpha: 0.5 } },
+                  style: { fontFamily: localFont, color: "#C00000" },
+                  line: { color: { color: "#C00000", alpha: 0.5 } },
                   gridlines: { color: "accent1" },
                 },
               }}
@@ -381,23 +402,26 @@ describe("public theme entry", () => {
                     {
                       name: "Local",
                       values: [1],
-                      color: "ink",
-                      points: { 0: { color: "accent1", labelColor: "ink" } },
+                      color: "#C00000",
+                      points: {
+                        0: { color: "accent1", labelColor: "#C00000" },
+                      },
                     },
                   ],
                   dataLabels: {
                     value: true,
-                    style: { fontFamily: "major", color: "ink" },
+                    style: { fontFamily: localFont, color: "#C00000" },
                   },
                 },
               ]}
             />
             <Box
               id="nested-box"
-              style={{ width: 180, height: 60 }}
-              theme={{
-                colors: { ink: "#008040", brand: "ink" },
-                fonts: { major: cjkFont },
+              style={{
+                width: 180,
+                height: 60,
+                fontFamily: "major",
+                color: "#008040",
               }}
             >
               <Text id="nested-text" style={{ width: 150, height: "auto" }}>
@@ -411,7 +435,7 @@ describe("public theme entry", () => {
                   top: 30,
                   width: 40,
                   height: 20,
-                  background: "brand",
+                  background: "#C00000",
                 }}
               />
             </Box>
@@ -433,9 +457,9 @@ describe("public theme entry", () => {
           </Text>
         </Slide>
         <Slide
-          id="slide-scope"
-          theme={{
-            colors: { ink: "#123456" },
+          id="slide-override"
+          themeOverride={{
+            colors: { dk1: "#123456" },
             fonts: { major: localFont, minor: cjkFont },
           }}
           style={{ fontSize: 18 }}
@@ -532,31 +556,35 @@ describe("public theme entry", () => {
     assert.match(categoryAxis ?? "", /<a:srgbClr val="C00000"\/>/u);
     assert.match(categoryAxis ?? "", /<a:latin typeface="Jost\*"\/>/u);
     assert.match(categoryAxis ?? "", /<a:schemeClr val="accent1"\/>/u);
-    assert.match(categoryAxis ?? "", /<a:srgbClr val="C00000"\/>/u);
     assert.match(valueAxis ?? "", /<a:alpha val="50000"\/>/u);
     assert.match(valueAxis ?? "", /<a:schemeClr val="accent1"\/>/u);
     assert.match(dataLabels ?? "", /<a:srgbClr val="C00000"\/>/u);
     assert.match(dataLabels ?? "", /<a:latin typeface="Jost\*"\/>/u);
     assert.match(chart, /<c:txPr>/u);
     const theme = strFromU8(parts["ppt/theme/theme1.xml"]!);
-    const slideScope = strFromU8(parts["ppt/slides/slide2.xml"]!);
+    const slideOverrideXml = strFromU8(parts["ppt/slides/slide2.xml"]!);
+    const themeOverrideXml = strFromU8(parts["ppt/theme/themeOverride1.xml"]!);
     assert.match(theme, /<a:majorFont><a:latin typeface="Theme Metrics Sans"/u);
     assert.match(theme, /<a:accent1><a:srgbClr val="336699"\/><\/a:accent1>/u);
-    assert.match(slideScope, /<a:srgbClr val="123456"\/>/u);
-    assert.match(slideScope, /<a:latin typeface="Jost\*"\/>/u);
-    assert.match(slideScope, /<a:latin typeface="Theme Metrics Sans"\/>/u);
-    assert.match(slideScope, /sz="1350"/u);
+    assert.match(
+      themeOverrideXml,
+      /<a:dk1><a:srgbClr val="123456"\/><\/a:dk1>/u,
+    );
+    assert.match(themeOverrideXml, /<a:majorFont><a:latin typeface="Jost\*"/u);
+    assert.match(slideOverrideXml, /<a:schemeClr val="dk1"\/>/u);
+    assert.match(slideOverrideXml, /<a:latin typeface="\+mj-lt"\/>/u);
+    assert.match(slideOverrideXml, /<a:latin typeface="\+mn-lt"\/>/u);
+    assert.match(slideOverrideXml, /sz="1350"/u);
   });
 
-  it("preserves native slots for aliases, tint/shade variants, and opacity along the same color resolver", async () => {
+  it("preserves native slots for host ThemeShade constants, opacity, and #RGBA style hex values", async () => {
+    const pale = lighter("accent1", 0.4);
+    const deep = darker("accent1", 0.2);
     const result = await build(
       <Deck
         theme={defineTheme({
           colors: {
             accent1: "#336699",
-            brand: "accent1",
-            pale: lighter("accent1", 0.4),
-            deep: darker("accent1", 0.2),
           },
         })}
       >
@@ -569,7 +597,7 @@ describe("public theme entry", () => {
               top: 0,
               width: 80,
               height: 40,
-              background: "brand",
+              background: "accent1",
             }}
           />
           <Shape
@@ -580,7 +608,7 @@ describe("public theme entry", () => {
               top: 0,
               width: 80,
               height: 40,
-              background: "pale",
+              background: pale,
             }}
           />
           <Shape
@@ -591,7 +619,7 @@ describe("public theme entry", () => {
               top: 0,
               width: 80,
               height: 40,
-              background: "deep",
+              background: deep,
             }}
           />
           <Shape
@@ -602,7 +630,7 @@ describe("public theme entry", () => {
               top: 0,
               width: 80,
               height: 40,
-              background: { color: "brand", alpha: 0.5 },
+              background: { color: "accent1", alpha: 0.5 },
             }}
           />
           <Shape
@@ -631,144 +659,154 @@ describe("public theme entry", () => {
     );
   });
 
-  it("resolves nearest local overrides for deck color aliases at usage sites while preserving outer references of the same name", async () => {
+  it("applies Slide themeOverride and colorMapOverride consistently across Text, Shape, Table, and Chart and roundtrips #RGB normalization", async () => {
+    const theme = defineTheme({
+      name: "Normalized Brand",
+      colors: {
+        dk1: "#abc",
+        lt1: "#ffffff",
+        dk2: "#1a2b3c",
+        lt2: "#fed",
+        accent1: "#123456",
+        accent2: "#234567",
+        accent3: "#345678",
+        accent4: "#456789",
+        accent5: "#56789a",
+        accent6: "#6789ab",
+        hlink: "#00f",
+        folHlink: "#808",
+      },
+      fonts: { major: "Georgia", minor: "Aptos" },
+    });
+    assert.equal(theme.colors.dk1, "#AABBCC");
+    assert.equal(theme.colors.dk2, "#1A2B3C");
+    assert.equal(theme.colors.lt2, "#FFEEDD");
+    assert.equal(theme.colors.hlink, "#0000FF");
+    assert.equal(theme.colors.folHlink, "#880088");
+
     const result = await build(
-      <Deck
-        theme={defineTheme({
-          colors: {
-            ink: "#112233",
-            caption: "ink",
-            chain: "caption",
-          },
-        })}
-      >
-        <Slide id="local-alias" theme={{ colors: { ink: "#C00000" } }}>
+      <Deck theme={theme}>
+        <Slide
+          id="native-override"
+          themeOverride={{ colors: { accent1: "#c00", dk1: "#112233" } }}
+          colorMapOverride={{ ...defaultColorMap, tx1: "accent1" }}
+        >
           <Text
-            id="alias-text"
+            id="override-text"
             style={{
               position: "absolute",
               left: 0,
               top: 0,
               width: 180,
               height: 40,
-              color: "chain",
+              color: "tx1",
             }}
           >
-            Alias text
+            Override text
           </Text>
           <Shape
-            id="alias-shape"
+            id="override-shape"
             style={{
               position: "absolute",
               left: 0,
               top: 50,
               width: 100,
               height: 30,
-              background: "chain",
-              color: "chain",
+              background: "accent1",
+              color: "dk1",
             }}
           >
-            Alias shape
+            Override shape
           </Shape>
           <Table
-            id="alias-table"
+            id="override-table"
             columns={[140]}
             style={{ position: "absolute", left: 0, top: 90 }}
           >
             <Row style={{ height: 36 }}>
-              <Cell style={{ color: "chain", background: "chain" }}>
-                Alias cell
+              <Cell style={{ color: "tx1", background: "accent1" }}>
+                Override cell
               </Cell>
             </Row>
           </Table>
           <Chart
-            id="alias-chart"
+            id="override-chart"
             style={{
               position: "absolute",
               left: 160,
               top: 90,
               width: 240,
               height: 150,
-              color: "chain",
+              color: "tx1",
             }}
             groups={[
               {
                 kind: "column",
                 data: { kind: "shared-categories", categories: ["A"] },
-                series: [{ name: "Alias series", values: [1], color: "chain" }],
+                series: [
+                  { name: "Override series", values: [1], color: "accent1" },
+                ],
               },
             ]}
           />
-          <Box
-            id="same-name-scope"
-            style={{ width: 100, height: 40 }}
-            theme={{ colors: { ink: "ink" } }}
-          >
-            <Shape
-              id="same-name-shape"
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                width: 80,
-                height: 30,
-                background: "ink",
-              }}
-            />
-          </Box>
         </Slide>
       </Deck>,
     );
 
-    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const validated = await validatePptx(result.pptx);
+    assert.deepEqual(validated.errors, []);
     const parts = unzipSync(result.pptx);
-    const slide = strFromU8(parts["ppt/slides/slide1.xml"]!);
-    const chart = strFromU8(parts["ppt/charts/chart1.xml"]!);
-    for (const authorId of ["alias-text", "alias-shape", "alias-table"]) {
-      const id = findAuthorObject(
-        result.report.slides[0]?.objects,
-        authorId,
-      )?.id;
-      assert.match(
-        slide,
-        new RegExp(`id="${id}"[\\s\\S]*?<a:srgbClr val="C00000"/>`, "u"),
-      );
-    }
-    assert.match(chart, /<a:srgbClr val="C00000"\/>/u);
-    const sameNameId = findAuthorObject(
-      result.report.slides[0]?.objects,
-      "same-name-shape",
-    )?.id;
-    const sameNameStart = slide.indexOf(`id="${sameNameId}"`);
-    assert.notEqual(sameNameStart, -1);
+    const themeXml = strFromU8(parts["ppt/theme/theme1.xml"]!);
+    const overrideXml = strFromU8(parts["ppt/theme/themeOverride1.xml"]!);
+    assert.match(themeXml, /<a:dk1><a:srgbClr val="AABBCC"\/><\/a:dk1>/u);
+    assert.match(themeXml, /<a:dk2><a:srgbClr val="1A2B3C"\/><\/a:dk2>/u);
     assert.match(
-      slide.slice(sameNameStart, sameNameStart + 1200),
-      /val="C00000"/u,
+      overrideXml,
+      /<a:accent1><a:srgbClr val="CC0000"\/><\/a:accent1>/u,
     );
+    assert.match(overrideXml, /<a:dk1><a:srgbClr val="112233"\/><\/a:dk1>/u);
+
+    const slideFile = validated.slides[0];
+    const overrideTextId = findAuthorObject(
+      result.report.slides[0]?.objects,
+      "override-text",
+    )?.id;
+    const textRun = slideFile?.objects.find(({ id }) => id === overrideTextId)
+      ?.text?.paragraphs[0]?.runs[0];
+    assert.equal(textRun?.color, "#CC0000");
+
+    const imported = importPptx(result.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const reactCode = codegen(imported.document, { target: "react" });
+    const vanillaCode = codegen(imported.document, { target: "vanilla" });
+    assert.match(String(reactCode.files["deck.tsx"]), /#AABBCC/u);
+    assert.match(String(reactCode.files["deck.tsx"]), /#CC0000/u);
+    assert.match(String(vanillaCode.files["deck.ts"]), /#AABBCC/u);
+    assert.match(String(vanillaCode.files["deck.ts"]), /#CC0000/u);
   });
 
-  it("resolves the same font token only once across Text, P, and Span", async () => {
+  it("resolves system font families directly across Text, P, and Span without dictionary lookups", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({
-          fonts: { body: "Aptos", Aptos: "Courier New" },
+          fonts: { major: "Georgia", minor: "Aptos" },
         })}
       >
-        <Slide id="font-token-once">
+        <Slide id="system-font-direct">
           <Text
-            id="font-token-once"
+            id="system-font-direct"
             style={{
               position: "absolute",
               left: 0,
               top: 0,
               width: 300,
               height: 120,
-              fontFamily: "body",
+              fontFamily: "Aptos",
             }}
           >
             Bare text
-            <P style={{ fontFamily: "body" }}>Paragraph text</P>
-            <Span style={{ fontFamily: "body" }}>Span text</Span>
+            <P style={{ fontFamily: "Courier New" }}>Paragraph text</P>
+            <Span style={{ fontFamily: "minor" }}>Span text</Span>
           </Text>
         </Slide>
       </Deck>,
@@ -776,11 +814,11 @@ describe("public theme entry", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
-    const fontTokenId = findAuthorObject(
+    const fontId = findAuthorObject(
       result.report.slides[0]?.objects,
-      "font-token-once",
+      "system-font-direct",
     )?.id;
-    const object = file.slides[0]?.objects.find(({ id }) => id === fontTokenId);
+    const object = file.slides[0]?.objects.find(({ id }) => id === fontId);
     const runs = object?.text?.paragraphs.flatMap(({ runs: paragraphRuns }) =>
       paragraphRuns.map(({ text, fontFamily }) => ({ text, fontFamily })),
     );
@@ -788,10 +826,16 @@ describe("public theme entry", () => {
       runs?.map(({ text, fontFamily }) => [text.trim(), fontFamily]),
       [
         ["Bare text", "Aptos"],
-        ["Paragraph text", "Aptos"],
+        ["Paragraph text", "Courier New"],
         ["Span text", "Aptos"],
       ],
     );
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(slideXml, /<a:latin typeface="Aptos"\/>/u);
+    assert.match(slideXml, /<a:latin typeface="Courier New"\/>/u);
+    assert.match(slideXml, /<a:latin typeface="\+mn-lt"\/>/u);
   });
 
   it("participates in measurement with paragraph defaults on Deck, Slide, Box, and Group and allows descendant overrides", async () => {
@@ -1103,19 +1147,20 @@ describe("public theme entry", () => {
     const result = await build(
       <Deck
         theme={defineTheme({
-          colors: { ink: "#112233", caption: "ink" },
-          fonts: { minor: cjkFont, body: cjkFont },
+          colors: { dk1: "#112233" },
+          fonts: { minor: cjkFont },
         })}
       >
         {variants.map(({ id: slideId, child }) => (
           <Slide id={slideId} key={slideId}>
             <Group
               id="outer-group"
-              theme={{
-                colors: { ink: "#C00000" },
-                fonts: { minor: localFont, body: localFont },
+              style={{
+                fontFamily: localFont,
+                color: "#C00000",
+                align: "center",
+                spacingAfter: 12,
               }}
-              style={{ color: "caption", align: "center", spacingAfter: 12 }}
             >
               {child}
             </Group>
@@ -1127,7 +1172,7 @@ describe("public theme entry", () => {
                 top: 120,
                 width: 300,
                 height: "auto",
-                color: "caption",
+                color: "dk1",
               }}
             >
               <P>Outside the Group</P>
@@ -1211,110 +1256,261 @@ describe("public theme entry", () => {
     }
   });
 
-  it("rejects unknown color and font tokens in local themes", async () => {
-    const theme = defineTheme({
-      colors: { ink: "accent1" },
-      fonts: { major: "Aptos Display" },
-    });
-    const scopedDeck = (scope: unknown) => (
-      <Deck theme={theme}>
-        <Slide id="invalid-scope">
-          <Box
-            id="scope"
-            style={{ width: 100, height: 50 }}
-            theme={scope as ThemeScope}
-          >
-            <Text
-              id="sample"
-              style={{ width: 80, height: "auto", color: "ink" }}
-            >
-              Sample
-            </Text>
-          </Box>
-        </Slide>
-      </Deck>
-    );
+  it("enforces compile-time and runtime closure on ThemeInput, ThemeOverride, ThemeColor, FontReference, and Slide/Box/Group props", async () => {
+    // Compile-time type checks for narrowed public types
+    const validColor: ThemeColor = "bg1";
+    const validHex: HexColor = "#1a2b3c";
+    const validFontSlot: ThemeFontSlot = "major";
+    const validFontRef: FontReference = validFontSlot;
+    assert.equal(validColor, "bg1");
+    assert.equal(validHex, "#1a2b3c");
+    assert.equal(validFontRef, "major");
 
-    for (const scope of [
-      { colors: { unknown: "#FF0000" } },
-      { colors: { accent1: "#FF0000" } },
-      { fonts: { heading: "Aptos Display" } },
+    // @ts-expect-error unknown color slot in ThemeInput
+    const badThemeColorKey: ThemeInput = { colors: { followHlink: "#112233" } };
+    const badThemeShadeColor: ThemeInput = {
+      colors: {
+        // @ts-expect-error ThemeShade rejected in ThemeInput.colors
+        dk1: lighter("accent1", 0.2),
+      },
+    };
+    // @ts-expect-error scheme slot string rejected in ThemeInput.colors
+    const badThemeSlotRef: ThemeInput = { colors: { dk1: "accent2" } };
+    // @ts-expect-error unknown font slot in ThemeInput.fonts
+    const badThemeFontKey: ThemeInput = { fonts: { minro: "Aptos" } };
+    const badOverrideColorKey: ThemeOverride = {
+      colors: {
+        // @ts-expect-error unknown color slot in ThemeOverride
+        tileAccent: "#112233",
+      },
+    };
+    // @ts-expect-error unknown color string rejected on ThemeColor
+    const badStyleColor: ThemeColor = "red";
+    // @ts-expect-error misspelled scheme slot rejected on ThemeColor
+    const badSchemeColor: ThemeColor = "acent1";
+    assert.ok(badThemeColorKey);
+    assert.ok(badThemeShadeColor);
+    assert.ok(badThemeSlotRef);
+    assert.ok(badThemeFontKey);
+    assert.ok(badOverrideColorKey);
+    assert.ok(badStyleColor);
+    assert.ok(badSchemeColor);
+
+    for (const invalidTheme of [
+      { colors: { followHlink: "#112233" } },
+      { colors: { tileAccent: "#112233" } },
+      { colors: { accent1: "#11223380" } },
+      { colors: { accent1: "#1234" } },
+      { colors: { dk1: "accent2" } },
+      { colors: { accent1: lighter("accent1", 0.2) } },
+      { fonts: { minro: "Aptos" } },
+      { fonts: { mono: "Consolas" } },
+      { fonts: { major: "major" } },
+      { fonts: { minor: "minor" } },
+      { fonts: { major: "+mj-lt" } },
+      { fonts: { minor: "+mn-ea" } },
     ]) {
-      await assert.rejects(build(scopedDeck(scope)), (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-prop");
-        assert.equal(
-          error.diagnostics[0]?.path,
-          "deck/slide[invalid-scope]/box[scope]",
-        );
-        return true;
-      });
+      assert.throws(
+        () => defineTheme(invalidTheme as never),
+        (error: unknown) => {
+          assert.ok(error instanceof CapabilityError);
+          assert.equal(error.code, "invalid-theme");
+          return true;
+        },
+      );
+
+      await assert.rejects(
+        build(
+          <Deck theme={invalidTheme as never}>
+            <Slide id="s1" />
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
+          assert.equal(error.diagnostics[0]?.path, "deck");
+          return true;
+        },
+      );
+
+      const blank = defineSlideLayout({ id: "blank", type: "blank" });
+      await assert.rejects(
+        build(
+          <Deck>
+            <SlideMaster id="m1" theme={invalidTheme as never}>
+              <SlideLayout layout={blank} />
+            </SlideMaster>
+            <Slide id="s1" layout={blank} />
+          </Deck>,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          assert.equal(error.diagnostics[0]?.code, "invalid-prop");
+          assert.equal(error.diagnostics[0]?.path, "deck/slide-master[m1]");
+          return true;
+        },
+      );
     }
 
+    // Rejects Slide/Box/Group local theme prop at compile time and runtime
     await assert.rejects(
-      build(scopedDeck({ colors: { ink: "missing-token" } })),
-      (error: unknown) => {
-        assert.ok(error instanceof BuildError);
-        assert.equal(error.diagnostics[0]?.code, "invalid-style");
-        assert.equal(
-          error.diagnostics[0]?.path,
-          "deck/slide[invalid-scope]/box[scope]/text[sample]",
-        );
-        return true;
-      },
+      build(
+        <Deck>
+          {/* @ts-expect-error Slide.theme removed */}
+          <Slide id="s1" theme={{ colors: { dk1: "#112233" } }} />
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "unknown-prop" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]",
     );
-  });
+    await assert.rejects(
+      build(
+        <Deck>
+          <Slide id="s1">
+            {/* @ts-expect-error Box.theme removed */}
+            <Box id="b1" theme={{ colors: { dk1: "#112233" } }} />
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "unknown-prop" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]/box[b1]",
+    );
+    await assert.rejects(
+      build(
+        <Deck>
+          <Slide id="s1">
+            {/* @ts-expect-error Group.theme removed */}
+            <Group id="g1" theme={{ colors: { dk1: "#112233" } }}>
+              <Shape id="sh1" style={{ width: 20, height: 20 }} />
+            </Group>
+          </Slide>
+        </Deck>,
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics[0]?.code === "unknown-prop" &&
+        error.diagnostics[0]?.path === "deck/slide[s1]/group[g1]",
+    );
 
-  it("keeps local tokens isolated without cross-contamination during concurrent builds sharing a deck theme", async () => {
-    const theme = defineTheme({ colors: { ink: "accent1" } });
-    const deck = (slideId: string, color: string) => (
-      <Deck theme={theme}>
-        <Slide id={slideId}>
-          <Box
-            id="scope"
-            style={{ width: 100, height: 50 }}
-            theme={{ colors: { ink: color } }}
-          >
+    // Rejects invalid style/border/shadow/gradient colors consistently
+    for (const invalidColor of ["red", "tileAccent", "acent1"] as const) {
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide id="bad-color">
+              <Text
+                id="t1"
+                style={{ width: 100, height: 40, color: invalidColor as never }}
+              >
+                Sample
+              </Text>
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-style",
+      );
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide id="bad-bg">
+              <Shape
+                id="sh1"
+                style={{
+                  width: 100,
+                  height: 40,
+                  background: invalidColor as never,
+                }}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-style",
+      );
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide id="bad-border">
+              <Shape
+                id="sh1"
+                style={{
+                  width: 100,
+                  height: 40,
+                  border: { color: invalidColor as never, width: 1 },
+                }}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-style",
+      );
+      await assert.rejects(
+        build(
+          <Deck>
+            <Slide id="bad-gradient">
+              <Shape
+                id="sh1"
+                style={{
+                  width: 100,
+                  height: 40,
+                  background: linearGradient(
+                    90,
+                    invalidColor as never,
+                    "#FFFFFF",
+                  ),
+                }}
+              />
+            </Slide>
+          </Deck>,
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-style",
+      );
+    }
+
+    // All 16 SchemeColorNames are accepted on styles
+    const allSchemeDeck = await build(
+      <Deck>
+        <Slide id="all-scheme">
+          {schemeColorNames.map((name, idx) => (
             <Shape
-              id="sample"
+              key={name}
+              id={`s-${name}`}
               style={{
                 position: "absolute",
-                left: 0,
-                top: 0,
-                width: 80,
-                height: 40,
-                background: "ink",
+                left: (idx % 4) * 40,
+                top: Math.floor(idx / 4) * 30,
+                width: 30,
+                height: 20,
+                background: name,
               }}
             />
-          </Box>
+          ))}
         </Slide>
-      </Deck>
+      </Deck>,
     );
-    const [red, green] = await Promise.all([
-      build(deck("red", "#CC0000")),
-      build(deck("green", "#00AA00")),
-    ]);
-    const redSlide = strFromU8(unzipSync(red.pptx)["ppt/slides/slide1.xml"]!);
-    const greenSlide = strFromU8(
-      unzipSync(green.pptx)["ppt/slides/slide1.xml"]!,
-    );
-    assert.match(redSlide, /<a:srgbClr val="CC0000"\/>/u);
-    assert.doesNotMatch(redSlide, /<a:srgbClr val="00AA00"\/>/u);
-    assert.match(greenSlide, /<a:srgbClr val="00AA00"\/>/u);
-    assert.doesNotMatch(greenSlide, /<a:srgbClr val="CC0000"\/>/u);
-    assert.deepEqual((await validatePptx(red.pptx)).errors, []);
-    assert.deepEqual((await validatePptx(green.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(allSchemeDeck.pptx)).errors, []);
   });
 
-  it("includes local theme fonts in font resource records of the same deck", async () => {
+  it("includes Slide themeOverride fonts in font resource records of the same deck", async () => {
     const result = await build(
       <Deck
         theme={defineTheme({ fonts: { major: "Aptos Display" } })}
         style={{ fontFamily: "major", fontSize: 20 }}
       >
         <Slide
-          id="local-font"
-          theme={{ fonts: { major: italicFont } }}
+          id="override-font"
+          themeOverride={{ fonts: { major: italicFont } }}
           style={{ fontStyle: "italic" }}
         >
           <Text
@@ -1327,7 +1523,7 @@ describe("public theme entry", () => {
               height: "auto",
             }}
           >
-            Local font resource{" "}
+            Override font resource{" "}
             <Span style={{ fontFamily: "major" }}>inline resource</Span>
           </Text>
         </Slide>
@@ -1339,10 +1535,12 @@ describe("public theme entry", () => {
     const parts = unzipSync(result.pptx);
     const presentation = strFromU8(parts["ppt/presentation.xml"]!);
     const slide = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    const themeOverride = strFromU8(parts["ppt/theme/themeOverride1.xml"]!);
     assert.match(presentation, /<p:embeddedFontLst>/u);
     assert.match(presentation, /<p:italic r:id="rId\d+"\/>/u);
     assert.ok(Object.keys(parts).some((path) => path.startsWith("ppt/fonts/")));
-    assert.match(slide, /<a:latin typeface="Jost"\/>/u);
+    assert.match(themeOverride, /<a:majorFont><a:latin typeface="Jost"/u);
+    assert.match(slide, /<a:latin typeface="\+mj-lt"\/>/u);
     assert.match(slide, /i="1"/u);
     const italicId = findAuthorObject(
       result.report.slides[0]?.objects,
@@ -1441,5 +1639,133 @@ describe("public theme entry", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
+  });
+
+  it("exports themeFontSlots and isThemeFontSlot identically across ., ./react, and ./vanilla", async () => {
+    const reactEntry = await import("@officedk/pptxdk/react");
+    assert.equal("themeFontSlots" in pptxdkVanilla, true);
+    assert.equal("isThemeFontSlot" in pptxdkVanilla, true);
+    assert.deepEqual(
+      (pptxdkVanilla as Record<string, unknown>)["themeFontSlots"],
+      themeFontSlots,
+    );
+    assert.deepEqual(reactEntry.themeFontSlots, themeFontSlots);
+    const vanillaIsThemeFontSlot = (pptxdkVanilla as Record<string, unknown>)[
+      "isThemeFontSlot"
+    ] as (value: unknown) => boolean;
+    assert.equal(vanillaIsThemeFontSlot("major"), true);
+    assert.equal(vanillaIsThemeFontSlot("minor"), true);
+    assert.equal(vanillaIsThemeFontSlot("body"), false);
+    assert.equal(isThemeFontSlot("major"), true);
+    assert.equal(reactEntry.isThemeFontSlot("minor"), true);
+  });
+
+  it("imports PPTX with reserved font placeholders in theme1.xml and themeOverride1.xml without throwing, without duplicate diagnostics, and resolves/codegens cleanly", async () => {
+    const OPC_REL_NS =
+      "http://schemas.openxmlformats.org/package/2006/relationships";
+    const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+    const P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main";
+    const R_NS =
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    const REL_OFFICE_DOCUMENT = `${R_NS}/officeDocument`;
+    const REL_SLIDE_MASTER = `${R_NS}/slideMaster`;
+    const REL_SLIDE_LAYOUT = `${R_NS}/slideLayout`;
+    const REL_SLIDE = `${R_NS}/slide`;
+    const REL_THEME = `${R_NS}/theme`;
+    const REL_THEME_OVERRIDE = `${R_NS}/themeOverride`;
+
+    const pptx = zipSync({
+      "[Content_Types].xml": strToU8(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+  <Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
+  <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+  <Override PartName="/ppt/theme/themeOverride1.xml" ContentType="application/vnd.openxmlformats-officedocument.themeOverride+xml"/>
+</Types>`,
+      ),
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE}" Target="slides/slide1.xml"/></Relationships>`,
+      ),
+      "ppt/theme/theme1.xml": strToU8(
+        `<a:theme xmlns:a="${A_NS}" name="Reserved Theme"><a:themeElements><a:clrScheme name="Base"><a:dk1><a:srgbClr val="111111"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="222222"/></a:dk2><a:lt2><a:srgbClr val="EEEEEE"/></a:lt2><a:accent1><a:srgbClr val="123456"/></a:accent1><a:accent2><a:srgbClr val="654321"/></a:accent2><a:accent3><a:srgbClr val="112233"/></a:accent3><a:accent4><a:srgbClr val="445566"/></a:accent4><a:accent5><a:srgbClr val="778899"/></a:accent5><a:accent6><a:srgbClr val="AABBCC"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme><a:fontScheme name="ReservedFonts"><a:majorFont><a:latin typeface="+mj-lt"/></a:majorFont><a:minorFont><a:latin typeface="minor"/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
+      ),
+      "ppt/theme/themeOverride1.xml": strToU8(
+        `<a:themeOverride xmlns:a="${A_NS}"><a:fontScheme name="ReservedOverride"><a:majorFont><a:latin typeface="major"/></a:majorFont></a:fontScheme></a:themeOverride>`,
+      ),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld name="M1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="blank"><p:cSld name="L1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_THEME_OVERRIDE}" Target="../theme/themeOverride1.xml"/></Relationships>`,
+      ),
+      "ppt/slides/slide1.xml": strToU8(
+        `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld name="s1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+      ),
+      "ppt/slides/_rels/slide1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+      ),
+    });
+
+    const imported = importPptx(pptx);
+    const fontDiagnostics = imported.report.diagnostics.filter(
+      (
+        d,
+      ): d is Extract<
+        ImportDiagnostic,
+        { readonly code: "invalid-xml-value" }
+      > =>
+        d.code === "invalid-xml-value" &&
+        d.attributeOrElement === "a:latin/@typeface",
+    );
+    assert.deepEqual(
+      fontDiagnostics.map((d) => [d.location.part, d.rawValue]),
+      [
+        ["ppt/theme/theme1.xml", "+mj-lt"],
+        ["ppt/theme/theme1.xml", "minor"],
+        ["ppt/theme/themeOverride1.xml", "major"],
+      ],
+    );
+
+    const resolved = resolve(imported.document);
+    assert.equal(resolved.slides.length, 1);
+    const generated = codegen(imported.document, { target: "vanilla" });
+    assert.match(String(generated.files["deck.ts"]), /export default deck\(/u);
+
+    const fontTextImporter = createImporter(await selectCapabilities(["text"]));
+    const partialImported = fontTextImporter(pptx);
+    const partialFontDiagnostics = partialImported.report.diagnostics.filter(
+      (
+        d,
+      ): d is Extract<
+        ImportDiagnostic,
+        { readonly code: "invalid-xml-value" }
+      > =>
+        d.code === "invalid-xml-value" &&
+        d.attributeOrElement === "a:latin/@typeface",
+    );
+    assert.deepEqual(
+      partialFontDiagnostics.map((d) => [d.location.part, d.rawValue]),
+      [
+        ["ppt/theme/theme1.xml", "+mj-lt"],
+        ["ppt/theme/theme1.xml", "minor"],
+      ],
+    );
   });
 });

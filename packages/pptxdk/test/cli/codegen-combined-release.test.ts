@@ -13,13 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  build,
-  codegen,
-  defineTheme,
-  importPptx,
-  lighter,
-} from "@officedk/pptxdk";
+import { build, codegen, defineTheme, importPptx } from "@officedk/pptxdk";
 import { buildFromSource } from "@officedk/pptxdk/node";
 import {
   cell,
@@ -100,7 +94,7 @@ describe("pptxdk CLI combined release directory and ZIP relocated rebuild", () =
       const sharedPng = createSamplePng();
       const brandTheme = defineTheme({
         name: "CLI Combined Brand",
-        colors: { accent1: "#1D4ED8", brandTint: lighter("accent1", 0.3) },
+        colors: { accent1: "#1D4ED8" },
         fonts: { major: jostFont, minor: jostFont },
       });
 

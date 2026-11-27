@@ -86,8 +86,6 @@ export const aetherTheme = defineTheme({
     accent6: PALETTE.inkMuted,
     hlink: PALETTE.cobalt,
     folHlink: "#1447A6",
-    accent2Muted: lighter("accent2", 0.85),
-    tileAccent: PALETTE.vermilion,
   },
   fonts: {
     major: jostFont,
@@ -113,6 +111,9 @@ export const aetherTheme = defineTheme({
     ],
   },
 });
+
+/** Soft 85%-lightened accent2 tint derived from the theme palette. */
+export const accent2Muted = lighter("accent2", 0.85);
 
 // Shared Morph continuity scope connecting Slide 2 and Slide 3.
 export const telemetryMorph = createMorphScope();

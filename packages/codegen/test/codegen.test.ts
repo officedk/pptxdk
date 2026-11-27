@@ -279,7 +279,7 @@ describe("@pptxdk/codegen core contract", () => {
     const scopeB = createMorphScope();
     const sharedTheme = defineTheme({
       name: "Brand",
-      colors: { brandAccent: lighter("accent2", 0.25) },
+      colors: { accent2: "#2563EB" },
     });
 
     const dummyObjectCap = {
@@ -408,7 +408,10 @@ describe("@pptxdk/codegen core contract", () => {
           layout: titleDef,
           transition: { duration: "fast" },
         }).append(t1, img1),
-        createSlideNode({ id: "s2" }).append(t2, img2),
+        createSlideNode({
+          id: "s2",
+          style: { color: lighter("accent2", 0.25) },
+        }).append(t2, img2),
       ),
     );
 
@@ -810,6 +813,255 @@ describe("@pptxdk/codegen core contract", () => {
         error.diagnostics[0]?.code === "unexpressible-value" &&
         error.diagnostics[0]?.path === "deck/slide[s1]@transition[0]" &&
         error.diagnostics[0]?.field === "transition[0]" &&
+        !("severity" in error.diagnostics[0]),
+    );
+  });
+
+  it("validates and normalizes inline ThemeInput and ThemeOverride across Deck, SlideMaster, SlideLayout, and Slide", () => {
+    const generate = createCodegen([]);
+    const layoutDef = defineSlideLayout({
+      id: "layout-def-ovr",
+      name: "Def Override",
+      themeOverride: {
+        colors: { accent1: "#def" },
+        fonts: { minor: "Georgia" },
+      },
+    });
+    const normalizedDoc = createDeckNode({
+      width: 960,
+      height: 540,
+      theme: {
+        name: "Inline Deck",
+        colors: { accent1: "#abc", accent2: " #1a2b3c " as `#${string}` },
+        fonts: { major: "Georgia" },
+      },
+    }).append(
+      createSlideMasterNode({
+        id: "m1",
+        theme: {
+          name: "Inline Master",
+          colors: { dk1: "#123", lt1: " #fefefe " as `#${string}` },
+          fonts: { minor: "Arial" },
+        },
+      }).append(
+        createSlideLayoutNode(layoutDef),
+        createSlideLayoutNode({
+          id: "layout-inline-ovr",
+          name: "Inline Override",
+          themeOverride: {
+            colors: { accent2: "#345", accent3: " #a1b2c3 " as `#${string}` },
+            fonts: { major: "Verdana" },
+          },
+        }),
+      ),
+      createSlideNode({
+        id: "s1",
+        layout: layoutDef,
+        themeOverride: {
+          colors: { accent1: "#789", accent4: " #abcdef " as `#${string}` },
+          fonts: { minor: "Calibri" },
+        },
+      }),
+    );
+
+    for (const target of ["vanilla", "react"] as const) {
+      const source = generate(normalizedDoc, { target }).files[
+        target === "vanilla" ? "deck.ts" : "deck.tsx"
+      ] as string;
+      assert.match(source, /"#AABBCC"/u);
+      assert.match(source, /"#1A2B3C"/u);
+      assert.match(source, /"#112233"/u);
+      assert.match(source, /"#FEFEFE"/u);
+      assert.match(source, /"#DDEEFF"/u);
+      assert.match(source, /"#334455"/u);
+      assert.match(source, /"#A1B2C3"/u);
+      assert.match(source, /"#778899"/u);
+      assert.match(source, /"#ABCDEF"/u);
+      assert.doesNotMatch(source, /"#abc"|"#1a2b3c"|"#def"|"#789"/u);
+    }
+
+    const invalidCases: readonly {
+      readonly label: string;
+      readonly doc: CommonNode;
+      readonly expectedPath: string;
+      readonly expectedField: string;
+    }[] = [
+      {
+        label: "Deck.theme invalid color key",
+        doc: createDeckNode({
+          theme: { colors: { followHlink: "#112233" } } as never,
+        }).append(createSlideNode({ id: "s1" })),
+        expectedPath: "deck@theme.colors.followHlink",
+        expectedField: "theme.colors.followHlink",
+      },
+      {
+        label: "SlideMaster.theme reserved font placeholder",
+        doc: createDeckNode({}).append(
+          createSlideMasterNode({
+            id: "m1",
+            theme: { fonts: { major: "+mj-lt" } },
+          }),
+          createSlideNode({ id: "s1" }),
+        ),
+        expectedPath: "deck/slide-master[m1]@theme.fonts.major",
+        expectedField: "theme.fonts.major",
+      },
+      {
+        label: "SlideLayout.themeOverride invalid hex",
+        doc: createDeckNode({}).append(
+          createSlideMasterNode({ id: "m1" }).append(
+            createSlideLayoutNode({
+              id: "l1",
+              themeOverride: { colors: { accent1: "#11223380" } },
+            }),
+          ),
+          createSlideNode({ id: "s1" }),
+        ),
+        expectedPath:
+          "deck/slide-master[m1]/slide-layout[l1]@themeOverride.colors.accent1",
+        expectedField: "themeOverride.colors.accent1",
+      },
+      {
+        label: "Slide.themeOverride invalid key and color",
+        doc: createDeckNode({}).append(
+          createSlideNode({
+            id: "s",
+            themeOverride: {
+              colors: {
+                accent1: "#abc",
+                accent2: " #1a2b3c " as never,
+                followHlink: "#112233" as never,
+              },
+            },
+          }),
+        ),
+        expectedPath: "deck/slide[s]@themeOverride.colors.followHlink",
+        expectedField: "themeOverride.colors.followHlink",
+      },
+    ];
+
+    for (const item of invalidCases) {
+      assert.throws(
+        () => generate(item.doc, { target: "vanilla" }),
+        (error: unknown) =>
+          error instanceof CodegenError &&
+          error.diagnostics[0]?.code === "unexpressible-value" &&
+          error.diagnostics[0]?.path === item.expectedPath &&
+          error.diagnostics[0]?.field === item.expectedField &&
+          !("severity" in error.diagnostics[0]),
+        `${item.label} should throw CodegenError at ${item.expectedPath}`,
+      );
+    }
+  });
+
+  it("preserves and validates SlideLayoutDefinition.props set via .set({ layout }) and rejects non-definition SlideLayout.layout", () => {
+    const placeholderCap = {
+      declaration: "placeholder",
+      codegen: defineObjectCodegen({
+        declarations: {
+          placeholder: {
+            emitVanilla: (node, ctx) =>
+              ctx.formatVanillaCall(ctx.useImport("placeholder"), [
+                ctx.formatProps(Object.entries(node.props)),
+              ]),
+            emitReact: (node, ctx) =>
+              ctx.formatJsxElement(
+                ctx.useImport("Placeholder"),
+                Object.entries(node.props),
+              ),
+          },
+        },
+      }),
+      bind() {
+        throw new Error("not used in codegen unit test");
+      },
+    } as unknown as RegisteredCapabilityModule;
+
+    const generate = createCodegen([placeholderCap]);
+    const dynDef = defineSlideLayout({
+      id: "dyn",
+      name: "Dyn",
+      themeOverride: {
+        colors: { accent1: "#def" },
+        fonts: { minor: "Georgia" },
+      },
+      placeholders: {
+        title: {
+          type: "title",
+          idx: 0,
+          size: "full",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 400,
+            height: 60,
+          },
+        },
+      },
+    });
+    const lNode = createSlideLayoutNode();
+    lNode.set({ layout: dynDef });
+
+    const doc = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideMasterNode({ id: "m1" }).append(lNode),
+      createSlideNode({ id: "s1", layout: lNode }).append(
+        new CommonNode("placeholder", "placeholder", {
+          id: "ph1",
+          placeholder: "title",
+          nativePlaceholder: { type: "title", idx: 0, size: "full" },
+        }),
+      ),
+    );
+
+    for (const target of ["vanilla", "react"] as const) {
+      const result = generate(doc, { target });
+      const source = result.files[result.entry] as string;
+      assert.match(source, /id:\s*"dyn"/u);
+      assert.match(source, /name:\s*"Dyn"/u);
+      assert.match(source, /"#DDEEFF"/u);
+      assert.match(source, /minor:\s*"Georgia"/u);
+      assert.doesNotMatch(source, /nativePlaceholder/u);
+    }
+
+    const invalidLayoutDef = {
+      ...dynDef,
+      props: {
+        ...dynDef.props,
+        themeOverride: { colors: { accent1: "#11223380" } },
+      },
+    } as never;
+    const badDefNode = createSlideLayoutNode();
+    badDefNode.set({ layout: invalidLayoutDef });
+    const badDefDoc = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideMasterNode({ id: "m1" }).append(badDefNode),
+      createSlideNode({ id: "s1" }),
+    );
+    assert.throws(
+      () => generate(badDefDoc, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "unexpressible-value" &&
+        error.diagnostics[0]?.field === "themeOverride.colors.accent1" &&
+        error.diagnostics[0]?.path.endsWith("@themeOverride.colors.accent1") &&
+        !("severity" in error.diagnostics[0]),
+    );
+
+    const nonDefLayoutDoc = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideMasterNode({ id: "m1" }).append(
+        createSlideLayoutNode({ layout: "not-a-layout" as never }),
+      ),
+      createSlideNode({ id: "s1" }),
+    );
+    assert.throws(
+      () => generate(nonDefLayoutDoc, { target: "vanilla" }),
+      (error: unknown) =>
+        error instanceof CodegenError &&
+        error.diagnostics[0]?.code === "unexpressible-value" &&
+        error.diagnostics[0]?.field === "layout" &&
+        /^deck\/slide-master\[m1\]\/slide-layout\[[^\]]+\]@layout$/u.test(
+          error.diagnostics[0]?.path ?? "",
+        ) &&
         !("severity" in error.diagnostics[0]),
     );
   });

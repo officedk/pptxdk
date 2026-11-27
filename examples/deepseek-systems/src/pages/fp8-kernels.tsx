@@ -7,7 +7,7 @@ import {
   SemanticTag,
 } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const kernelCompareCategories = [
   "FlashMLA 访存带宽 (GB/s)",
@@ -201,7 +201,7 @@ export function Fp8KernelsPage() {
                 width: 68,
                 height: 23,
                 background: r === 0 && c === 1 ? colors.comm : colors.commSoft,
-                fontFamily: "metric",
+                fontFamily: fonts.metric,
                 fontSize: 10,
                 fontWeight: 700,
                 color: r === 0 && c === 1 ? colors.surface : colors.commText,
@@ -313,7 +313,7 @@ export function Fp8KernelsPage() {
             width: 24,
             height: 24,
             background: colors.slot,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 14,
             fontWeight: 700,
             color: colors.steel,
@@ -372,7 +372,7 @@ export function Fp8KernelsPage() {
             width: 24,
             height: 24,
             background: colors.slot,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 14,
             fontWeight: 700,
             color: colors.steel,
@@ -476,7 +476,11 @@ export function Fp8KernelsPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10.5,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -486,7 +490,11 @@ export function Fp8KernelsPage() {
               numberFormat: '0"%"',
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -512,7 +520,11 @@ export function Fp8KernelsPage() {
                 value: true,
                 position: "outsideEnd",
                 numberFormat: '0.0"%"',
-                style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+                style: {
+                  fontFamily: fonts.body,
+                  fontSize: 10,
+                  color: colors.ink,
+                },
               },
             },
           ]}
@@ -522,7 +534,7 @@ export function Fp8KernelsPage() {
             top: 168,
             width: 520,
             height: 240,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10.5,
             color: colors.ink,
           }}

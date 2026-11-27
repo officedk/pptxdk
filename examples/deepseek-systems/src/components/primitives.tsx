@@ -8,19 +8,20 @@ import {
   type EntranceEffectDeclaration,
   type ShapeProps,
   type TextStyle,
+  type ThemeColor,
 } from "@officedk/pptxdk/react";
 import type { ReactNode } from "react";
 
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 export type SemanticTone = "compute" | "comm" | "copper" | "baseline" | "steel";
 
 const tonePalette: Record<
   SemanticTone,
   {
-    readonly accent: string;
-    readonly soft: string;
-    readonly text: string;
+    readonly accent: ThemeColor;
+    readonly soft: ThemeColor;
+    readonly text: ThemeColor;
   }
 > = {
   compute: {
@@ -62,7 +63,7 @@ export function Rule({
   readonly y: number;
   readonly width: number;
   readonly height?: number;
-  readonly color?: string;
+  readonly color?: ThemeColor;
 }) {
   return (
     <Shape
@@ -164,8 +165,8 @@ export function PanelCard({
   readonly rightBadge?: string;
   readonly tone?: SemanticTone;
   readonly accentSide?: "top" | "left" | "none";
-  readonly background?: string;
-  readonly borderColor?: string;
+  readonly background?: ThemeColor;
+  readonly borderColor?: ThemeColor;
   readonly id?: string;
   readonly children?: ReactNode;
 }) {
@@ -345,7 +346,7 @@ export function MetricCard({
           top: y + 28,
           width: width - 20,
           padding: 0,
-          fontFamily: "metric",
+          fontFamily: fonts.metric,
           fontSize: 21,
           fontWeight: 700,
           color: valueColor,

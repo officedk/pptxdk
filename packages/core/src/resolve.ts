@@ -75,7 +75,6 @@ import {
   type ThemeContext,
   type ThemeInput,
   type ThemeOverride,
-  type ThemeScope,
 } from "#/theme.ts";
 import { computeTransformedGeometry } from "#/transform-geometry.ts";
 import type {
@@ -2788,10 +2787,7 @@ function resolveSlideDeclaration(
   }
   let theme: ThemeContext;
   try {
-    theme = documentTheme.with(
-      node.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(node.props["style"]),
-    );
+    theme = documentTheme.with(textStyleFrom(node.props["style"]));
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic(path, error.code, error.message)]);
@@ -3444,7 +3440,9 @@ function resolveDocument(
     );
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
-    throw new BuildError([diagnostic("deck", error.code, error.message)]);
+    throw new BuildError([
+      diagnostic("deck", error.code, error.message, error.details),
+    ]);
   }
   const parsed = resolveSlides(container, modules, theme.theme);
   const { masters: parsedMasters, layoutIdByKey, slides, sections } = parsed;

@@ -3,13 +3,11 @@ import {
   layoutStyleShape,
   linkTargetSchema,
   textStyleShape,
-  themeScopeSchema,
   visualStyleShape,
   type AuthorId,
   type LayoutStyle,
   type LinkTarget,
   type TextStyle,
-  type ThemeScope,
   type VisualStyle,
 } from "@pptxdk/core/capability";
 import { CommonContainer } from "@pptxdk/core/document";
@@ -62,7 +60,6 @@ export type GroupDeclarationProps = MotionProps & {
   readonly morphKey?: MorphKey | undefined;
   readonly link?: LinkTarget | undefined;
   readonly style?: GroupStyle | undefined;
-  readonly theme?: ThemeScope | undefined;
 };
 
 const groupDeclarationPropsObjectSchema = z.strictObject({
@@ -71,7 +68,6 @@ const groupDeclarationPropsObjectSchema = z.strictObject({
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   style: rawGroupStyleSchema.optional(),
-  theme: themeScopeSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
   motion: motionPropsShape.motion,

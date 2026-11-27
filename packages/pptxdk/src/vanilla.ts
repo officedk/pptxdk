@@ -18,10 +18,12 @@ export {
   isSchemeColorSlot,
   isSlideLayoutDefinition,
   isTheme,
+  isThemeFontSlot,
   lighter,
   nativeColorSlots,
   schemeColorNames,
   schemeColorSlots,
+  themeFontSlots,
 } from "@pptxdk/core";
 export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
 export type {
@@ -83,6 +85,7 @@ export type {
   ResolvedTableCell,
   ResolvedTableRow,
   RichTextItem,
+  HexColor,
   SchemeColorName,
   SchemeColorSlot,
   ScreenPoint,
@@ -97,9 +100,9 @@ export type {
   Theme,
   ThemeColor,
   ThemeData,
+  ThemeFontSlot,
   ThemeInput,
   ThemeOverride,
-  ThemeScope,
   ThemeShade,
   UnmeasuredFontIssue,
   VisualStyle,

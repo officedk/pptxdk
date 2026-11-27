@@ -14,6 +14,7 @@ import {
   deckPropsSchema,
   defineTheme,
   font,
+  isTheme,
   layoutLengthSchema,
   layoutSpacingSchema,
   layoutStyleSchema,
@@ -28,8 +29,8 @@ import {
   slidePropsSchema,
   textStyleSchema,
   themeInputSchema,
+  themeOverrideSchema,
   themeSchema,
-  themeScopeSchema,
 } from "@officedk/pptxdk";
 import * as pptxdkBuild from "@officedk/pptxdk/build";
 import {
@@ -130,7 +131,6 @@ describe("core author Zod schemas & dual-entry parity", () => {
       "textStyleSchema",
       "themeInputSchema",
       "themeSchema",
-      "themeScopeSchema",
       "linkTargetSchema",
     ] as const) {
       assert.ok(key in coreMain, `@pptxdk/core must export ${key}`);
@@ -143,11 +143,23 @@ describe("core author Zod schemas & dual-entry parity", () => {
         `@pptxdk/core/document must export ${key}`,
       );
     }
+    assert.ok(
+      "themeOverrideSchema" in coreMain,
+      "@pptxdk/core must export themeOverrideSchema",
+    );
+    assert.ok(
+      "themeOverrideSchema" in coreCapability,
+      "@pptxdk/core/capability must export themeOverrideSchema",
+    );
+    assert.ok(
+      "themeOverrideSchema" in pptxdkMain,
+      "@officedk/pptxdk must export themeOverrideSchema",
+    );
     for (const key of [
       "textStyleSchema",
       "themeInputSchema",
+      "themeOverrideSchema",
       "themeSchema",
-      "themeScopeSchema",
       "colorValueSchema",
       "fontSchema",
     ] as const) {
@@ -229,20 +241,31 @@ describe("core author Zod schemas & dual-entry parity", () => {
       "unsupported-declaration",
     );
     assert.equal(
-      themeInputSchema.parse({ colors: { ink: "dk1" } }).colors?.["ink"],
-      "dk1",
+      themeInputSchema.parse({ colors: { accent1: "#112233" } }).colors
+        ?.accent1,
+      "#112233",
     );
     assert.equal(themeSchema.parse(defineTheme()).name, "Office Theme");
     assert.equal(
-      themeScopeSchema.parse({ colors: { ink: "#112233" } }).colors?.["ink"],
-      "#112233",
+      themeOverrideSchema.parse({ colors: { accent1: "#abc" } }).colors
+        ?.accent1,
+      "#AABBCC",
     );
+    const brandTheme = defineTheme({ name: "Brand Parity" });
+    const parsedDeckWithTheme = deckPropsSchema.parse({ theme: brandTheme });
+    assert.equal(parsedDeckWithTheme.theme, brandTheme);
+    assert.equal(isTheme(parsedDeckWithTheme.theme), true);
+    const parsedDeckWithInlineTheme = deckPropsSchema.parse({
+      theme: { colors: { accent1: " #1a2b3c " as `#${string}` } },
+    });
+    assert.equal(isTheme(parsedDeckWithInlineTheme.theme), false);
+    assert.equal(parsedDeckWithInlineTheme.theme?.colors?.accent1, "#1A2B3C");
   });
 
   it("produces identical valid documents and PPTX outputs from @officedk/pptxdk/react and @officedk/pptxdk/vanilla", async () => {
     const theme = defineTheme({
       name: "Shared Brand",
-      colors: { ink: "#1E293B", accent: "accent1" },
+      colors: { dk1: "#1E293B", accent1: "#2563EB" },
       fonts: { major: jostFont, minor: jostFont },
     });
 
@@ -252,12 +275,12 @@ describe("core author Zod schemas & dual-entry parity", () => {
         height={540}
         theme={theme}
         title="Dual Entry Parity"
-        style={{ fontFamily: "minor", color: "ink", fontSize: 18 }}
+        style={{ fontFamily: "minor", color: "dk1", fontSize: 18 }}
       >
         <Section name="Overview">
           <Slide
             id="cover"
-            theme={{ colors: { ink: "#0F172A" } }}
+            themeOverride={{ colors: { dk1: "#0F172A" } }}
             style={{
               display: "flex",
               flexDirection: "column",
@@ -286,7 +309,10 @@ describe("core author Zod schemas & dual-entry parity", () => {
                   </Span>
                 </P>
               </Text>
-              <Text id="px-title" style={{ fontSize: "32px", color: "accent" }}>
+              <Text
+                id="px-title"
+                style={{ fontSize: "32px", color: "accent1" }}
+              >
                 32px Title
               </Text>
             </Box>
@@ -315,12 +341,12 @@ describe("core author Zod schemas & dual-entry parity", () => {
       height: 540,
       theme,
       title: "Dual Entry Parity",
-      style: { fontFamily: "minor", color: "ink", fontSize: 18 },
+      style: { fontFamily: "minor", color: "dk1", fontSize: 18 },
     }).append(
       section({ name: "Overview" }).append(
         slide({
           id: "cover",
-          theme: { colors: { ink: "#0F172A" } },
+          themeOverride: { colors: { dk1: "#0F172A" } },
           style: {
             display: "flex",
             flexDirection: "column",
@@ -357,7 +383,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
             ),
             text("32px Title", {
               id: "px-title",
-              style: { fontSize: "32px", color: "accent" },
+              style: { fontSize: "32px", color: "accent1" },
             }),
           ),
         ),
@@ -495,21 +521,65 @@ describe("core author Zod schemas & dual-entry parity", () => {
           ),
       },
       {
-        label: "invalid local theme scope",
-        expectedCode: "invalid-prop",
+        label: "unknown Box theme prop",
+        expectedCode: "unknown-prop",
         expectedPath: "deck/slide[s1]/box[b1]",
         jsx: () => (
           <Deck>
             <Slide id="s1">
-              <Box id="b1" theme={{ colors: { dk1: "#112233" } }} />
+              <Box
+                id="b1"
+                {...({
+                  theme: { colors: { dk1: "#112233" } },
+                } as Record<string, unknown>)}
+              />
             </Slide>
           </Deck>
         ),
         vanilla: () =>
           deck().append(
             slide({ id: "s1" }).append(
-              box({ id: "b1", theme: { colors: { dk1: "#112233" } } }),
+              box({ id: "b1", theme: { colors: { dk1: "#112233" } } } as never),
             ),
+          ),
+      },
+      {
+        label: "unknown Slide theme prop",
+        expectedCode: "unknown-prop",
+        expectedPath: "deck/slide[s1]",
+        jsx: () => (
+          <Deck>
+            <Slide
+              id="s1"
+              {...({
+                theme: { colors: { dk1: "#112233" } },
+              } as Record<string, unknown>)}
+            />
+          </Deck>
+        ),
+        vanilla: () =>
+          deck().append(
+            slide({ id: "s1", theme: { colors: { dk1: "#112233" } } } as never),
+          ),
+      },
+      {
+        label: "invalid Slide themeOverride",
+        expectedCode: "invalid-prop",
+        expectedPath: "deck/slide[s1]",
+        jsx: () => (
+          <Deck>
+            <Slide
+              id="s1"
+              themeOverride={{ colors: { custom: "#112233" } } as never}
+            />
+          </Deck>
+        ),
+        vanilla: () =>
+          deck().append(
+            slide({
+              id: "s1",
+              themeOverride: { colors: { custom: "#112233" } } as never,
+            }),
           ),
       },
       {
@@ -591,7 +661,10 @@ describe("core author Zod schemas & dual-entry parity", () => {
     const heroKey = morphScope.handle("hero");
     const motionHandle = createMotionScopeHandle();
     const bgUrl = new URL("https://example.test/bg.png");
-    const mutableStyle = { fontSize: "32pt" as const, color: "#112233" };
+    const mutableStyle: { fontSize: "32pt"; color: `#${string}` } = {
+      fontSize: "32pt",
+      color: "#112233",
+    };
 
     const vanillaDoc = deck({}).append(
       slide({ id: "s1", background: { image: bgUrl } }).append(

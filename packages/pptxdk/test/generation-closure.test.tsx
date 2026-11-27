@@ -65,12 +65,12 @@ function plainDeck() {
   return deck({
     width: 960,
     height: 540,
-    theme: { colors: { ink: "#123456", accent1: "#2F6F8F" } },
+    theme: { colors: { dk2: "#123456", accent1: "#2F6F8F" } },
   }).append(
     slide({
       id: "overview",
       background: "#F7F9FB",
-      theme: { colors: { ink: "#0B5C7A" } },
+      themeOverride: { colors: { dk2: "#0B5C7A" } },
     }).append(
       box({
         id: "layout",
@@ -84,7 +84,7 @@ function plainDeck() {
         text(
           paragraph(
             span("Same ", { style: { fontWeight: "bold" } }),
-            span("intent", { style: { color: "ink" } }),
+            span("intent", { style: { color: "dk2" } }),
           ),
           {
             id: "headline",
@@ -231,7 +231,7 @@ function plainDeck() {
           width: 400,
           height: 48,
           fontSize: 24,
-          color: "ink",
+          color: "dk2",
         },
       }),
     ),
@@ -245,12 +245,12 @@ function ReactDeck() {
     <Deck
       width={960}
       height={540}
-      theme={{ colors: { ink: "#123456", accent1: "#2F6F8F" } }}
+      theme={{ colors: { dk2: "#123456", accent1: "#2F6F8F" } }}
     >
       <Slide
         id="overview"
         background="#F7F9FB"
-        theme={{ colors: { ink: "#0B5C7A" } }}
+        themeOverride={{ colors: { dk2: "#0B5C7A" } }}
       >
         <Box
           id="layout"
@@ -274,7 +274,7 @@ function ReactDeck() {
           >
             <P>
               <Span style={{ fontWeight: "bold" }}>Same </Span>
-              <Span style={{ color: "ink" }}>intent</Span>
+              <Span style={{ color: "dk2" }}>intent</Span>
             </P>
           </Text>
           <Shape
@@ -422,7 +422,7 @@ function ReactDeck() {
             width: 400,
             height: 48,
             fontSize: 24,
-            color: "ink",
+            color: "dk2",
           }}
         >
           Details
@@ -509,12 +509,20 @@ describe("generation closure", () => {
 
     const plainSlideXml = slideXml(plainResult);
     const reactSlideXml = slideXml(reactResult);
-    assert.match(plainSlideXml, /0B5C7A/u);
-    assert.match(reactSlideXml, /0B5C7A/u);
+    assert.match(plainSlideXml, /<a:schemeClr val="dk2"\/>/u);
+    assert.match(reactSlideXml, /<a:schemeClr val="dk2"\/>/u);
     assert.match(plainSlideXml, /<p:timing/u);
     assert.match(reactSlideXml, /<p:timing/u);
     const plainParts = unzipSync(plainResult.pptx);
     const reactParts = unzipSync(reactResult.pptx);
+    assert.match(
+      strFromU8(plainParts["ppt/theme/themeOverride1.xml"]!),
+      /0B5C7A/u,
+    );
+    assert.match(
+      strFromU8(reactParts["ppt/theme/themeOverride1.xml"]!),
+      /0B5C7A/u,
+    );
     assert.equal(
       strFromU8(plainParts["ppt/theme/theme1.xml"]!),
       strFromU8(reactParts["ppt/theme/theme1.xml"]!),

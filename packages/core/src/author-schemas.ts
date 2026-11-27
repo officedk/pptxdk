@@ -12,17 +12,17 @@ import {
   backgroundValueSchema,
   colorMapOverrideSchema,
   colorValueSchema,
+  isTheme,
   textStyleSchema,
   textStyleShape,
   themeInputSchema,
   themeOverrideSchema,
-  themeScopeSchema,
   type BackgroundValue,
   type ColorMapOverride,
   type TextStyle,
+  type Theme,
   type ThemeInput,
   type ThemeOverride,
-  type ThemeScope,
 } from "#/theme.ts";
 
 type AssertExact<A, B> =
@@ -115,7 +115,7 @@ export type DeckProps = {
   /** Slide canvas height in CSS pixels (`px`); defaults to `720` (16:9 widescreen) when omitted. */
   readonly height?: number | undefined;
   /** Deck-level theme definition or inline theme input inherited by slides unless overridden. */
-  readonly theme?: ThemeInput | undefined;
+  readonly theme?: ThemeInput | Theme | undefined;
   /** Inherited root text style applied across slides unless overridden. */
   readonly style?: TextStyle | undefined;
   /** Presentation metadata title written to core document properties. */
@@ -125,7 +125,7 @@ export type DeckProps = {
 const deckPropsObjectSchema = z.strictObject({
   width: slideDimensionSchema.optional(),
   height: slideDimensionSchema.optional(),
-  theme: themeInputSchema.optional(),
+  theme: z.union([z.custom<Theme>(isTheme), themeInputSchema]).optional(),
   style: textStyleSchema.optional(),
   title: xml10StringSchema.optional(),
 });
@@ -162,7 +162,6 @@ const slideCorePropsObjectSchema = z.strictObject({
   /** Optional PowerPoint display name written to `<p:cSld name="...">` without altering the stable `id`. */
   name: xml10StringSchema.optional(),
   layout: z.unknown().optional(),
-  theme: themeScopeSchema.optional(),
   colorMapOverride: colorMapOverrideSchema.optional(),
   themeOverride: themeOverrideSchema.optional(),
   style: rawSlideStyleSchema.optional(),
@@ -278,7 +277,6 @@ export type SlideProps = {
   /** Optional PowerPoint display name written to `<p:cSld name="...">` without altering the stable `id`. */
   readonly name?: string | undefined;
   readonly layout?: unknown;
-  readonly theme?: ThemeScope | undefined;
   readonly colorMapOverride?: ColorMapOverride | undefined;
   readonly themeOverride?: ThemeOverride | undefined;
   readonly style?: SlideStyle | undefined;
@@ -522,6 +520,16 @@ export function parseSectionProps(
   return parsed.data;
 }
 
+const knownTrimmedSlideProps = new Set([
+  "background",
+  "transition",
+  "advanceAfter",
+  "motion",
+  "footer",
+  "dateTime",
+  "slideNumber",
+]);
+
 /** Validates core Slide props against `slideCorePropsSchema` while respecting registered slide capability extensions. */
 export function parseSlideCoreProps(
   props: Readonly<Record<string, unknown>>,
@@ -541,7 +549,6 @@ export function parseSlideCoreProps(
     "name",
     "layout",
     "placeholders",
-    "theme",
     "colorMapOverride",
     "themeOverride",
     "style",
@@ -554,13 +561,25 @@ export function parseSlideCoreProps(
   const authorId = readAuthorId(props["id"], `deck/slide[${index + 1}]`);
   if (unknown !== undefined) {
     const label = authorId ?? index + 1;
+    if (knownTrimmedSlideProps.has(unknown)) {
+      throw new BuildError([
+        {
+          code: "missing-capability",
+          path: `deck/slide[${label}]`,
+          field: unknown,
+          capability: unknown,
+          message: `No capability module registered for Slide.${unknown}`,
+        },
+      ]);
+    }
     throw new BuildError([
       {
-        code: "missing-capability",
+        code: "unknown-prop",
         path: `deck/slide[${label}]`,
+        prop: unknown,
         field: unknown,
-        capability: unknown,
-        message: `No capability module registered for Slide.${unknown}`,
+        scope: "props",
+        message: `Slide contains unknown parameter ${unknown}`,
       },
     ]);
   }

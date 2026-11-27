@@ -4,6 +4,7 @@ import {
   text,
   type BoxNode,
   type CommonNode,
+  type ThemeColor,
 } from "@officedk/pptxdk/vanilla";
 
 import { colors } from "../theme.ts";
@@ -38,7 +39,7 @@ const BLOCK_START_X = 148;
 const BLOCK_GAP = 6;
 const BLOCK_HEIGHT = 34;
 
-const toneFill: Record<ScheduleTone, string> = {
+const toneFill: Record<ScheduleTone, ThemeColor> = {
   compute: colors.compute,
   comm: colors.comm,
   copper: colors.copper,

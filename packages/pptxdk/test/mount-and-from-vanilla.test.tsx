@@ -10,6 +10,7 @@ import {
   fade,
   motionSchedule,
   resolve,
+  type ThemeColor,
 } from "@officedk/pptxdk";
 import {
   Box,
@@ -583,32 +584,29 @@ describe("public React Mount adoption", () => {
     );
   });
 
-  it("participates dynamically in outer Flex/Grid layout, Step, MotionScope stagger, and ThemeScope", async () => {
+  it("participates dynamically in outer Flex/Grid layout, Step, MotionScope stagger, and explicit theme colors", async () => {
     const scopeHandle = createMotionScopeHandle();
     const outerTheme = defineTheme({
       name: "OuterTheme",
-      colors: { accent: "#1D4ED8" },
+      colors: { accent1: "#1D4ED8", accent2: "#BE123C" },
     });
-    const scopedTheme = {
-      colors: { accent: "#BE123C" },
-    };
 
-    const createTile = (id: string) =>
+    const createTile = (id: string, accentColor: ThemeColor = "accent1") =>
       shape(id, {
         id,
         style: {
           flex: 1,
           height: 44,
-          background: "accent",
+          background: accentColor,
           color: "#FFFFFF",
         },
         enter: fade({ duration: 150 }),
       });
 
-    const narrowA = createTile("narrow-a");
-    const narrowB = createTile("narrow-b");
-    const wideA = createTile("wide-a");
-    const wideB = createTile("wide-b");
+    const narrowA = createTile("narrow-a", "accent1");
+    const narrowB = createTile("narrow-b", "accent1");
+    const wideA = createTile("wide-a", "accent2");
+    const wideB = createTile("wide-b", "accent2");
 
     const doc = await expandDocument(
       createElement(
@@ -645,7 +643,6 @@ describe("public React Mount adoption", () => {
                 Box,
                 {
                   id: "wide-flex",
-                  theme: scopedTheme,
                   style: {
                     position: "absolute",
                     left: 20,
@@ -680,10 +677,14 @@ describe("public React Mount adoption", () => {
     assert.equal(wideABox?.width, 240);
     assert.equal(wideBBox?.width, 240);
 
-    // Scoped ThemeScope overrides accent color on wide tiles vs outer theme on narrow tiles.
-    const xml = strFromU8(unzipSync(built.pptx)["ppt/slides/slide1.xml"]!);
-    assert.match(xml, /1D4ED8/u);
-    assert.match(xml, /BE123C/u);
+    // Explicit theme color slots differentiate wide tiles vs narrow tiles.
+    const parts = unzipSync(built.pptx);
+    const xml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    const themeXml = strFromU8(parts["ppt/theme/theme1.xml"]!);
+    assert.match(xml, /<a:schemeClr val="accent1"\/>/u);
+    assert.match(xml, /<a:schemeClr val="accent2"\/>/u);
+    assert.match(themeXml, /1D4ED8/u);
+    assert.match(themeXml, /BE123C/u);
 
     // MotionScope stagger + Step 1 applies to all 4 mounted tiles.
     const schedule = motionSchedule(built.slides[0]!);
@@ -704,6 +705,7 @@ describe("public React fromVanilla bridge", () => {
       readonly id: string;
       readonly label: string;
       readonly value: string;
+      readonly accentColor?: ThemeColor;
     }
 
     const createBadge = () =>
@@ -712,11 +714,16 @@ describe("public React fromVanilla bridge", () => {
         style: {
           width: 100,
           height: 32,
-          background: "accent",
+          background: "accent1",
           color: "#FFFFFF",
         },
       });
-    const createMetricTile = ({ id, label, value }: MetricTileProps) =>
+    const createMetricTile = ({
+      id,
+      label,
+      value,
+      accentColor = "accent1",
+    }: MetricTileProps) =>
       box({
         id,
         style: {
@@ -732,7 +739,7 @@ describe("public React fromVanilla bridge", () => {
         shape(label, { id: `${id}-label`, style: { height: 18 } }),
         text(value, {
           id: `${id}-value`,
-          style: { height: 24, color: "accent" },
+          style: { height: 24, color: accentColor },
         }),
       );
 
@@ -764,7 +771,7 @@ describe("public React fromVanilla bridge", () => {
         height={450}
         theme={defineTheme({
           name: "BridgeTheme",
-          colors: { accent: "#0F766E" },
+          colors: { accent1: "#0F766E" },
         })}
       >
         <Slide id="bridge-slide">
@@ -788,7 +795,6 @@ describe("public React fromVanilla bridge", () => {
               </Box>
               <Box
                 id="wide"
-                theme={{ colors: { accent: "#9333EA" } }}
                 style={{
                   position: "absolute",
                   left: 20,
@@ -800,8 +806,18 @@ describe("public React fromVanilla bridge", () => {
                   gap: 20,
                 }}
               >
-                <MetricTile id="tile-w1" label="W1" value="30" />
-                <MetricTile id="tile-w2" label="W2" value="40" />
+                <MetricTile
+                  id="tile-w1"
+                  label="W1"
+                  value="30"
+                  accentColor="#9333EA"
+                />
+                <MetricTile
+                  id="tile-w2"
+                  label="W2"
+                  value="40"
+                  accentColor="#9333EA"
+                />
               </Box>
             </MotionScope>
           </Step>
@@ -826,8 +842,11 @@ describe("public React fromVanilla bridge", () => {
     const objs = resolved.slides[0]?.objects ?? [];
     assert.equal(objs.find((o) => o.authorId === "tile-n1")?.box?.width, 110);
     assert.equal(objs.find((o) => o.authorId === "tile-w1")?.box?.width, 240);
-    const xml = strFromU8(unzipSync(built.pptx)["ppt/slides/slide1.xml"]!);
-    assert.match(xml, /0F766E/u);
+    const parts = unzipSync(built.pptx);
+    const xml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    const themeXml = strFromU8(parts["ppt/theme/theme1.xml"]!);
+    assert.match(xml, /<a:schemeClr val="accent1"\/>/u);
+    assert.match(themeXml, /0F766E/u);
     assert.match(xml, /9333EA/u);
 
     const schedule = motionSchedule(built.slides[0]!);

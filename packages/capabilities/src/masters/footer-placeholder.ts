@@ -5,6 +5,7 @@ import {
   type ColorValue,
   type FooterPlaceholderSpec,
   type FooterPlaceholders,
+  type HexColor,
   type Rect,
   type HeaderFooter,
   type PlaceholderSize,
@@ -635,7 +636,7 @@ function readFooterXmlColor(
   if (colorCursor === undefined) return undefined;
 
   let slot: z.infer<typeof schemeColorNameSchema> | undefined;
-  let hex: string | undefined;
+  let hex: HexColor | undefined;
   if (srgb !== undefined) {
     const parsed = SrgbAttrSchema.safeParse(srgb.attrsObject(["val"]));
     if (!parsed.success) return undefined;

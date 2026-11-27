@@ -2,7 +2,7 @@ import { Cell, Chart, P, Row, Table, Text, wipe } from "@officedk/pptxdk/react";
 
 import { MetricCard, PanelCard } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const costRows = [
   {
@@ -70,7 +70,11 @@ export function TrainingCostPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 12, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 12,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -80,7 +84,11 @@ export function TrainingCostPage() {
               numberFormat: '#,##0"K"',
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 11, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 11,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -111,7 +119,11 @@ export function TrainingCostPage() {
                 value: true,
                 position: "outsideEnd",
                 numberFormat: '#,##0"K"',
-                style: { fontFamily: "body", fontSize: 12, color: colors.ink },
+                style: {
+                  fontFamily: fonts.body,
+                  fontSize: 12,
+                  color: colors.ink,
+                },
               },
             },
           ]}
@@ -121,7 +133,7 @@ export function TrainingCostPage() {
             top: 168,
             width: 520,
             height: 292,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 12,
             color: colors.ink,
           }}
@@ -150,7 +162,11 @@ export function TrainingCostPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 11.5, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 11.5,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -162,7 +178,7 @@ export function TrainingCostPage() {
               gridlines: { color: colors.line, width: 1 },
               line: false,
               style: {
-                fontFamily: "body",
+                fontFamily: fonts.body,
                 fontSize: 10.5,
                 color: colors.muted,
               },
@@ -199,7 +215,7 @@ export function TrainingCostPage() {
             top: 496,
             width: 520,
             height: 150,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 11,
             color: colors.ink,
           }}
@@ -225,7 +241,7 @@ export function TrainingCostPage() {
             left: 638,
             top: 174,
             width: 576,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 11.5,
             color: colors.ink,
           }}

@@ -984,7 +984,7 @@ describe("plain authoring choreography", () => {
   it("builds transitions, navigation, and Morph through the plain entry", async () => {
     const scope = createMorphScope();
     const hero = scope.handle("hero");
-    const style = { width: 100, height: 50, background: "#336699" };
+    const style = { width: 100, height: 50, background: "#336699" as const };
     const document = deck({ width: 320, height: 180 }).append(
       slide({
         id: "first",

@@ -355,7 +355,7 @@ describe("public React handoff", () => {
   });
 
   it("keeps received style values when unmount cleanup mutates the original style object", async () => {
-    const style = { color: "#FF0000" };
+    const style: { color: `#${string}` } = { color: "#FF0000" };
 
     function MutatingCleanup() {
       useLayoutEffect(

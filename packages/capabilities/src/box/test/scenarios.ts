@@ -109,11 +109,11 @@ export const boxPositiveScenario: CapabilityScenario = {
   id: "box-containers-and-nesting",
   capability: "box",
   description:
-    "Dual-author Box scenario covering transparent Flex/Grid layout containers, visible filled/bordered/rotated/linked Boxes, nested Shape & wrapped Text, and scoped ThemeScope overrides.",
+    "Dual-author Box scenario covering transparent Flex/Grid layout containers, visible filled/bordered/rotated/linked Boxes, nested Shape & wrapped Text, and native theme / slide themeOverride.",
   visualCheckpoints: [
     "Page 1 (box-nesting-and-styles): light slate #F8FAFC canvas; transparent outer Flex container holds two side-by-side visible cards.",
-    "Page 2 (box-theme-and-wrapping): white canvas; green-tinted Grid card resolved from local ThemeScope; hollow bordered Box below.",
-    "Page 3 (box-visual-effects): linear-gradient card with borderRadius & dashed border, radial-gradient card, PNG & GIF image-filled rounded Boxes, rotated screen-space boxShadow card, and feathered softEdge card.",
+    "Page 2 (box-theme-and-wrapping): white canvas; green-tinted Grid card resolved from native scheme slots and container style; hollow bordered Box below.",
+    "Page 3 (box-visual-effects): linear-gradient card (via Slide themeOverride) with borderRadius & dashed border, radial-gradient card, PNG & GIF image-filled rounded Boxes, rotated screen-space boxShadow card, and feathered softEdge card.",
     "Page 4 (box-arrow-types): Box grid traversing all 6 ArrowType values across straight lines, curved open paths, dashed strokes, and flipped/rotated segments.",
   ],
   nativeCheckpoints: [
@@ -126,8 +126,12 @@ export const boxPositiveScenario: CapabilityScenario = {
         width: 640,
         height: 360,
         theme: {
-          colors: { accentInk: "#991B1B", surface: "#FEE2E2" },
-          fonts: { headingFont: notoFont },
+          colors: {
+            accent1: "#0F766E",
+            lt2: "#ECFDF5",
+            accent2: "#991B1B",
+          },
+          fonts: { major: jostFont, minor: notoFont },
         },
       },
       createElement(
@@ -236,10 +240,6 @@ export const boxPositiveScenario: CapabilityScenario = {
           Box,
           {
             id: "themed-section",
-            theme: {
-              colors: { accentInk: "#0F766E", surface: "#ECFDF5" },
-              fonts: { headingFont: jostFont },
-            },
             style: {
               position: "absolute",
               left: 32,
@@ -250,7 +250,7 @@ export const boxPositiveScenario: CapabilityScenario = {
               gap: 18,
               fontFamily: notoFont,
               fontSize: 15,
-              color: "accentInk",
+              color: "accent1",
             },
           },
           createElement(
@@ -262,25 +262,25 @@ export const boxPositiveScenario: CapabilityScenario = {
                 gridTemplateColumns: "120px 1fr",
                 gap: 16,
                 padding: 16,
-                background: "surface",
+                background: "lt2",
                 border: { color: "#10B981", width: 2, style: "solid" },
               },
             },
             createElement(Shape, {
               id: "grid-swatch",
-              style: { width: 120, height: 72, background: "accentInk" },
+              style: { width: 120, height: 72, background: "accent1" },
             }),
             createElement(
               Text,
               {
                 id: "grid-text",
                 style: {
-                  fontFamily: "headingFont",
+                  fontFamily: "major",
                   fontSize: 17,
                   lineHeight: 25,
                 },
               },
-              "ThemeScope overrides surface fill, accentInk color, and headingFont inside nested Grid Box.",
+              "Container style and native scheme slots drive lt2 fill, accent1 color, and major font inside nested Grid Box.",
             ),
           ),
           createElement(
@@ -321,12 +321,15 @@ export const boxPositiveScenario: CapabilityScenario = {
       ),
       createElement(
         Slide,
-        { id: "box-visual-effects", background: "#FFFFFF" },
+        {
+          id: "box-visual-effects",
+          background: "#FFFFFF",
+          themeOverride: { colors: { lt2: "#1D4ED8", accent1: "#9333EA" } },
+        },
         createElement(
           Box,
           {
             id: "effects-grid",
-            theme: { colors: { surface: "#1D4ED8", accentInk: "#9333EA" } },
             style: {
               position: "absolute",
               left: 24,
@@ -341,7 +344,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "linear-rounded-dashed",
             style: {
               height: 90,
-              background: linearGradient(90, "surface", "accentInk"),
+              background: linearGradient(90, "lt2", "accent1"),
               border: { color: "#0F172A", width: 2, style: "dashed" },
               borderRadius: 14,
             },
@@ -477,8 +480,12 @@ export const boxPositiveScenario: CapabilityScenario = {
       width: 640,
       height: 360,
       theme: {
-        colors: { accentInk: "#991B1B", surface: "#FEE2E2" },
-        fonts: { headingFont: notoFont },
+        colors: {
+          accent1: "#0F766E",
+          lt2: "#ECFDF5",
+          accent2: "#991B1B",
+        },
+        fonts: { major: jostFont, minor: notoFont },
       },
     }).append(
       slide({ id: "box-nesting-and-styles", background: "#F8FAFC" }).append(
@@ -568,10 +575,6 @@ export const boxPositiveScenario: CapabilityScenario = {
       slide({ id: "box-theme-and-wrapping", background: "#FFFFFF" }).append(
         box({
           id: "themed-section",
-          theme: {
-            colors: { accentInk: "#0F766E", surface: "#ECFDF5" },
-            fonts: { headingFont: jostFont },
-          },
           style: {
             position: "absolute",
             left: 32,
@@ -582,7 +585,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             gap: 18,
             fontFamily: notoFont,
             fontSize: 15,
-            color: "accentInk",
+            color: "accent1",
           },
         }).append(
           box({
@@ -592,20 +595,20 @@ export const boxPositiveScenario: CapabilityScenario = {
               gridTemplateColumns: "120px 1fr",
               gap: 16,
               padding: 16,
-              background: "surface",
+              background: "lt2",
               border: { color: "#10B981", width: 2, style: "solid" },
             },
           }).append(
             shape({
               id: "grid-swatch",
-              style: { width: 120, height: 72, background: "accentInk" },
+              style: { width: 120, height: 72, background: "accent1" },
             }),
             text(
-              "ThemeScope overrides surface fill, accentInk color, and headingFont inside nested Grid Box.",
+              "Container style and native scheme slots drive lt2 fill, accent1 color, and major font inside nested Grid Box.",
               {
                 id: "grid-text",
                 style: {
-                  fontFamily: "headingFont",
+                  fontFamily: "major",
                   fontSize: 17,
                   lineHeight: 25,
                 },
@@ -640,10 +643,13 @@ export const boxPositiveScenario: CapabilityScenario = {
           ),
         ),
       ),
-      slide({ id: "box-visual-effects", background: "#FFFFFF" }).append(
+      slide({
+        id: "box-visual-effects",
+        background: "#FFFFFF",
+        themeOverride: { colors: { lt2: "#1D4ED8", accent1: "#9333EA" } },
+      }).append(
         box({
           id: "effects-grid",
-          theme: { colors: { surface: "#1D4ED8", accentInk: "#9333EA" } },
           style: {
             position: "absolute",
             left: 24,
@@ -658,7 +664,7 @@ export const boxPositiveScenario: CapabilityScenario = {
             id: "linear-rounded-dashed",
             style: {
               height: 90,
-              background: linearGradient(90, "surface", "accentInk"),
+              background: linearGradient(90, "lt2", "accent1"),
               border: { color: "#0F172A", width: 2, style: "dashed" },
               borderRadius: 14,
             },
@@ -823,7 +829,7 @@ export const boxPositiveScenario: CapabilityScenario = {
     const slide1Xml = strFromU8(unzipSync(pptx)["ppt/slides/slide1.xml"]!);
     assert.match(slide1Xml, /rot="180000"/u);
 
-    // Page 2: ThemeScope tokens resolved in both SVG and PPTX, hollow frame has fill="none".
+    // Page 2: Scheme colors and container styles resolved in both SVG and PPTX, hollow frame has fill="none".
     expect(page2.svg).toContain('fill="#ECFDF5"');
     expect(page2.svg).toContain('fill="#0F766E"');
     expect(page2.svg).toContain('fill="none"');

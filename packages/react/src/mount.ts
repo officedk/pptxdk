@@ -35,8 +35,8 @@ export type MountProps =
  * Adopts pre-constructed {@link CommonNode} instances directly into the React tree without
  * creating a wrapper node.
  *
- * Adopted nodes retain their own props, identity, and imperative subtree, participate in layout,
- * motion, and theme scopes, and enforce strict single-parent ownership. When `slot` is provided,
+ * Adopted nodes retain their own props, identity, and imperative subtree, participate in layout
+ * and motion, and enforce strict single-parent ownership. When `slot` is provided,
  * JSX `children` are reconciled inside `slot` after any imperative preset children.
  */
 export function Mount(props: MountProps): ReactNode {

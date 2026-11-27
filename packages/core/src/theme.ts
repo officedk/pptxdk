@@ -118,13 +118,29 @@ export const fontOptionsSchema: z.ZodType<FontOptions> =
       : never
   >;
 
-export type FontReference = string | Font;
-export type FontToken = FontReference;
+export const themeFontSlots = ["major", "minor"] as const;
+export type ThemeFontSlot = (typeof themeFontSlots)[number];
+const rawThemeFontSlotSchema = z.enum(themeFontSlots);
+export const themeFontSlotSchema: z.ZodType<ThemeFontSlot> =
+  rawThemeFontSlotSchema satisfies z.ZodType<
+    AssertExact<
+      ThemeFontSlot,
+      z.infer<typeof rawThemeFontSlotSchema>
+    > extends true
+      ? ThemeFontSlot
+      : never
+  >;
+
+export function isThemeFontSlot(value: unknown): value is ThemeFontSlot {
+  return value === "major" || value === "minor";
+}
+
+export type FontReference = ThemeFontSlot | (string & {}) | Font;
 
 const rawFontReferenceSchema = z.union([
   nonEmptyTrimmedStringSchema,
   rawFontSchema,
-]);
+]) as unknown as z.ZodType<FontReference>;
 export const fontReferenceSchema: z.ZodType<FontReference> =
   rawFontReferenceSchema satisfies z.ZodType<
     AssertExact<
@@ -135,7 +151,23 @@ export const fontReferenceSchema: z.ZodType<FontReference> =
       : never
   >;
 
-export const fontTokenSchema: z.ZodType<FontToken> = fontReferenceSchema;
+const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
+
+function isAllowedThemeFontFamily(family: string): boolean {
+  const trimmed = family.trim();
+  return trimmed !== "" && !reservedThemeFontPattern.test(trimmed);
+}
+
+const rawThemeFontValueSchema = z.union([
+  nonEmptyTrimmedStringSchema.refine(
+    isAllowedThemeFontFamily,
+    "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'",
+  ),
+  rawFontSchema.refine(
+    (fontValue) => isAllowedThemeFontFamily(fontValue.family),
+    "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'",
+  ),
+]);
 
 const textLengthPattern = /^(\d+(?:\.\d+)?)(px|pt)$/u;
 const textLengthStringSchema = z
@@ -381,8 +413,46 @@ export const themeShadeSchema: z.ZodType<ThemeShade> =
       : never
   >;
 
-export type ThemeColor = string | ThemeShade;
-const rawThemeColorSchema = z.union([z.string(), rawThemeShadeSchema]);
+export type HexColor = `#${string}`;
+
+const themeHexColorPattern = /^\s*#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\s*$/u;
+const styleHexColorPattern =
+  /^\s*#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\s*$/u;
+
+function normalizeThemeHexColor(raw: string): HexColor {
+  const trimmed = raw.trim();
+  const digits = trimmed.slice(1);
+  const expanded =
+    digits.length === 3
+      ? digits
+          .split("")
+          .map((digit) => digit + digit)
+          .join("")
+      : digits;
+  return `#${expanded.toUpperCase()}` as HexColor;
+}
+
+const rawThemeHexColorSchema: z.ZodType<HexColor> = z
+  .string()
+  .regex(
+    themeHexColorPattern,
+    "Theme color slot must be an opaque #RGB or #RRGGBB hex color",
+  )
+  .transform(normalizeThemeHexColor);
+
+const rawStyleHexColorSchema = z
+  .string()
+  .regex(
+    styleHexColorPattern,
+    "Color hex value must be #RGB, #RGBA, #RRGGBB, or #RRGGBBAA",
+  ) as unknown as z.ZodType<HexColor>;
+
+export type ThemeColor = SchemeColorName | HexColor | ThemeShade;
+const rawThemeColorSchema = z.union([
+  rawSchemeColorNameSchema,
+  rawStyleHexColorSchema,
+  rawThemeShadeSchema,
+]);
 export const themeColorSchema: z.ZodType<ThemeColor> =
   rawThemeColorSchema satisfies z.ZodType<
     AssertExact<ThemeColor, z.infer<typeof rawThemeColorSchema>> extends true
@@ -390,17 +460,17 @@ export const themeColorSchema: z.ZodType<ThemeColor> =
       : never
   >;
 
-/** Color entry can directly provide color, theme slot, or theme token, optionally with alpha. */
+/** Color entry can directly provide a scheme color, hex color, or theme shade, optionally with alpha. */
 export type ColorValue =
-  | string
-  | ThemeShade
+  | ThemeColor
   | {
       readonly color: ThemeColor;
       readonly alpha?: number | undefined;
     };
 
 const rawColorValueSchema = z.union([
-  z.string(),
+  rawSchemeColorNameSchema,
+  rawStyleHexColorSchema,
   rawThemeShadeSchema,
   z
     .strictObject({
@@ -409,7 +479,7 @@ const rawColorValueSchema = z.union([
     })
     .readonly(),
 ]);
-/** Color entry can directly provide color, theme slot, or theme token, optionally with alpha. */
+/** Color entry can directly provide a scheme color, hex color, or theme shade, optionally with alpha. */
 export const colorValueSchema: z.ZodType<ColorValue> =
   rawColorValueSchema satisfies z.ZodType<
     AssertExact<ColorValue, z.infer<typeof rawColorValueSchema>> extends true
@@ -659,8 +729,9 @@ export const imageBackgroundSchema: z.ZodType<ImageBackground> =
       : never
   >;
 
-/** Fill value (`"none"`, color token/hex, gradient, or image background). */
+/** Fill value (`"none"`, color, gradient, or image background). */
 export type BackgroundValue =
+  | "none"
   | ColorValue
   | LinearGradient
   | RadialGradient
@@ -1101,34 +1172,30 @@ export const formatSchemeSchema: z.ZodType<FormatScheme> =
       : never
   >;
 
-/** Deck-level or master-level theme input; major/minor fonts are written to native PPTX theme. */
+/** Deck-level or master-level theme input; major/minor fonts and 12 native color slots are written to native PPTX theme. */
 export type ThemeInput = {
   readonly name?: string | undefined;
   readonly colors?:
-    | Readonly<
-        {
-          dk1?: string | undefined;
-          lt1?: string | undefined;
-          dk2?: string | undefined;
-          lt2?: string | undefined;
-          accent1?: string | undefined;
-          accent2?: string | undefined;
-          accent3?: string | undefined;
-          accent4?: string | undefined;
-          accent5?: string | undefined;
-          accent6?: string | undefined;
-          hlink?: string | undefined;
-          folHlink?: string | undefined;
-        } & Record<string, ThemeColor>
-      >
+    | {
+        readonly dk1?: HexColor | undefined;
+        readonly lt1?: HexColor | undefined;
+        readonly dk2?: HexColor | undefined;
+        readonly lt2?: HexColor | undefined;
+        readonly accent1?: HexColor | undefined;
+        readonly accent2?: HexColor | undefined;
+        readonly accent3?: HexColor | undefined;
+        readonly accent4?: HexColor | undefined;
+        readonly accent5?: HexColor | undefined;
+        readonly accent6?: HexColor | undefined;
+        readonly hlink?: HexColor | undefined;
+        readonly folHlink?: HexColor | undefined;
+      }
     | undefined;
   readonly fonts?:
-    | Readonly<
-        {
-          major?: FontToken | undefined;
-          minor?: FontToken | undefined;
-        } & Record<string, FontToken>
-      >
+    | {
+        readonly major?: Font | string | undefined;
+        readonly minor?: Font | string | undefined;
+      }
     | undefined;
   readonly formatScheme?: FormatScheme | undefined;
 };
@@ -1137,35 +1204,33 @@ const rawThemeInputSchema = z
   .strictObject({
     name: z.string().optional(),
     colors: z
-      .object({
-        dk1: z.string().optional(),
-        lt1: z.string().optional(),
-        dk2: z.string().optional(),
-        lt2: z.string().optional(),
-        accent1: z.string().optional(),
-        accent2: z.string().optional(),
-        accent3: z.string().optional(),
-        accent4: z.string().optional(),
-        accent5: z.string().optional(),
-        accent6: z.string().optional(),
-        hlink: z.string().optional(),
-        folHlink: z.string().optional(),
+      .strictObject({
+        dk1: rawThemeHexColorSchema.optional(),
+        lt1: rawThemeHexColorSchema.optional(),
+        dk2: rawThemeHexColorSchema.optional(),
+        lt2: rawThemeHexColorSchema.optional(),
+        accent1: rawThemeHexColorSchema.optional(),
+        accent2: rawThemeHexColorSchema.optional(),
+        accent3: rawThemeHexColorSchema.optional(),
+        accent4: rawThemeHexColorSchema.optional(),
+        accent5: rawThemeHexColorSchema.optional(),
+        accent6: rawThemeHexColorSchema.optional(),
+        hlink: rawThemeHexColorSchema.optional(),
+        folHlink: rawThemeHexColorSchema.optional(),
       })
-      .catchall(rawThemeColorSchema)
       .readonly()
       .optional(),
     fonts: z
-      .object({
-        major: rawFontReferenceSchema.optional(),
-        minor: rawFontReferenceSchema.optional(),
+      .strictObject({
+        major: rawThemeFontValueSchema.optional(),
+        minor: rawThemeFontValueSchema.optional(),
       })
-      .catchall(rawFontReferenceSchema)
       .readonly()
       .optional(),
     formatScheme: rawFormatSchemeSchema.optional(),
   })
   .readonly();
-/** Deck-level or master-level theme input; major/minor fonts are written to native PPTX theme. */
+/** Deck-level or master-level theme input; major/minor fonts and 12 native color slots are written to native PPTX theme. */
 export const themeInputSchema: z.ZodType<ThemeInput> =
   rawThemeInputSchema satisfies z.ZodType<
     AssertExact<ThemeInput, z.infer<typeof rawThemeInputSchema>> extends true
@@ -1177,24 +1242,24 @@ export const themeInputSchema: z.ZodType<ThemeInput> =
 export type ThemeOverride = {
   readonly colors?:
     | {
-        readonly dk1?: string | undefined;
-        readonly lt1?: string | undefined;
-        readonly dk2?: string | undefined;
-        readonly lt2?: string | undefined;
-        readonly accent1?: string | undefined;
-        readonly accent2?: string | undefined;
-        readonly accent3?: string | undefined;
-        readonly accent4?: string | undefined;
-        readonly accent5?: string | undefined;
-        readonly accent6?: string | undefined;
-        readonly hlink?: string | undefined;
-        readonly folHlink?: string | undefined;
+        readonly dk1?: HexColor | undefined;
+        readonly lt1?: HexColor | undefined;
+        readonly dk2?: HexColor | undefined;
+        readonly lt2?: HexColor | undefined;
+        readonly accent1?: HexColor | undefined;
+        readonly accent2?: HexColor | undefined;
+        readonly accent3?: HexColor | undefined;
+        readonly accent4?: HexColor | undefined;
+        readonly accent5?: HexColor | undefined;
+        readonly accent6?: HexColor | undefined;
+        readonly hlink?: HexColor | undefined;
+        readonly folHlink?: HexColor | undefined;
       }
     | undefined;
   readonly fonts?:
     | {
-        readonly major?: FontToken | undefined;
-        readonly minor?: FontToken | undefined;
+        readonly major?: Font | string | undefined;
+        readonly minor?: Font | string | undefined;
       }
     | undefined;
   readonly formatScheme?: FormatScheme | undefined;
@@ -1204,25 +1269,25 @@ const rawThemeOverrideSchema = z
   .strictObject({
     colors: z
       .strictObject({
-        dk1: z.string().optional(),
-        lt1: z.string().optional(),
-        dk2: z.string().optional(),
-        lt2: z.string().optional(),
-        accent1: z.string().optional(),
-        accent2: z.string().optional(),
-        accent3: z.string().optional(),
-        accent4: z.string().optional(),
-        accent5: z.string().optional(),
-        accent6: z.string().optional(),
-        hlink: z.string().optional(),
-        folHlink: z.string().optional(),
+        dk1: rawThemeHexColorSchema.optional(),
+        lt1: rawThemeHexColorSchema.optional(),
+        dk2: rawThemeHexColorSchema.optional(),
+        lt2: rawThemeHexColorSchema.optional(),
+        accent1: rawThemeHexColorSchema.optional(),
+        accent2: rawThemeHexColorSchema.optional(),
+        accent3: rawThemeHexColorSchema.optional(),
+        accent4: rawThemeHexColorSchema.optional(),
+        accent5: rawThemeHexColorSchema.optional(),
+        accent6: rawThemeHexColorSchema.optional(),
+        hlink: rawThemeHexColorSchema.optional(),
+        folHlink: rawThemeHexColorSchema.optional(),
       })
       .readonly()
       .optional(),
     fonts: z
       .strictObject({
-        major: rawFontReferenceSchema.optional(),
-        minor: rawFontReferenceSchema.optional(),
+        major: rawThemeFontValueSchema.optional(),
+        minor: rawThemeFontValueSchema.optional(),
       })
       .readonly()
       .optional(),
@@ -1242,28 +1307,24 @@ export const themeOverrideSchema: z.ZodType<ThemeOverride> =
 
 export type ThemeData = {
   readonly name: string;
-  readonly colors: Readonly<
-    {
-      dk1: string;
-      lt1: string;
-      dk2: string;
-      lt2: string;
-      accent1: string;
-      accent2: string;
-      accent3: string;
-      accent4: string;
-      accent5: string;
-      accent6: string;
-      hlink: string;
-      folHlink: string;
-    } & Record<string, ThemeColor>
-  >;
-  readonly fonts: Readonly<
-    {
-      major: FontToken;
-      minor: FontToken;
-    } & Record<string, FontToken>
-  >;
+  readonly colors: {
+    readonly dk1: HexColor;
+    readonly lt1: HexColor;
+    readonly dk2: HexColor;
+    readonly lt2: HexColor;
+    readonly accent1: HexColor;
+    readonly accent2: HexColor;
+    readonly accent3: HexColor;
+    readonly accent4: HexColor;
+    readonly accent5: HexColor;
+    readonly accent6: HexColor;
+    readonly hlink: HexColor;
+    readonly folHlink: HexColor;
+  };
+  readonly fonts: {
+    readonly major: Font | string;
+    readonly minor: Font | string;
+  };
   readonly formatScheme?: FormatScheme | undefined;
 };
 
@@ -1271,28 +1332,26 @@ const rawThemeDataSchema = z
   .strictObject({
     name: z.string(),
     colors: z
-      .object({
-        dk1: z.string(),
-        lt1: z.string(),
-        dk2: z.string(),
-        lt2: z.string(),
-        accent1: z.string(),
-        accent2: z.string(),
-        accent3: z.string(),
-        accent4: z.string(),
-        accent5: z.string(),
-        accent6: z.string(),
-        hlink: z.string(),
-        folHlink: z.string(),
+      .strictObject({
+        dk1: rawThemeHexColorSchema,
+        lt1: rawThemeHexColorSchema,
+        dk2: rawThemeHexColorSchema,
+        lt2: rawThemeHexColorSchema,
+        accent1: rawThemeHexColorSchema,
+        accent2: rawThemeHexColorSchema,
+        accent3: rawThemeHexColorSchema,
+        accent4: rawThemeHexColorSchema,
+        accent5: rawThemeHexColorSchema,
+        accent6: rawThemeHexColorSchema,
+        hlink: rawThemeHexColorSchema,
+        folHlink: rawThemeHexColorSchema,
       })
-      .catchall(rawThemeColorSchema)
       .readonly(),
     fonts: z
-      .object({
-        major: rawFontReferenceSchema,
-        minor: rawFontReferenceSchema,
+      .strictObject({
+        major: rawThemeFontValueSchema,
+        minor: rawThemeFontValueSchema,
       })
-      .catchall(rawFontReferenceSchema)
       .readonly(),
     formatScheme: rawFormatSchemeSchema.optional(),
   })
@@ -1312,26 +1371,6 @@ export type Theme = ThemeData & {
 export const themeSchema: z.ZodType<Theme> = rawThemeDataSchema.transform(
   (data) => defineTheme(data),
 );
-
-/** Local theme scopes on slides or containers can only override color and font tokens already present in the deck. */
-export type ThemeScope = {
-  readonly colors?: Readonly<Record<string, ThemeColor>> | undefined;
-  readonly fonts?: Readonly<Record<string, FontToken>> | undefined;
-};
-
-const rawThemeScopeSchema = z
-  .strictObject({
-    colors: z.record(z.string(), rawThemeColorSchema).readonly().optional(),
-    fonts: z.record(z.string(), rawFontReferenceSchema).readonly().optional(),
-  })
-  .readonly();
-/** Local theme scopes on slides or containers can only override color and font tokens already present in the deck. */
-export const themeScopeSchema: z.ZodType<ThemeScope> =
-  rawThemeScopeSchema satisfies z.ZodType<
-    AssertExact<ThemeScope, z.infer<typeof rawThemeScopeSchema>> extends true
-      ? ThemeScope
-      : never
-  >;
 
 export type ResolvedThemeFont = {
   readonly family: string;
@@ -1356,14 +1395,14 @@ export const resolvedThemeFontSchema: z.ZodType<ResolvedThemeFont> =
       : never
   >;
 
-/** Theme, local scopes, active color map, native overrides, and accumulated container text defaults in a single build. */
+/** Theme, active color map, native overrides, and accumulated container text defaults in a single build. */
 export type ThemeContext = {
   readonly theme: Theme;
   readonly colorMap: ColorMap;
   readonly formatScheme: FormatScheme | undefined;
   readonly textStyle: TextStyle;
-  with(scope?: ThemeScope, style?: TextStyle): ThemeContext;
-  /** Replaces the accumulated container text defaults while retaining the same theme scope chain. */
+  with(style?: TextStyle): ThemeContext;
+  /** Replaces the accumulated container text defaults while retaining the same theme and overrides. */
   withTextStyle(style: TextStyle): ThemeContext;
   /** Derives a child context applying native `<a:themeOverride>` and/or `<p:clrMapOvr>` without mutating `theme`. */
   withNativeOverrides(
@@ -1374,7 +1413,7 @@ export type ThemeContext = {
   resolveFont(value: FontReference): ResolvedThemeFont;
 };
 
-const officeColors: Record<NativeColorSlot, string> = {
+const officeColors: Record<NativeColorSlot, HexColor> = {
   dk1: "#000000",
   lt1: "#FFFFFF",
   dk2: "#1F497D",
@@ -1389,14 +1428,7 @@ const officeColors: Record<NativeColorSlot, string> = {
   folHlink: "#800080",
 };
 
-const contextRecords = new WeakMap<
-  ThemeContext,
-  {
-    readonly parent?: ThemeContext;
-    readonly scope?: ThemeScope;
-    readonly themeOverride?: ThemeOverride;
-  }
->();
+const contextRecords = new WeakMap<ThemeContext, ThemeOverride>();
 
 export const textStyleKeys = new Set(Object.keys(textStyleObjectSchema.shape));
 
@@ -1449,7 +1481,14 @@ function textStyleErrorForIssue(
     );
   }
   if (field === "color") {
-    return new CapabilityError("invalid-color", "Invalid color value format");
+    return new CapabilityError(
+      "invalid-color",
+      "Invalid color value format",
+      undefined,
+      {
+        field: "style.color",
+      },
+    );
   }
   if (field === "lineHeight") {
     return new CapabilityError(
@@ -1500,6 +1539,14 @@ function textStyleErrorForIssue(
     );
   }
   if (field === "textShadow") {
+    if (issue?.path[1] === "color") {
+      return new CapabilityError(
+        "invalid-color",
+        "Invalid color value format",
+        undefined,
+        { field: "style.textShadow.color" },
+      );
+    }
     return new CapabilityError(
       "invalid-shadow",
       issue?.message ?? "textShadow must be a shadow object or 'none'",
@@ -1685,9 +1732,15 @@ class NativeThemeRecord implements Theme {
     const parsed = themeInputSchema.safeParse(patch);
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
+      const field =
+        issue !== undefined && issue.path.length > 0
+          ? `theme.${issue.path.join(".")}`
+          : "theme";
       throw new CapabilityError(
         "invalid-theme",
         issue?.message ?? "Invalid theme declaration",
+        undefined,
+        { field },
       );
     }
     const validPatch = parsed.data;
@@ -1726,13 +1779,19 @@ function parseThemeInputData(input: ThemeInput = {}): ThemeData {
   const parsed = themeInputSchema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
+    const field =
+      issue !== undefined && issue.path.length > 0
+        ? `theme.${issue.path.join(".")}`
+        : "theme";
     throw new CapabilityError(
       "invalid-theme",
       issue?.message ?? "Invalid theme declaration",
+      undefined,
+      { field },
     );
   }
   const validInput = parsed.data;
-  // Theme values are content inputs: isolate nested shades, font declarations, and font bytes.
+  // Theme values are content inputs: isolate theme palette colors, font declarations, and font bytes.
   const colors = snapshotValue({
     ...officeColors,
     ...validInput.colors,
@@ -1779,46 +1838,6 @@ export function lighter(slot: SchemeColorName, amount: number): ThemeShade {
 
 export function isNativeColorSlot(value: string): value is NativeColorSlot {
   return nativeSlot(value);
-}
-
-function scopeValue(
-  context: ThemeContext,
-  name: string,
-): { readonly value: ThemeColor; readonly parent?: ThemeContext } | undefined {
-  let current: ThemeContext | undefined = context;
-  while (current !== undefined) {
-    const scope = contextRecords.get(current)?.scope;
-    if (scope?.colors !== undefined && Object.hasOwn(scope.colors, name)) {
-      return {
-        value: scope.colors[name]!,
-        ...(contextRecords.get(current)?.parent === undefined
-          ? {}
-          : { parent: contextRecords.get(current)!.parent! }),
-      };
-    }
-    current = contextRecords.get(current)?.parent;
-  }
-  return undefined;
-}
-
-function scopeFontValue(
-  context: ThemeContext,
-  name: string,
-): { readonly value: FontToken; readonly parent?: ThemeContext } | undefined {
-  let current: ThemeContext | undefined = context;
-  while (current !== undefined) {
-    const scope = contextRecords.get(current)?.scope;
-    if (scope?.fonts !== undefined && Object.hasOwn(scope.fonts, name)) {
-      return {
-        value: scope.fonts[name]!,
-        ...(contextRecords.get(current)?.parent === undefined
-          ? {}
-          : { parent: contextRecords.get(current)!.parent! }),
-      };
-    }
-    current = contextRecords.get(current)?.parent;
-  }
-  return undefined;
 }
 
 function rgbChannelsFromHex(hex: string): [number, number, number] {
@@ -1952,96 +1971,74 @@ function effectiveThemeColor(
   context: ThemeContext,
   slot: NativeColorSlot,
 ): string {
-  const overrideColor =
-    contextRecords.get(context)?.themeOverride?.colors?.[slot];
-  return overrideColor ?? context.theme.colors[slot];
+  return (
+    contextRecords.get(context)?.colors?.[slot] ?? context.theme.colors[slot]
+  );
 }
 
-function resolveColorName(
-  raw: string,
-  context: ThemeContext,
-  depth: number,
-): ResolvedColor {
-  if (depth > 16) {
-    throw new CapabilityError(
-      "invalid-color",
-      `Circular color token reference: ${raw}`,
-    );
+function parseThemeHexValue(raw: string): ResolvedColor {
+  const digits = raw.trim().slice(1);
+  const expanded =
+    digits.length === 3 || digits.length === 4
+      ? digits
+          .split("")
+          .map((digit) => digit + digit)
+          .join("")
+      : digits;
+  if (!/^[0-9a-f]{6}([0-9a-f]{2})?$/iu.test(expanded)) {
+    throw new CapabilityError("invalid-color", `Invalid color value: ${raw}`);
   }
+  const alpha =
+    expanded.length === 8
+      ? Number.parseInt(expanded.slice(6), 16) / 255
+      : undefined;
+  return {
+    hex: expanded.slice(0, 6).toUpperCase(),
+    ...(alpha === undefined || alpha === 1 ? {} : { alpha }),
+  };
+}
+
+function resolveColorName(raw: string, context: ThemeContext): ResolvedColor {
   const value = raw.trim();
   if (value.startsWith("#")) {
-    const digits = value.slice(1);
-    const expanded =
-      digits.length === 3 || digits.length === 4
-        ? digits
-            .split("")
-            .map((digit) => digit + digit)
-            .join("")
-        : digits;
-    if (!/^[0-9a-f]{6}([0-9a-f]{2})?$/iu.test(expanded)) {
-      throw new CapabilityError("invalid-color", `Invalid color value: ${raw}`);
-    }
-    const alpha =
-      expanded.length === 8
-        ? Number.parseInt(expanded.slice(6), 16) / 255
-        : undefined;
-    return {
-      hex: expanded.slice(0, 6).toUpperCase(),
-      ...(alpha === undefined || alpha === 1 ? {} : { alpha }),
-    };
+    return parseThemeHexValue(value);
   }
   if (schemeSlot(value)) {
     const mappedSlot = context.colorMap[value];
     const configured = effectiveThemeColor(context, mappedSlot);
-    const resolved = resolveColorName(
-      configured,
-      rootContext(context),
-      depth + 1,
-    );
-    return { ...resolved, slot: mappedSlot, scheme: value };
+    if (!configured.trim().startsWith("#")) {
+      throw new CapabilityError(
+        "invalid-color",
+        `Invalid color value: ${configured}`,
+      );
+    }
+    return {
+      ...parseThemeHexValue(configured),
+      slot: mappedSlot,
+      scheme: value,
+    };
   }
   if (nativeSlot(value)) {
     const configured = effectiveThemeColor(context, value);
-    const resolved = resolveColorName(
-      configured,
-      rootContext(context),
-      depth + 1,
-    );
-    return { ...resolved, slot: value, scheme: value };
+    if (!configured.trim().startsWith("#")) {
+      throw new CapabilityError(
+        "invalid-color",
+        `Invalid color value: ${configured}`,
+      );
+    }
+    return { ...parseThemeHexValue(configured), slot: value, scheme: value };
   }
-  const local = scopeValue(context, value);
-  if (local !== undefined) {
-    return resolveColorValue(
-      local.value,
-      local.parent ?? rootContext(context),
-      depth + 1,
-    );
-  }
-  const configured = context.theme.colors[value];
-  if (configured === undefined) {
-    throw new CapabilityError(
-      "invalid-color",
-      `Unknown color or theme token: ${raw}`,
-    );
-  }
-  // Deck token aliases are resolved at the point of use so they see overrides from the nearest scope.
-  return resolveColorValue(configured, context, depth + 1);
-}
-
-function rootContext(context: ThemeContext): ThemeContext {
-  let current = context;
-  while (contextRecords.get(current)?.parent !== undefined) {
-    current = contextRecords.get(current)!.parent!;
-  }
-  return current;
+  throw new CapabilityError(
+    "invalid-color",
+    `Unknown color or scheme color slot: ${raw}`,
+  );
 }
 
 function resolveColorValue(
   value: ThemeColor,
   context: ThemeContext,
-  depth: number,
 ): ResolvedColor {
-  if (typeof value === "string") return resolveColorName(value, context, depth);
+  if (typeof value === "string") return resolveColorName(value, context);
   if (
     !record(value) ||
     !schemeColorName(String(value["slot"])) ||
@@ -2056,7 +2053,7 @@ function resolveColorValue(
       ? undefined
       : checkedFraction(value["lumOff"], "lumOff");
   const scheme = value["slot"];
-  const base = resolveColorName(scheme, context, depth + 1);
+  const base = resolveColorName(scheme, context);
   return {
     hex: shadeHex(base.hex, lumMod, lumOff ?? 0),
     ...(base.slot === undefined ? {} : { slot: base.slot }),
@@ -2090,8 +2087,6 @@ function mergeThemeOverrides(
 
 function createContext(
   theme: Theme,
-  parent: ThemeContext | undefined,
-  scope: ThemeScope | undefined,
   textStyle: TextStyle,
   colorMap: ColorMap = defaultColorMap,
   themeOverride?: ThemeOverride,
@@ -2103,75 +2098,15 @@ function createContext(
     colorMap,
     formatScheme,
     textStyle: Object.freeze(textStyle),
-    with(nextScope?: ThemeScope, style?: TextStyle) {
-      let checkedScope: ThemeScope | undefined;
-      if (nextScope !== undefined) {
-        const parsedScope = themeScopeSchema.safeParse(nextScope);
-        if (!parsedScope.success) {
-          throw new CapabilityError(
-            "invalid-theme-scope",
-            parsedScope.error.issues[0]?.message ??
-              "Local theme scope is invalid",
-          );
-        }
-        const colors = parsedScope.data.colors;
-        for (const name of Object.keys(colors ?? {})) {
-          if (schemeColorName(name)) {
-            throw new CapabilityError(
-              "invalid-theme-scope",
-              `Local theme scope cannot redefine native color slot ${name}`,
-            );
-          }
-          if (!Object.hasOwn(theme.colors, name)) {
-            throw new CapabilityError(
-              "invalid-theme-scope",
-              `Theme has no color token ${name}`,
-            );
-          }
-        }
-        const fonts = parsedScope.data.fonts;
-        for (const name of Object.keys(fonts ?? {})) {
-          if (!Object.hasOwn(theme.fonts, name)) {
-            throw new CapabilityError(
-              "invalid-theme-scope",
-              `Theme has no font token ${name}`,
-            );
-          }
-        }
-        checkedScope = Object.freeze({
-          ...(colors === undefined
-            ? {}
-            : { colors: Object.freeze({ ...colors }) }),
-          ...(fonts === undefined
-            ? {}
-            : { fonts: Object.freeze({ ...fonts }) }),
-        });
-      }
-      const candidateContext = createContext(
-        theme,
-        context,
-        checkedScope,
-        context.textStyle,
-        colorMap,
-        themeOverride,
-      );
+    with(style?: TextStyle) {
       const validated =
-        style === undefined ? {} : textStyleFrom(style, candidateContext);
+        style === undefined ? {} : textStyleFrom(style, context);
       const nextStyle = { ...context.textStyle, ...validated };
-      return createContext(
-        theme,
-        context,
-        checkedScope,
-        nextStyle,
-        colorMap,
-        themeOverride,
-      );
+      return createContext(theme, nextStyle, colorMap, themeOverride);
     },
     withTextStyle(style) {
       return createContext(
         theme,
-        context,
-        undefined,
         textStyleFrom(style, context),
         colorMap,
         themeOverride,
@@ -2188,8 +2123,6 @@ function createContext(
           : nextColorMapOverride;
       return createContext(
         theme,
-        context,
-        undefined,
         context.textStyle,
         nextColorMap,
         mergedOverride,
@@ -2214,8 +2147,8 @@ function createContext(
       }
       const resolved =
         typeof raw === "string"
-          ? resolveColorName(raw, context, 0)
-          : resolveColorValue(raw, context, 0);
+          ? resolveColorName(raw, context)
+          : resolveColorValue(raw, context);
       if (alpha === undefined) return resolved;
       return {
         ...resolved,
@@ -2230,50 +2163,32 @@ function createContext(
           "fontFamily cannot be empty",
         );
       }
-      const local = scopeFontValue(context, value);
-      const themeFontName: ResolvedThemeFont["themeFont"] =
-        value === "major" || value === "minor" ? value : undefined;
-      const overrideFont =
-        themeFontName === undefined
-          ? undefined
-          : themeOverride?.fonts?.[themeFontName];
-      const token =
-        local?.value ??
-        overrideFont ??
-        (Object.hasOwn(theme.fonts, value) ? theme.fonts[value]! : value);
-      const globalThemeFont =
-        themeFontName === undefined
-          ? undefined
-          : (overrideFont ?? theme.fonts[themeFontName]);
-      const globalFamily = isFont(globalThemeFont)
-        ? globalThemeFont.family
-        : globalThemeFont;
-      if (isFont(token)) {
+      if (isThemeFontSlot(value)) {
+        const slotFont = themeOverride?.fonts?.[value] ?? theme.fonts[value];
+        if (isFont(slotFont)) {
+          return {
+            family: slotFont.family,
+            font: slotFont,
+            themeFont: value,
+          };
+        }
         return {
-          family: token.family,
-          font: token,
-          ...(themeFontName === undefined || token.family !== globalFamily
-            ? {}
-            : { themeFont: themeFontName }),
+          family: slotFont,
+          themeFont: value,
         };
       }
       return {
-        family: token,
-        ...(themeFontName === undefined || token !== globalFamily
-          ? {}
-          : { themeFont: themeFontName }),
+        family: value.trim(),
       };
     },
   });
-  contextRecords.set(context, {
-    ...(parent === undefined ? {} : { parent }),
-    ...(scope === undefined ? {} : { scope }),
-    ...(themeOverride === undefined ? {} : { themeOverride }),
-  });
+  if (themeOverride !== undefined) {
+    contextRecords.set(context, themeOverride);
+  }
   return context;
 }
 
-/** Create a theme chain unique to a single build; local scopes do not mutate the shared theme object. */
+/** Create a theme chain unique to a single build; container text defaults do not mutate the shared theme object. */
 export function createThemeContext(
   input?: ThemeInput | Theme,
   style?: TextStyle,
@@ -2298,16 +2213,12 @@ export function createThemeContext(
   const colorMap = options.colorMap ?? defaultColorMap;
   const initialContext = createContext(
     theme,
-    undefined,
-    undefined,
     {},
     colorMap,
     options.themeOverride,
   );
   return createContext(
     theme,
-    undefined,
-    undefined,
     textStyleFrom(style, initialContext),
     colorMap,
     options.themeOverride,

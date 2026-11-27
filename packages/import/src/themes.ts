@@ -12,6 +12,7 @@ import {
   type FormatFillStyle,
   type FormatLineStyle,
   type FormatScheme,
+  type HexColor,
   type NativeColorSlot,
   type Shadow,
   type Theme,
@@ -76,7 +77,7 @@ const outerShdwAttrSchema = z.object({
   rotWithShape: ooxmlBoolSchema.optional(),
 });
 
-const officeFallbackColors: Record<NativeColorSlot, string> = {
+const officeFallbackColors: Record<NativeColorSlot, HexColor> = {
   dk1: "#000000",
   lt1: "#FFFFFF",
   dk2: "#1F497D",
@@ -162,8 +163,8 @@ function resolveSimpleThemeHex(
   partPath: string,
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
-): string | undefined {
-  let result: string | undefined;
+): HexColor | undefined {
+  let result: HexColor | undefined;
   for (const child of slotCursor.remainingElementChildren()) {
     if (child.namespaceUri !== A_NS) {
       diagnostics.push({
@@ -255,7 +256,7 @@ function readClrScheme(
   partPath: string,
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
-): Record<NativeColorSlot, string> {
+): Record<NativeColorSlot, HexColor> {
   clrSchemeCursor.consumeAttr("name");
   const colors = { ...officeFallbackColors };
   for (const child of clrSchemeCursor.remainingElementChildren()) {
@@ -292,8 +293,13 @@ function readClrScheme(
   return colors;
 }
 
+const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
+
 function readFontCollection(
   fontCollectionCursor: XmlElementCursor,
+  partPath: string,
+  slideIndex: number | undefined,
+  diagnostics: ImportDiagnostic[],
 ): string | undefined {
   let latinTypeface: string | undefined;
   for (const child of fontCollectionCursor.remainingElementChildren()) {
@@ -301,7 +307,22 @@ function readFontCollection(
     if (child.localName === "latin") {
       const typeface = child.attr("typeface");
       if (typeface !== undefined && typeface.trim() !== "") {
-        latinTypeface = typeface;
+        if (reservedThemeFontPattern.test(typeface.trim())) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: {
+              part: partPath,
+              xpath: `${child.xpath}/@typeface`,
+              ...(slideIndex === undefined ? {} : { slideIndex }),
+            },
+            attributeOrElement: "a:latin/@typeface",
+            rawValue: typeface,
+          });
+        } else {
+          latinTypeface = typeface;
+        }
       }
       child.consumeAttr("panose");
       child.consumeAttr("pitchFamily");
@@ -319,17 +340,31 @@ function readFontCollection(
   return latinTypeface;
 }
 
-function readFontScheme(fontSchemeCursor: XmlElementCursor): {
-  readonly major?: string;
-  readonly minor?: string;
-} {
+function readFontScheme(
+  fontSchemeCursor: XmlElementCursor,
+  partPath: string,
+  slideIndex: number | undefined,
+  diagnostics: ImportDiagnostic[],
+):
+  | {
+      readonly major?: string;
+      readonly minor?: string;
+    }
+  | undefined {
   fontSchemeCursor.consumeAttr("name");
   const majorCursor = fontSchemeCursor.child(A_NS, "majorFont");
   const minorCursor = fontSchemeCursor.child(A_NS, "minorFont");
   const major =
-    majorCursor === undefined ? undefined : readFontCollection(majorCursor);
+    majorCursor === undefined
+      ? undefined
+      : readFontCollection(majorCursor, partPath, slideIndex, diagnostics);
   const minor =
-    minorCursor === undefined ? undefined : readFontCollection(minorCursor);
+    minorCursor === undefined
+      ? undefined
+      : readFontCollection(minorCursor, partPath, slideIndex, diagnostics);
+  if (major === undefined && minor === undefined) {
+    return undefined;
+  }
   return {
     ...(major === undefined ? {} : { major }),
     ...(minor === undefined ? {} : { minor }),
@@ -822,7 +857,7 @@ export function readThemePart(
     rawName !== undefined && rawName.trim() !== "" ? rawName : "Office Theme";
 
   const themeElements = themeCursor.child(A_NS, "themeElements");
-  let colors: Record<NativeColorSlot, string> = { ...officeFallbackColors };
+  let colors: Record<NativeColorSlot, HexColor> = { ...officeFallbackColors };
   let fonts: { readonly major?: string; readonly minor?: string } = {};
   let formatScheme: FormatScheme | undefined;
 
@@ -833,7 +868,8 @@ export function readThemePart(
     }
     const fontScheme = themeElements.child(A_NS, "fontScheme");
     if (fontScheme !== undefined) {
-      fonts = readFontScheme(fontScheme);
+      fonts =
+        readFontScheme(fontScheme, themePartPath, undefined, diagnostics) ?? {};
     }
     const fmtScheme = themeElements.child(A_NS, "fmtScheme");
     if (fmtScheme !== undefined) {
@@ -953,7 +989,9 @@ export function readThemeOverridePart(
       : readClrScheme(clrScheme, overridePartPath, slideIndex, diagnostics);
   const fontScheme = cursor.child(A_NS, "fontScheme");
   const fonts =
-    fontScheme === undefined ? undefined : readFontScheme(fontScheme);
+    fontScheme === undefined
+      ? undefined
+      : readFontScheme(fontScheme, overridePartPath, slideIndex, diagnostics);
   const fmtScheme = cursor.child(A_NS, "fmtScheme");
   const formatScheme =
     fmtScheme === undefined

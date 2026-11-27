@@ -15,7 +15,6 @@ import {
   type PaintOutput,
   type PreviewTransform,
   type ObjectResolution,
-  type ThemeScope,
 } from "@pptxdk/core/capability";
 import { xmlEscape } from "@pptxdk/emit";
 
@@ -106,10 +105,7 @@ export const boxCapability: ObjectCapabilityModule = {
       path: context.path,
     });
 
-    const theme = context.theme.with(
-      input.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(style),
-    );
+    const theme = context.theme.with(textStyleFrom(style));
 
     resolveVisualModel({
       theme,

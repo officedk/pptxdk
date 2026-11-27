@@ -67,11 +67,10 @@ export {
   fontReferenceSchema,
   fontSchema,
   fontSizeSchema,
-  fontTokenSchema,
   textStyleSchema,
+  themeFontSlotSchema,
   themeInputSchema,
   themeSchema,
-  themeScopeSchema,
 } from "#/theme.ts";
 export type {
   ColorValue,
@@ -79,11 +78,11 @@ export type {
   FontFace,
   FontReference,
   FontSize,
-  FontToken,
+  HexColor,
   TextStyle,
   Theme,
+  ThemeFontSlot,
   ThemeInput,
-  ThemeScope,
 } from "#/theme.ts";
 import type {
   DeckProps,

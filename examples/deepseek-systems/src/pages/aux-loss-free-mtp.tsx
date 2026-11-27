@@ -2,7 +2,7 @@ import { fillColor, preset, Shape, Step, Text } from "@officedk/pptxdk/react";
 
 import { PanelCard, Rule, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const routedExperts = [
   { id: "E01", active: true, hot: false },
@@ -558,7 +558,7 @@ export function AuxLossFreeMtpPage() {
             top: 544,
             width: 152,
             padding: 0,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 21,
             fontWeight: 700,
             color: colors.copperText,

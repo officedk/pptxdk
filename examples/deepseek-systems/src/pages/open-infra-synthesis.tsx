@@ -2,7 +2,7 @@ import { Shape, Text } from "@officedk/pptxdk/react";
 
 import { Rule } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const openSourceWeekItems = [
   {
@@ -160,7 +160,7 @@ export function OpenInfraSynthesisPage() {
               width: 54,
               height: 20,
               background: item.accent,
-              fontFamily: "metric",
+              fontFamily: fonts.metric,
               fontSize: 10,
               fontWeight: 700,
               color: colors.surface,
@@ -223,7 +223,7 @@ export function OpenInfraSynthesisPage() {
               top: 202,
               width: 165,
               height: 20,
-              fontFamily: "metric",
+              fontFamily: fonts.metric,
               fontSize: 11.5,
               fontWeight: 700,
               color: item.bright,
@@ -330,7 +330,7 @@ export function OpenInfraSynthesisPage() {
               width: 36,
               height: 24,
               background: rec.accent,
-              fontFamily: "metric",
+              fontFamily: fonts.metric,
               fontSize: 12,
               fontWeight: 700,
               color: colors.surface,

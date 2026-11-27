@@ -21,13 +21,13 @@ import { validatePptx } from "@pptxdk/validation";
 import { describe, it } from "vitest";
 
 import {
-  createBeamDivergenceDiagram,
   createMetricTile,
   createTakeawayStrip,
   createTelemetryPanel,
-} from "../src/components/vanilla.ts";
+} from "../src/components/cards.ts";
+import { createBeamDivergenceDiagram } from "../src/components/diagrams.ts";
 import { AetherLinkDeck } from "../src/index.ts";
-import { PALETTE, aetherTheme } from "../src/theme.ts";
+import { PALETTE, accent2Muted, aetherTheme } from "../src/theme.ts";
 
 function assertValidPng1280x720(png: Uint8Array, label: string): void {
   const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -349,6 +349,7 @@ describe("@pptxdk/aether-link Vanilla component library", () => {
       title: "Pure Vanilla Telemetry",
       badge: "VERIFIED",
       accentColor: PALETTE.cobalt,
+      badgeBackground: accent2Muted,
       width: 560,
     });
     panel.slot.append(
@@ -390,6 +391,8 @@ describe("@pptxdk/aether-link Vanilla component library", () => {
     assert.ok(objs.some((o) => o.authorId === "vanilla-tile"));
     assert.ok(objs.some((o) => o.authorId === "vanilla-diagram"));
     assert.ok(objs.some((o) => o.authorId === "vanilla-strip"));
+    const standaloneBuilt = emit(resolved);
+    assert.deepEqual((await validatePptx(standaloneBuilt.pptx)).errors, []);
 
     // Closed Vanilla factory bridged with fromVanilla statically rejects children.
     const MetricTile = fromVanilla(createMetricTile);
@@ -407,7 +410,6 @@ describe("@pptxdk/aether-link Vanilla component library", () => {
         <Deck width={800} height={450} theme={aetherTheme}>
           <Slide id="bridge-check">
             <Box
-              theme={{ colors: { tileAccent: "#0E8A74" } }}
               style={{
                 position: "absolute",
                 left: 24,
@@ -424,7 +426,8 @@ describe("@pptxdk/aether-link Vanilla component library", () => {
                   label="SIGNAL"
                   value="78.2"
                   unit="%"
-                  detail="Resolved inside slotted panel and ThemeScope."
+                  accentColor="#0E8A74"
+                  detail="Resolved inside slotted panel with explicit accentColor."
                 />
               </TelemetryPanel>
             </Box>

@@ -42,6 +42,7 @@ export {
   layoutLengthSchema,
   layoutSpacingSchema,
   layoutStyleSchema,
+  nonNegativeLayoutSpacingSchema,
   paddingStyleSchema,
 } from "#/layout-schemas.ts";
 export {
@@ -261,6 +262,8 @@ export type {
   BoundSlideContinuityCollaboration,
   BuildReport,
   BuildResult,
+  CapabilityExplicitPixelSize,
+  CapabilityLayoutAxes,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
   CapabilityLayoutRequest,
@@ -295,6 +298,7 @@ export type {
   MasterPlaceholderSpec,
   MasterTextStyles,
   NativePlaceholderRef,
+  NonNegativeLayoutSpacing,
   ObjectTransform,
   PaddingStyle,
   PaintContext,

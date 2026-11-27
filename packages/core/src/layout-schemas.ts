@@ -64,6 +64,9 @@ export const nonNegativeLayoutSpacingSchema = z.union([
     ])
     .readonly(),
 ]);
+export type NonNegativeLayoutSpacing = z.infer<
+  typeof nonNegativeLayoutSpacingSchema
+>;
 
 export const paddingStyleSchema = z
   .strictObject({

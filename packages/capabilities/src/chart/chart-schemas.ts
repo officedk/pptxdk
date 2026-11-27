@@ -1966,14 +1966,32 @@ export function parseChartAxisBySchema(
   return parsed.data;
 }
 
+const commonGroupKeys = new Set([
+  "kind",
+  "data",
+  "series",
+  "axes",
+  "dataLabels",
+]);
+
+function groupOptionKeysFromShape(
+  shape: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  return Object.keys(shape).filter((key) => !commonGroupKeys.has(key));
+}
+
 const groupOptionsByKind: Readonly<Record<ChartKind, readonly string[]>> = {
-  column: ["stacking", "gapWidth", "overlap"],
-  bar: ["stacking", "gapWidth", "overlap"],
-  line: ["stacking"],
-  area: ["stacking"],
-  pie: ["explosion", "firstSliceAngle"],
-  doughnut: ["explosion", "firstSliceAngle", "holeSize"],
-  scatter: ["line", "markers"],
+  column: groupOptionKeysFromShape(
+    ColumnOrBarStackedGroupSchema.unwrap().shape,
+  ),
+  bar: groupOptionKeysFromShape(ColumnOrBarStackedGroupSchema.unwrap().shape),
+  line: groupOptionKeysFromShape(LineChartGroupRawSchema.unwrap().shape),
+  area: groupOptionKeysFromShape(AreaChartGroupRawSchema.unwrap().shape),
+  pie: groupOptionKeysFromShape(PieChartGroupRawSchema.unwrap().shape),
+  doughnut: groupOptionKeysFromShape(
+    DoughnutSharedGroupRawSchema.unwrap().shape,
+  ),
+  scatter: groupOptionKeysFromShape(scatterChartGroupSchema.unwrap().shape),
 };
 
 /** Validates and parses one chart group entry via its kind-specific local Zod schema. */
@@ -2145,7 +2163,20 @@ export function parseChartExtentBySchema(
   value: unknown,
   label: "width" | "height",
 ): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 0 || pxToEmu(value) === 0) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${label} is 0px; ${label} must be greater than 0px`,
+      );
+    }
+    if (value < 0 || pxToEmu(value) < 1) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${label} is ${value}px; ${label} must be greater than 0px`,
+      );
+    }
+  } else {
     throw new CapabilityError(
       "invalid-coordinate",
       `${label} must be a finite positive pixel value`,

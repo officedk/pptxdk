@@ -1176,9 +1176,10 @@ export const tableCapability = {
       contract,
       declaredX: placeholderGeometry?.x,
       declaredY: placeholderGeometry?.y,
-      declaredWidth: placeholderGeometry?.width ?? contract.layoutStyle.width,
+      declaredWidth:
+        placeholderGeometry?.width ?? contract.explicitPixelSize?.width,
       declaredHeight:
-        placeholderGeometry?.height ?? contract.layoutStyle.height,
+        placeholderGeometry?.height ?? contract.explicitPixelSize?.height,
     };
 
     const authorId =
@@ -1313,8 +1314,14 @@ export const tableCapability = {
           resolveContext.layoutBox?.y ?? parsed.declaredY,
           "y",
         );
-        const width = widths.reduce((sum, value) => sum + value, 0);
-        const height = heights.reduce((sum, value) => sum + value, 0);
+        const width = parseTablePositiveSize(
+          widths.reduce((sum, value) => sum + value, 0),
+          "Table.width",
+        );
+        const height = parseTablePositiveSize(
+          heights.reduce((sum, value) => sum + value, 0),
+          "Table.height",
+        );
         const box: Rect = { x, y, width, height };
         const columnOffsets: number[] = [];
         let offsetX = x;

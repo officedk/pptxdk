@@ -266,6 +266,20 @@ function emu(
   signed = false,
 ): number {
   const converted = pxToEmu(value);
+  if (!allowZero && !signed) {
+    if (!Number.isFinite(value) || value === 0 || converted === 0) {
+      invalid(
+        "invalid-visual-style",
+        `Computed ${label} is 0px; ${label} must be greater than 0px`,
+      );
+    }
+    if (value < 0 || converted < 1) {
+      invalid(
+        "invalid-visual-style",
+        `Computed ${label} is ${value}px; ${label} must be greater than 0px`,
+      );
+    }
+  }
   if (
     !Number.isSafeInteger(converted) ||
     (!signed && converted < (allowZero ? 0 : 1)) ||
@@ -277,6 +291,14 @@ function emu(
     );
   }
   return converted;
+}
+
+/** Validates that a visible object box has positive DrawingML EMU extents during resolve. */
+export function assertVisualBoxExtent(box: ShapeBox): void {
+  emu(box.x, "x", true, true);
+  emu(box.y, "y", true, true);
+  emu(box.width, "width", false);
+  emu(box.height, "height", false);
 }
 
 function lineWidthEmu(value: number): number {

@@ -1,28 +1,11 @@
 import { defineObjectCodegen, type CodegenContext } from "@pptxdk/codegen";
-import {
-  layoutStyleSchema,
-  nativePlaceholderRefSchema,
-  visualStyleSchema,
-} from "@pptxdk/core/capability";
+import { nativePlaceholderRefSchema } from "@pptxdk/core/capability";
 import type { CommonNode } from "@pptxdk/core/document";
-import { z } from "zod";
 
-const placeholderAllowedPropKeys = new Set([
-  "id",
-  "name",
-  "morphKey",
-  "placeholder",
-  "nativePlaceholder",
-  "link",
-  "style",
-]);
-
-const placeholderCleanStyleSchema = z
-  .strictObject({
-    ...layoutStyleSchema.unwrap().shape,
-    ...visualStyleSchema.unwrap().shape,
-  })
-  .readonly();
+import {
+  placeholderAllowedPropKeys,
+  placeholderObjectStyleSchema,
+} from "./placeholder-schemas.ts";
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -55,7 +38,7 @@ function validatePlaceholderStyle(value: unknown, ctx: CodegenContext): void {
       "@style",
     );
   }
-  const parsed = placeholderCleanStyleSchema.safeParse(value);
+  const parsed = placeholderObjectStyleSchema.safeParse(value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const issuePath =

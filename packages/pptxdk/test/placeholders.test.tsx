@@ -25,6 +25,7 @@ import {
   Span,
   Table,
   Text,
+  expandDocument,
 } from "@officedk/pptxdk/react";
 import {
   CommonNode,
@@ -49,7 +50,7 @@ import {
 } from "@officedk/pptxdk/vanilla";
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
-import { type ReactNode } from "react";
+import { Suspense, type ReactNode, use, useEffect, useState } from "react";
 import { describe, it } from "vitest";
 
 const jostBytes = new Uint8Array(
@@ -1891,5 +1892,188 @@ describe("typed text placeholders and style inheritance", () => {
     );
     assert.equal(attachedChart.props["placeholder"], undefined);
     assert.equal(attachedChart.parent, externalHolder);
+  });
+
+  it("updates placeholder binding when a stateful re-render moves an adopted CommonNode from slotA to slotB", async () => {
+    const dualSlotLayout = defineSlideLayout({
+      id: "dual-slot",
+      name: "Dual Slot",
+      type: "twoTxTwoObj",
+      placeholders: {
+        slotA: {
+          type: "body",
+          idx: 1,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 40,
+            width: 360,
+            height: 120,
+            fontFamily: jostFont,
+            fontSize: 18,
+          },
+        },
+        slotB: {
+          type: "body",
+          idx: 2,
+          style: {
+            position: "absolute",
+            left: 480,
+            top: 200,
+            width: 360,
+            height: 120,
+            fontFamily: jostFont,
+            fontSize: 18,
+          },
+        },
+      },
+    });
+
+    const adopted = text("Moved Placeholder Text", { id: "moved-node" });
+    const gate = Promise.withResolvers<void>();
+
+    function MovingPlaceholderSlide() {
+      const [slotKey, setSlotKey] = useState<"slotA" | "slotB">("slotA");
+      useEffect(() => {
+        if (slotKey === "slotA") {
+          setSlotKey("slotB");
+        } else {
+          gate.resolve();
+        }
+      }, [slotKey]);
+
+      return (
+        <Slide
+          id="s-move"
+          layout={dualSlotLayout}
+          placeholders={
+            slotKey === "slotA" ? { slotA: adopted } : { slotB: adopted }
+          }
+        />
+      );
+    }
+
+    const docPromise = expandDocument(
+      <Deck width={960} height={540}>
+        <SlideMaster id="m-move">
+          <SlideLayout layout={dualSlotLayout} />
+        </SlideMaster>
+        <MovingPlaceholderSlide />
+      </Deck>,
+    );
+    await gate.promise;
+    const doc = await docPromise;
+
+    assert.equal(adopted.props["placeholder"], "slotB");
+    const slideNode = doc.query.get("s-move").node;
+    assert.ok(slideNode instanceof SlideContainer);
+    assert.deepEqual([...slideNode.children], [adopted]);
+
+    const built = await build(doc);
+    const validated = await validatePptx(built.pptx);
+    assert.deepEqual(validated.errors, []);
+    assert.equal(validated.slides[0]?.objects.length, 1);
+    assert.equal(validated.slides[0]?.objects[0]?.placeholder?.idx, 2);
+    assert.equal(built.report.slides[0]?.objects[0]?.box?.x, 480);
+    assert.equal(built.report.slides[0]?.objects[0]?.box?.y, 200);
+  });
+
+  it("leaves adopted node.props.placeholder untouched on cross-deck ownership conflict, multi-slide contention, and Suspense AbortSignal cancellation", async () => {
+    // 1. Detached node owned by another Deck (parent === undefined, foreign owner).
+    const foreignNode = text("Foreign node", { id: "foreign" });
+    const foreignSlide = slide({ id: "foreign-slide" }).append(foreignNode);
+    deck({ width: 960, height: 540 }).append(foreignSlide);
+    foreignNode.remove();
+    assert.equal(foreignNode.parent, undefined);
+    assert.equal(foreignNode.props["placeholder"], undefined);
+
+    await assert.rejects(
+      expandDocument(
+        <Deck width={960} height={540}>
+          <SlideMaster id="m-foreign">
+            <SlideLayout layout={sectionLayout} />
+          </SlideMaster>
+          <Slide
+            id="s-foreign"
+            layout={sectionLayout}
+            placeholders={{ title: foreignNode }}
+          />
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
+        return true;
+      },
+    );
+    assert.equal(foreignNode.props["placeholder"], undefined);
+    assert.equal(foreignNode.parent, undefined);
+
+    // 2. Contending across two <Slide>s in the same <Deck>.
+    const contendedNode = text("Contended node", { id: "contended" });
+    await assert.rejects(
+      expandDocument(
+        <Deck width={960} height={540}>
+          <SlideMaster id="m-contend">
+            <SlideLayout layout={sectionLayout} />
+          </SlideMaster>
+          <Slide
+            id="s-contend-1"
+            layout={sectionLayout}
+            placeholders={{ title: contendedNode }}
+          />
+          <Slide
+            id="s-contend-2"
+            layout={sectionLayout}
+            placeholders={{ body: contendedNode }}
+          />
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
+        return true;
+      },
+    );
+    assert.equal(contendedNode.props["placeholder"], undefined);
+    assert.equal(contendedNode.parent, undefined);
+
+    // 3. Aborting via AbortSignal during <Suspense> before commit.
+    const suspendedNode = text("Suspended node", { id: "suspended" });
+    const neverResolves = new Promise<string>(() => {});
+    const renderStarted = Promise.withResolvers<void>();
+    function PendingLabel() {
+      renderStarted.resolve();
+      const label = use(neverResolves);
+      return <Text>{label}</Text>;
+    }
+    const controller = new AbortController();
+    const cancelReason = new Error("aborted before commit");
+    const pendingExpand = expandDocument(
+      <Deck width={960} height={540}>
+        <SlideMaster id="m-abort">
+          <SlideLayout layout={sectionLayout} />
+        </SlideMaster>
+        <Suspense fallback={null}>
+          <Slide
+            id="s-abort"
+            layout={sectionLayout}
+            placeholders={{ title: suspendedNode }}
+          >
+            <PendingLabel />
+          </Slide>
+        </Suspense>
+      </Deck>,
+      { signal: controller.signal },
+    );
+    await renderStarted.promise;
+    await Promise.resolve();
+    controller.abort(cancelReason);
+    await assert.rejects(
+      pendingExpand,
+      (error: unknown) => error === cancelReason,
+    );
+    assert.equal(suspendedNode.props["placeholder"], undefined);
+    assert.equal(suspendedNode.parent, undefined);
   });
 });

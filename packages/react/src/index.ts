@@ -156,4 +156,4 @@ export type {
 export { Mount } from "#/mount.ts";
 export type { MountProps } from "#/mount.ts";
 export { fromVanilla } from "#/from-vanilla.ts";
-export type { VanillaSlotResult } from "#/from-vanilla.ts";
+export type { VanillaFactoryProps, VanillaSlotResult } from "#/from-vanilla.ts";

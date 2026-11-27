@@ -8,7 +8,6 @@ import { xmlEscape } from "@pptxdk/emit";
 import {
   buildEmbeddedEotPayload,
   fontFamilyKey,
-  isTrueTypeFontEmbeddable,
   validateEmbeddableTrueTypeFont,
 } from "./font-engine.ts";
 import type { FontFaceStyle } from "./font.ts";
@@ -59,15 +58,6 @@ function fail(
     },
     ...extraDetails,
   });
-}
-
-/** Checks whether raw font bytes and author policy allow full TrueType font embedding. */
-export function isFontEmbeddable(
-  bytes: Uint8Array,
-  substitute: boolean,
-  declaredEmbeddable: boolean,
-): boolean {
-  return isTrueTypeFontEmbeddable(bytes, substitute, declaredEmbeddable);
 }
 
 type FontSlot = "regular" | "bold" | "italic" | "boldItalic";

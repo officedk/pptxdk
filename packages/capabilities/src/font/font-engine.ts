@@ -941,9 +941,13 @@ function checkFsTypeEmbeddability(fsType: number): boolean {
   return true;
 }
 
-/** Checks whether raw font bytes and author policy allow full TrueType font embedding. */
+/**
+ * Checks whether raw font bytes, declared `family` (`Name ID 1`), and author policy allow full
+ * TrueType font embedding.
+ */
 export function isTrueTypeFontEmbeddable(
   bytes: Uint8Array,
+  family: string,
   substitute: boolean,
   declaredEmbeddable: boolean,
 ): boolean {
@@ -959,6 +963,9 @@ export function isTrueTypeFontEmbeddable(
     !parsed.sfnt.tables.has("name") ||
     parsed.fsType === undefined
   ) {
+    return false;
+  }
+  if (!matchesLegacyUnicodeFamily(parsed, family)) {
     return false;
   }
   const os2 = parsed.sfnt.tables.get("OS/2");

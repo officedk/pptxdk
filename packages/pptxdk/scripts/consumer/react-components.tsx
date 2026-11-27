@@ -98,13 +98,31 @@ function createCardShell(props: {
 
 const ClosedBadge = fromVanilla(createClosedBadge);
 const CardShell = fromVanilla(createCardShell);
+const OptionalNote = fromVanilla(
+  (props?: { readonly tone?: "warm" | "cool" }) =>
+    shape(props?.tone ?? "neutral", {
+      style: { height: 22, fontSize: 11 },
+    }),
+);
+const DefaultNote = fromVanilla(
+  (props: { readonly tone?: "warm" | "cool" } = {}) =>
+    shape(props.tone ?? "default", {
+      style: { height: 22, fontSize: 11 },
+    }),
+);
 
-// Statically verify that closed fromVanilla components reject JSX children.
+// Statically verify that closed fromVanilla components reject JSX children and invalid props.
 const rejectClosedChildren = () => (
-  <ClosedBadge id="invalid-closed" label="Disallowed">
-    {/* @ts-expect-error closed fromVanilla component must reject JSX children */}
-    <Text>disallowed</Text>
-  </ClosedBadge>
+  <>
+    <ClosedBadge id="invalid-closed" label="Disallowed">
+      {/* @ts-expect-error closed fromVanilla component must reject JSX children */}
+      <Text>disallowed</Text>
+    </ClosedBadge>
+    {/* @ts-expect-error optional-prop fromVanilla component must reject invalid prop type */}
+    <OptionalNote tone={123} />
+    {/* @ts-expect-error default-prop fromVanilla component must reject invalid prop type */}
+    <DefaultNote tone={123} />
+  </>
 );
 void rejectClosedChildren;
 
@@ -177,6 +195,10 @@ export function ReactConsumerDeck(): ReactElement {
           }}
         >
           <ClosedBadge id="bridged-badge" label="Bridged closed badge" />
+          <Box style={{ display: "flex", flexDirection: "row", gap: 6 }}>
+            <OptionalNote />
+            <DefaultNote tone="warm" />
+          </Box>
           <CardShell id="bridged-shell" title="Bridged slotted shell">
             <Table id="react-summary" columns={["1fr", "1fr"]}>
               <Row>
@@ -196,7 +218,7 @@ export function ReactConsumerDeck(): ReactElement {
                   series: [{ name: "Revenue", values: [120, 150] }],
                 },
               ]}
-              style={{ width: "100%", height: 110 }}
+              style={{ width: "100%", height: 80 }}
             />
           </CardShell>
           <Mount {...closedMountProps} />

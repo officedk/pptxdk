@@ -14,20 +14,18 @@ import {
 
 import {
   appendInitialHostChild,
-  attachHostChild,
   commitMountHostInstance,
   createHostContainer,
   createHostInstance,
   createHostText,
-  detachHostChild,
   type AdapterChild,
   type HostContainer,
   type HostInstance,
-  insertRootChild,
+  insertHostChild,
   isMountHostRecord,
   lockHandoffTree,
   releaseContainerMounts,
-  removeRootChild,
+  removeHostChild,
   updateHostInstance,
   updateHostText,
 } from "#/document-adapter.ts";
@@ -97,22 +95,22 @@ const reconciler = Reconciler<
     appendInitialHostChild(parent, child);
   },
   appendChild(parent, child) {
-    attachHostChild(parent, child);
+    insertHostChild(parent, child);
   },
   appendChildToContainer(container, child) {
-    insertRootChild(container, child);
+    insertHostChild(container, child);
   },
   insertBefore(parent, child, before) {
-    attachHostChild(parent, child, before);
+    insertHostChild(parent, child, before);
   },
   insertInContainerBefore(container, child, before) {
-    insertRootChild(container, child, before);
+    insertHostChild(container, child, before);
   },
   removeChild(parent, child) {
-    detachHostChild(parent, child);
+    removeHostChild(parent, child);
   },
   removeChildFromContainer(container, child) {
-    removeRootChild(container, child);
+    removeHostChild(container, child);
   },
   commitUpdate(instance, _type, _previous, next) {
     updateHostInstance(instance, next);

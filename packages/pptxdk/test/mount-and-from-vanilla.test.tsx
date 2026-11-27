@@ -1010,4 +1010,189 @@ describe("public React fromVanilla bridge", () => {
       "persisted-child",
     );
   });
+
+  it("infers exact JSX props for zero-arg, required-prop, optional-prop, and default-prop closed and slotted vanilla factories", async () => {
+    const ZeroClosed = fromVanilla(() => shape("zero", { id: "zero-closed" }));
+    const ReqClosed = fromVanilla(
+      (props: { readonly id: string; readonly label: string }) =>
+        shape(props.label, { id: props.id }),
+    );
+    const OptClosed = fromVanilla(
+      (props?: { readonly id?: string; readonly tone?: "warm" | "cool" }) =>
+        shape(props?.tone ?? "neutral", {
+          id: props?.id ?? "opt-closed",
+        }),
+    );
+    const DefClosed = fromVanilla(
+      (props: { readonly id?: string; readonly tone?: "warm" | "cool" } = {}) =>
+        shape(props.tone ?? "default", {
+          id: props.id ?? "def-closed",
+        }),
+    );
+
+    const ZeroSlot = fromVanilla((): VanillaSlotResult => {
+      const root = box({ id: "zero-slot" });
+      return { node: root, slot: root };
+    });
+    const ReqSlot = fromVanilla(
+      (props: { readonly id: string }): VanillaSlotResult => {
+        const root = box({ id: props.id });
+        return { node: root, slot: root };
+      },
+    );
+    const OptSlot = fromVanilla(
+      (props?: {
+        readonly id?: string;
+        readonly tone?: "warm" | "cool";
+      }): VanillaSlotResult => {
+        const slot = box({ id: `${props?.id ?? "opt-slot"}-inner` });
+        const root = box({ id: props?.id ?? "opt-slot" }).append(
+          shape(props?.tone ?? "neutral", {
+            id: `${props?.id ?? "opt-slot"}-header`,
+          }),
+          slot,
+        );
+        return { node: root, slot };
+      },
+    );
+    const DefSlot = fromVanilla(
+      (
+        props: {
+          readonly id?: string;
+          readonly tone?: "warm" | "cool";
+        } = {},
+      ): VanillaSlotResult => {
+        const slot = box({ id: `${props.id ?? "def-slot"}-inner` });
+        const root = box({ id: props.id ?? "def-slot" }).append(
+          shape(props.tone ?? "default", {
+            id: `${props.id ?? "def-slot"}-header`,
+          }),
+          slot,
+        );
+        return { node: root, slot };
+      },
+    );
+
+    const checkTypes = () => (
+      <>
+        <ZeroClosed />
+        {/* @ts-expect-error zero-arg closed component must reject unknown props */}
+        <ZeroClosed unknownProp={1} />
+        <ZeroClosed>
+          {/* @ts-expect-error zero-arg closed component must reject children */}
+          <Text>nope</Text>
+        </ZeroClosed>
+
+        {/* @ts-expect-error required-prop closed component must require props */}
+        <ReqClosed />
+        <ReqClosed id="r1" label="ok">
+          {/* @ts-expect-error required-prop closed component must reject children */}
+          <Text>nope</Text>
+        </ReqClosed>
+
+        <OptClosed />
+        <OptClosed id="o1" tone="warm" />
+        {/* @ts-expect-error optional-prop closed component must reject wrong prop type */}
+        <OptClosed tone={123} />
+        {/* @ts-expect-error optional-prop closed component must reject unknown props */}
+        <OptClosed unknownProp={1} />
+        <OptClosed tone="warm">
+          {/* @ts-expect-error optional-prop closed component must reject children */}
+          <Text>nope</Text>
+        </OptClosed>
+
+        <DefClosed />
+        <DefClosed id="d1" tone="cool" />
+        {/* @ts-expect-error default-prop closed component must reject wrong prop type */}
+        <DefClosed tone={123} />
+        <DefClosed tone="cool">
+          {/* @ts-expect-error default-prop closed component must reject children */}
+          <Text>nope</Text>
+        </DefClosed>
+
+        <ZeroSlot />
+        {/* @ts-expect-error zero-arg slot component must reject unknown props */}
+        <ZeroSlot unknownProp={1} />
+
+        {/* @ts-expect-error required-prop slot component must require props */}
+        <ReqSlot />
+
+        <OptSlot />
+        <OptSlot id="os1" tone="warm">
+          <Text id="os1-child">in opt</Text>
+        </OptSlot>
+        {/* @ts-expect-error optional-prop slot component must reject wrong prop type */}
+        <OptSlot tone={123} />
+
+        <DefSlot />
+        <DefSlot id="ds1" tone="cool">
+          <Text id="ds1-child">in def</Text>
+        </DefSlot>
+        {/* @ts-expect-error default-prop slot component must reject wrong prop type */}
+        <DefSlot tone={123} />
+      </>
+    );
+    void checkTypes;
+
+    const doc = await expandDocument(
+      <Deck width={640} height={360}>
+        <Slide id="s-shapes">
+          <OptClosed id="opt-default" />
+          <OptClosed id="opt-warm" tone="warm" />
+          <DefClosed id="def-default" />
+          <DefClosed id="def-cool" tone="cool" />
+          <OptSlot id="slot-opt-default">
+            <Text id="slot-opt-default-child">child A</Text>
+          </OptSlot>
+          <OptSlot id="slot-opt-warm" tone="warm">
+            <Text id="slot-opt-warm-child">child B</Text>
+          </OptSlot>
+          <DefSlot id="slot-def-default">
+            <Text id="slot-def-default-child">child C</Text>
+          </DefSlot>
+          <DefSlot id="slot-def-cool" tone="cool">
+            <Text id="slot-def-cool-child">child D</Text>
+          </DefSlot>
+        </Slide>
+      </Deck>,
+    );
+
+    const slideNode = doc.query.get("s-shapes").node;
+    const firstText = (nodeId: string, scopeId?: string) => {
+      const target =
+        scopeId === undefined
+          ? slideNode.query.get(nodeId).node
+          : slideNode.query.get(scopeId).get(nodeId).node;
+      const child = target.children[0];
+      return child !== undefined && "text" in child ? child.text : undefined;
+    };
+    assert.equal(firstText("opt-default"), "neutral");
+    assert.equal(firstText("opt-warm"), "warm");
+    assert.equal(firstText("def-default"), "default");
+    assert.equal(firstText("def-cool"), "cool");
+    assert.equal(
+      firstText("slot-opt-default-header", "slot-opt-default"),
+      "neutral",
+    );
+    assert.equal(firstText("slot-opt-warm-header", "slot-opt-warm"), "warm");
+    assert.equal(
+      firstText("slot-def-default-header", "slot-def-default"),
+      "default",
+    );
+    assert.equal(firstText("slot-def-cool-header", "slot-def-cool"), "cool");
+    assert.equal(
+      slideNode.query
+        .get("slot-opt-warm")
+        .get("slot-opt-warm-inner")
+        .get("slot-opt-warm-child").node.id,
+      "slot-opt-warm-child",
+    );
+    assert.equal(
+      slideNode.query
+        .get("slot-def-cool")
+        .get("slot-def-cool-inner")
+        .get("slot-def-cool-child").node.id,
+      "slot-def-cool-child",
+    );
+  });
 });

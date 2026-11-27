@@ -277,11 +277,16 @@ function hasUnstyledTextLeaf(node: CommonNode): boolean {
   }
   if (
     node.type === "text" ||
-    node.type === "shape" ||
     node.type === "cell" ||
     node.type === "notes" ||
     node.type === "paragraph"
   ) {
+    return (
+      node.children.length === 0 ||
+      node.children.some((child) => !(child instanceof CommonNode))
+    );
+  }
+  if (node.type === "shape") {
     return node.children.some((child) => !(child instanceof CommonNode));
   }
   return false;

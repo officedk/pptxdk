@@ -18,6 +18,27 @@ export type VanillaSlotResult<
   readonly slot: Slot;
 };
 
+/**
+ * Maps a vanilla factory function onto its React component props, preserving optional and default
+ * parameter objects while allowing `children` only when the factory returns {@link VanillaSlotResult}.
+ */
+export type VanillaFactoryProps<
+  F extends (props: never) => CommonNode | VanillaSlotResult,
+> =
+  Parameters<F> extends readonly []
+    ? {
+        readonly children?: ReturnType<F> extends VanillaSlotResult
+          ? ReactNode
+          : never;
+      }
+    : Parameters<F> extends readonly [props?: infer P]
+      ? NonNullable<P> & {
+          readonly children?: ReturnType<F> extends VanillaSlotResult
+            ? ReactNode
+            : never;
+        }
+      : never;
+
 type VanillaOutput = CommonNode | VanillaSlotResult;
 
 function isVanillaSlotResult(value: unknown): value is VanillaSlotResult {
@@ -73,27 +94,8 @@ function bridgeError(message: string): BuildError {
  * `<Suspense>` retries while non-`children` props remain shallow-equal.
  */
 export function fromVanilla<
-  Node extends CommonNode = CommonNode,
-  Slot extends CommonContainer = CommonContainer,
->(
-  factory: () => VanillaSlotResult<Node, Slot>,
-): (props: { readonly children?: ReactNode }) => ReactNode;
-export function fromVanilla<
-  P extends object,
-  Node extends CommonNode = CommonNode,
-  Slot extends CommonContainer = CommonContainer,
->(
-  factory: (props: P) => VanillaSlotResult<Node, Slot>,
-): (props: P & { readonly children?: ReactNode }) => ReactNode;
-export function fromVanilla<Node extends CommonNode = CommonNode>(
-  factory: () => Node,
-): (props: { readonly children?: never }) => ReactNode;
-export function fromVanilla<
-  P extends object,
-  Node extends CommonNode = CommonNode,
->(
-  factory: (props: P) => Node,
-): (props: P & { readonly children?: never }) => ReactNode;
+  F extends (props: never) => CommonNode | VanillaSlotResult,
+>(factory: F): (props: VanillaFactoryProps<F>) => ReactNode;
 export function fromVanilla(
   factory: (props?: never) => VanillaOutput,
 ): (props: Record<string, unknown>) => ReactNode {

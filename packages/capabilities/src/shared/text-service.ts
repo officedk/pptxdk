@@ -26,7 +26,6 @@ import LineBreakerImplementation from "linebreak";
 
 import {
   fontPresentationContributions,
-  isFontEmbeddable,
   requiresFontGlyph,
   requiresVisibleFontGlyph,
   type FontEmbeddingMode,
@@ -35,6 +34,7 @@ import {
 import {
   findMissingFontGlyphs,
   fontBytesIdentity,
+  isTrueTypeFontEmbeddable,
   openMeasureFontFace,
   resolveDeclaredFaceSlot,
   shapeFontAdvances,
@@ -1173,8 +1173,9 @@ function textResourceClaims(runs: readonly Run[]): {
           entry.text.join(""),
           requiresVisibleFontGlyph,
         );
-        const embeddable = isFontEmbeddable(
+        const embeddable = isTrueTypeFontEmbeddable(
           font.data!,
+          font.family,
           font.substitute,
           font.embeddable,
         );

@@ -22,7 +22,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { Mount } from "#/mount.ts";
+import { Mount, createPlaceholderMount } from "#/mount.ts";
 
 export type ElementProps = {
   readonly children?: ReactNode;
@@ -67,11 +67,7 @@ function isInlineTextNode(node: CommonNode): boolean {
   );
 }
 
-function expandPlaceholderEntry(
-  key: string,
-  value: unknown,
-  seenObjectNodes: Set<CommonNode>,
-): ReactNode {
+function expandPlaceholderEntry(key: string, value: unknown): ReactNode {
   if (value === undefined) return null;
   if (value instanceof CommonNode) {
     if (isInlineTextNode(value)) {
@@ -85,11 +81,7 @@ function expandPlaceholderEntry(
         createElement(Mount, { node: value }),
       );
     }
-    if (value.parent === undefined && !seenObjectNodes.has(value)) {
-      seenObjectNodes.add(value);
-      value.set({ placeholder: key });
-    }
-    return createElement(Mount, { key: `__ph_${key}`, node: value });
+    return createPlaceholderMount(key, value);
   }
   if (Array.isArray(value)) {
     const mapped = value.map((item, index) =>
@@ -164,9 +156,8 @@ export function Slide(props: SlideProps): ReactNode {
     ([, value]) => value !== undefined,
   );
   const keepEmpty = props.layout === undefined && entries.length === 0;
-  const seenObjectNodes = new Set<CommonNode>();
   const placeholderChildren = entries.map(([key, value]) =>
-    expandPlaceholderEntry(key, value, seenObjectNodes),
+    expandPlaceholderEntry(key, value),
   );
   return createElement(
     "slide",

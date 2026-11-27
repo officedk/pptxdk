@@ -671,7 +671,6 @@ describe("Imported embedded font weight preservation & backfill", () => {
           { placeholder: "body" },
         ),
         box({
-          theme: { fonts: { minor: mediumMixedFont } },
           style: {
             position: "absolute",
             left: 48,
@@ -694,7 +693,7 @@ describe("Imported embedded font weight preservation & backfill", () => {
                 position: "relative",
                 width: 340,
                 height: 50,
-                fontFamily: "minor",
+                fontFamily: mediumMixedFont,
                 fontWeight: 500,
                 fontSize: 14,
               },

@@ -68,8 +68,8 @@ export const notesPositiveScenario: CapabilityScenario = {
         style: { fontSize: 36, color: "#991B1B" },
         theme: {
           colors: {
-            brandNavy: "#1E3A8A",
-            highlight: "#F59E0B",
+            accent1: "#1E3A8A",
+            accent2: "#F59E0B",
           },
         },
       },
@@ -78,7 +78,7 @@ export const notesPositiveScenario: CapabilityScenario = {
         {
           id: "intro-notes",
           background: "#F8FAFC",
-          theme: { colors: { highlight: "#D97706" } },
+          themeOverride: { colors: { accent2: "#D97706" } },
         },
         createElement(Shape, {
           id: "navy-card",
@@ -88,7 +88,7 @@ export const notesPositiveScenario: CapabilityScenario = {
             top: 48,
             width: 240,
             height: 110,
-            background: "brandNavy",
+            background: "accent1",
           },
         }),
         createElement(Shape, {
@@ -99,7 +99,7 @@ export const notesPositiveScenario: CapabilityScenario = {
             top: 48,
             width: 240,
             height: 110,
-            background: "highlight",
+            background: "accent2",
           },
         }),
         createElement(
@@ -115,7 +115,7 @@ export const notesPositiveScenario: CapabilityScenario = {
             { id: "takeaway-line" },
             createElement(
               Span,
-              { style: { fontWeight: "bold", color: "highlight" } },
+              { style: { fontWeight: "bold", color: "#D97706" } },
               "Key takeaway: ",
             ),
             "keep notes off the visible canvas.",
@@ -156,15 +156,15 @@ export const notesPositiveScenario: CapabilityScenario = {
       style: { fontSize: 36, color: "#991B1B" },
       theme: {
         colors: {
-          brandNavy: "#1E3A8A",
-          highlight: "#F59E0B",
+          accent1: "#1E3A8A",
+          accent2: "#F59E0B",
         },
       },
     }).append(
       slide({
         id: "intro-notes",
         background: "#F8FAFC",
-        theme: { colors: { highlight: "#D97706" } },
+        themeOverride: { colors: { accent2: "#D97706" } },
       }).append(
         shape({
           id: "navy-card",
@@ -174,7 +174,7 @@ export const notesPositiveScenario: CapabilityScenario = {
             top: 48,
             width: 240,
             height: 110,
-            background: "brandNavy",
+            background: "accent1",
           },
         }),
         shape({
@@ -185,7 +185,7 @@ export const notesPositiveScenario: CapabilityScenario = {
             top: 48,
             width: 240,
             height: 110,
-            background: "highlight",
+            background: "accent2",
           },
         }),
         notes(
@@ -196,7 +196,7 @@ export const notesPositiveScenario: CapabilityScenario = {
             paragraph(
               [
                 span("Key takeaway: ", {
-                  style: { fontWeight: "bold", color: "highlight" },
+                  style: { fontWeight: "bold", color: "#D97706" },
                 }),
                 "keep notes off the visible canvas.",
               ],

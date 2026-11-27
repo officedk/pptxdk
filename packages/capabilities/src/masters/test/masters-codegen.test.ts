@@ -30,7 +30,6 @@ describe("masters capability codegen", () => {
       name: "Brand Theme",
       colors: {
         accent1: "#1D4ED8",
-        brandSoft: lighter("accent1", 0.35),
       },
     });
 
@@ -115,6 +114,7 @@ describe("masters capability codegen", () => {
             top: 16,
             width: 240,
             height: 28,
+            color: lighter("accent1", 0.35),
           },
         }),
         slideLayout(m1TitleLayout),

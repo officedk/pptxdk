@@ -132,18 +132,17 @@ describe("rich-text speaker notes", () => {
       height: 540,
       theme: {
         name: "Notes Theme Contract",
-        colors: { accent1: "#336699", brand: "#123456" },
+        colors: { accent1: "#336699", accent2: "#ABCDEF" },
         fonts: { major: jost, minor: jost },
       },
     }).append(
       slide({
         id: "notes-theme",
-        theme: { colors: { brand: "#ABCDEF" } },
       }).append(
         notes(
           paragraph([
             span("Theme-aware notes", {
-              style: { color: "brand" },
+              style: { color: "accent2" },
             }),
           ]),
         ),
@@ -210,19 +209,18 @@ describe("rich-text speaker notes", () => {
     );
   });
 
-  it("keeps page theme tokens and notes defaults while notes, paragraph, and span styles override in order", async () => {
+  it("keeps notes defaults while notes, paragraph, and span styles override in order", async () => {
     const resourceFont = jost;
     const document = deck({
       width: 960,
       height: 540,
       theme: {
-        fonts: { major: resourceFont, minor: resourceFont },
-        colors: { brand: "#123456" },
+        fonts: { major: resourceFont, minor: "Jost" },
+        colors: { accent1: "#ABCDEF" },
       },
     }).append(
       slide({
         id: "themed",
-        theme: { colors: { brand: "#ABCDEF" }, fonts: { minor: "Jost" } },
         style: { fontSize: 48, lineHeight: "60pt" },
       }).append(
         notes(
@@ -241,7 +239,7 @@ describe("rich-text speaker notes", () => {
               }),
             ]),
           ],
-          { id: "speech", style: { fontSize: "20pt", color: "brand" } },
+          { id: "speech", style: { fontSize: "20pt", color: "accent1" } },
         ),
       ),
     );

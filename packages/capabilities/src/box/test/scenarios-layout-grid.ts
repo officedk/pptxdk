@@ -50,10 +50,10 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
   id: "layout-grid-semantics",
   capability: "layout:grid",
   description:
-    "Dual-author Grid layout scenario covering px/auto/fr columns & rows, explicit placement & spans, percentage sizing inside grid areas, width-constrained Text wrapping driving auto row height, nested Grid <-> Flex Box combinations, scoped ThemeScope, and out-of-bounds grid track and item geometry.",
+    "Dual-author Grid layout scenario covering px/auto/fr columns & rows, explicit placement & spans, percentage sizing inside grid areas, width-constrained Text wrapping driving auto row height, nested Grid <-> Flex Box combinations, container style inheritance, and out-of-bounds grid track and item geometry.",
   visualCheckpoints: [
     "Page 1 (grid-tracks-span-wrap): light #F8FAFC canvas; top full-span blue banner ('Grid Layout Dashboard' + pale blue badge) spans all 3 columns; row 2 has a 120px white left card ('Fixed 120px'), an auto-width blue card ('AutoColTrack'), and a wider emerald 1fr card whose wrapped 2-line text expands row 2 height so all three row-2 cards share the same height; row 3 has a 2-column spanning bottom-left white card and a centered purple 60%x50% Shape in column 3.",
-    "Page 2 (grid-nested-flex-and-theme): white canvas; top Flex header ('Nested Flex <-> Grid & Scoped Theme'); left half holds an amber-themed nested Grid ('Scoped Theme Grid', orange Shape, and white Flex card '网格嵌套 Flex') overridden via local theme; right half holds a slate-themed Flex column containing an auto-rows Grid whose top row is fixed 36px and bottom row grows with wrapped text while retaining outer theme colors.",
+    "Page 2 (grid-nested-flex-and-theme): white canvas; top Flex header ('Nested Flex <-> Grid & Scoped Theme'); left half holds an amber-themed nested Grid ('Scoped Theme Grid', orange Shape, and white Flex card '网格嵌套 Flex') using distinct scheme slots and inherited color; right half holds a slate-themed Flex column containing an auto-rows Grid whose top row is fixed 36px and bottom row grows with wrapped text while retaining outer theme colors.",
     "Page 3 (grid-overflow-warnings): pale rose #FEF2F2 canvas; top red-bordered 280x110 Grid lets its 180px+150px fixed columns visibly extend past the right container border; bottom dark-red-bordered Grid contains a 200x110 coral Shape intentionally overflowing its 160x80 cell (overlapping the left edge of the green Shape in column 2).",
   ],
   nativeCheckpoints: [
@@ -67,12 +67,14 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
         height: 360,
         theme: {
           colors: {
-            surface: "#FFFFFF",
-            accent: "#2563EB",
-            ink: "#0F172A",
-            cardBg: "#F1F5F9",
-            badge: "#0EA5E9",
-            textInk: "#0F172A",
+            lt1: "#FFFFFF",
+            accent1: "#2563EB",
+            dk1: "#0F172A",
+            lt2: "#F1F5F9",
+            accent2: "#0EA5E9",
+            accent3: "#FEF3C7",
+            accent4: "#D97706",
+            dk2: "#78350F",
           },
         },
       },
@@ -101,7 +103,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               justifyContent: "space-between",
               alignItems: "center",
               padding: [8, 12],
-              background: "accent",
+              background: "accent1",
             },
           },
           createElement(
@@ -132,7 +134,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridColumn: 1,
               gridRow: 2,
               padding: 8,
-              background: "surface",
+              background: "lt1",
               border: { color: "#CBD5E1", width: 1 },
             },
           },
@@ -143,7 +145,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               style: {
                 fontFamily: jostFont,
                 fontSize: 13,
-                color: "ink",
+                color: "dk1",
               },
             },
             "Fixed 120px",
@@ -208,7 +210,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               gridColumn: "1 / span 2",
               gridRow: 3,
               padding: 10,
-              background: "surface",
+              background: "lt1",
               border: { color: "#94A3B8", width: 1 },
             },
           },
@@ -219,7 +221,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               style: {
                 fontFamily: jostFont,
                 fontSize: 13,
-                color: "ink",
+                color: "dk1",
               },
             },
             "Spans columns 1-2 (120px + gap + auto)",
@@ -260,7 +262,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               justifyContent: "space-between",
               alignItems: "center",
               padding: [8, 12],
-              background: "cardBg",
+              background: "lt2",
               border: { color: "#CBD5E1", width: 1 },
             },
           },
@@ -272,7 +274,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 fontFamily: jostFont,
                 fontSize: 15,
                 fontWeight: "bold",
-                color: "textInk",
+                color: "dk1",
                 width: "auto",
                 height: "auto",
               },
@@ -281,7 +283,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
           ),
           createElement(Shape, {
             id: "outer-theme-dot",
-            style: { width: 22, height: 22, background: "badge" },
+            style: { width: 22, height: 22, background: "accent2" },
           }),
         ),
         createElement(
@@ -300,21 +302,15 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             Box,
             {
               id: "nested-grid",
-              theme: {
-                colors: {
-                  cardBg: "#FEF3C7",
-                  badge: "#D97706",
-                  textInk: "#78350F",
-                },
-              },
               style: {
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",
                 gridTemplateRows: "auto 1fr",
                 gap: 8,
                 padding: 10,
-                background: "cardBg",
-                border: { color: "badge", width: 2 },
+                background: "accent3",
+                border: { color: "accent4", width: 2 },
+                color: "dk2",
               },
             },
             createElement(
@@ -326,14 +322,13 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                   fontFamily: jostFont,
                   fontSize: 14,
                   fontWeight: "bold",
-                  color: "textInk",
                 },
               },
               "Scoped Theme Grid",
             ),
             createElement(Shape, {
               id: "nested-shape-a",
-              style: { height: "100%", background: "badge" },
+              style: { height: "100%", background: "accent4" },
             }),
             createElement(
               Box,
@@ -345,7 +340,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                   justifyContent: "center",
                   alignItems: "center",
                   background: "#FFFFFF",
-                  border: { color: "badge", width: 1 },
+                  border: { color: "accent4", width: 1 },
                   padding: 6,
                 },
               },
@@ -356,7 +351,6 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                   style: {
                     fontFamily: notoFont,
                     fontSize: 12,
-                    color: "textInk",
                     align: "center",
                   },
                 },
@@ -373,7 +367,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 flexDirection: "column",
                 gap: 8,
                 padding: 10,
-                background: "cardBg",
+                background: "lt2",
                 border: { color: "#94A3B8", width: 1 },
               },
             },
@@ -385,7 +379,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                   fontFamily: jostFont,
                   fontSize: 14,
                   fontWeight: "bold",
-                  color: "textInk",
+                  color: "dk1",
                 },
               },
               "Outer Theme Preserved",
@@ -403,7 +397,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               },
               createElement(Shape, {
                 id: "auto-r1-c1",
-                style: { height: "100%", background: "badge" },
+                style: { height: "100%", background: "accent2" },
               }),
               createElement(Shape, {
                 id: "auto-r1-c2",
@@ -426,7 +420,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                     style: {
                       fontFamily: jostFont,
                       fontSize: 12,
-                      color: "textInk",
+                      color: "dk1",
                     },
                   },
                   "Auto row wraps nicely here",
@@ -511,12 +505,14 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
       height: 360,
       theme: {
         colors: {
-          surface: "#FFFFFF",
-          accent: "#2563EB",
-          ink: "#0F172A",
-          cardBg: "#F1F5F9",
-          badge: "#0EA5E9",
-          textInk: "#0F172A",
+          lt1: "#FFFFFF",
+          accent1: "#2563EB",
+          dk1: "#0F172A",
+          lt2: "#F1F5F9",
+          accent2: "#0EA5E9",
+          accent3: "#FEF3C7",
+          accent4: "#D97706",
+          dk2: "#78350F",
         },
       },
     }).append(
@@ -541,7 +537,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             justifyContent: "space-between",
             alignItems: "center",
             padding: [8, 12],
-            background: "accent",
+            background: "accent1",
           },
         }).append(
           text("Grid Layout Dashboard", {
@@ -566,7 +562,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridColumn: 1,
             gridRow: 2,
             padding: 8,
-            background: "surface",
+            background: "lt1",
             border: { color: "#CBD5E1", width: 1 },
           },
         }).append(
@@ -575,7 +571,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             style: {
               fontFamily: jostFont,
               fontSize: 13,
-              color: "ink",
+              color: "dk1",
             },
           }),
         ),
@@ -627,7 +623,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             gridColumn: "1 / span 2",
             gridRow: 3,
             padding: 10,
-            background: "surface",
+            background: "lt1",
             border: { color: "#94A3B8", width: 1 },
           },
         }).append(
@@ -636,7 +632,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             style: {
               fontFamily: jostFont,
               fontSize: 13,
-              color: "ink",
+              color: "dk1",
             },
           }),
         ),
@@ -671,7 +667,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             justifyContent: "space-between",
             alignItems: "center",
             padding: [8, 12],
-            background: "cardBg",
+            background: "lt2",
             border: { color: "#CBD5E1", width: 1 },
           },
         }).append(
@@ -681,14 +677,14 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               fontFamily: jostFont,
               fontSize: 15,
               fontWeight: "bold",
-              color: "textInk",
+              color: "dk1",
               width: "auto",
               height: "auto",
             },
           }),
           shape({
             id: "outer-theme-dot",
-            style: { width: 22, height: 22, background: "badge" },
+            style: { width: 22, height: 22, background: "accent2" },
           }),
         ),
         box({
@@ -703,21 +699,15 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
         }).append(
           box({
             id: "nested-grid",
-            theme: {
-              colors: {
-                cardBg: "#FEF3C7",
-                badge: "#D97706",
-                textInk: "#78350F",
-              },
-            },
             style: {
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gridTemplateRows: "auto 1fr",
               gap: 8,
               padding: 10,
-              background: "cardBg",
-              border: { color: "badge", width: 2 },
+              background: "accent3",
+              border: { color: "accent4", width: 2 },
+              color: "dk2",
             },
           }).append(
             text("Scoped Theme Grid", {
@@ -727,12 +717,11 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 fontFamily: jostFont,
                 fontSize: 14,
                 fontWeight: "bold",
-                color: "textInk",
               },
             }),
             shape({
               id: "nested-shape-a",
-              style: { height: "100%", background: "badge" },
+              style: { height: "100%", background: "accent4" },
             }),
             box({
               id: "nested-flex-b",
@@ -742,7 +731,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 justifyContent: "center",
                 alignItems: "center",
                 background: "#FFFFFF",
-                border: { color: "badge", width: 1 },
+                border: { color: "accent4", width: 1 },
                 padding: 6,
               },
             }).append(
@@ -751,7 +740,6 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 style: {
                   fontFamily: notoFont,
                   fontSize: 12,
-                  color: "textInk",
                   align: "center",
                 },
               }),
@@ -764,7 +752,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
               flexDirection: "column",
               gap: 8,
               padding: 10,
-              background: "cardBg",
+              background: "lt2",
               border: { color: "#94A3B8", width: 1 },
             },
           }).append(
@@ -774,7 +762,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                 fontFamily: jostFont,
                 fontSize: 14,
                 fontWeight: "bold",
-                color: "textInk",
+                color: "dk1",
               },
             }),
             box({
@@ -788,7 +776,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
             }).append(
               shape({
                 id: "auto-r1-c1",
-                style: { height: "100%", background: "badge" },
+                style: { height: "100%", background: "accent2" },
               }),
               shape({
                 id: "auto-r1-c2",
@@ -807,7 +795,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
                   style: {
                     fontFamily: jostFont,
                     fontSize: 12,
-                    color: "textInk",
+                    color: "dk1",
                   },
                 }),
               ),
@@ -938,7 +926,7 @@ export const layoutGridPositiveScenario: CapabilityScenario = {
     assert.ok(percentShapeBox.x > wrapCardBox.x, author);
     assert.ok(percentShapeBox.y > spanPanelBox.y, author);
 
-    // Page 2: Nested Grid <-> Flex Box, gridAutoRows cycling, and scoped ThemeScope isolation.
+    // Page 2: Nested Grid <-> Flex Box, gridAutoRows cycling, and scheme color / container style isolation.
     const page2 = preview.pages[1]!;
     assert.deepEqual(page2.errors, [], author);
     assert.ok(page2.png !== undefined, author);

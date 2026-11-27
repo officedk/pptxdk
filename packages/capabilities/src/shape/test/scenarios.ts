@@ -171,7 +171,7 @@ export const shapePositiveScenario: CapabilityScenario = {
   description:
     "Dual-author Shape scenario covering rect, ellipse, preset, custom path, fill/border, opacity, rotate, flip, theme tokens, and zIndex.",
   visualCheckpoints: [
-    "Page 1 (geometry-and-styles): light gray #F4F6F8 canvas; blue rectangle (#2563EB) with 3px dark border (#1E293B) at top-left; semi-transparent red ellipse (#EF4444, opacity 0.7) overlapping the rectangle's bottom-right corner; 45-degree rotated emerald diamond (#10B981 via ThemeScope accent1) in the center; horizontally flipped purple chevron (#8B5CF6) and orange/navy custom diamond+arc shape on the right.",
+    "Page 1 (geometry-and-styles): light gray #F4F6F8 canvas; blue rectangle (#2563EB) with 3px dark border (#1E293B) at top-left; semi-transparent red ellipse (#EF4444, opacity 0.7) overlapping the rectangle's bottom-right corner; 45-degree rotated emerald diamond (#10B981 via Slide themeOverride accent1) in the center; horizontally flipped purple chevron (#8B5CF6) and orange/navy custom diamond+arc shape on the right.",
     "Page 2 (layer-order): warm amber rectangle (#F59E0B, zIndex 5) rendered in front of dark slate rectangle (#334155, zIndex 1) despite being declared earlier; adjacent borderless teal rectangle (borderWidth: 0) has no dark outline.",
   ],
   nativeCheckpoints: [
@@ -183,14 +183,14 @@ export const shapePositiveScenario: CapabilityScenario = {
       {
         width: 640,
         height: 360,
-        theme: { colors: { diamondFill: "#059669" } },
+        theme: { colors: { accent1: "#059669" } },
       },
       createElement(
         Slide,
         {
           id: "geometry-and-styles",
           background: "#F4F6F8",
-          theme: { colors: { diamondFill: "#10B981" } },
+          themeOverride: { colors: { accent1: "#10B981" } },
         },
         createElement(Shape, {
           id: "base-rect",
@@ -229,7 +229,7 @@ export const shapePositiveScenario: CapabilityScenario = {
             top: 70,
             width: 84,
             height: 84,
-            background: "diamondFill",
+            background: "accent1",
             border: { color: "#065F46", width: 2 },
             rotate: 45,
           },
@@ -309,12 +309,12 @@ export const shapePositiveScenario: CapabilityScenario = {
     return deck({
       width: 640,
       height: 360,
-      theme: { colors: { diamondFill: "#059669" } },
+      theme: { colors: { accent1: "#059669" } },
     }).append(
       slide({
         id: "geometry-and-styles",
         background: "#F4F6F8",
-        theme: { colors: { diamondFill: "#10B981" } },
+        themeOverride: { colors: { accent1: "#10B981" } },
       }).append(
         shape({
           id: "base-rect",
@@ -353,7 +353,7 @@ export const shapePositiveScenario: CapabilityScenario = {
             top: 70,
             width: 84,
             height: 84,
-            background: "diamondFill",
+            background: "accent1",
             border: { color: "#065F46", width: 2 },
             rotate: 45,
           },
@@ -1057,7 +1057,7 @@ export const shapeTextParityScenario: CapabilityScenario = {
       {
         width: 640,
         height: 360,
-        theme: { colors: { badgeFill: "#7C3AED", textGold: "#FDE047" } },
+        theme: { colors: { accent1: "#7C3AED", accent2: "#FDE047" } },
       },
       createElement(
         Slide,
@@ -1095,7 +1095,7 @@ export const shapeTextParityScenario: CapabilityScenario = {
               top: 20,
               width: 190,
               height: 130,
-              background: "badgeFill",
+              background: "accent1",
               border: { color: "#4C1D95", width: 2, style: "dashed" },
               padding: 4,
             },
@@ -1110,7 +1110,7 @@ export const shapeTextParityScenario: CapabilityScenario = {
             ),
             createElement(
               Span,
-              { style: { textDecoration: "underline", color: "textGold" } },
+              { style: { textDecoration: "underline", color: "accent2" } },
               "Rich",
             ),
           ),
@@ -1344,7 +1344,7 @@ export const shapeTextParityScenario: CapabilityScenario = {
     return deck({
       width: 640,
       height: 360,
-      theme: { colors: { badgeFill: "#7C3AED", textGold: "#FDE047" } },
+      theme: { colors: { accent1: "#7C3AED", accent2: "#FDE047" } },
     }).append(
       slide({
         id: "shape-rich-text-and-presets",
@@ -1377,7 +1377,7 @@ export const shapeTextParityScenario: CapabilityScenario = {
             top: 20,
             width: 190,
             height: 130,
-            background: "badgeFill",
+            background: "accent1",
             border: { color: "#4C1D95", width: 2, style: "dashed" },
             padding: 4,
           },
@@ -1386,7 +1386,7 @@ export const shapeTextParityScenario: CapabilityScenario = {
             span("Diamond ").style({ fontWeight: 700, color: "#FFFFFF" }),
             span("Rich").style({
               textDecoration: "underline",
-              color: "textGold",
+              color: "accent2",
             }),
           ]).style({ fontFamily: jostFont, fontSize: 14, align: "center" }),
           paragraph("Wraps inner text").style({

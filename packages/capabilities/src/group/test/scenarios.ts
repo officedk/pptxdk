@@ -132,7 +132,7 @@ export const groupPositiveScenario: CapabilityScenario = {
   id: "group-native-composition-and-transforms",
   capability: "group",
   description:
-    "Dual-author Group scenario covering loose and layout-participating Groups containing Text, Shape, Box, nested rotated Groups, flipped members, scoped ThemeScope, Motion members, Morph continuity, and slide links.",
+    "Dual-author Group scenario covering loose and layout-participating Groups containing Text, Shape, Box, nested rotated Groups, flipped members, inherited container text style, Motion members, Morph continuity, and slide links.",
   visualCheckpoints: [
     "Page 1 (group-hierarchy-and-transforms): light slate #F8FAFC canvas; top-left blue-bordered card (#EFF6FF fill, 2px #2563EB border) holds a #1D4ED8 badge shape and text '原生组合 Native Group' overlapped at top-right by an amber #F59E0B tag shape; on the right half, a 20deg clockwise rotated cluster contains an emerald green triangle (#10B981) and a nested -35deg rotated inner group holding a horizontally flipped pink triangle (#DB2777) above a dark slate #1E293B 'Nested' caption box.",
     "Page 2 (group-layout-morph-and-link): white canvas; light gray #F1F5F9 Flex container frames a -6deg tilted Group on the left (dark teal #0F766E rectangle beside mint #CCFBF1 'Morph & Link' text card) followed on the right by an amber #FEF3C7 sibling Box with text 'Sibling card follows layout-sized Group cleanly.'",
@@ -147,7 +147,7 @@ export const groupPositiveScenario: CapabilityScenario = {
       {
         width: 640,
         height: 360,
-        theme: { colors: { badgeFill: "#991B1B", badgeText: "#000000" } },
+        theme: { colors: { accent1: "#1D4ED8", lt1: "#FFFFFF" } },
       },
       createElement(
         Slide,
@@ -156,7 +156,7 @@ export const groupPositiveScenario: CapabilityScenario = {
           Group,
           {
             id: "badge-group",
-            theme: { colors: { badgeFill: "#1D4ED8", badgeText: "#FFFFFF" } },
+            style: { color: "lt1" },
             enter: fade({ duration: 400 }),
           },
           createElement(
@@ -178,7 +178,7 @@ export const groupPositiveScenario: CapabilityScenario = {
             },
             createElement(Shape, {
               id: "badge-dot",
-              style: { width: 48, height: 22, background: "badgeFill" },
+              style: { width: 48, height: 22, background: "accent1" },
             }),
             createElement(
               Text,
@@ -204,7 +204,6 @@ export const groupPositiveScenario: CapabilityScenario = {
                 opacity: 0.85,
                 fontFamily: jostFont,
                 fontSize: 11,
-                color: "badgeText",
                 align: "center",
                 verticalAlign: "middle",
               },
@@ -426,7 +425,7 @@ export const groupPositiveScenario: CapabilityScenario = {
     return deck({
       width: 640,
       height: 360,
-      theme: { colors: { badgeFill: "#991B1B", badgeText: "#000000" } },
+      theme: { colors: { accent1: "#1D4ED8", lt1: "#FFFFFF" } },
     }).append(
       slide({
         id: "group-hierarchy-and-transforms",
@@ -434,7 +433,7 @@ export const groupPositiveScenario: CapabilityScenario = {
       }).append(
         group({
           id: "badge-group",
-          theme: { colors: { badgeFill: "#1D4ED8", badgeText: "#FFFFFF" } },
+          style: { color: "lt1" },
           enter: fade({ duration: 400 }),
         }).append(
           box({
@@ -454,7 +453,7 @@ export const groupPositiveScenario: CapabilityScenario = {
           }).append(
             shape({
               id: "badge-dot",
-              style: { width: 48, height: 22, background: "badgeFill" },
+              style: { width: 48, height: 22, background: "accent1" },
             }),
             text("原生组合 Native Group", {
               id: "badge-title",
@@ -474,7 +473,6 @@ export const groupPositiveScenario: CapabilityScenario = {
               opacity: 0.85,
               fontFamily: jostFont,
               fontSize: 11,
-              color: "badgeText",
               align: "center",
               verticalAlign: "middle",
             },
@@ -754,8 +752,10 @@ export const groupPositiveScenario: CapabilityScenario = {
     const slide1Xml = strFromU8(unzipped["ppt/slides/slide1.xml"]!);
     const slide2Xml = strFromU8(unzipped["ppt/slides/slide2.xml"]!);
     const slide3Xml = strFromU8(unzipped["ppt/slides/slide3.xml"]!);
+    const theme1Xml = strFromU8(unzipped["ppt/theme/theme1.xml"]!);
     expect(slide1Xml).toContain("<p:grpSp>");
-    expect(slide1Xml).toContain("1D4ED8");
+    expect(slide1Xml).toContain('<a:schemeClr val="accent1"/>');
+    expect(theme1Xml).toContain("1D4ED8");
     expect(slide2Xml).toContain("!!morph-");
     expect(slide2Xml).toContain("<a:hlinkClick");
     expect(slide3Xml).toContain("!!morph-");

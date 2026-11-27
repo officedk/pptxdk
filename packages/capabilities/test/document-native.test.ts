@@ -125,9 +125,12 @@ describe("native content in the common document", () => {
     assert.match(firstXml, /AA0000/u);
   });
 
-  it("creates editable native groups whose members, local theme, and appearance rebuild", async () => {
-    const localTheme = { colors: { ink: "#112233" } };
-    const member = shape({
+  it("creates editable native groups whose members, inherited style, and appearance rebuild", async () => {
+    const localStyle: { rotate: number; color: "#112233" | "#0000FF" } = {
+      rotate: 12,
+      color: "#112233",
+    };
+    const member = shape("Badge", {
       id: "group-shape",
       name: "group-shape",
       style: {
@@ -136,7 +139,7 @@ describe("native content in the common document", () => {
         top: 24,
         width: 120,
         height: 72,
-        background: "ink",
+        background: "#336699",
         border: { color: "#000000", width: 1 },
       },
     });
@@ -154,13 +157,12 @@ describe("native content in the common document", () => {
     });
     const node = group({
       id: "editable-group",
-      style: { rotate: 12 },
-      theme: localTheme,
+      style: localStyle,
     }).append(member, badge);
     const document = deck({
       width: 960,
       height: 540,
-      theme: { colors: { ink: "#223344" } },
+      theme: { colors: { accent1: "#223344" } },
     }).append(slide({ id: "group" }).append(node));
 
     const first = await build(document);
@@ -176,13 +178,13 @@ describe("native content in the common document", () => {
     assert.match(firstXml, /rot="720000"/u);
     assert.match(firstXml, /112233/u);
 
-    localTheme.colors.ink = "#0000FF";
+    localStyle.color = "#0000FF";
     const isolated = await build(document);
     assert.match(slideXml(isolated), /112233/u);
     assert.doesNotMatch(slideXml(isolated), /0000FF/u);
 
     member.style({ border: { color: "#445566", width: 1 } });
-    node.set({ theme: { colors: { ink: "#778899" } } });
+    node.style({ color: "#778899" });
     const updated = await build(document);
     assert.deepEqual((await validatePptx(updated.pptx)).errors, []);
     const updatedXml = slideXml(updated);
@@ -191,11 +193,11 @@ describe("native content in the common document", () => {
     assert.doesNotMatch(updatedXml, /112233/u);
   });
 
-  it("creates editable slide backgrounds and local themes through the common document", async () => {
+  it("creates editable slide backgrounds and theme overrides through the common document", async () => {
     const node = slide({
       id: "appearance",
       background: "#112233",
-      theme: { colors: { ink: "#223344" } },
+      themeOverride: { colors: { accent1: "#223344" } },
     }).append(
       shape({
         id: "theme-shape",
@@ -205,33 +207,39 @@ describe("native content in the common document", () => {
           top: 24,
           width: 120,
           height: 72,
-          background: "ink",
+          background: "accent1",
         },
       }),
     );
     const document = deck({
       width: 960,
       height: 540,
-      theme: { colors: { ink: "#000000" } },
+      theme: { colors: { accent1: "#000000" } },
     }).append(node);
 
     const first = await build(document);
-    assert.deepEqual((await validatePptx(first.pptx)).errors, []);
+    const firstFile = await validatePptx(first.pptx);
+    assert.deepEqual(firstFile.errors, []);
+    assert.equal(firstFile.slides[0]?.themeOverride?.colors.accent1, "#223344");
     const firstXml = slideXml(first);
     assert.match(
       firstXml,
       /<p:bg><p:bgPr><a:solidFill><a:srgbClr val="112233"\/><\/a:solidFill><a:effectLst\/><\/p:bgPr><\/p:bg>/u,
     );
-    assert.match(firstXml, /223344/u);
+    assert.match(firstXml, /<a:schemeClr val="accent1"\/>/u);
 
     node.set({ background: "#445566" });
-    node.set({ theme: { colors: { ink: "#556677" } } });
+    node.set({ themeOverride: { colors: { accent1: "#556677" } } });
     const updated = await build(document);
-    assert.deepEqual((await validatePptx(updated.pptx)).errors, []);
+    const updatedFile = await validatePptx(updated.pptx);
+    assert.deepEqual(updatedFile.errors, []);
+    assert.equal(
+      updatedFile.slides[0]?.themeOverride?.colors.accent1,
+      "#556677",
+    );
     const updatedXml = slideXml(updated);
     assert.match(updatedXml, /445566/u);
-    assert.match(updatedXml, /556677/u);
-    assert.doesNotMatch(updatedXml, /112233|223344/u);
+    assert.doesNotMatch(updatedXml, /112233/u);
 
     const backgroundBytes = new Uint8Array(png);
     node.set({ background: { image: backgroundBytes } });

@@ -116,6 +116,7 @@ export type DeckImportContext = {
     Readonly<Record<string, NativeColorSlot>>
   >;
   readonly slideNodeByPresentationSldId?: ReadonlyMap<number, CommonNode>;
+  readonly existingDiagnostics?: readonly ImportDiagnostic[];
 };
 
 export type DeckImportOutcome = {

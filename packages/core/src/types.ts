@@ -737,13 +737,13 @@ export type BoundObjectNativeCollaboration = {
 
 /**
  * Generic container collaboration facts submitted by a bound object capability.
- * Core coordinates child layout/compilation, scoped theme propagation, layout observation,
+ * Core coordinates child layout/compilation, active theme context propagation, layout observation,
  * baseline propagation, and native object qualification without hardcoding container names.
  */
 export type BoundContainerCollaboration = {
   /** Child declarations owned by this layout container. */
   readonly children: readonly CapabilityChild[];
-  /** Scoped theme and accumulated text defaults applied to descendants and container compilation. */
+  /** Native theme overrides and inherited container text defaults applied to descendants and container compilation. */
   readonly theme?: ThemeContext;
   /** True when this container produces a native PresentationML object rather than remaining layout-only. */
   readonly emitsObject: boolean;
@@ -772,7 +772,7 @@ export type ResolvedObjectChildren = {
 export type ObjectResolveContext = {
   readonly id: number;
   readonly path: string;
-  /** Deck theme, local color scope, and container text defaults available to the current element. */
+  /** Active theme context (deck theme, native theme overrides, and inherited container text defaults) available to the current element. */
   readonly theme: ThemeContext;
   readonly options: ResolveOptions;
   readonly slideNumber: number;

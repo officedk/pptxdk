@@ -14,15 +14,18 @@ import {
   importPptx,
   isThemeFontSlot,
   lighter,
+  resolve,
   schemeColorNames,
   themeFontSlots,
   type FontReference,
   type HexColor,
+  type ImportDiagnostic,
   type ThemeColor,
   type ThemeFontSlot,
   type ThemeInput,
   type ThemeOverride,
 } from "@officedk/pptxdk";
+import { createImporter, selectCapabilities } from "@officedk/pptxdk/build";
 import {
   Box,
   Chart,
@@ -44,7 +47,7 @@ import {
 } from "@officedk/pptxdk/react";
 import * as pptxdkVanilla from "@officedk/pptxdk/vanilla";
 import { validatePptx } from "@pptxdk/validation";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import type { ReactNode } from "react";
 import { describe, it } from "vitest";
 
@@ -1655,5 +1658,114 @@ describe("public theme entry", () => {
     assert.equal(vanillaIsThemeFontSlot("body"), false);
     assert.equal(isThemeFontSlot("major"), true);
     assert.equal(reactEntry.isThemeFontSlot("minor"), true);
+  });
+
+  it("imports PPTX with reserved font placeholders in theme1.xml and themeOverride1.xml without throwing, without duplicate diagnostics, and resolves/codegens cleanly", async () => {
+    const OPC_REL_NS =
+      "http://schemas.openxmlformats.org/package/2006/relationships";
+    const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+    const P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main";
+    const R_NS =
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    const REL_OFFICE_DOCUMENT = `${R_NS}/officeDocument`;
+    const REL_SLIDE_MASTER = `${R_NS}/slideMaster`;
+    const REL_SLIDE_LAYOUT = `${R_NS}/slideLayout`;
+    const REL_SLIDE = `${R_NS}/slide`;
+    const REL_THEME = `${R_NS}/theme`;
+    const REL_THEME_OVERRIDE = `${R_NS}/themeOverride`;
+
+    const pptx = zipSync({
+      "[Content_Types].xml": strToU8(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+  <Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
+  <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+  <Override PartName="/ppt/theme/themeOverride1.xml" ContentType="application/vnd.openxmlformats-officedocument.themeOverride+xml"/>
+</Types>`,
+      ),
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE}" Target="slides/slide1.xml"/></Relationships>`,
+      ),
+      "ppt/theme/theme1.xml": strToU8(
+        `<a:theme xmlns:a="${A_NS}" name="Reserved Theme"><a:themeElements><a:clrScheme name="Base"><a:dk1><a:srgbClr val="111111"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="222222"/></a:dk2><a:lt2><a:srgbClr val="EEEEEE"/></a:lt2><a:accent1><a:srgbClr val="123456"/></a:accent1><a:accent2><a:srgbClr val="654321"/></a:accent2><a:accent3><a:srgbClr val="112233"/></a:accent3><a:accent4><a:srgbClr val="445566"/></a:accent4><a:accent5><a:srgbClr val="778899"/></a:accent5><a:accent6><a:srgbClr val="AABBCC"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme><a:fontScheme name="ReservedFonts"><a:majorFont><a:latin typeface="+mj-lt"/></a:majorFont><a:minorFont><a:latin typeface="minor"/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
+      ),
+      "ppt/theme/themeOverride1.xml": strToU8(
+        `<a:themeOverride xmlns:a="${A_NS}"><a:fontScheme name="ReservedOverride"><a:majorFont><a:latin typeface="major"/></a:majorFont></a:fontScheme></a:themeOverride>`,
+      ),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld name="M1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="blank"><p:cSld name="L1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_THEME_OVERRIDE}" Target="../theme/themeOverride1.xml"/></Relationships>`,
+      ),
+      "ppt/slides/slide1.xml": strToU8(
+        `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld name="s1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+      ),
+      "ppt/slides/_rels/slide1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+      ),
+    });
+
+    const imported = importPptx(pptx);
+    const fontDiagnostics = imported.report.diagnostics.filter(
+      (
+        d,
+      ): d is Extract<
+        ImportDiagnostic,
+        { readonly code: "invalid-xml-value" }
+      > =>
+        d.code === "invalid-xml-value" &&
+        d.attributeOrElement === "a:latin/@typeface",
+    );
+    assert.deepEqual(
+      fontDiagnostics.map((d) => [d.location.part, d.rawValue]),
+      [
+        ["ppt/theme/theme1.xml", "+mj-lt"],
+        ["ppt/theme/theme1.xml", "minor"],
+        ["ppt/theme/themeOverride1.xml", "major"],
+      ],
+    );
+
+    const resolved = resolve(imported.document);
+    assert.equal(resolved.slides.length, 1);
+    const generated = codegen(imported.document, { target: "vanilla" });
+    assert.match(String(generated.files["deck.ts"]), /export default deck\(/u);
+
+    const fontTextImporter = createImporter(await selectCapabilities(["text"]));
+    const partialImported = fontTextImporter(pptx);
+    const partialFontDiagnostics = partialImported.report.diagnostics.filter(
+      (
+        d,
+      ): d is Extract<
+        ImportDiagnostic,
+        { readonly code: "invalid-xml-value" }
+      > =>
+        d.code === "invalid-xml-value" &&
+        d.attributeOrElement === "a:latin/@typeface",
+    );
+    assert.deepEqual(
+      partialFontDiagnostics.map((d) => [d.location.part, d.rawValue]),
+      [
+        ["ppt/theme/theme1.xml", "+mj-lt"],
+        ["ppt/theme/theme1.xml", "minor"],
+      ],
+    );
   });
 });

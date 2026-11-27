@@ -7,7 +7,7 @@ const hook = registerHooks({
   resolve(specifier, context, nextResolve) {
     assert.doesNotMatch(
       specifier,
-      /^(?:@ykdz\/cli-contract|@resvg\/resvg-js|react|react-reconciler)(?:\/|$)/,
+      /^(?:@boringparts\/cli-contract|@resvg\/resvg-js|react|react-reconciler)(?:\/|$)/,
     );
     return nextResolve(specifier, context);
   },

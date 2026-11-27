@@ -97,6 +97,9 @@ describe("pptxdk CLI build", () => {
     expect(buildHelp.stdout).toContain("--target");
     expect(buildHelp.stdout).toContain("--embed-fonts");
     expect(buildHelp.stdout).toContain("--output");
+    expect(buildHelp.stdout).toContain(
+      '--output <mode> (choices: "text", "structured", default: "text")',
+    );
     expect(buildHelp.stdout).toContain('(choices: "full", "subset")');
 
     const pkg = JSON.parse(
@@ -116,7 +119,7 @@ describe("pptxdk CLI build", () => {
     expect(rootSchema.code).toBe(0);
     expect(JSON.parse(rootSchema.stdout)).toMatchObject({
       kind: "directory",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "pptxdk",
       children: [
         { command: "build" },
@@ -132,7 +135,7 @@ describe("pptxdk CLI build", () => {
     expect(buildSchema.code).toBe(0);
     expect(JSON.parse(buildSchema.stdout)).toMatchObject({
       kind: "summary",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "build",
     });
 
@@ -143,7 +146,7 @@ describe("pptxdk CLI build", () => {
     expect(buildInputSchema.code).toBe(0);
     expect(JSON.parse(buildInputSchema.stdout)).toMatchObject({
       kind: "input",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "build",
     });
 
@@ -182,7 +185,7 @@ describe("pptxdk CLI build", () => {
     };
     expect(parsedBuildSuccessText).toMatchObject({
       kind: "success",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "build",
       mode: "text",
       success: {
@@ -664,6 +667,53 @@ describe("pptxdk CLI build", () => {
     }
   });
 
+  it("prints font identity and missing characters in default text mode for build font failures", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk-cli-build-font-"));
+    try {
+      const missingWeight = await runInMemory(
+        [
+          "build",
+          fixture("font-failure-deck.tsx"),
+          "--export",
+          "MissingFontWeightDeck",
+          "--out",
+          join(directory, "weight.pptx"),
+        ],
+        directory,
+      );
+      expect(missingWeight.code).toBe(1);
+      expect(missingWeight.stdout).toBe("");
+      expect(missingWeight.stderr).toContain("Build failed:");
+      expect(missingWeight.stderr).toContain(
+        "deck/slide[missing-weight]/text[headline] [font-unavailable]:",
+      );
+      expect(missingWeight.stderr).toContain("Jost 600 normal");
+
+      const missingGlyph = await runInMemory(
+        [
+          "build",
+          fixture("font-failure-deck.tsx"),
+          "--export",
+          "MissingGlyphDeck",
+          "--out",
+          join(directory, "glyph.pptx"),
+        ],
+        directory,
+      );
+      expect(missingGlyph.code).toBe(1);
+      expect(missingGlyph.stdout).toBe("");
+      expect(missingGlyph.stderr).toContain("Build failed:");
+      expect(missingGlyph.stderr).toContain(
+        "deck/slide[missing-glyph]/text[glyph-text] [font-missing-glyph]:",
+      );
+      expect(missingGlyph.stderr).toContain("Jost 400 normal");
+      expect(missingGlyph.stderr).toContain("汉");
+      expect(missingGlyph.stderr).toContain("字");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("connects SIGINT during build and source import to cancelled exit status 130", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pptxdk cli "));
     try {
@@ -910,7 +960,7 @@ describe("pptxdk CLI preview", () => {
     expect(previewSchema.code).toBe(0);
     expect(JSON.parse(previewSchema.stdout)).toMatchObject({
       kind: "summary",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "preview",
     });
 
@@ -935,7 +985,7 @@ describe("pptxdk CLI preview", () => {
     };
     expect(parsedPreviewSuccessStructured).toMatchObject({
       kind: "success",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "preview",
       mode: "structured",
       success: {
@@ -1508,6 +1558,53 @@ describe("pptxdk CLI preview", () => {
     }
   });
 
+  it("prints font identity and missing characters in default text mode for preview font failures", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pptxdk-cli-preview-font-"));
+    try {
+      const missingWeight = await runInMemory(
+        [
+          "preview",
+          fixture("font-failure-deck.tsx"),
+          "--export",
+          "MissingFontWeightDeck",
+          "--out-dir",
+          join(directory, "weight-preview"),
+        ],
+        directory,
+      );
+      expect(missingWeight.code).toBe(1);
+      expect(missingWeight.stdout).toBe("");
+      expect(missingWeight.stderr).toContain("Build failed:");
+      expect(missingWeight.stderr).toContain(
+        "deck/slide[missing-weight]/text[headline] [font-unavailable]:",
+      );
+      expect(missingWeight.stderr).toContain("Jost 600 normal");
+
+      const missingGlyph = await runInMemory(
+        [
+          "preview",
+          fixture("font-failure-deck.tsx"),
+          "--export",
+          "MissingGlyphDeck",
+          "--out-dir",
+          join(directory, "glyph-preview"),
+        ],
+        directory,
+      );
+      expect(missingGlyph.code).toBe(1);
+      expect(missingGlyph.stdout).toBe("");
+      expect(missingGlyph.stderr).toContain("Build failed:");
+      expect(missingGlyph.stderr).toContain(
+        "deck/slide[missing-glyph]/text[glyph-text] [font-missing-glyph]:",
+      );
+      expect(missingGlyph.stderr).toContain("Jost 400 normal");
+      expect(missingGlyph.stderr).toContain("汉");
+      expect(missingGlyph.stderr).toContain("字");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("connects pre-aborted signals and SIGINT during preview to cancelled exit status 130 without creating outDir", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pptxdk preview cancel "));
     try {
@@ -1635,7 +1732,7 @@ describe("pptxdk CLI preview", () => {
     expect(previewInputSchema.code).toBe(0);
     expect(JSON.parse(previewInputSchema.stdout)).toMatchObject({
       kind: "input",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "preview",
       fields: expect.arrayContaining([
         expect.objectContaining({
@@ -2397,6 +2494,9 @@ describe("pptxdk CLI codegen", () => {
     expect(codegenHelp.stdout).toContain("--out-dir");
     expect(codegenHelp.stdout).toContain("--out-zip");
     expect(codegenHelp.stdout).toContain("Constraints");
+    expect(codegenHelp.stdout).toContain(
+      "At most 1 of --out-dir, --out-zip may be specified",
+    );
     expect(codegenHelp.stdout).toContain("Schema");
     expect(codegenHelp.stdout).toContain('(choices: "vanilla", "react")');
 
@@ -2407,7 +2507,7 @@ describe("pptxdk CLI codegen", () => {
     expect(codegenSummary.code).toBe(0);
     expect(JSON.parse(codegenSummary.stdout)).toMatchObject({
       kind: "summary",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "codegen",
     });
 
@@ -2418,7 +2518,7 @@ describe("pptxdk CLI codegen", () => {
     expect(codegenInput.code).toBe(0);
     expect(JSON.parse(codegenInput.stdout)).toMatchObject({
       kind: "input",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "codegen",
       usageConstraints: [
         { kind: "count", fields: ["outDir", "outZip"], max: 1 },
@@ -2462,7 +2562,7 @@ describe("pptxdk CLI codegen", () => {
     };
     expect(parsedSuccessText).toMatchObject({
       kind: "success",
-      schemaVersion: "5",
+      schemaVersion: "6",
       command: "codegen",
       mode: "text",
       success: {

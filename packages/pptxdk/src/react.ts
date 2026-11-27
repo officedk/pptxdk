@@ -1,11 +1,22 @@
-export { appendJSX, Deck, expandDocument, Section } from "@pptxdk/react";
+export {
+  appendJSX,
+  Deck,
+  expandDocument,
+  expandFragment,
+  fromVanilla,
+  Mount,
+  Section,
+} from "@pptxdk/react";
 export type {
   AppendJSXOptions,
   DeckProps,
   ElementProps,
   ExpandDocumentOptions,
+  ExpandFragmentOptions,
   ExpandedDocument,
+  MountProps,
   SectionProps,
+  VanillaSlotResult,
 } from "@pptxdk/react";
 export {
   Slide,

@@ -1,6 +1,10 @@
 export { authorIdSchema, readAuthorId } from "#/author-ids.ts";
 export type { AuthorId } from "#/author-ids.ts";
 export {
+  readDeclarationProps,
+  readInternalDeclarationProps,
+} from "#/document-internals.ts";
+export {
   backgroundRefSchema,
   deckPropsSchema,
   linkTargetSchema,
@@ -75,6 +79,15 @@ export type {
   TargetName,
 } from "#/stage-options.ts";
 export {
+  bytesSha256,
+  createSealedFontFace,
+  hasFontFaceBytes,
+  isSealedFont,
+  markSealedFont,
+  peekFontFaceResource,
+  type FontFaceResourceView,
+} from "#/font-seal.ts";
+export {
   applyFormatColorTransforms,
   assertValidLang,
   backgroundValueSchema,
@@ -140,6 +153,7 @@ export {
   themeOverrideSchema,
   themeSchema,
   themeShadeSchema,
+  unsealedFontSchema,
   validateTextStyle,
   visualStyleSchema,
   visualStyleShape,

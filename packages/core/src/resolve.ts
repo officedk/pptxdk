@@ -21,6 +21,7 @@ import {
   toBuildDiagnostic,
   zodIssueToBuildDiagnostic,
 } from "#/diagnostics.ts";
+import { readInternalDeclarationProps } from "#/document-internals.ts";
 import {
   LayoutPass,
   validateBoundObjectCapability,
@@ -392,7 +393,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
   if (!isDeclarationNode(child)) return { type: "#text", text: child.text };
   return {
     type: child.type,
-    props: child.props,
+    props: readInternalDeclarationProps(child),
     children: child.children.map(capabilityChild),
     ...(child.pageAffiliated === true ? { pageAffiliated: true } : {}),
   };
@@ -400,7 +401,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
 
 function capabilityLabel(child: CapabilityChild, index: number): string {
   if (!("props" in child)) return `text[${index + 1}]`;
-  const identity = declarationIdentity(child.props);
+  const identity = declarationIdentity(readInternalDeclarationProps(child));
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
@@ -409,7 +410,7 @@ function capabilityLabel(child: CapabilityChild, index: number): string {
 }
 
 function isHiddenByStyle(node: DeclarationNode): boolean {
-  const style = node.props["style"];
+  const style = readInternalDeclarationProps(node)["style"];
   return (
     typeof style === "object" &&
     style !== null &&
@@ -435,7 +436,7 @@ function collectExplicitObjectNamesFromChildren(
       collectExplicitObjectNamesFromChildren(child.children, modules, names);
       continue;
     }
-    const rawName = child.props["name"];
+    const rawName = readInternalDeclarationProps(child)["name"];
     if (typeof rawName === "string" && rawName.trim() !== "") {
       names.add(rawName);
     }
@@ -597,11 +598,12 @@ function resolveSlides(
 
   for (const [masterIndex, masterNode] of masterNodes.entries()) {
     const rawMasterPath = `deck/slide-master[${masterIndex + 1}]`;
-    const masterAuthorId = readAuthorId(masterNode.props["id"], rawMasterPath);
+    const masterProps = readInternalDeclarationProps(masterNode);
+    const masterAuthorId = readAuthorId(masterProps["id"], rawMasterPath);
     const masterKey = `master-${masterIndex + 1}`;
     const masterId = masterAuthorId ?? masterKey;
     const masterPath = `deck/slide-master[${masterAuthorId ?? masterIndex + 1}]`;
-    const unknownMasterProp = unknownPropertyKey(masterNode.props, [
+    const unknownMasterProp = unknownPropertyKey(masterProps, [
       "id",
       "name",
       "preserve",
@@ -648,8 +650,8 @@ function resolveSlides(
       "placeholders",
       "textStyles",
     ] as const) {
-      if (Object.hasOwn(masterNode.props, key)) {
-        masterDataInput[key] = masterNode.props[key];
+      if (Object.hasOwn(masterProps, key)) {
+        masterDataInput[key] = masterProps[key];
       }
     }
     const parsedMaster = slideMasterDataPropsSchema.safeParse(masterDataInput);
@@ -665,7 +667,7 @@ function resolveSlides(
       ]);
     }
     let masterTheme: Theme;
-    const rawMasterTheme = masterNode.props["theme"];
+    const rawMasterTheme = masterProps["theme"];
     if (rawMasterTheme === undefined) {
       masterTheme = defaultDeckTheme;
     } else if (isTheme(rawMasterTheme)) {
@@ -772,7 +774,8 @@ function resolveSlides(
 
     for (const [layoutIndex, layoutNode] of layoutNodes.entries()) {
       const rawLayoutPath = `${masterPath}/slide-layout[${layoutIndex + 1}]`;
-      const rawLayoutDef = layoutNode.props["layout"];
+      const layoutProps = readInternalDeclarationProps(layoutNode);
+      const rawLayoutDef = layoutProps["layout"];
       let layoutDef: SlideLayoutDefinition | undefined;
       if (rawLayoutDef !== undefined) {
         if (!isSlideLayoutDefinition(rawLayoutDef)) {
@@ -789,7 +792,7 @@ function resolveSlides(
       const effectiveLayoutProps: Record<string, unknown> = {
         ...layoutDef?.props,
       };
-      for (const [key, value] of Object.entries(layoutNode.props)) {
+      for (const [key, value] of Object.entries(layoutProps)) {
         if (key === "layout" || value === undefined) continue;
         effectiveLayoutProps[key] = value;
       }
@@ -1045,7 +1048,7 @@ function resolveSlides(
       validateAuthorIdScopes(
         {
           type: "slide-master",
-          props: masterNode.props,
+          props: masterProps,
           children: masterCanvasNodes,
         },
         masterPath,
@@ -1059,11 +1062,11 @@ function resolveSlides(
         : { placeholders: parsedMaster.data.placeholders };
     for (const prop of slidePropertySet) {
       if (prop === "background") continue;
-      if (Object.hasOwn(masterNode.props, prop)) {
-        masterSlideProps[prop] = masterNode.props[prop];
+      if (Object.hasOwn(masterProps, prop)) {
+        masterSlideProps[prop] = masterProps[prop];
       }
     }
-    const masterStyleProp = masterNode.props["style"];
+    const masterStyleProp = masterProps["style"];
     const effectiveMasterBackground =
       parsedMaster.data.style?.background ?? parsedMaster.data.background;
     masters.push({
@@ -1127,7 +1130,10 @@ function resolveSlides(
           ),
         ]);
       }
-      const { name } = parseSectionProps(node.props, index);
+      const { name } = parseSectionProps(
+        readInternalDeclarationProps(node),
+        index,
+      );
       if (nonWhitespaceText(node.children)) {
         throw new BuildError([
           diagnostic(
@@ -1173,6 +1179,7 @@ function resolveSlides(
     ]);
   }
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
+    const slideProps = readInternalDeclarationProps(node);
     const {
       id,
       name,
@@ -1181,7 +1188,7 @@ function resolveSlides(
       showMasterShapes,
       colorMapOverride,
       themeOverride,
-    } = parseSlideCoreProps(node.props, index, slideProperties);
+    } = parseSlideCoreProps(slideProps, index, slideProperties);
     const authorId = id;
     if (authorIds.has(authorId)) {
       throw new BuildError([
@@ -1197,7 +1204,7 @@ function resolveSlides(
     validateAuthorIdScopes(node, `deck/slide[${id}]`, new Set());
 
     let layoutKey: string | undefined;
-    const rawLayout = node.props["layout"];
+    const rawLayout = slideProps["layout"];
     if (rawLayout === undefined) {
       if (masters.length > 0) {
         layoutKey = defaultBlankLayoutKey ?? firstLayoutKey;
@@ -1247,7 +1254,8 @@ function resolveSlides(
       }
       const matchedKey = layoutKeyByNode.get(rawLayout);
       if (matchedKey === undefined) {
-        const rawTarget = rawLayout.props["id"] ?? rawLayout.props["name"];
+        const rawLayoutProps = readInternalDeclarationProps(rawLayout);
+        const rawTarget = rawLayoutProps["id"] ?? rawLayoutProps["name"];
         const targetLabel =
           typeof rawTarget === "string" ? rawTarget : "<unnamed>";
         throw new BuildError([
@@ -1577,7 +1585,10 @@ function resolveChildrenPass(
 
     if (context.layout.hidden.has(child)) return;
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
-    const authorId = readAuthorId(child.props["id"], path);
+    const authorId = readAuthorId(
+      readInternalDeclarationProps(child)["id"],
+      path,
+    );
     const order = context.slide.nextNodeOrder++;
     const module = context.modules.declarations.get(child.type);
     if (module === undefined) {
@@ -2411,9 +2422,10 @@ function collectNestedPlaceholders(
       );
       return;
     }
+    const childProps = readInternalDeclarationProps(child);
     const hasPhProp =
-      child.props["placeholder"] !== undefined ||
-      child.props["nativePlaceholder"] !== undefined;
+      childProps["placeholder"] !== undefined ||
+      childProps["nativePlaceholder"] !== undefined;
     if (hasPhProp) {
       if (allowDirect) {
         onDirect?.(child, childPath);
@@ -2486,8 +2498,9 @@ function buildSlidePlaceholderContexts(args: {
     true,
     diagnostics,
     (child, childPath) => {
-      const rawKey = child.props["placeholder"];
-      const rawNativePh = child.props["nativePlaceholder"];
+      const childProps = readInternalDeclarationProps(child);
+      const rawKey = childProps["placeholder"];
+      const rawNativePh = childProps["nativePlaceholder"];
       let parsedNativePh:
         | ReturnType<typeof nativePlaceholderRefSchema.parse>
         | undefined;
@@ -2769,6 +2782,7 @@ function resolveSlideDeclaration(
     layoutSpec === undefined
       ? undefined
       : masterByKey.get(layoutSpec.masterKey);
+  const nodeProps = readInternalDeclarationProps(node);
   const placeholderContexts = buildSlidePlaceholderContexts({
     slideId: id,
     slidePath: path,
@@ -2778,7 +2792,7 @@ function resolveSlideDeclaration(
     masterSpec,
     placeholderTheme: documentTheme.withTextStyle({}),
     children,
-    rawPlaceholdersProp: node.props["placeholders"],
+    rawPlaceholdersProp: nodeProps["placeholders"],
     modules,
     diagnostics: slide.diagnostics,
   });
@@ -2787,7 +2801,7 @@ function resolveSlideDeclaration(
   }
   let theme: ThemeContext;
   try {
-    theme = documentTheme.with(textStyleFrom(node.props["style"]));
+    theme = documentTheme.with(textStyleFrom(nodeProps["style"]));
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic(path, error.code, error.message)]);
@@ -2797,7 +2811,7 @@ function resolveSlideDeclaration(
     dimensions,
     index,
     options,
-  ).run(children, path, theme, node.props["style"], (element) =>
+  ).run(children, path, theme, nodeProps["style"], (element) =>
     placeholderContexts.get(element),
   );
   const ownedOrder = { value: 0 };
@@ -2846,11 +2860,11 @@ function resolveSlideDeclaration(
   const slideCapabilities: ResolvedSlideCapabilityRecord[] = [];
   const input: CapabilityInput = {
     type: node.type,
-    props: node.props,
+    props: nodeProps,
     children: node.children.map(capabilityChild),
   };
 
-  const slideStyle = node.props["style"];
+  const slideStyle = nodeProps["style"];
   const hasSlideStyleBackground =
     typeof slideStyle === "object" &&
     slideStyle !== null &&
@@ -2881,7 +2895,7 @@ function resolveSlideDeclaration(
     const hasStyleBackground =
       module.consumesOwnerBackgroundStyle === true && hasSlideStyleBackground;
     const hasSlideProps =
-      slideProps.some((property) => Object.hasOwn(node.props, property)) ||
+      slideProps.some((property) => Object.hasOwn(nodeProps, property)) ||
       hasStyleBackground;
     if (!module.always && !hasSlideProps) {
       if (inheritedContinuity?.get(module.declaration) === true) {
@@ -2968,7 +2982,7 @@ function resolveSlideDeclaration(
         !(
           consumer.slideProps ??
           (consumer.slideProp === undefined ? [] : [consumer.slideProp])
-        ).some((property) => Object.hasOwn(node.props, property)))
+        ).some((property) => Object.hasOwn(nodeProps, property)))
     ) {
       slide.diagnostics.push(
         diagnostic(
@@ -3430,13 +3444,14 @@ function resolveDocument(
     ]);
   }
   const deck = decks[0];
-  const { width, height, title } = parseDeckProps(deck.props);
+  const deckProps = readInternalDeclarationProps(deck);
+  const { width, height, title } = parseDeckProps(deckProps);
   const size: ResolutionDimensions = { width, height };
   let theme: ThemeContext;
   try {
     theme = createThemeContext(
-      deck.props["theme"] as ThemeInput | Theme | undefined,
-      deck.props["style"] as Record<string, unknown> | undefined,
+      deckProps["theme"] as ThemeInput | Theme | undefined,
+      deckProps["style"] as Record<string, unknown> | undefined,
     );
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
@@ -3550,7 +3565,7 @@ function resolveDocument(
     try {
       masterThemeBase = createThemeContext(
         parsedMaster.theme,
-        deck.props["style"] as Record<string, unknown> | undefined,
+        deckProps["style"] as Record<string, unknown> | undefined,
         { colorMap: parsedMaster.colorMap },
       );
       if (parsedMaster.style !== undefined) {
@@ -3637,7 +3652,7 @@ function resolveDocument(
     const masterShared = resolveSharedCanvasLayers({
       children: parsedMaster.canvasChildren.map(capabilityChild),
       path: parsedMaster.path,
-      style: parsedMaster.node.props["style"],
+      style: readInternalDeclarationProps(parsedMaster.node)["style"],
       modules,
       dimensions: size,
       options,
@@ -3890,7 +3905,7 @@ function resolveDocument(
     if (boundMaster !== undefined) {
       slideThemeBase = createThemeContext(
         boundMaster.theme,
-        deck.props["style"] as Record<string, unknown> | undefined,
+        deckProps["style"] as Record<string, unknown> | undefined,
         { colorMap: boundMaster.colorMap },
       );
       if (
@@ -3922,7 +3937,8 @@ function resolveDocument(
     const parsedMaster = parsedOwner?.master;
     const parsedLayout = parsedOwner?.layout;
 
-    const slideStyleObj = parsedSlide.node.props["style"];
+    const slideNodeProps = readInternalDeclarationProps(parsedSlide.node);
+    const slideStyleObj = slideNodeProps["style"];
     const hasSlideStyleBackground =
       typeof slideStyleObj === "object" &&
       slideStyleObj !== null &&
@@ -3932,7 +3948,7 @@ function resolveDocument(
         undefined;
     let inheritedBackground: ResolvedSlideCapabilityRecord | undefined;
     if (
-      !Object.hasOwn(parsedSlide.node.props, "background") &&
+      !Object.hasOwn(slideNodeProps, "background") &&
       !hasSlideStyleBackground &&
       parsedSlide.layoutKey !== undefined &&
       bgModule !== undefined

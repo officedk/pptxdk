@@ -1,4 +1,5 @@
 import { defineObjectCodegen, type CodegenContext } from "@pptxdk/codegen";
+import { readInternalDeclarationProps } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import {
@@ -43,7 +44,7 @@ function validateTableNativePlaceholder(
   node: CommonNode,
   ctx: CodegenContext,
 ): void {
-  const nativePh = node.props["nativePlaceholder"];
+  const nativePh = readInternalDeclarationProps(node)["nativePlaceholder"];
   if (
     isPlainRecord(nativePh) &&
     Object.hasOwn(nativePh, "sz") &&
@@ -103,7 +104,7 @@ function validateTableLayerStyle(
 }
 
 function validateTableColumns(node: CommonNode, ctx: CodegenContext): void {
-  const columns = node.props["columns"];
+  const columns = readInternalDeclarationProps(node)["columns"];
   if (!Array.isArray(columns) || columns.length === 0) {
     ctx.fail(
       "invalid-document",
@@ -195,7 +196,7 @@ export const tableCodegen = defineObjectCodegen({
         );
         validateTableNativePlaceholder(node, ctx);
         validateTableLayerStyle(
-          node.props["style"],
+          readInternalDeclarationProps(node)["style"],
           "Table",
           tableCleanStyleKeys,
           ctx,
@@ -218,7 +219,7 @@ export const tableCodegen = defineObjectCodegen({
         );
         validateTableNativePlaceholder(node, ctx);
         validateTableLayerStyle(
-          node.props["style"],
+          readInternalDeclarationProps(node)["style"],
           "Table",
           tableCleanStyleKeys,
           ctx,
@@ -237,7 +238,7 @@ export const tableCodegen = defineObjectCodegen({
           false,
         );
         validateTableLayerStyle(
-          node.props["style"],
+          readInternalDeclarationProps(node)["style"],
           "Row",
           rowCleanStyleKeys,
           ctx,
@@ -256,7 +257,7 @@ export const tableCodegen = defineObjectCodegen({
           false,
         );
         validateTableLayerStyle(
-          node.props["style"],
+          readInternalDeclarationProps(node)["style"],
           "Row",
           rowCleanStyleKeys,
           ctx,
@@ -268,7 +269,7 @@ export const tableCodegen = defineObjectCodegen({
     cell: {
       emitVanilla(node, ctx) {
         validateTableLayerStyle(
-          node.props["style"],
+          readInternalDeclarationProps(node)["style"],
           "Cell",
           cellCleanStyleKeys,
           ctx,
@@ -277,7 +278,7 @@ export const tableCodegen = defineObjectCodegen({
       },
       emitReact(node, ctx) {
         validateTableLayerStyle(
-          node.props["style"],
+          readInternalDeclarationProps(node)["style"],
           "Cell",
           cellCleanStyleKeys,
           ctx,

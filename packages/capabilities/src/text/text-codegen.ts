@@ -6,7 +6,10 @@ import {
   type DeclarationCodegenHandler,
 } from "@pptxdk/codegen";
 import type { DeclarationText } from "@pptxdk/core/build";
-import { nativePlaceholderRefSchema } from "@pptxdk/core/capability";
+import {
+  nativePlaceholderRefSchema,
+  readInternalDeclarationProps,
+} from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
@@ -127,11 +130,12 @@ export function collectRichTextNodeProps(
   allowedPropKeys: ReadonlySet<string>,
   supportObjectExtras: boolean,
 ): readonly (readonly [string, unknown])[] {
+  const props = readInternalDeclarationProps(node);
   const extra: Readonly<Record<string, CodegenExpr>> = supportObjectExtras
-    ? ctx.emitObjectExtraProps(node.props)
+    ? ctx.emitObjectExtraProps(props)
     : {};
   const entries: [string, unknown][] = [];
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!allowedPropKeys.has(key)) {
       ctx.fail(

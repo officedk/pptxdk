@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CapabilityError } from "#/diagnostics.ts";
+import { isSealedFont } from "#/font-seal.ts";
 import { snapshotValue } from "#/input-values.ts";
 
 type AssertExact<A, B> =
@@ -87,7 +88,7 @@ export type Font = {
   readonly embeddable?: boolean | undefined;
 };
 
-const rawFontSchema = z
+const unsealedFontObjectSchema = z
   .strictObject({
     family: nonEmptyTrimmedStringSchema,
     faces: z.array(rawFontFaceSchema).readonly().optional(),
@@ -95,6 +96,15 @@ const rawFontSchema = z
     embeddable: z.boolean().optional(),
   })
   .readonly();
+const sealedFontSchema = z.custom<Font>(isSealedFont);
+const rawFontSchema = z.union([sealedFontSchema, unsealedFontObjectSchema]);
+/** Internal schema used by `font()` constructor to report exact per-field validation issues. */
+export const unsealedFontSchema: z.ZodType<Font> =
+  unsealedFontObjectSchema satisfies z.ZodType<
+    AssertExact<Font, z.infer<typeof unsealedFontObjectSchema>> extends true
+      ? Font
+      : never
+  >;
 /** Font family and explicit measurement resources referenceable across deck themes and components. */
 export const fontSchema: z.ZodType<Font> = rawFontSchema satisfies z.ZodType<
   AssertExact<Font, z.infer<typeof rawFontSchema>> extends true ? Font : never
@@ -137,9 +147,11 @@ export function isThemeFontSlot(value: unknown): value is ThemeFontSlot {
 
 export type FontReference = ThemeFontSlot | (string & {}) | Font;
 
+// Keep a flat 3-branch union so invalid unsealed faces preserve `path[0] === "faces"` in textStyleErrorForIssue.
 const rawFontReferenceSchema = z.union([
   nonEmptyTrimmedStringSchema,
-  rawFontSchema,
+  sealedFontSchema,
+  unsealedFontObjectSchema,
 ]) as unknown as z.ZodType<FontReference>;
 export const fontReferenceSchema: z.ZodType<FontReference> =
   rawFontReferenceSchema satisfies z.ZodType<
@@ -152,20 +164,29 @@ export const fontReferenceSchema: z.ZodType<FontReference> =
   >;
 
 const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
+const themeFontReservedSlotMessage =
+  "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'";
 
 function isAllowedThemeFontFamily(family: string): boolean {
   const trimmed = family.trim();
   return trimmed !== "" && !reservedThemeFontPattern.test(trimmed);
 }
 
+const allowedThemeSealedFontSchema = z.custom<Font>(
+  (value): value is Font =>
+    isSealedFont(value) && isAllowedThemeFontFamily(value.family),
+  { message: themeFontReservedSlotMessage },
+);
+
 const rawThemeFontValueSchema = z.union([
   nonEmptyTrimmedStringSchema.refine(
     isAllowedThemeFontFamily,
-    "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'",
+    themeFontReservedSlotMessage,
   ),
-  rawFontSchema.refine(
+  allowedThemeSealedFontSchema,
+  unsealedFontObjectSchema.refine(
     (fontValue) => isAllowedThemeFontFamily(fontValue.family),
-    "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'",
+    themeFontReservedSlotMessage,
   ),
 ]);
 

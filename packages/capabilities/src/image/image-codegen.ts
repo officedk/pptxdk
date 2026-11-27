@@ -8,6 +8,7 @@ import type { DeclarationText } from "@pptxdk/core/build";
 import {
   imageBackgroundSchema,
   nativePlaceholderRefSchema,
+  readInternalDeclarationProps,
 } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
@@ -227,13 +228,13 @@ function collectImageProps(
   ctx: CodegenContext,
 ): readonly (readonly [string, unknown])[] {
   assertNoImageChildren(node, ctx);
-  const extra: Readonly<Record<string, CodegenExpr>> = ctx.emitObjectExtraProps(
-    node.props,
-  );
+  const props = readInternalDeclarationProps(node);
+  const extra: Readonly<Record<string, CodegenExpr>> =
+    ctx.emitObjectExtraProps(props);
   const entries: [string, unknown][] = [];
   let sawSrc = false;
 
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!imageAllowedPropKeys.has(key)) {
       ctx.fail(

@@ -49,6 +49,7 @@ export type {
 import type { DeclarationChild, DeclarationNode } from "#/declaration.ts";
 import {
   insertDeclarationChild,
+  readDeclarationProps,
   removeDeclarationChild,
   replaceDeclarationProps,
 } from "#/document-internals.ts";
@@ -180,6 +181,11 @@ export class CommonNode<
   /** Isolated declaration values for the formal build; mutating the returned value cannot edit the node. */
   get props(): Readonly<Record<string, unknown>> {
     return snapshotValue(this.#props);
+  }
+
+  /** Internal read-only props view used by read-only pipeline stages to avoid redundant byte cloning. */
+  [readDeclarationProps](): Readonly<Record<string, unknown>> {
+    return this.#props;
   }
 
   /** Author id declared on this node, ignoring non-string values rejected by the formal build. */

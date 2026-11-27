@@ -1,5 +1,8 @@
 import { defineObjectCodegen, type CodegenContext } from "@pptxdk/codegen";
-import { nativePlaceholderRefSchema } from "@pptxdk/core/capability";
+import {
+  nativePlaceholderRefSchema,
+  readInternalDeclarationProps,
+} from "@pptxdk/core/capability";
 import type { CommonNode } from "@pptxdk/core/document";
 
 import {
@@ -64,7 +67,9 @@ function collectPlaceholderProps(
     );
   }
   const entries: [string, unknown][] = [];
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(
+    readInternalDeclarationProps(node),
+  )) {
     if (value === undefined) continue;
     if (!placeholderAllowedPropKeys.has(key)) {
       ctx.fail(

@@ -1,4 +1,5 @@
 import { replaceDeclarationProps } from "#/document-internals.ts";
+import { isSealedFont } from "#/font-seal.ts";
 import { isMorphKey } from "#/morph.ts";
 
 const slideLayoutDefinitionSymbol = Symbol.for(
@@ -12,6 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function preservesIdentity(value: object): boolean {
   if (
+    isSealedFont(value) ||
     isMorphKey(value) ||
     slideLayoutDefinitionSymbol in value ||
     themeBrandSymbol in value

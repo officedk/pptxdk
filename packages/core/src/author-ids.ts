@@ -6,6 +6,7 @@ import {
   type DeclarationNode,
 } from "#/declaration.ts";
 import { BuildError } from "#/diagnostics.ts";
+import { readInternalDeclarationProps } from "#/document-internals.ts";
 
 export type AuthorId = string;
 
@@ -57,7 +58,10 @@ export function validateAuthorIdScopes(
   node.children.forEach((child, index) => {
     if (!isDeclarationNode(child)) return;
     const childPath = `${path}/${componentLabel(child, index)}`;
-    const id = readAuthorId(child.props["id"], childPath);
+    const id = readAuthorId(
+      readInternalDeclarationProps(child)["id"],
+      childPath,
+    );
     if (id !== undefined) {
       if (scope.has(id)) {
         throw new BuildError([

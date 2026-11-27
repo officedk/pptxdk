@@ -235,6 +235,7 @@ const fontUnavailableReasonByLegacyCode: Readonly<
   "font-face-mismatch": "style-mismatch",
   "font-family-mismatch": "family-mismatch",
   "font-style-mismatch": "style-mismatch",
+  "font-weight-mismatch": "style-mismatch",
   "font-substitution-required": "substitute-required",
   "font-substitute-not-embeddable": "not-embeddable",
   "font-not-embeddable": "not-embeddable",

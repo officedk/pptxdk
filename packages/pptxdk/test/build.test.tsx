@@ -3747,9 +3747,11 @@ describe("public build entry", () => {
               Span,
               {
                 style: {
-                  fontFamily: font("Example Sans", [
-                    { weight: 700, data: new Uint8Array([1, 2, 3]) },
-                  ]),
+                  fontFamily: font(
+                    "Example Sans",
+                    [{ weight: 700, data: jostBold }],
+                    { substitute: true },
+                  ),
                   fontSize: "12pt",
                   fontWeight: "bold",
                   color: "#334455",
@@ -3897,9 +3899,9 @@ describe("public build entry", () => {
             Span,
             {
               style: {
-                fontFamily: font("Collision Sans", [
-                  { data: new Uint8Array([1, 2]) },
-                ]),
+                fontFamily: font("Collision Sans", [{ data: jostBook }], {
+                  substitute: true,
+                }),
               },
             },
             "first",
@@ -3908,9 +3910,9 @@ describe("public build entry", () => {
             Span,
             {
               style: {
-                fontFamily: font("Collision Sans", [
-                  { data: new Uint8Array([3, 4]) },
-                ]),
+                fontFamily: font("Collision Sans", [{ data: zcoolXiaoWei }], {
+                  substitute: true,
+                }),
               },
             },
             "second",
@@ -3928,10 +3930,14 @@ describe("public build entry", () => {
   });
 
   it("fails when conflicting resources are referenced for actually used duplicate weight and style within same font value", async () => {
-    const sharedValue = font("Duplicate Face", [
-      { data: new Uint8Array([1, 2]) },
-      { weight: 400, style: "normal", data: new Uint8Array([3, 4]) },
-    ]);
+    const sharedValue = font(
+      "Duplicate Face",
+      [
+        { data: jostBook },
+        { weight: 400, style: "normal", data: zcoolXiaoWei },
+      ],
+      { substitute: true },
+    );
 
     await assert.rejects(
       build(
@@ -3995,10 +4001,11 @@ describe("public build entry", () => {
               Span,
               {
                 style: {
-                  fontFamily: font("Shared", [
-                    { data: new Uint8Array([1, 2]) },
-                    { weight: 700, data: new Uint8Array([3, 4]) },
-                  ]),
+                  fontFamily: font(
+                    "Shared",
+                    [{ data: jostBook }, { weight: 700, data: jostBold }],
+                    { substitute: true },
+                  ),
                 },
               },
               "资源引用",

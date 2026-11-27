@@ -30,6 +30,7 @@ import { createElement } from "react";
 import { expect } from "vitest";
 
 import type { CapabilityScenario } from "../../../test/acceptance-runner.ts";
+import { stripVariableFontTables } from "../../../test/sfnt-test-helpers.ts";
 
 const jostRegularBytes = readFileSync(
   new URL("../../../test/assets/fonts/Jost-400-Book.ttf", import.meta.url),
@@ -60,10 +61,12 @@ const notoFont = font("Noto Sans CJK SC", [
 const notoArabicFont = font("Noto Naskh Arabic", [
   {
     weight: 400,
-    data: readFileSync(
-      new URL(
-        "../../../test/assets/fonts/NotoNaskhArabic.ttf",
-        import.meta.url,
+    data: stripVariableFontTables(
+      readFileSync(
+        new URL(
+          "../../../test/assets/fonts/NotoNaskhArabic.ttf",
+          import.meta.url,
+        ),
       ),
     ),
   },

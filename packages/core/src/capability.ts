@@ -261,7 +261,7 @@ export type {
   CapabilityPresentationContribution,
   CapabilityResource,
   CapabilityResourceClaim,
-  CapabilitySubPartObservation,
+  CapabilitySubPart,
   ContributionResolver,
   EmitContext,
   EmitOutput,

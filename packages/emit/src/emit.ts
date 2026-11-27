@@ -11,7 +11,7 @@ import {
   type BuildDiagnostic,
   type BuildOptions,
   type BuildReport,
-  type ResourceObservation,
+  type ResolvedResource,
 } from "@pptxdk/core/build";
 import type {
   CapabilityPackagePart,
@@ -101,7 +101,7 @@ type PartPackageState = {
   readonly index: number;
   readonly relationships: PptxRelationship[];
   readonly relationshipIds: Map<string, string>;
-  readonly resourceObservations: (ResourceObservation & { objectId: number })[];
+  readonly resourceObservations: (ResolvedResource & { objectId: number })[];
 };
 
 type PackageContext = {
@@ -416,7 +416,7 @@ function relationshipTarget(sourcePath: string, targetPath: string): string {
 function recordResourceObservation(
   slide: PartPackageState,
   objectId: number,
-  resource: ResourceObservation,
+  resource: ResolvedResource,
 ): void {
   if (
     slide.resourceObservations.some(

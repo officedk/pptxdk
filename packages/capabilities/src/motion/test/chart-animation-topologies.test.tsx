@@ -8,7 +8,7 @@ import {
   motionSchedule,
   Shape,
   useMotionScope,
-  type MotionEffectObservation,
+  type ResolvedMotionEffect,
 } from "@pptxdk/capabilities";
 import {
   chart as documentChart,
@@ -153,7 +153,7 @@ const mixedDomainCombo = {
 function chartEffects(
   motion: ResolvedMotion,
   authorId: string,
-): readonly MotionEffectObservation[] {
+): readonly ResolvedMotionEffect[] {
   return (
     motion.steps[0]?.effects.filter(
       ({ target }) => target.authorId === authorId,

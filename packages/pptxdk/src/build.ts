@@ -360,7 +360,7 @@ export type {
   FontStyleDescriptor,
   FontUsage,
   Locator,
-  LocatorResourceObservation,
+  LocatorResource,
   ObjectTransform,
   PreviewError,
   PreviewPlaceholder,

@@ -6,7 +6,7 @@ import {
   build,
   motionSchedule,
   spin,
-  type MotionScopeObservation,
+  type ResolvedMotionScope,
 } from "@officedk/pptxdk";
 import {
   Deck,
@@ -373,7 +373,7 @@ describe("read-only build query", () => {
     const schedule = motionSchedule(result.slide("frozen-motion"));
     assert.equal(schedule?.steps.length, 1);
     const motion = result.report.slides[0]?.capabilities?.["motion"] as {
-      readonly scopes?: readonly MotionScopeObservation[];
+      readonly scopes?: readonly ResolvedMotionScope[];
     };
     const scope = motion.scopes?.[0];
     assert.ok(scope);

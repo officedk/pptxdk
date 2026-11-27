@@ -492,7 +492,7 @@ type LocalContainerValue = {
   readonly defaultEnter?: readonly NormalizedEffect[];
 };
 
-export type MotionEffectObservation = {
+export type ResolvedMotionEffect = {
   readonly target: {
     readonly id: number;
     readonly name: string;
@@ -522,10 +522,10 @@ export type MotionEffectObservation = {
   readonly startAfterAll?: readonly MotionStartDependency[];
 };
 
-export type MotionStepObservation = {
+export type ResolvedMotionStep = {
   readonly trigger: "auto" | "click";
   readonly number?: number;
-  readonly effects: readonly MotionEffectObservation[];
+  readonly effects: readonly ResolvedMotionEffect[];
 };
 
 /** Corresponding real member effects and timing identity in PPTX for a logical Group effect. */
@@ -539,7 +539,7 @@ export type MotionNativeProjection = {
   }[];
 };
 
-export type MotionScopeObservation = {
+export type ResolvedMotionScope = {
   readonly id: string;
   readonly parentId?: string;
   readonly mode: MotionScopeMode;
@@ -558,8 +558,8 @@ export type MotionScopeObservation = {
 };
 
 export type ResolvedMotion = {
-  readonly steps: readonly MotionStepObservation[];
-  readonly scopes?: readonly MotionScopeObservation[];
+  readonly steps: readonly ResolvedMotionStep[];
+  readonly scopes?: readonly ResolvedMotionScope[];
   readonly nativeProjections?: readonly MotionNativeProjection[];
 };
 

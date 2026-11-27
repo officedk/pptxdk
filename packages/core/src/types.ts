@@ -377,13 +377,13 @@ export type EmitResult = {
   readonly report: BuildReport;
 };
 
-export type ResourceObservation = {
+export type ResolvedResource = {
   readonly part: string;
   readonly contentType: string;
   readonly byteLength: number;
 };
 
-export type LocatorResourceObservation = ResourceObservation & {
+export type LocatorResource = ResolvedResource & {
   readonly objectId: number;
 };
 
@@ -406,7 +406,7 @@ export type Locator = {
   readonly image?: ResolvedImage;
   readonly gridArea?: Rect;
   readonly objects: readonly ResolvedObject[];
-  readonly resources?: readonly LocatorResourceObservation[];
+  readonly resources?: readonly LocatorResource[];
   /** Finds one author id in this locator scope without crossing the next named scope. */
   get(id: string): Locator;
   /** Lists matches for an author id in this locator scope; duplicates are already rejected by the build. */
@@ -661,14 +661,14 @@ export type CapabilityLayoutMeasurement = {
  * Generic sub-part observation node contributed by a composite object capability
  * for read-only locator traversal and observation without core knowing capability-specific part kinds.
  */
-export type CapabilitySubPartObservation = {
+export type CapabilitySubPart = {
   readonly kind?: string;
   readonly authorId?: string;
   readonly path?: string;
   readonly box?: Rect;
   readonly text?: string;
   readonly textMetrics?: TextMetrics;
-  readonly parts?: readonly CapabilitySubPartObservation[];
+  readonly parts?: readonly CapabilitySubPart[];
 };
 
 /** Font usage claim reported by capability modules to assemble document-level FontUsage summaries. */
@@ -807,7 +807,7 @@ export type ObjectResolution = {
     readonly path?: string;
   };
   readonly transform?: PreviewTransform;
-  readonly parts?: readonly CapabilitySubPartObservation[];
+  readonly parts?: readonly CapabilitySubPart[];
   readonly extensions: readonly Extension[];
   readonly annotations?: readonly CapabilityAnnotation[];
   readonly resourceClaims?: readonly CapabilityResourceClaim[];

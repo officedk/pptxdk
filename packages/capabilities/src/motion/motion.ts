@@ -17,11 +17,11 @@ import { defineShowMechanism } from "@pptxdk/import";
 
 import type {
   MotionDirection,
-  MotionEffectObservation,
   MotionNativeProjection,
   MotionStartDependency,
   NormalizedEffect,
   ResolvedMotion,
+  ResolvedMotionEffect,
 } from "./motion-api.ts";
 import {
   ownerMotionSchema,
@@ -98,24 +98,24 @@ export {
 } from "./motion-api.ts";
 export { motionSchedule } from "./motion-query.ts";
 export type {
-  EffectInstanceObservation,
-  MotionCueObservation,
+  EffectInstance,
+  MotionCue,
   MotionCueRef,
   MotionDecision,
-  MotionDependencyObservation,
+  MotionDependency,
   MotionDifference,
   MotionEffectRef,
   MotionIntervalRef,
   MotionMembership,
-  MotionMomentObservation,
   MotionMomentRef,
   MotionSchedule,
   MotionScopeQueryMember,
-  MotionScopeQueryObservation,
   MotionScopeRef,
+  MotionScopeSchedule,
   MotionStepQuery,
   MotionStepRef,
   MotionTime,
+  ResolvedMotionMoment,
 } from "./motion-query.ts";
 export type {
   Easing,
@@ -132,21 +132,21 @@ export type {
   MotionCompletionState,
   MotionDirection,
   MotionGranularity,
-  MotionEffectObservation,
   MotionNativeProjection,
   MotionMoment,
   MotionMomentOffset,
   MotionScopeHandle,
   MotionScopeMode,
-  MotionScopeObservation,
   MotionScopeProps,
   MotionProps,
   MotionStartDependency,
   MotionTargetRange,
   MotionTiming,
-  MotionStepObservation,
   RepeatCount,
   RepeatedEffect,
+  ResolvedMotionEffect,
+  ResolvedMotionScope,
+  ResolvedMotionStep,
   SpinOptions,
   StepProps,
 } from "./motion-api.ts";
@@ -237,7 +237,7 @@ function createTimingIds(): TimingIds {
   };
 }
 
-export type TimingEffect = MotionEffectObservation & {
+export type TimingEffect = ResolvedMotionEffect & {
   readonly effectIndex: number;
   readonly partIndex?: number;
   readonly targetKind: string;
@@ -287,7 +287,7 @@ type MotionTimingWrite = {
 
 function timingTarget(
   effect: TimingEffect,
-  range: MotionEffectObservation["target"]["range"] = effect.target.range,
+  range: ResolvedMotionEffect["target"]["range"] = effect.target.range,
   background = false,
 ): string {
   return element(
@@ -370,7 +370,7 @@ function visibilitySet(
   );
 }
 
-function direction(effect: MotionEffectObservation): MotionDirection {
+function direction(effect: ResolvedMotionEffect): MotionDirection {
   return typeof effect.from === "string" ? effect.from : "bottom";
 }
 

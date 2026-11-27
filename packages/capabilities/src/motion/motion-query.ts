@@ -2,12 +2,12 @@ import type { ResolvedSlide, SlideLocator } from "@pptxdk/core/capability";
 import { BuildQueryError, resolveSlideFromLocator } from "@pptxdk/core/query";
 
 import type {
-  MotionEffectObservation,
   MotionMoment,
   MotionScopeDeclaration,
   MotionScopeMode,
   MotionStartDependency,
   MotionTiming,
+  ResolvedMotionEffect,
 } from "./motion-api.ts";
 
 export type MotionTime =
@@ -58,7 +58,7 @@ export type MotionMomentRef =
     };
 export type MotionIntervalRef = MotionEffectRef | MotionScopeRef;
 
-export type MotionMomentObservation =
+export type ResolvedMotionMoment =
   | ({ readonly ref: MotionMomentRef } & {
       readonly state: "known";
       readonly ms: number;
@@ -70,20 +70,20 @@ export type MotionMomentObservation =
       readonly state: "no-natural-completion";
     });
 
-export type EffectInstanceObservation = MotionEffectObservation & {
+export type EffectInstance = ResolvedMotionEffect & {
   readonly ref: MotionEffectRef;
   readonly effectIndex: number;
   readonly partIndex?: number;
   readonly scopes: readonly MotionScopeRef[];
-  readonly start: MotionMomentObservation;
-  readonly end: MotionMomentObservation;
+  readonly start: ResolvedMotionMoment;
+  readonly end: ResolvedMotionMoment;
 };
 
 export type MotionScopeQueryMember =
   | { readonly kind: "scope"; readonly ref: MotionScopeRef }
   | { readonly kind: "effect"; readonly ref: MotionEffectRef };
 
-export type MotionScopeQueryObservation = {
+export type MotionScopeSchedule = {
   readonly ref: MotionScopeRef;
   readonly step: MotionStepRef;
   readonly parent?: MotionScopeRef;
@@ -91,11 +91,11 @@ export type MotionScopeQueryObservation = {
   readonly eachMs?: number;
   readonly delayMs: number;
   readonly members: readonly MotionScopeQueryMember[];
-  readonly start: MotionMomentObservation;
-  readonly end: MotionMomentObservation;
+  readonly start: ResolvedMotionMoment;
+  readonly end: ResolvedMotionMoment;
 };
 
-export type MotionCueObservation = {
+export type MotionCue = {
   readonly ref: MotionCueRef;
   readonly name: string;
   readonly publishedBy: MotionScopeRef;
@@ -103,7 +103,7 @@ export type MotionCueObservation = {
   readonly at: MotionMomentRef;
 };
 
-export type MotionDependencyObservation =
+export type MotionDependency =
   | {
       readonly kind: "scope-start";
       readonly scope: MotionScopeRef;
@@ -140,10 +140,10 @@ export type MotionStepQuery = {
   readonly ref: MotionStepRef;
   readonly trigger: "auto" | "click";
   readonly number?: number;
-  readonly effects: readonly EffectInstanceObservation[];
-  readonly scopes: readonly MotionScopeQueryObservation[];
-  readonly dependencies: readonly MotionDependencyObservation[];
-  readonly cues: readonly MotionCueObservation[];
+  readonly effects: readonly EffectInstance[];
+  readonly scopes: readonly MotionScopeSchedule[];
+  readonly dependencies: readonly MotionDependency[];
+  readonly cues: readonly MotionCue[];
   difference(from: MotionMomentRef, to: MotionMomentRef): MotionDifference;
   before(from: MotionMomentRef, to: MotionMomentRef): MotionDecision;
   overlap(a: MotionIntervalRef, b: MotionIntervalRef): MotionDecision;
@@ -169,7 +169,7 @@ export type MotionQueryMomentSource = {
 };
 
 export type MotionQueryEffectSource = {
-  readonly observation: MotionEffectObservation;
+  readonly observation: ResolvedMotionEffect;
   readonly targetId: number;
   readonly effectIndex: number;
   readonly partIndex?: number;
@@ -237,13 +237,13 @@ function frozenRef<T extends object>(value: T, owner: MotionReferenceOwner): T {
 function freezeMoment(
   ref: MotionMomentRef,
   time: MotionTime,
-): MotionMomentObservation {
+): ResolvedMotionMoment {
   return Object.freeze({ ...time, ref });
 }
 
 function projectEffectObservation(
-  source: MotionEffectObservation,
-): MotionEffectObservation {
+  source: ResolvedMotionEffect,
+): ResolvedMotionEffect {
   const target = Object.freeze({
     id: source.target.id,
     name: source.target.name,
@@ -488,7 +488,7 @@ export function createMotionQuery(
       ownerRef: MotionEffectRef | MotionScopeRef,
       point: "start" | "end",
       sourceMoment: MotionQueryMomentSource,
-    ): MotionMomentObservation => {
+    ): ResolvedMotionMoment => {
       const ref: MotionMomentRef = Object.freeze(
         kind === "effect"
           ? { kind, effect: ownerRef as MotionEffectRef, point }
@@ -591,7 +591,7 @@ export function createMotionQuery(
       });
     });
 
-    const cuesByKey = new Map<string, MotionCueObservation>();
+    const cuesByKey = new Map<string, MotionCue>();
     const cues = source.cues.flatMap((cue) => {
       const scope = scopesByIdentity.get(cue.scopeIdentity);
       if (scope === undefined) return [];
@@ -618,7 +618,7 @@ export function createMotionQuery(
       return [observation];
     });
 
-    const dependencies: MotionDependencyObservation[] = [];
+    const dependencies: MotionDependency[] = [];
     for (const scope of source.scopes) {
       const consumer = scopesByIdentity.get(scope.identity);
       if (consumer === undefined || scope.declaration.startAt === undefined)

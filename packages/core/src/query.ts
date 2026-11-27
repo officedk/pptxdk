@@ -1,13 +1,13 @@
 import type {
   Locator,
-  LocatorResourceObservation,
+  LocatorResource,
   ObjectTransform,
   Rect,
   ResolutionDimensionsSummary,
   ResolvedLayout,
   ResolvedObject,
+  ResolvedResource,
   ResolvedSlide,
-  ResourceObservation,
   ScreenPoint,
   SlideLocator,
   TextMetrics,
@@ -58,7 +58,7 @@ export type BuildQuerySlideInput = {
   readonly observation: ResolvedSlide;
   readonly dimensions?: ResolutionDimensionsSummary;
   readonly content: readonly QueryContentNode[];
-  readonly resources?: readonly (ResourceObservation & {
+  readonly resources?: readonly (ResolvedResource & {
     readonly objectId: number;
   })[];
 };
@@ -199,14 +199,14 @@ type LocatorSnapshot = {
   readonly textMetrics?: TextMetrics;
   readonly gridArea?: Rect;
   readonly objects: readonly ResolvedObject[];
-  readonly resources?: readonly LocatorResourceObservation[];
+  readonly resources?: readonly LocatorResource[];
 };
 
 function computeLocatorSnapshot(
   node: QueryNode,
   layouts: ReadonlyMap<number, ResolvedLayout>,
   objectsById: ReadonlyMap<number, ResolvedObject>,
-  resourcesByObjectId: ReadonlyMap<number, readonly ResourceObservation[]>,
+  resourcesByObjectId: ReadonlyMap<number, readonly ResolvedResource[]>,
   defaultKind: string,
   defaultPath: string,
 ): LocatorSnapshot {
@@ -251,7 +251,7 @@ function computeLocatorSnapshot(
         : (object?.kind ?? defaultKind);
   const path =
     partRef?.path ?? layout?.path ?? object?.path ?? node.path ?? defaultPath;
-  const resources: LocatorResourceObservation[] = objects.flatMap((item) =>
+  const resources: LocatorResource[] = objects.flatMap((item) =>
     (resourcesByObjectId.get(item.id) ?? []).map((resource) =>
       Object.freeze({ objectId: item.id, ...resource }),
     ),
@@ -278,7 +278,7 @@ function makeLocator(
   entry: LocatorEntry,
   layouts: ReadonlyMap<number, ResolvedLayout>,
   objectsById: ReadonlyMap<number, ResolvedObject>,
-  resourcesByObjectId: ReadonlyMap<number, readonly ResourceObservation[]>,
+  resourcesByObjectId: ReadonlyMap<number, readonly ResolvedResource[]>,
   defaultKind = "locator",
   defaultPath = "",
 ): Locator {
@@ -364,7 +364,7 @@ function slideQuery(
   observation: ResolvedSlide,
   dimensions: ResolutionDimensionsSummary | undefined,
   content: readonly QueryContentNode[],
-  resources: readonly (ResourceObservation & { readonly objectId: number })[],
+  resources: readonly (ResolvedResource & { readonly objectId: number })[],
 ): SlideLocator {
   const objectsById = new Map<number, ResolvedObject>();
   const addObject = (object: ResolvedObject) => {
@@ -376,7 +376,7 @@ function slideQuery(
   const layouts = new Map(
     (observation.layouts ?? []).map((layout) => [layout.id, layout] as const),
   );
-  const resourcesByObjectId = new Map<number, ResourceObservation[]>();
+  const resourcesByObjectId = new Map<number, ResolvedResource[]>();
   for (const { objectId, ...resource } of resources) {
     const items = resourcesByObjectId.get(objectId) ?? [];
     items.push(Object.freeze({ ...resource }));

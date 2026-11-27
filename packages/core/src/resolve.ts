@@ -91,7 +91,7 @@ import type {
   CapabilityLayoutContract,
   CapabilityModule,
   CapabilityResourceClaim,
-  CapabilitySubPartObservation,
+  CapabilitySubPart,
   Extension,
   FontUsage,
   LayoutChildReference,
@@ -2245,7 +2245,7 @@ function paintOrder(contract?: CapabilityLayoutContract): number {
 }
 
 function subPartContentNodes(
-  parts: readonly CapabilitySubPartObservation[] | undefined,
+  parts: readonly CapabilitySubPart[] | undefined,
 ): QueryContentNode[] {
   if (parts === undefined || parts.length === 0) return [];
   return parts.map((part) => ({

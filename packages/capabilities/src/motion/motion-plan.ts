@@ -10,14 +10,14 @@ import type {
   MotionMoment,
   MotionScopeDeclaration,
   MotionTiming,
-  MotionEffectObservation,
   MotionGranularity,
   MotionStartDependency,
   MotionTargetRange,
-  ResolvedMotion,
-  MotionScopeObservation,
-  MotionStepObservation,
   NormalizedEffect,
+  ResolvedMotion,
+  ResolvedMotionEffect,
+  ResolvedMotionScope,
+  ResolvedMotionStep,
 } from "./motion-api.ts";
 import {
   createMotionQuery,
@@ -69,7 +69,7 @@ type ScopeValue = {
   readonly scope: MotionScopeDeclaration;
 };
 
-export type ScheduledEffect = MotionEffectObservation & {
+export type ScheduledEffect = ResolvedMotionEffect & {
   readonly stepKey: string;
   readonly order: number;
   readonly effectIndex: number;
@@ -88,7 +88,7 @@ export type ScheduledEffect = MotionEffectObservation & {
   };
 };
 
-export type MotionPlanStep = MotionStepObservation & {
+export type MotionPlanStep = ResolvedMotionStep & {
   readonly key: string;
   readonly order: number;
   readonly effects: ScheduledEffect[];
@@ -1463,7 +1463,7 @@ function motionPlan(
     }
   }
 
-  const scopeObservations: MotionScopeObservation[] = [];
+  const scopeObservations: ResolvedMotionScope[] = [];
   const stepStates = new Map<string, StepState>();
   const registerStep = (
     key: string,

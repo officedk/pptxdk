@@ -9,7 +9,7 @@ import {
   type CapabilityLayoutMeasurement,
   type CapabilityLayoutRequest,
   type CapabilityParseContext,
-  type CapabilitySubPartObservation,
+  type CapabilitySubPart,
   type EmitContext,
   type EmitOutput,
   type NativePlaceholderRef,
@@ -1494,8 +1494,8 @@ export const tableCapability = {
               textMetrics,
             };
           });
-        const subParts: CapabilitySubPartObservation[] =
-          resolvedRowObservations.map((rowObs) => ({
+        const subParts: CapabilitySubPart[] = resolvedRowObservations.map(
+          (rowObs) => ({
             kind: "row",
             ...(rowObs.id === undefined ? {} : { authorId: rowObs.id }),
             path: rowObs.path,
@@ -1511,7 +1511,8 @@ export const tableCapability = {
                 text: cellObs.text,
                 textMetrics: cellObs.textMetrics,
               })),
-          }));
+          }),
+        );
         const observation: ResolvedTable = {
           columns: [...widths],
           rows: resolvedRowObservations,

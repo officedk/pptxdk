@@ -55,6 +55,7 @@ function fail(
   code: string,
   message: string,
   characters?: readonly string[],
+  extraDetails?: Readonly<Record<string, unknown>>,
 ): never {
   throw new CapabilityError(code, message, use.path, {
     font: {
@@ -63,6 +64,7 @@ function fail(
       style: use.style,
     },
     ...(characters === undefined ? {} : { characters }),
+    ...extraDetails,
   });
 }
 
@@ -609,6 +611,26 @@ function slotOrder(value: FontSlot): number {
   return { regular: 0, bold: 1, italic: 2, boldItalic: 3 }[value];
 }
 
+function formatEmbeddedFontSlotConflictMessage(
+  family: string,
+  styleSlot: FontSlot,
+): string {
+  return `Font family "${family}" maps multiple font files to the "${styleSlot}" embedding slot. OOXML (<p:embeddedFont>) supports only four slots per font family (regular, bold, italic, boldItalic); register additional weights (such as 500 Medium or 600 SemiBold) under a separate font family name (for example "${family} Medium").`;
+}
+
+function embeddedFontSlotConflictDetails(
+  use: FontEmbeddingUse,
+): Readonly<Record<string, unknown>> {
+  return {
+    font: {
+      family: use.family,
+      weight: use.weight,
+      style: use.style,
+    },
+    reason: "not-embeddable",
+  };
+}
+
 /** Generates full fonts or presentation character subsets according to emitted families and styles. */
 export function fontPresentationContributions(
   uses: readonly FontEmbeddingUse[],
@@ -617,22 +639,31 @@ export function fontPresentationContributions(
   if (requested === undefined) return [];
   const contributions: CapabilityPresentationContribution[] = [];
   const slots = new Map<string, string>();
+  const recordContents = new Map<string, string>();
   for (const use of uses) {
     const checked = checkedFont(use, requested);
     const styleSlot = slot(use.bold, use.italic);
     const family = xmlEscape(use.family);
     const category = fontCategory(checked.font);
-    const recordContent = `<p:font typeface="${family}" pitchFamily="${category.pitchFamily}" charset="${category.charset}"/>`;
     const recordKey = fontFamilyKey(use.family);
-    const recordIdentity = `${recordContent}\u0000${category.pitchFamily}\u0000${category.charset}`;
+    // Keep one <p:font> header per case-insensitive family so PANOSE or casing differences across weights do not fail record registration.
+    let recordContent = recordContents.get(recordKey);
+    if (recordContent === undefined) {
+      recordContent = `<p:font typeface="${family}" pitchFamily="${category.pitchFamily}" charset="${category.charset}"/>`;
+      recordContents.set(recordKey, recordContent);
+    }
+    const recordIdentity = recordKey;
     const itemKey = `${recordKey}\u0000${styleSlot}`;
     const existing = slots.get(itemKey);
+    const conflictMessage = formatEmbeddedFontSlotConflictMessage(
+      use.family,
+      styleSlot,
+    );
+    const conflictDetails = embeddedFontSlotConflictDetails(use);
     if (existing !== undefined && existing !== use.identity) {
-      return fail(
-        use,
-        "conflicting-resource",
-        `${use.family} style slot ${styleSlot} corresponds to multiple font files`,
-      );
+      return fail(use, "font-unavailable", conflictMessage, undefined, {
+        reason: "not-embeddable",
+      });
     }
     if (existing !== undefined) continue;
     slots.set(itemKey, use.identity);
@@ -663,6 +694,11 @@ export function fontPresentationContributions(
           : { resourceClaim, resolveBytes }),
         content: (relationshipId) =>
           `<p:${styleSlot} r:id="${xmlEscape(relationshipId)}"/>`,
+        onConflict: {
+          code: "font-unavailable",
+          message: conflictMessage,
+          details: conflictDetails,
+        },
       },
     });
   }

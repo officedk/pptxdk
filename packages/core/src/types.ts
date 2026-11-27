@@ -593,6 +593,12 @@ export type CapabilityPresentationContribution = {
     /** Called once after core aggregates characters for this resource claim, returning final part bytes to write. */
     readonly resolveBytes?: (characters: string) => Uint8Array;
     readonly content: (relationshipId: string) => string;
+    /** Optional domain-specific diagnostic emitted instead of the generic presentation-item conflict error when this item conflicts with an existing item under the same record. */
+    readonly onConflict?: {
+      readonly code: string;
+      readonly message: string;
+      readonly details?: Readonly<Record<string, unknown>>;
+    };
   };
 };
 

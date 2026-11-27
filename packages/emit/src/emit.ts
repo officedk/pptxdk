@@ -955,7 +955,17 @@ function addPresentationContribution(
         item.resourceClaim.key === "")) ||
     (item.resolveBytes !== undefined &&
       typeof item.resolveBytes !== "function") ||
-    typeof item.content !== "function"
+    typeof item.content !== "function" ||
+    (item.onConflict !== undefined &&
+      (typeof item.onConflict !== "object" ||
+        item.onConflict === null ||
+        typeof item.onConflict.code !== "string" ||
+        item.onConflict.code.trim() === "" ||
+        typeof item.onConflict.message !== "string" ||
+        item.onConflict.message.trim() === "" ||
+        (item.onConflict.details !== undefined &&
+          (typeof item.onConflict.details !== "object" ||
+            item.onConflict.details === null))))
   ) {
     throw new CapabilityError(
       "invalid-presentation-contribution",
@@ -1016,8 +1026,7 @@ function addPresentationContribution(
     targetCollection.records.set(record.key, targetRecord);
   } else if (
     targetRecord.identity !== record.identity ||
-    targetRecord.tagName !== record.tagName ||
-    targetRecord.content !== record.content
+    targetRecord.tagName !== record.tagName
   ) {
     context.slide.diagnostics.push(
       diagnostic(
@@ -1055,11 +1064,18 @@ function addPresentationContribution(
       existingItem.resourceClaim?.key !== item.resourceClaim?.key;
     if (conflicts) {
       context.slide.diagnostics.push(
-        diagnostic(
-          path,
-          "conflicting-presentation-item",
-          `Presentation-level record ${record.key} item ${item.key} uses conflicting resources`,
-        ),
+        item.onConflict === undefined
+          ? diagnostic(
+              path,
+              "conflicting-presentation-item",
+              `Presentation-level record ${record.key} item ${item.key} uses conflicting resources`,
+            )
+          : diagnostic(
+              path,
+              item.onConflict.code,
+              item.onConflict.message,
+              item.onConflict.details,
+            ),
       );
     } else {
       const objectIds =

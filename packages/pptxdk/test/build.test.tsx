@@ -3424,29 +3424,27 @@ describe("public build entry", () => {
     });
   });
 
-  it("accepts non-RIBBI weights via typographic family and preserves native weight mapping", async () => {
-    const result = await build(
-      deck(
-        createElement(Text, {
-          id: "preferred-family-face",
-          style: {
-            position: "absolute",
-            left: 24,
-            top: 18,
-            width: 240,
-            height: "auto",
-            fontFamily: font("Darker Grotesque", [
-              { weight: 600, data: darkerGrotesqueSemiBold },
-            ]),
-            fontSize: 20,
-            fontWeight: 600,
-          },
-          children: "SemiBold preferred family",
-        }),
-      ),
-      { embedFonts: "full" },
+  it("accepts non-RIBBI weights via typographic Name ID 16 when unembedded and rejects embedFonts with family-mismatch naming native Name ID 1", async () => {
+    const typographicDeck = deck(
+      createElement(Text, {
+        id: "preferred-family-face",
+        style: {
+          position: "absolute",
+          left: 24,
+          top: 18,
+          width: 240,
+          height: "auto",
+          fontFamily: font("Darker Grotesque", [
+            { weight: 600, data: darkerGrotesqueSemiBold },
+          ]),
+          fontSize: 20,
+          fontWeight: 600,
+        },
+        children: "SemiBold preferred family",
+      }),
     );
 
+    const result = await build(typographicDeck);
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(
@@ -3457,6 +3455,23 @@ describe("public build entry", () => {
       file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.bold,
       false,
     );
+
+    for (const embedFonts of ["full", "subset"] as const) {
+      await assert.rejects(
+        build(typographicDeck, { embedFonts }),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          const diag = error.diagnostics[0];
+          assert.equal(diag?.code, "font-unavailable");
+          if (diag?.code === "font-unavailable") {
+            assert.equal(diag.reason, "family-mismatch");
+          }
+          assert.match(diag?.message ?? "", /Darker Grotesque SemiBold/u);
+          assert.match(diag?.message ?? "", /Name ID 1/u);
+          return true;
+        },
+      );
+    }
   });
 
   it("reports overflow via textMetrics when measured text exceeds fixed bounding box, preserving box, content, and native default line spacing", async () => {

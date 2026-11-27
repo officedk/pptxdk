@@ -13,7 +13,7 @@ import { subsetFont } from "./font-subset.ts";
 
 /** Normalizes a font family name for case-insensitive, whitespace-collapsed lookup. */
 export function fontFamilyKey(value: string): string {
-  return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
+  return value.trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 /** Computes the SHA-256 hex digest used to key parsed font caches and resource identities. */
@@ -36,6 +36,22 @@ type SfntDirectory = {
 type FontkitExtras = {
   readonly post?: { readonly isFixedPitch?: number };
   readonly directory?: { readonly tables?: Record<string, unknown> };
+  readonly name?: {
+    readonly records?: {
+      readonly fontFamily?: Readonly<Record<string, unknown>>;
+      readonly preferredFamily?: Readonly<Record<string, unknown>>;
+    };
+  };
+};
+
+type UnicodeFontNames = {
+  readonly legacyFamilies: ReadonlySet<string>;
+  readonly legacyFamilyKeys: ReadonlySet<string>;
+  readonly preferredFamilies: ReadonlySet<string>;
+  readonly preferredFamilyKeys: ReadonlySet<string>;
+  readonly primaryLegacyFamily: string | undefined;
+  readonly eotUtf16LeFields: ReadonlyMap<number, Uint8Array>;
+  readonly nameTableError: string | undefined;
 };
 
 type CachedHarfBuzzFace = {
@@ -50,6 +66,7 @@ type ParsedFontBinary = {
   readonly format: FontBinaryFormat;
   readonly font: fontkit.Font;
   readonly sfnt: SfntDirectory | undefined;
+  readonly names: UnicodeFontNames;
   readonly hasGlyf: boolean;
   readonly hasFvar: boolean;
   readonly hasColorOrBitmapTable: boolean;
@@ -107,6 +124,7 @@ export type ShapedOutlineGlyph = {
 
 export type CheckedEmbeddableTrueType = {
   readonly identity: string;
+  readonly primaryLegacyFamily: string | undefined;
   readonly weightClass: number;
   readonly fsType: number;
   readonly os2Bold: boolean;
@@ -215,15 +233,196 @@ function isItalicFontkit(font: fontkit.Font): boolean {
   );
 }
 
-function matchesFontFamilyInternal(
-  font: fontkit.Font,
+const utf16BeDecoder = new TextDecoder("utf-16be");
+const eotRequiredNameIds = new Set([1, 2, 4, 5]);
+
+function unicodeNamePriority(platformID: number, languageID: number): number {
+  if (platformID === 3 && languageID === 0x0409) return 0;
+  if (platformID === 0) return 1;
+  return 2;
+}
+
+function emptyUnicodeFontNames(nameTableError?: string): UnicodeFontNames {
+  return {
+    legacyFamilies: new Set(),
+    legacyFamilyKeys: new Set(),
+    preferredFamilies: new Set(),
+    preferredFamilyKeys: new Set(),
+    primaryLegacyFamily: undefined,
+    eotUtf16LeFields: new Map(),
+    nameTableError,
+  };
+}
+
+/**
+ * Extracts all Unicode `Name ID 1` / `Name ID 16` family names and EOT UTF-16LE fields
+ * from an SFNT `name` table in a single pass (`platformID === 0` or `platformID === 3`
+ * with `encodingID === 1 || 10`, across all language IDs).
+ */
+function parseSfntUnicodeNames(
+  bytes: Uint8Array,
+  table: SfntTableRecord | undefined,
+): UnicodeFontNames {
+  if (table === undefined) {
+    return emptyUnicodeFontNames("Font name table is missing");
+  }
+  if (table.length < 6) {
+    return emptyUnicodeFontNames("Font name table is incomplete");
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const count = view.getUint16(table.offset + 2);
+  const stringsOffset = view.getUint16(table.offset + 4);
+  if (6 + count * 12 > table.length || stringsOffset > table.length) {
+    return emptyUnicodeFontNames("Font name table record out of bounds");
+  }
+
+  const legacyFamilies = new Set<string>();
+  const legacyFamilyKeys = new Set<string>();
+  const preferredFamilies = new Set<string>();
+  const preferredFamilyKeys = new Set<string>();
+  let primaryLegacyFamily: string | undefined;
+  let primaryLegacyPriority = Number.POSITIVE_INFINITY;
+  const eotUtf16LeFields = new Map<number, Uint8Array>();
+  const eotPriorities = new Map<number, number>();
+  let nameTableError: string | undefined;
+
+  for (let index = 0; index < count; index += 1) {
+    const record = table.offset + 6 + index * 12;
+    const platformID = view.getUint16(record);
+    const encodingID = view.getUint16(record + 2);
+    const languageID = view.getUint16(record + 4);
+    const nameID = view.getUint16(record + 6);
+    const length = view.getUint16(record + 8);
+    const offset = stringsOffset + view.getUint16(record + 10);
+    if (offset > table.length || length > table.length - offset) {
+      nameTableError ??= "Font name string out of bounds";
+      continue;
+    }
+    const isUnicode =
+      platformID === 0 ||
+      (platformID === 3 && (encodingID === 1 || encodingID === 10));
+    if (!isUnicode) continue;
+
+    const raw = bytes.subarray(
+      table.offset + offset,
+      table.offset + offset + length,
+    );
+    if (raw.byteLength % 2 !== 0) {
+      nameTableError ??= "Font name string is not UTF-16 encoded";
+      continue;
+    }
+
+    const priority = unicodeNamePriority(platformID, languageID);
+    if (eotRequiredNameIds.has(nameID)) {
+      const existingPriority =
+        eotPriorities.get(nameID) ?? Number.POSITIVE_INFINITY;
+      if (priority < existingPriority) {
+        const littleEndian = new Uint8Array(raw.byteLength);
+        for (let at = 0; at < raw.byteLength; at += 2) {
+          littleEndian[at] = raw[at + 1]!;
+          littleEndian[at + 1] = raw[at]!;
+        }
+        eotUtf16LeFields.set(nameID, littleEndian);
+        eotPriorities.set(nameID, priority);
+      }
+    }
+
+    if (nameID !== 1 && nameID !== 16) continue;
+    const decoded = utf16BeDecoder.decode(raw);
+    if (decoded.trim() === "") continue;
+    if (nameID === 1) {
+      legacyFamilies.add(decoded);
+      legacyFamilyKeys.add(fontFamilyKey(decoded));
+      if (priority < primaryLegacyPriority) {
+        primaryLegacyFamily = decoded;
+        primaryLegacyPriority = priority;
+      }
+    } else {
+      preferredFamilies.add(decoded);
+      preferredFamilyKeys.add(fontFamilyKey(decoded));
+    }
+  }
+
+  return {
+    legacyFamilies,
+    legacyFamilyKeys,
+    preferredFamilies,
+    preferredFamilyKeys,
+    primaryLegacyFamily,
+    eotUtf16LeFields,
+    nameTableError,
+  };
+}
+
+/**
+ * Fallback Unicode family extraction for WOFF/WOFF2 containers via `fontkit`'s
+ * decompressed `name.records` across all language entries.
+ */
+function extractWoffUnicodeNames(font: fontkit.Font): UnicodeFontNames {
+  const records = (font as unknown as FontkitExtras).name?.records;
+  const legacyFamilies = new Set<string>();
+  const legacyFamilyKeys = new Set<string>();
+  const preferredFamilies = new Set<string>();
+  const preferredFamilyKeys = new Set<string>();
+
+  const fontFamilyRecords = records?.fontFamily ?? {};
+  for (const value of Object.values(fontFamilyRecords)) {
+    if (typeof value === "string" && value.trim() !== "") {
+      legacyFamilies.add(value);
+      legacyFamilyKeys.add(fontFamilyKey(value));
+    }
+  }
+
+  const preferredFamilyRecords = records?.preferredFamily ?? {};
+  for (const value of Object.values(preferredFamilyRecords)) {
+    if (typeof value === "string" && value.trim() !== "") {
+      preferredFamilies.add(value);
+      preferredFamilyKeys.add(fontFamilyKey(value));
+    }
+  }
+
+  const englishLegacy = fontFamilyRecords["en"];
+  const firstLegacy = [...legacyFamilies][0];
+  const fallbackFamily =
+    typeof font.familyName === "string" && font.familyName.trim() !== ""
+      ? font.familyName
+      : undefined;
+  const primaryLegacyFamily =
+    typeof englishLegacy === "string" && englishLegacy.trim() !== ""
+      ? englishLegacy
+      : (firstLegacy ?? fallbackFamily);
+  if (primaryLegacyFamily !== undefined && legacyFamilies.size === 0) {
+    legacyFamilies.add(primaryLegacyFamily);
+    legacyFamilyKeys.add(fontFamilyKey(primaryLegacyFamily));
+  }
+
+  return {
+    legacyFamilies,
+    legacyFamilyKeys,
+    preferredFamilies,
+    preferredFamilyKeys,
+    primaryLegacyFamily,
+    eotUtf16LeFields: new Map(),
+    nameTableError: undefined,
+  };
+}
+
+function matchesAnyUnicodeFamily(
+  parsed: ParsedFontBinary,
   family: string,
 ): boolean {
-  const preferredFamily = font.getName("preferredFamily", "en");
   const targetKey = fontFamilyKey(family);
-  return [font.familyName, preferredFamily].some(
-    (candidate) => candidate !== null && fontFamilyKey(candidate) === targetKey,
+  return (
+    parsed.names.legacyFamilyKeys.has(targetKey) ||
+    parsed.names.preferredFamilyKeys.has(targetKey)
   );
+}
+
+function matchesLegacyUnicodeFamily(
+  parsed: ParsedFontBinary,
+  family: string,
+): boolean {
+  return parsed.names.legacyFamilyKeys.has(fontFamilyKey(family));
 }
 
 function computeFontCategory(font: fontkit.Font): {
@@ -346,6 +545,10 @@ function parseFontBinaryUncached(
   const isItalic = isItalicFontkit(opened);
   const os2Bold = Boolean(os2?.fsSelection?.bold);
   const { pitchFamily, charset } = computeFontCategory(opened);
+  const names =
+    sfnt !== undefined
+      ? parseSfntUnicodeNames(safeBytes, sfnt.tables.get("name"))
+      : extractWoffUnicodeNames(opened);
 
   return {
     identity,
@@ -353,6 +556,7 @@ function parseFontBinaryUncached(
     format,
     font: opened,
     sfnt,
+    names,
     hasGlyf,
     hasFvar,
     hasColorOrBitmapTable,
@@ -596,14 +800,15 @@ export function openMeasureFontFace(
 ): FontMeasureFace {
   const face = validateFontFaceResource(source);
   const parsed = parsedOfMeasureFace(face);
-  if (
-    !source.substitute &&
-    !matchesFontFamilyInternal(parsed.font, source.family)
-  ) {
+  if (!source.substitute && !matchesAnyUnicodeFamily(parsed, source.family)) {
+    const declaredFamily =
+      parsed.names.primaryLegacyFamily ??
+      [...parsed.names.preferredFamilies][0] ??
+      parsed.font.familyName;
     return failFont(
       source,
       "font-substitution-required",
-      `Metrics file declares ${parsed.font.familyName}; retaining output font name ${source.family} requires setting Font.substitute explicitly`,
+      `Metrics file declares ${declaredFamily}; retaining output font name ${source.family} requires setting Font.substitute explicitly`,
       { reason: "font-substitution-required" },
     );
   }
@@ -783,10 +988,33 @@ export function validateEmbeddableTrueTypeFont(
     );
   }
   if (input.substitute) {
+    const parsed =
+      input.bytes !== undefined
+        ? tryGetOrParseFontBinary(input.bytes, input.identity)
+        : undefined;
+    const nativeLegacy = parsed?.names.primaryLegacyFamily;
+    if (
+      parsed !== undefined &&
+      matchesLegacyUnicodeFamily(parsed, input.family)
+    ) {
+      const nativeName = nativeLegacy ?? input.family;
+      return failFont(
+        input,
+        "font-substitute-not-embeddable",
+        `Font "${input.family}" sets substitute: true, but the font file's native Name ID 1 ("${nativeName}") already matches "${input.family}"; remove redundant substitute: true to enable embedding.`,
+      );
+    }
+    if (nativeLegacy !== undefined) {
+      return failFont(
+        input,
+        "font-substitute-not-embeddable",
+        `Font "${input.family}" sets substitute: true with a font file whose native Name ID 1 is "${nativeLegacy}"; substitute fonts cannot be embedded under another family name.`,
+      );
+    }
     return failFont(
       input,
       "font-substitute-not-embeddable",
-      `${input.family} uses substitute font metrics and cannot satisfy embedding request for the declared family`,
+      `Font "${input.family}" uses substitute font metrics and cannot satisfy embedding request for the declared family`,
     );
   }
   if (input.bytes === undefined || input.identity === "missing") {
@@ -897,11 +1125,26 @@ export function validateEmbeddableTrueTypeFont(
     );
   }
 
-  if (!matchesFontFamilyInternal(parsed.font, input.family)) {
+  if (!matchesLegacyUnicodeFamily(parsed, input.family)) {
+    const nativeLegacy = parsed.names.primaryLegacyFamily;
+    if (parsed.names.preferredFamilyKeys.has(fontFamilyKey(input.family))) {
+      const nativeLabel =
+        nativeLegacy ?? "an unspecified Name ID 1 legacy family";
+      return failFont(
+        input,
+        "font-family-mismatch",
+        `Font "${input.family}" matches typographic Name ID 16 only, whereas embedding requires matching the font file's native Name ID 1 legacy family "${nativeLabel}". Register an independent font("${nativeLabel}", ...) for embedding, or disable embedFonts.`,
+      );
+    }
+    const nativeLabel =
+      nativeLegacy ??
+      [...parsed.names.preferredFamilies][0] ??
+      parsed.font.familyName ??
+      "unknown";
     return failFont(
       input,
       "font-family-mismatch",
-      `Font family ${parsed.font.familyName} declared in font file does not match output family ${input.family}; declare substitute explicitly if intended for measurement`,
+      `Font file's native Name ID 1 family "${nativeLabel}" does not match declared family "${input.family}". Register font("${nativeLabel}", ...) for embedding, or set substitute: true for unembedded measurement only.`,
     );
   }
   if (parsed.weightClass !== input.weight) {
@@ -925,6 +1168,7 @@ export function validateEmbeddableTrueTypeFont(
 
   return {
     identity: parsed.identity,
+    primaryLegacyFamily: parsed.names.primaryLegacyFamily,
     weightClass: parsed.weightClass,
     fsType,
     os2Bold: parsed.os2Bold,
@@ -934,72 +1178,23 @@ export function validateEmbeddableTrueTypeFont(
   };
 }
 
-function extractNameUtf16Le(
-  bytes: Uint8Array,
-  table: SfntTableRecord,
+function getEotNameUtf16Le(
+  names: UnicodeFontNames,
   id: number,
   context: FontEmbeddingContext,
 ): Uint8Array {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (table.length < 6) {
-    return failFont(
-      context,
-      "unsupported-font-format",
-      "Font name table is incomplete",
-    );
+  if (names.nameTableError !== undefined) {
+    return failFont(context, "unsupported-font-format", names.nameTableError);
   }
-  const count = view.getUint16(table.offset + 2);
-  const stringsOffset = view.getUint16(table.offset + 4);
-  if (6 + count * 12 > table.length || stringsOffset > table.length) {
-    return failFont(
-      context,
-      "unsupported-font-format",
-      "Font name table record out of bounds",
-    );
-  }
-  let fallback: Uint8Array | undefined;
-  for (let index = 0; index < count; index += 1) {
-    const record = table.offset + 6 + index * 12;
-    if (view.getUint16(record + 6) !== id) continue;
-    const platform = view.getUint16(record);
-    const language = view.getUint16(record + 4);
-    const length = view.getUint16(record + 8);
-    const offset = stringsOffset + view.getUint16(record + 10);
-    if (offset > table.length || length > table.length - offset) {
-      return failFont(
-        context,
-        "unsupported-font-format",
-        "Font name string out of bounds",
-      );
-    }
-    if (platform !== 0 && platform !== 3) continue;
-    const raw = bytes.subarray(
-      table.offset + offset,
-      table.offset + offset + length,
-    );
-    if (raw.byteLength % 2 !== 0) {
-      return failFont(
-        context,
-        "unsupported-font-format",
-        "Font name string is not UTF-16 encoded",
-      );
-    }
-    const littleEndian = new Uint8Array(raw.byteLength);
-    for (let at = 0; at < raw.byteLength; at += 2) {
-      littleEndian[at] = raw[at + 1]!;
-      littleEndian[at + 1] = raw[at]!;
-    }
-    if (platform === 3 && language === 0x0409) return littleEndian;
-    fallback ??= littleEndian;
-  }
-  if (fallback === undefined) {
+  const field = names.eotUtf16LeFields.get(id);
+  if (field === undefined) {
     return failFont(
       context,
       "unsupported-font-format",
       `Font name table is missing Unicode name field ${id} required for EOT`,
     );
   }
-  return fallback;
+  return field;
 }
 
 function subsetTrueTypeAndVerify(
@@ -1098,14 +1293,14 @@ function subsetTrueTypeAndVerify(
 }
 
 function packUncompressedEot(
-  sourceBytes: Uint8Array,
-  sourceSfnt: SfntDirectory,
+  parsed: ParsedFontBinary,
   checked: CheckedEmbeddableTrueType,
   payloadBytes: Uint8Array,
   context: FontEmbeddingContext,
 ): Uint8Array {
+  const sourceBytes = parsed.bytes;
+  const sourceSfnt = parsed.sfnt!;
   const os2 = sourceSfnt.tables.get("OS/2")!;
-  const names = sourceSfnt.tables.get("name")!;
   const view = new DataView(
     sourceBytes.buffer,
     sourceBytes.byteOffset,
@@ -1167,7 +1362,7 @@ function packUncompressedEot(
   u32(payloadView.getUint32(payloadHead.offset + 8));
   for (let index = 0; index < 4; index += 1) u32(0);
   for (const id of [1, 2, 5, 4]) {
-    const name = extractNameUtf16Le(sourceBytes, names, id, context);
+    const name = getEotNameUtf16Le(parsed.names, id, context);
     u16(0);
     u16(name.byteLength);
     chunks.push(name);
@@ -1222,13 +1417,7 @@ export function buildEmbeddedEotPayload(
           requiresVisibleGlyph,
         )
       : parsed.bytes;
-  return packUncompressedEot(
-    parsed.bytes,
-    parsed.sfnt,
-    checked,
-    payloadBytes,
-    context,
-  );
+  return packUncompressedEot(parsed, checked, payloadBytes, context);
 }
 
 /**
@@ -1244,7 +1433,7 @@ export function inspectImportedEmbeddedFont(
     return undefined;
   }
   return {
-    familyMatches: matchesFontFamilyInternal(parsed.font, declaredTypeface),
+    familyMatches: matchesAnyUnicodeFamily(parsed, declaredTypeface),
     weight: parsed.weightClass,
     style: parsed.hasOs2 ? parsed.style : undefined,
   };

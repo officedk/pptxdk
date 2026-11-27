@@ -84,8 +84,19 @@ function slotOrder(value: FontSlot): number {
 function formatEmbeddedFontSlotConflictMessage(
   family: string,
   styleSlot: FontSlot,
+  nativeLegacyFamily: string | undefined,
 ): string {
-  return `Font family "${family}" maps multiple font files to the "${styleSlot}" embedding slot. OOXML (<p:embeddedFont>) supports only four slots per font family (regular, bold, italic, boldItalic); register additional weights (such as 500 Medium or 600 SemiBold) under a separate font family name (for example "${family} Medium").`;
+  if (
+    nativeLegacyFamily !== undefined &&
+    fontFamilyKey(nativeLegacyFamily) !== fontFamilyKey(family)
+  ) {
+    return `Font family "${family}" maps multiple font files to the "${styleSlot}" embedding slot (conflicting file native Name ID 1: "${nativeLegacyFamily}"). OOXML (<p:embeddedFont>) supports only four slots per font family (regular, bold, italic, boldItalic); register "${nativeLegacyFamily}" as a separate font family.`;
+  }
+  const nativePart =
+    nativeLegacyFamily === undefined
+      ? ""
+      : ` (file native Name ID 1: "${nativeLegacyFamily}")`;
+  return `Font family "${family}" maps multiple font files to the "${styleSlot}" embedding slot${nativePart}. OOXML (<p:embeddedFont>) supports only four slots per font family (regular, bold, italic, boldItalic); register additional weights (such as 500 Medium or 600 SemiBold) under a separate font family name (for example "${family} Medium").`;
 }
 
 function embeddedFontSlotConflictDetails(
@@ -108,11 +119,17 @@ export function fontPresentationContributions(
 ): CapabilityPresentationContribution[] {
   if (requested === undefined) return [];
   const contributions: CapabilityPresentationContribution[] = [];
-  const slots = new Map<string, string>();
+  const slots = new Map<
+    string,
+    {
+      readonly identity: string;
+      readonly primaryLegacyFamily: string | undefined;
+    }
+  >();
   const recordContents = new Map<string, string>();
   for (const use of uses) {
     const checked = validateEmbeddableTrueTypeFont(use, requested);
-    const styleSlot = slot(use.bold, use.italic);
+    const styleSlot = slot(checked.os2Bold, checked.isItalic);
     const family = xmlEscape(use.family);
     const recordKey = fontFamilyKey(use.family);
     // Keep one <p:font> header per case-insensitive family so PANOSE or casing differences across weights do not fail record registration.
@@ -124,18 +141,36 @@ export function fontPresentationContributions(
     const recordIdentity = recordKey;
     const itemKey = `${recordKey}\u0000${styleSlot}`;
     const existing = slots.get(itemKey);
+    const conflictDetails = embeddedFontSlotConflictDetails(use);
+    if (existing !== undefined && existing.identity !== use.identity) {
+      const conflictNative =
+        checked.primaryLegacyFamily !== undefined &&
+        fontFamilyKey(checked.primaryLegacyFamily) !== fontFamilyKey(use.family)
+          ? checked.primaryLegacyFamily
+          : (existing.primaryLegacyFamily ?? checked.primaryLegacyFamily);
+      return fail(
+        use,
+        "font-unavailable",
+        formatEmbeddedFontSlotConflictMessage(
+          use.family,
+          styleSlot,
+          conflictNative,
+        ),
+        {
+          reason: "not-embeddable",
+        },
+      );
+    }
+    if (existing !== undefined) continue;
+    slots.set(itemKey, {
+      identity: use.identity,
+      primaryLegacyFamily: checked.primaryLegacyFamily,
+    });
     const conflictMessage = formatEmbeddedFontSlotConflictMessage(
       use.family,
       styleSlot,
+      checked.primaryLegacyFamily,
     );
-    const conflictDetails = embeddedFontSlotConflictDetails(use);
-    if (existing !== undefined && existing !== use.identity) {
-      return fail(use, "font-unavailable", conflictMessage, {
-        reason: "not-embeddable",
-      });
-    }
-    if (existing !== undefined) continue;
-    slots.set(itemKey, use.identity);
     const resourceClaim = { kind: "font-face", key: use.claimKey };
     const resolveBytes =
       requested === "subset"

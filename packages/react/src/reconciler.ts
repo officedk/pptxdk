@@ -13,13 +13,20 @@ import {
 } from "react-reconciler/constants.js";
 
 import {
+  appendInitialHostChild,
   attachHostChild,
+  commitMountHostInstance,
+  createHostContainer,
   createHostInstance,
   createHostText,
   detachHostChild,
+  type AdapterChild,
   type HostContainer,
+  type HostInstance,
   insertRootChild,
+  isMountHostRecord,
   lockHandoffTree,
+  releaseContainerMounts,
   removeRootChild,
   updateHostInstance,
   updateHostText,
@@ -49,13 +56,13 @@ const reconciler = Reconciler<
   string,
   Props,
   HostContainer,
-  CommonNode,
+  HostInstance,
   HostTextNode,
   never,
   never,
   never,
   never,
-  CommonNode | HostTextNode,
+  AdapterChild,
   Record<string, never>,
   never,
   ReturnType<typeof setTimeout>,
@@ -80,14 +87,14 @@ const reconciler = Reconciler<
   NotPendingTransition: null,
   HostTransitionContext: hostTransitionContext,
 
-  createInstance(type, props) {
-    return createHostInstance(type, props);
+  createInstance(type, props, rootContainer) {
+    return createHostInstance(type, props, rootContainer);
   },
-  createTextInstance(text) {
-    return createHostText(text);
+  createTextInstance(text, rootContainer) {
+    return createHostText(text, rootContainer);
   },
   appendInitialChild(parent, child) {
-    attachHostChild(parent, child);
+    appendInitialHostChild(parent, child);
   },
   appendChild(parent, child) {
     attachHostChild(parent, child);
@@ -120,8 +127,12 @@ const reconciler = Reconciler<
   resetTextContent() {},
   clearContainer(container) {
     container.children.length = 0;
+    container.hostOrder.length = 0;
   },
-  finalizeInitialChildren: () => false,
+  finalizeInitialChildren: (instance) => isMountHostRecord(instance),
+  commitMount(instance) {
+    commitMountHostInstance(instance);
+  },
   shouldSetTextContent: () => false,
   getRootHostContext: () => ({}),
   getChildHostContext: (parent) => parent,
@@ -244,7 +255,7 @@ async function expandReactRoot<Result>(
 ): Promise<Result> {
   if (signal?.aborted) throw signal.reason;
 
-  const container: HostContainer = { children: [] };
+  const container = createHostContainer();
   type Outcome = "running" | "completed" | "failed" | "cancelled";
   let outcome: Outcome = "running";
   let outcomeError: unknown;
@@ -391,6 +402,7 @@ async function expandReactRoot<Result>(
       });
       attemptCleanup(() => reconciler.flushSyncWork());
       attemptCleanup(() => reconciler.flushPassiveEffects());
+      attemptCleanup(() => releaseContainerMounts(container));
     } finally {
       if (currentAdapterInstalled && currentDescriptor !== undefined) {
         attemptCleanup(() => {
@@ -431,7 +443,7 @@ export async function expandReactDocument(
 ): Promise<CommonContainer<"deck">> {
   return expandReactRoot(element, signal, (container) => {
     const candidate = completedDocument(container);
-    lockHandoffTree(candidate);
+    lockHandoffTree(container);
     return candidate;
   });
 }
@@ -449,12 +461,12 @@ function completedFragment(container: HostContainer): readonly CommonNode[] {
       diagnostic(
         "fragment",
         "unexpected-text",
-        "No text allowed outside an editable node in an appended JSX fragment",
+        "No text allowed outside an editable node in a JSX fragment",
       ),
     ]);
   }
   const frozen = Object.freeze(nodes);
-  for (const node of frozen) lockHandoffTree(node);
+  lockHandoffTree(container);
   return frozen;
 }
 

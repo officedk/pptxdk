@@ -6,6 +6,7 @@ import type {
   SlideProps as CoreSlideProps,
 } from "@pptxdk/core";
 import {
+  CommonNode,
   RichTextContainer,
   createDeckNode,
   createSectionNode,
@@ -20,6 +21,8 @@ import {
   isValidElement,
   type ReactNode,
 } from "react";
+
+import { Mount } from "#/mount.ts";
 
 export type ElementProps = {
   readonly children?: ReactNode;
@@ -54,13 +57,55 @@ function isInlineTextElement(value: unknown): boolean {
   );
 }
 
-function expandPlaceholderEntry(key: string, value: unknown): ReactNode {
+function isInlineTextNode(node: CommonNode): boolean {
+  return (
+    node.type === "paragraph" ||
+    node.type === "span" ||
+    node.type === "slide-number"
+  );
+}
+
+function expandPlaceholderEntry(
+  key: string,
+  value: unknown,
+  seenObjectNodes: Set<CommonNode>,
+): ReactNode {
   if (value === undefined) return null;
-  if (
-    typeof value === "string" ||
-    Array.isArray(value) ||
-    isInlineTextElement(value)
-  ) {
+  if (value instanceof CommonNode) {
+    if (isInlineTextNode(value)) {
+      return createElement(
+        "text",
+        {
+          key: `__ph_${key}`,
+          placeholder: key,
+          [hostNodeCreator]: createPlaceholderTextNode,
+        },
+        createElement(Mount, { node: value }),
+      );
+    }
+    if (value.parent === undefined && !seenObjectNodes.has(value)) {
+      seenObjectNodes.add(value);
+      value.set({ placeholder: key });
+    }
+    return createElement(Mount, { key: `__ph_${key}`, node: value });
+  }
+  if (Array.isArray(value)) {
+    const mapped = value.map((item, index) =>
+      item instanceof CommonNode
+        ? createElement(Mount, { key: `__ph_${key}_${index}`, node: item })
+        : (item as ReactNode),
+    );
+    return createElement(
+      "text",
+      {
+        key: `__ph_${key}`,
+        placeholder: key,
+        [hostNodeCreator]: createPlaceholderTextNode,
+      },
+      ...mapped,
+    );
+  }
+  if (typeof value === "string" || isInlineTextElement(value)) {
     return createElement(
       "text",
       {
@@ -117,8 +162,9 @@ export function Slide(props: SlideProps): ReactNode {
     ([, value]) => value !== undefined,
   );
   const keepEmpty = props.layout === undefined && entries.length === 0;
+  const seenObjectNodes = new Set<CommonNode>();
   const placeholderChildren = entries.map(([key, value]) =>
-    expandPlaceholderEntry(key, value),
+    expandPlaceholderEntry(key, value, seenObjectNodes),
   );
   return createElement(
     "slide",

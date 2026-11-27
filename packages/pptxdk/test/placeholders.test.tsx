@@ -30,6 +30,7 @@ import {
   CommonNode,
   DeckContainer,
   SlideContainer,
+  box,
   cell,
   chart,
   deck,
@@ -39,6 +40,7 @@ import {
   slide,
   slideLayout,
   slideMaster,
+  slideNumber,
   span,
   table,
   text,
@@ -1644,5 +1646,250 @@ describe("typed text placeholders and style inheritance", () => {
       | Record<string, unknown>
       | undefined;
     assert.ok(Math.abs(((style?.borderRadius as number) ?? 0) - 16) < 0.05);
+  });
+
+  it("adopts imperative CommonNode values in Slide placeholders matching imperative slide()", async () => {
+    const richLayout = defineSlideLayout({
+      id: "rich-ph",
+      name: "Rich Placeholders",
+      type: "obj",
+      placeholders: {
+        title: {
+          type: "title",
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 24,
+            width: 880,
+            height: 48,
+            fontFamily: jostFont,
+            fontSize: "24pt",
+          },
+        },
+        lead: {
+          type: "body",
+          idx: 1,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 84,
+            width: 420,
+            height: 80,
+            fontFamily: jostFont,
+            fontSize: "14pt",
+          },
+        },
+        mixed: {
+          type: "body",
+          idx: 2,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 176,
+            width: 420,
+            height: 80,
+            fontFamily: jostFont,
+            fontSize: "14pt",
+          },
+        },
+        pic: {
+          type: "pic",
+          idx: 3,
+          style: {
+            position: "absolute",
+            left: 40,
+            top: 270,
+            width: 120,
+            height: 90,
+          },
+        },
+        tbl: {
+          type: "tbl",
+          idx: 4,
+          style: {
+            position: "absolute",
+            left: 180,
+            top: 270,
+            width: 280,
+            height: 120,
+          },
+        },
+        chart: {
+          type: "chart",
+          idx: 5,
+          style: {
+            position: "absolute",
+            left: 480,
+            top: 84,
+            width: 440,
+            height: 300,
+          },
+        },
+        num: {
+          type: "sldNum",
+          idx: 6,
+          style: {
+            position: "absolute",
+            left: 840,
+            top: 490,
+            width: 80,
+            height: 28,
+            fontFamily: jostFont,
+            fontSize: "12pt",
+          },
+        },
+      },
+    });
+
+    const createNodes = () => ({
+      titleNode: text("Imperative Title"),
+      paraNode: paragraph("Imperative Paragraph"),
+      spanNode: span("Inline Span"),
+      picNode: image({ src: tinyPng }),
+      tblNode: table({ columns: [140, 140] }).append(
+        row({ style: { height: 32 } }).append(cell("Metric"), cell("Score")),
+      ),
+      chartNode: chart({
+        groups: [
+          {
+            kind: "column",
+            data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+            series: [{ name: "Actual", values: [12, 18] }],
+          },
+        ],
+      }),
+      numNode: slideNumber(),
+    });
+
+    const jsxNodes = createNodes();
+    const impNodes = createNodes();
+
+    const jsxBuilt = await build(
+      <Deck width={960} height={540}>
+        <SlideMaster id="m1">
+          <SlideLayout layout={richLayout} />
+        </SlideMaster>
+        <Slide
+          id="s1"
+          layout={richLayout}
+          placeholders={{
+            title: jsxNodes.titleNode,
+            lead: jsxNodes.paraNode,
+            mixed: [
+              jsxNodes.spanNode,
+              <Span key="tail"> + JSX Span</Span>,
+              " + Text",
+            ],
+            pic: jsxNodes.picNode,
+            tbl: jsxNodes.tblNode,
+            chart: jsxNodes.chartNode,
+            num: jsxNodes.numNode,
+          }}
+        />
+      </Deck>,
+    );
+
+    const impBuilt = await build(
+      deck({ width: 960, height: 540 }).append(
+        slideMaster({ id: "m1" }).append(slideLayout(richLayout)),
+        slide({
+          id: "s1",
+          layout: richLayout,
+          placeholders: {
+            title: impNodes.titleNode,
+            lead: impNodes.paraNode,
+            mixed: [impNodes.spanNode, span(" + JSX Span"), " + Text"],
+            pic: impNodes.picNode,
+            tbl: impNodes.tblNode,
+            chart: impNodes.chartNode,
+            num: impNodes.numNode,
+          },
+        }),
+      ),
+    );
+
+    const jsxValidated = await validatePptx(jsxBuilt.pptx);
+    const impValidated = await validatePptx(impBuilt.pptx);
+    assert.deepEqual(jsxValidated.errors, []);
+    assert.deepEqual(impValidated.errors, []);
+
+    assert.deepEqual(
+      jsxBuilt.report.slides[0]?.objects.map(
+        ({ kind, text: value, box: b }) => ({
+          kind,
+          text: value,
+          box: b,
+        }),
+      ),
+      impBuilt.report.slides[0]?.objects.map(
+        ({ kind, text: value, box: b }) => ({
+          kind,
+          text: value,
+          box: b,
+        }),
+      ),
+    );
+    assert.deepEqual(
+      jsxValidated.slides[0]?.objects.map(({ kind, placeholder }) => ({
+        kind,
+        placeholder,
+      })),
+      impValidated.slides[0]?.objects.map(({ kind, placeholder }) => ({
+        kind,
+        placeholder,
+      })),
+    );
+
+    // Also verifies SpanNode directly as a text placeholder value.
+    const spanOnlyBuilt = await build(
+      <Deck width={960} height={540}>
+        <SlideMaster id="m-span">
+          <SlideLayout layout={richLayout} />
+        </SlideMaster>
+        <Slide
+          id="s-span"
+          layout={richLayout}
+          placeholders={{ title: span("Span Only Title") }}
+        />
+      </Deck>,
+    );
+    assert.equal(
+      spanOnlyBuilt.report.slides[0]?.objects[0]?.text,
+      "Span Only Title",
+    );
+
+    // Rejects already-attached object nodes without mutating their placeholder prop.
+    const externalHolder = box();
+    const attachedChart = chart({
+      groups: [
+        {
+          kind: "column",
+          data: { kind: "shared-categories", categories: ["A"] },
+          series: [{ name: "S", values: [1] }],
+        },
+      ],
+    });
+    externalHolder.append(attachedChart);
+    await assert.rejects(
+      build(
+        <Deck width={960} height={540}>
+          <SlideMaster id="m-err">
+            <SlideLayout layout={richLayout} />
+          </SlideMaster>
+          <Slide
+            id="s-err"
+            layout={richLayout}
+            placeholders={{ chart: attachedChart }}
+          />
+        </Deck>,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof BuildError);
+        assert.equal(error.diagnostics[0]?.code, "invalid-structure");
+        return true;
+      },
+    );
+    assert.equal(attachedChart.props["placeholder"], undefined);
+    assert.equal(attachedChart.parent, externalHolder);
   });
 });

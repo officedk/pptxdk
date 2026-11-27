@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { createCodegen } from "@pptxdk/codegen";
-import { DeckContainer, defineTheme, lighter } from "@pptxdk/core";
+import { DeckContainer, defineTheme } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
 import { createImporter } from "@pptxdk/import";
@@ -170,7 +170,6 @@ describe("brand master capability codegen", () => {
       name: "Apex Brand",
       colors: {
         accent1: "#1D4ED8",
-        accentSoft: lighter("accent1", 0.35),
       },
       fonts: { major: jostFont, minor: jostFont },
     });

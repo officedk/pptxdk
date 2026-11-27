@@ -10,12 +10,15 @@ import { box, deck, shape, slide, text } from "../../document.ts";
 describe("box capability codegen", () => {
   it("preserves Flex, Grid, and Block layout rules and nested Box children in vanilla and react source", () => {
     const morphScope = createMorphScope();
-    const doc = deck({ width: 960, height: 540 }).append(
+    const doc = deck({
+      width: 960,
+      height: 540,
+      theme: { colors: { lt2: "#F8FAFC" } },
+    }).append(
       slide({ id: "layout" }).append(
         box({
           id: "flex-wrap-container",
           morphKey: morphScope.handle("panel"),
-          theme: { colors: { panelBg: "#F8FAFC" } },
           style: {
             position: "absolute",
             left: 32,
@@ -28,7 +31,7 @@ describe("box capability codegen", () => {
             alignItems: "center",
             gap: 12,
             padding: 16,
-            background: "panelBg",
+            background: "lt2",
             border: { color: "#CBD5E1", width: 1 },
             borderRadius: 8,
           },

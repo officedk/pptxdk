@@ -77,12 +77,12 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
   id: "slide-background-variants",
   capability: "slide-background",
   description:
-    "Dual-author slide-background scenario covering default white, solid hex, local ThemeScope token, linear/radial gradients with alpha, and PNG/JPEG/GIF image backgrounds.",
+    "Dual-author slide-background scenario covering default white, solid hex, Slide themeOverride scheme colors, linear/radial gradients with alpha, and PNG/JPEG/GIF image backgrounds.",
   visualCheckpoints: [
     "Page 1 (default-white): clean white canvas with centered dark slate square (#0F172A).",
     "Page 2 (solid-navy): deep navy canvas (#1E3A8A) with centered crisp white ellipse.",
-    "Page 3 (theme-cream): warm cream canvas (#FEF3C7 via ThemeScope) with amber rectangle (#D97706).",
-    "Page 4 (linear-gradient-bg): horizontal 90deg linear gradient from local ThemeScope surfaceBg (#0F172A) to #38BDF8.",
+    "Page 3 (theme-cream): warm cream canvas (#FEF3C7 via Slide themeOverride lt2) with amber rectangle (#D97706 via accent1).",
+    "Page 4 (linear-gradient-bg): horizontal 90deg linear gradient from Slide themeOverride lt2 (#0F172A) to #38BDF8.",
     "Page 5 (radial-gradient-bg): centered radial gradient from #FEF3C7 at center to #1E3A8A at corners.",
     "Page 6 (png-image-bg): deep blue PNG image background (#224488).",
     "Page 7 (jpeg-image-bg): warm rust JPEG image background (#C2410C).",
@@ -97,7 +97,7 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
       {
         width: 480,
         height: 270,
-        theme: { colors: { surfaceBg: "#FFFFFF", cardAccent: "#3B82F6" } },
+        theme: { colors: { lt2: "#FFFFFF", accent1: "#3B82F6" } },
       },
       createElement(
         Slide,
@@ -134,8 +134,8 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
         Slide,
         {
           id: "theme-cream",
-          background: "surfaceBg",
-          theme: { colors: { surfaceBg: "#FEF3C7", cardAccent: "#D97706" } },
+          background: "lt2",
+          themeOverride: { colors: { lt2: "#FEF3C7", accent1: "#D97706" } },
         },
         createElement(Shape, {
           id: "amber-card",
@@ -145,7 +145,7 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
             top: 75,
             width: 240,
             height: 120,
-            background: "cardAccent",
+            background: "accent1",
           },
         }),
       ),
@@ -153,10 +153,10 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
         Slide,
         {
           id: "linear-gradient-bg",
-          theme: { colors: { surfaceBg: "#0F172A" } },
+          themeOverride: { colors: { lt2: "#0F172A" } },
           background: linearGradient(
             90,
-            { color: "surfaceBg", position: 0 },
+            { color: "lt2", position: 0 },
             { color: { color: "#38BDF8", alpha: 0.85 }, position: 1 },
           ),
         },
@@ -197,7 +197,7 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
     return deck({
       width: 480,
       height: 270,
-      theme: { colors: { surfaceBg: "#FFFFFF", cardAccent: "#3B82F6" } },
+      theme: { colors: { lt2: "#FFFFFF", accent1: "#3B82F6" } },
     }).append(
       slide({ id: "default-white" }).append(
         shape({
@@ -231,8 +231,8 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
       ),
       slide({
         id: "theme-cream",
-        background: "surfaceBg",
-        theme: { colors: { surfaceBg: "#FEF3C7", cardAccent: "#D97706" } },
+        background: "lt2",
+        themeOverride: { colors: { lt2: "#FEF3C7", accent1: "#D97706" } },
       }).append(
         shape({
           id: "amber-card",
@@ -242,16 +242,16 @@ export const slideBackgroundPositiveScenario: CapabilityScenario = {
             top: 75,
             width: 240,
             height: 120,
-            background: "cardAccent",
+            background: "accent1",
           },
         }),
       ),
       slide({
         id: "linear-gradient-bg",
-        theme: { colors: { surfaceBg: "#0F172A" } },
+        themeOverride: { colors: { lt2: "#0F172A" } },
         background: linearGradient(
           90,
-          { color: "surfaceBg", position: 0 },
+          { color: "lt2", position: 0 },
           { color: { color: "#38BDF8", alpha: 0.85 }, position: 1 },
         ),
       }).append(

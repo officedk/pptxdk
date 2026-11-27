@@ -68,12 +68,11 @@ describe("Group static preview, bounds, and member failure propagation", () => {
     const doc = deck({
       width: 400,
       height: 240,
-      theme: { colors: { groupAccent: "#111111" } },
+      theme: { colors: { accent1: "#0F766E" } },
     }).append(
       slide({ id: "groups-preview", background: "#FFFFFF" }).append(
         group({
           id: "outer",
-          theme: { colors: { groupAccent: "#0F766E" } },
           style: { rotate: 90 },
         }).append(
           shape({
@@ -84,7 +83,7 @@ describe("Group static preview, bounds, and member failure propagation", () => {
               top: 40,
               width: 80,
               height: 40,
-              background: "groupAccent",
+              background: "accent1",
             },
           }),
           box({
@@ -295,18 +294,17 @@ describe("Group static preview, bounds, and member failure propagation", () => {
     );
   });
 
-  it("composites 3-level nested rotated Group with inline-text flipped/opaque Shape, local ThemeScope, exact corners, and missing-glyph propagation", async () => {
+  it("composites 3-level nested rotated Group with inline-text flipped/opaque Shape, inherited container style, exact corners, and missing-glyph propagation", async () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const doc = deck({
       width: 400,
       height: 260,
-      theme: { colors: { cardFill: "#991B1B", ink: "#000000" } },
+      theme: { colors: { accent1: "#1D4ED8", lt1: "#FFFFFF" } },
     }).append(
       slide({ id: "deep-group", background: "#FFFFFF" }).append(
         group({
           id: "lvl1",
-          theme: { colors: { cardFill: "#1D4ED8", ink: "#FFFFFF" } },
-          style: { rotate: 90 },
+          style: { rotate: 90, color: "lt1" },
         }).append(
           shape({
             id: "anchor",
@@ -336,7 +334,7 @@ describe("Group static preview, bounds, and member failure propagation", () => {
                   top: 90,
                   width: 120,
                   height: 60,
-                  background: "cardFill",
+                  background: "accent1",
                   flipH: true,
                   opacity: 0.7,
                 },
@@ -344,7 +342,6 @@ describe("Group static preview, bounds, and member failure propagation", () => {
                 paragraph([span("Deep")]).style({
                   fontFamily: jostFont,
                   fontSize: 16,
-                  color: "ink",
                   align: "center",
                 }),
               ),

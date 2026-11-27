@@ -35,8 +35,9 @@ export const arrowTypes = [
   "oval",
 ] as const;
 
-export const arrowTypeSchema = z.enum(arrowTypes);
-export type ArrowType = z.infer<typeof arrowTypeSchema>;
+export type ArrowType = (typeof arrowTypes)[number];
+
+export const arrowTypeSchema: z.ZodType<ArrowType> = z.enum(arrowTypes);
 
 const percentValAttrSchema = z.object({
   val: ooxmlNonNegativeIntSchema,

@@ -19,6 +19,7 @@ import {
   buildDiagnosticFontUnavailableReasonSchema,
   buildDiagnosticSchema,
   buildOptionsSchema,
+  buildOptionsShape,
   createResolver,
   emitOptionsSchema,
   extensionSchema,
@@ -28,13 +29,16 @@ import {
   previewErrorSchema,
   previewPlaceholderSchema,
   resolveOptionsSchema,
+  resolveOptionsShape,
   targetNameSchema,
   targetSchema,
   targets,
   toBuildDiagnostic,
+  type BuildOptions,
   type BuildResult,
   type CapabilityModule,
   type Resolution,
+  type ResolveOptions,
 } from "@pptxdk/core/build";
 import type { CommonNode } from "@pptxdk/core/document";
 import { emit, validateOptions } from "@pptxdk/emit";
@@ -54,6 +58,11 @@ import { z } from "zod";
 
 import { emitBuildResult, resolveDocumentInput } from "./compose.ts";
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
 /** Complete list of official capability names in canonical order. */
 export const officialCapabilityNames = Object.freeze([
   "box",
@@ -72,14 +81,36 @@ export const officialCapabilityNames = Object.freeze([
   "transition",
 ] as const);
 
-export const officialCapabilityNameSchema = z.enum(officialCapabilityNames);
 /** Official capability module names accepted by `@officedk/pptxdk/build`. */
-export type OfficialCapabilityName = z.infer<
-  typeof officialCapabilityNameSchema
->;
+export type OfficialCapabilityName =
+  | "box"
+  | "chart"
+  | "footer-placeholder"
+  | "group"
+  | "image"
+  | "masters"
+  | "motion"
+  | "notes"
+  | "placeholder"
+  | "shape"
+  | "slide-background"
+  | "table"
+  | "text"
+  | "transition";
+
+const rawOfficialCapabilityNameSchema = z.enum(officialCapabilityNames);
+export const officialCapabilityNameSchema: z.ZodType<OfficialCapabilityName> =
+  rawOfficialCapabilityNameSchema satisfies z.ZodType<
+    AssertExact<
+      OfficialCapabilityName,
+      z.infer<typeof rawOfficialCapabilityNameSchema>
+    > extends true
+      ? OfficialCapabilityName
+      : never
+  >;
 
 const capabilitiesSelectionSchema = z
-  .array(officialCapabilityNameSchema)
+  .array(rawOfficialCapabilityNameSchema)
   .readonly();
 
 const capabilityLoaders: Readonly<
@@ -115,21 +146,45 @@ const capabilityLoaders: Readonly<
     (await import("@pptxdk/capabilities/transition")).transitionCapability,
 };
 
-export const trimmedResolveOptionsSchema = resolveOptionsSchema
-  .unwrap()
-  .extend({
-    capabilities: capabilitiesSelectionSchema,
-  })
-  .readonly();
-export type TrimmedResolveOptions = z.infer<typeof trimmedResolveOptionsSchema>;
+export type TrimmedResolveOptions = ResolveOptions & {
+  readonly capabilities: readonly OfficialCapabilityName[];
+};
 
-export const trimmedBuildOptionsSchema = buildOptionsSchema
-  .unwrap()
-  .extend({
+const rawTrimmedResolveOptionsSchema = z
+  .strictObject({
+    ...resolveOptionsShape,
     capabilities: capabilitiesSelectionSchema,
   })
   .readonly();
-export type TrimmedBuildOptions = z.infer<typeof trimmedBuildOptionsSchema>;
+export const trimmedResolveOptionsSchema: z.ZodType<TrimmedResolveOptions> =
+  rawTrimmedResolveOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      TrimmedResolveOptions,
+      z.infer<typeof rawTrimmedResolveOptionsSchema>
+    > extends true
+      ? TrimmedResolveOptions
+      : never
+  >;
+
+export type TrimmedBuildOptions = BuildOptions & {
+  readonly capabilities: readonly OfficialCapabilityName[];
+};
+
+const rawTrimmedBuildOptionsSchema = z
+  .strictObject({
+    ...buildOptionsShape,
+    capabilities: capabilitiesSelectionSchema,
+  })
+  .readonly();
+export const trimmedBuildOptionsSchema: z.ZodType<TrimmedBuildOptions> =
+  rawTrimmedBuildOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      TrimmedBuildOptions,
+      z.infer<typeof rawTrimmedBuildOptionsSchema>
+    > extends true
+      ? TrimmedBuildOptions
+      : never
+  >;
 
 function validateCapabilityNames(
   names: unknown,

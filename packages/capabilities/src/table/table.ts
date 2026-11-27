@@ -22,6 +22,7 @@ import {
   type ResolvedTable,
   type ResolvedTableCell as ResolvedTableCellObservation,
   type ResolvedTableRow,
+  type SealedCanvasMechanism,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -1098,7 +1099,13 @@ export const tablePlaceholderMechanism = defineCanvasMechanism({
 });
 
 /** Table module independently validates row and column structure, resolving layout/cells once for emit and paint. */
-export const tableCapability = {
+export const tableCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"table">,
+    SealedCanvasMechanism<"table-placeholder">,
+  ]
+> = {
   declaration: "table",
   mechanisms: [tableMechanism, tablePlaceholderMechanism] as const,
   codegen: tableCodegen,

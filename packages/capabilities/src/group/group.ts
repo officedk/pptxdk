@@ -17,6 +17,7 @@ import {
   type ObjectResolution,
   type Rect,
   type ResolvedObject,
+  type SealedCanvasMechanism,
   type ThemeScope,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
@@ -35,7 +36,8 @@ import {
 import { groupCodegen } from "./group-codegen.ts";
 import {
   groupDeclarationPropsKeys,
-  groupStyleSchema,
+  groupStyleKeys,
+  groupTransformShape,
 } from "./group-declaration.ts";
 import { groupImportHandler } from "./group-import.ts";
 import { groupXml } from "./group-xml.ts";
@@ -154,9 +156,7 @@ function bounds(members: readonly ResolvedObject[]): {
   };
 }
 
-const groupAllowedStyleKeys = new Set<string>(
-  Object.keys(groupStyleSchema.unwrap().shape),
-);
+const groupAllowedStyleKeys = new Set<string>(groupStyleKeys);
 
 /** Closed resolved group model produced in resolve() and consumed by emitGroupModel and paintGroupModel. */
 type ResolvedGroupModel = {
@@ -225,7 +225,10 @@ export const groupMechanism = defineCanvasMechanism({
 });
 
 /** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
-export const groupCapability = {
+export const groupCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [SealedCanvasMechanism<"group">]
+> = {
   declaration: "group",
   codegen: groupCodegen,
   mechanisms: [groupMechanism] as const,
@@ -265,11 +268,10 @@ export const groupCapability = {
         ? (rawStyle as Record<string, unknown>)
         : {};
 
-    const groupStyleShape = groupStyleSchema.unwrap().shape;
     const rawRotation = styleRecord["rotate"];
     if (
       rawRotation !== undefined &&
-      !groupStyleShape.rotate.safeParse(rawRotation).success
+      !groupTransformShape.rotate.safeParse(rawRotation).success
     ) {
       throw new CapabilityError(
         "invalid-visual-style",
@@ -280,7 +282,7 @@ export const groupCapability = {
     const rawFlipH = styleRecord["flipH"];
     if (
       rawFlipH !== undefined &&
-      !groupStyleShape.flipH.safeParse(rawFlipH).success
+      !groupTransformShape.flipH.safeParse(rawFlipH).success
     ) {
       throw new CapabilityError(
         "invalid-visual-style",
@@ -290,7 +292,7 @@ export const groupCapability = {
     const rawFlipV = styleRecord["flipV"];
     if (
       rawFlipV !== undefined &&
-      !groupStyleShape.flipV.safeParse(rawFlipV).success
+      !groupTransformShape.flipV.safeParse(rawFlipV).success
     ) {
       throw new CapabilityError(
         "invalid-visual-style",

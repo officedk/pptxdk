@@ -18,6 +18,7 @@ import {
   type PaintOutput,
   type PreviewTransform,
   type ObjectResolution,
+  type SealedCanvasMechanism,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -84,7 +85,7 @@ import {
   shapeCoordinateSchema,
   shapeDeclarationPropsKeys,
   shapeSizeSchema,
-  shapeStyleSchema,
+  shapeStyleKeyList,
 } from "./shape-declaration.ts";
 
 export {
@@ -97,7 +98,7 @@ export {
 
 const allowedParameters: readonly string[] = shapeDeclarationPropsKeys;
 
-export const shapeStyleKeys = Object.keys(shapeStyleSchema.unwrap().shape);
+export const shapeStyleKeys = shapeStyleKeyList;
 
 function record(input: unknown): Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input)
@@ -316,7 +317,16 @@ export const customGeometryShapeMechanism = defineCanvasMechanism({
 });
 
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
-export const shapeCapability = {
+export const shapeCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"preset-shape">,
+    SealedCanvasMechanism<"custom-geometry-shape">,
+    SealedCanvasMechanism<"solid-fill">,
+    SealedCanvasMechanism<"gradient-fill">,
+    SealedCanvasMechanism<"image-fill">,
+  ]
+> = {
   declaration: "shape",
   codegen: shapeCodegen,
   mechanisms: [

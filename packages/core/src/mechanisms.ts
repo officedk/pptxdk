@@ -53,3 +53,11 @@ export type NativeMechanismDefinition<
 > =
   | CanvasMechanismDefinition<Key, Model, ImportSpec, any, any, any, any>
   | ShowMechanismDefinition<Key, Model, ImportSpec, any, any>;
+
+/** Sealed canvas mechanism handle retaining only the literal mechanism key and canvas role. */
+export type SealedCanvasMechanism<Key extends string = string> =
+  CanvasMechanismDefinition<Key, any, unknown, any, any, any, any>;
+
+/** Sealed show mechanism handle retaining only the literal mechanism key and show role. */
+export type SealedShowMechanism<Key extends string = string> =
+  ShowMechanismDefinition<Key, any, unknown, any, any>;

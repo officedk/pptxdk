@@ -2,17 +2,31 @@ import {
   CapabilityError,
   authorIdSchema,
   colorValueSchema,
-  layoutStyleSchema,
+  layoutStyleShape,
   linkTargetSchema,
   nativePlaceholderRefSchema,
-  textStyleSchema,
+  textStyleShape,
+  type AuthorId,
+  type ColorValue,
+  type LayoutStyle,
+  type LinkTarget,
+  type NativePlaceholderRef,
+  type TextStyle,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { z } from "zod";
 
-import { motionPropsSchema } from "../motion/motion-schemas.ts";
-import { morphKeySchema } from "../shared/morph-api.ts";
+import {
+  motionPropsShape,
+  type MotionProps,
+} from "../motion/motion-schemas.ts";
+import { morphKeySchema, type MorphKey } from "../shared/morph-api.ts";
 import { chartDataLabelPositions } from "./chart-labels.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
 
 const maximumLineWidthEmu = 20_116_800;
 const maximumShapeExtentEmu = 2_147_483_647;
@@ -115,7 +129,15 @@ function roundedIntInRangeSchema(options: {
     .transform((value) => Math.round(value));
 }
 
-export const chartKindSchema = z.enum([
+export type ChartKind =
+  | "column"
+  | "bar"
+  | "line"
+  | "area"
+  | "pie"
+  | "doughnut"
+  | "scatter";
+const rawChartKindSchema = z.enum([
   "column",
   "bar",
   "line",
@@ -124,33 +146,78 @@ export const chartKindSchema = z.enum([
   "doughnut",
   "scatter",
 ]);
-export type ChartKind = z.infer<typeof chartKindSchema>;
+export const chartKindSchema: z.ZodType<ChartKind> =
+  rawChartKindSchema satisfies z.ZodType<
+    AssertExact<ChartKind, z.infer<typeof rawChartKindSchema>> extends true
+      ? ChartKind
+      : never
+  >;
 
-const textStyleBaseSchema = textStyleSchema.unwrap();
-export const chartTextStyleSchema = textStyleBaseSchema
-  .omit({ textWrap: true })
-  .readonly();
-export type ChartTextStyle = z.infer<typeof chartTextStyleSchema>;
+export type ChartTextStyle = Omit<TextStyle, "textWrap">;
+const rawChartTextStyleObjectSchema = z
+  .strictObject(textStyleShape)
+  .omit({ textWrap: true });
+const rawChartTextStyleSchema = rawChartTextStyleObjectSchema.readonly();
+export const chartTextStyleKeys: readonly string[] = Object.keys(
+  rawChartTextStyleObjectSchema.shape,
+);
+export const chartTextStyleSchema: z.ZodType<ChartTextStyle> =
+  rawChartTextStyleSchema satisfies z.ZodType<
+    AssertExact<
+      ChartTextStyle,
+      z.infer<typeof rawChartTextStyleSchema>
+    > extends true
+      ? ChartTextStyle
+      : never
+  >;
 
-export const chartStyleSchema = z
-  .strictObject({
-    ...chartTextStyleSchema.unwrap().shape,
-    ...layoutStyleSchema.unwrap().shape,
-  })
-  .readonly();
+export type ChartStyle = LayoutStyle & ChartTextStyle;
+const rawChartStyleObjectSchema = z.strictObject({
+  ...rawChartTextStyleObjectSchema.shape,
+  ...layoutStyleShape,
+});
+const rawChartStyleSchema = rawChartStyleObjectSchema.readonly();
+export const chartStyleKeys: readonly string[] = Object.keys(
+  rawChartStyleObjectSchema.shape,
+);
+export const chartStyleSchema: z.ZodType<ChartStyle> =
+  rawChartStyleSchema satisfies z.ZodType<
+    AssertExact<ChartStyle, z.infer<typeof rawChartStyleSchema>> extends true
+      ? ChartStyle
+      : never
+  >;
 
-export const chartTitleSchema = z.union([
+export type ChartTitle =
+  | string
+  | {
+      readonly text: string;
+      readonly style?: ChartTextStyle | undefined;
+    };
+const rawChartTitleSchema = z.union([
   nonEmptyXmlStringSchema("invalid-parameter", "title"),
   z
     .strictObject({
       text: nonEmptyXmlStringSchema("invalid-parameter", "title.text"),
-      style: chartTextStyleSchema.optional(),
+      style: rawChartTextStyleSchema.optional(),
     })
     .readonly(),
 ]);
-export type ChartTitle = z.infer<typeof chartTitleSchema>;
+export const chartTitleSchema: z.ZodType<ChartTitle> =
+  rawChartTitleSchema satisfies z.ZodType<
+    AssertExact<ChartTitle, z.infer<typeof rawChartTitleSchema>> extends true
+      ? ChartTitle
+      : never
+  >;
 
-export const chartLineDashSchema = z.enum([
+export type ChartLineDash =
+  | "solid"
+  | "dash"
+  | "dot"
+  | "dashDot"
+  | "longDash"
+  | "longDashDot"
+  | "longDashDotDot";
+const rawChartLineDashSchema = z.enum([
   "solid",
   "dash",
   "dot",
@@ -159,9 +226,22 @@ export const chartLineDashSchema = z.enum([
   "longDashDot",
   "longDashDotDot",
 ]);
-export type ChartLineDash = z.infer<typeof chartLineDashSchema>;
+export const chartLineDashSchema: z.ZodType<ChartLineDash> =
+  rawChartLineDashSchema satisfies z.ZodType<
+    AssertExact<
+      ChartLineDash,
+      z.infer<typeof rawChartLineDashSchema>
+    > extends true
+      ? ChartLineDash
+      : never
+  >;
 
-export const chartLineSchema = z
+export type ChartLine = {
+  readonly color?: ColorValue | undefined;
+  readonly width?: number | undefined;
+  readonly dash?: ChartLineDash | undefined;
+};
+const rawChartLineSchema = z
   .strictObject({
     color: colorValueSchema.optional(),
     width: z
@@ -172,12 +252,29 @@ export const chartLineSchema = z
         message: "width converted value exceeds writable line width range",
       })
       .optional(),
-    dash: chartLineDashSchema.optional(),
+    dash: rawChartLineDashSchema.optional(),
   })
   .readonly();
-export type ChartLine = z.infer<typeof chartLineSchema>;
+export const chartLineSchema: z.ZodType<ChartLine> =
+  rawChartLineSchema satisfies z.ZodType<
+    AssertExact<ChartLine, z.infer<typeof rawChartLineSchema>> extends true
+      ? ChartLine
+      : never
+  >;
 
-export const chartMarkerSymbolSchema = z.enum([
+export type ChartMarkerSymbol =
+  | "auto"
+  | "circle"
+  | "dash"
+  | "diamond"
+  | "dot"
+  | "none"
+  | "plus"
+  | "square"
+  | "star"
+  | "triangle"
+  | "x";
+const rawChartMarkerSymbolSchema = z.enum([
   "auto",
   "circle",
   "dash",
@@ -190,32 +287,65 @@ export const chartMarkerSymbolSchema = z.enum([
   "triangle",
   "x",
 ]);
-export type ChartMarkerSymbol = z.infer<typeof chartMarkerSymbolSchema>;
+export const chartMarkerSymbolSchema: z.ZodType<ChartMarkerSymbol> =
+  rawChartMarkerSymbolSchema satisfies z.ZodType<
+    AssertExact<
+      ChartMarkerSymbol,
+      z.infer<typeof rawChartMarkerSymbolSchema>
+    > extends true
+      ? ChartMarkerSymbol
+      : never
+  >;
 
-export const chartMarkerSchema = z
+export type ChartMarker = {
+  readonly symbol?: ChartMarkerSymbol | undefined;
+  readonly size?: number | undefined;
+  readonly fill?: ColorValue | undefined;
+  readonly line?: ChartLine | undefined;
+};
+const rawChartMarkerSchema = z
   .strictObject({
-    symbol: chartMarkerSymbolSchema.optional(),
+    symbol: rawChartMarkerSymbolSchema.optional(),
     size: z.number().int().min(2).max(72).optional(),
     fill: colorValueSchema.optional(),
-    line: chartLineSchema.optional(),
+    line: rawChartLineSchema.optional(),
   })
   .readonly();
-export type ChartMarker = z.infer<typeof chartMarkerSchema>;
+export const chartMarkerSchema: z.ZodType<ChartMarker> =
+  rawChartMarkerSchema satisfies z.ZodType<
+    AssertExact<ChartMarker, z.infer<typeof rawChartMarkerSchema>> extends true
+      ? ChartMarker
+      : never
+  >;
 
-export const chartMarkerOptionSchema = z.union([
-  z.boolean(),
-  chartMarkerSchema,
-]);
+const rawChartMarkerOptionSchema = z.union([z.boolean(), rawChartMarkerSchema]);
+export const chartMarkerOptionSchema: z.ZodType<boolean | ChartMarker> =
+  rawChartMarkerOptionSchema;
 
-export const chartPointValueSchema = z.number().finite().nullable();
-export const chartSeriesValuesSchema = z
-  .array(chartPointValueSchema)
-  .readonly();
-export const chartCategoriesSchema = z
+export const chartPointValueSchema: z.ZodType<number | null> = z
+  .number()
+  .finite()
+  .nullable();
+const rawChartSeriesValuesSchema = z.array(chartPointValueSchema).readonly();
+export const chartSeriesValuesSchema: z.ZodType<readonly (number | null)[]> =
+  rawChartSeriesValuesSchema;
+const rawChartCategoriesSchema = z
   .array(xmlStringSchema("category"))
   .readonly();
+export const chartCategoriesSchema: z.ZodType<readonly string[]> =
+  rawChartCategoriesSchema;
 
-export const chartDataLabelPositionSchema = z.enum([
+export type ChartDataLabelPosition =
+  | "center"
+  | "insideEnd"
+  | "insideBase"
+  | "outsideEnd"
+  | "bestFit"
+  | "left"
+  | "right"
+  | "bottom"
+  | "top";
+const rawChartDataLabelPositionSchema = z.enum([
   "center",
   "insideEnd",
   "insideBase",
@@ -226,9 +356,15 @@ export const chartDataLabelPositionSchema = z.enum([
   "bottom",
   "top",
 ]);
-export type ChartDataLabelPosition = z.infer<
-  typeof chartDataLabelPositionSchema
->;
+export const chartDataLabelPositionSchema: z.ZodType<ChartDataLabelPosition> =
+  rawChartDataLabelPositionSchema satisfies z.ZodType<
+    AssertExact<
+      ChartDataLabelPosition,
+      z.infer<typeof rawChartDataLabelPositionSchema>
+    > extends true
+      ? ChartDataLabelPosition
+      : never
+  >;
 
 const separatorStringSchema = z
   .string()
@@ -254,61 +390,156 @@ const dataLabelCommonFields = {
     "invalid-data-labels",
     "numberFormat",
   ).optional(),
-  leaderLines: z.union([z.boolean(), chartLineSchema]).optional(),
-  style: chartTextStyleSchema.optional(),
+  leaderLines: z.union([z.boolean(), rawChartLineSchema]).optional(),
+  style: rawChartTextStyleSchema.optional(),
 };
 
 const chartDataLabelsObjectSchema = z.strictObject({
   ...dataLabelCommonFields,
-  position: chartDataLabelPositionSchema.optional(),
+  position: rawChartDataLabelPositionSchema.optional(),
 });
 
-export const chartDataLabelsBaseSchema = chartDataLabelsObjectSchema.readonly();
+const rawChartDataLabelsBaseSchema = chartDataLabelsObjectSchema.readonly();
+export const chartDataLabelsBaseSchema: z.ZodType<ChartDataLabelSettings> =
+  rawChartDataLabelsBaseSchema;
 
 export type ChartDataLabels<
   Position extends ChartDataLabelPosition = ChartDataLabelPosition,
-> = Omit<z.infer<typeof chartDataLabelsBaseSchema>, "position" | "xValue"> & {
+> = {
+  readonly value?: boolean | undefined;
+  readonly percent?: boolean | undefined;
+  readonly category?: boolean | undefined;
+  readonly seriesName?: boolean | undefined;
+  readonly separator?: string | undefined;
+  readonly numberFormat?: string | undefined;
+  readonly leaderLines?: boolean | ChartLine | undefined;
+  readonly style?: ChartTextStyle | undefined;
   readonly position?: Position | undefined;
 };
 
-export const chartDataLabelOverrideSchema = chartDataLabelsObjectSchema
+export type ChartDataLabelOverride = {
+  readonly value?: boolean | undefined;
+  readonly percent?: boolean | undefined;
+  readonly category?: boolean | undefined;
+  readonly seriesName?: boolean | undefined;
+  readonly separator?: string | undefined;
+  readonly numberFormat?: string | undefined;
+  readonly position?: ChartDataLabelPosition | undefined;
+};
+const rawChartDataLabelOverrideSchema = chartDataLabelsObjectSchema
   .omit({
     style: true,
     leaderLines: true,
     xValue: true,
   })
   .readonly();
-export type ChartDataLabelOverride = z.infer<
-  typeof chartDataLabelOverrideSchema
->;
+export const chartDataLabelOverrideSchema: z.ZodType<ChartDataLabelOverride> =
+  rawChartDataLabelOverrideSchema satisfies z.ZodType<
+    AssertExact<
+      ChartDataLabelOverride,
+      z.infer<typeof rawChartDataLabelOverrideSchema>
+    > extends true
+      ? ChartDataLabelOverride
+      : never
+  >;
 
-export const chartSeriesDataLabelOverrideSchema = chartDataLabelsObjectSchema
+export type ChartSeriesDataLabelOverride = {
+  readonly value?: boolean | undefined;
+  readonly percent?: boolean | undefined;
+  readonly category?: boolean | undefined;
+  readonly seriesName?: boolean | undefined;
+  readonly separator?: string | undefined;
+  readonly numberFormat?: string | undefined;
+  readonly leaderLines?: boolean | ChartLine | undefined;
+  readonly position?: ChartDataLabelPosition | undefined;
+};
+const rawChartSeriesDataLabelOverrideSchema = chartDataLabelsObjectSchema
   .omit({
     style: true,
     xValue: true,
   })
   .readonly();
-export type ChartSeriesDataLabelOverride = z.infer<
-  typeof chartSeriesDataLabelOverrideSchema
->;
+export const chartSeriesDataLabelOverrideSchema: z.ZodType<ChartSeriesDataLabelOverride> =
+  rawChartSeriesDataLabelOverrideSchema satisfies z.ZodType<
+    AssertExact<
+      ChartSeriesDataLabelOverride,
+      z.infer<typeof rawChartSeriesDataLabelOverrideSchema>
+    > extends true
+      ? ChartSeriesDataLabelOverride
+      : never
+  >;
 
-export const chartDataLabelSettingsSchema =
-  chartDataLabelsObjectSchema.readonly();
-export type ChartDataLabelSettings = z.infer<
-  typeof chartDataLabelSettingsSchema
->;
+export type ChartDataLabelSettings = {
+  readonly value?: boolean | undefined;
+  readonly percent?: boolean | undefined;
+  readonly category?: boolean | undefined;
+  readonly seriesName?: boolean | undefined;
+  readonly xValue?: boolean | undefined;
+  readonly separator?: string | undefined;
+  readonly numberFormat?: string | undefined;
+  readonly leaderLines?: boolean | ChartLine | undefined;
+  readonly style?: ChartTextStyle | undefined;
+  readonly position?: ChartDataLabelPosition | undefined;
+};
+const rawChartDataLabelSettingsSchema = chartDataLabelsObjectSchema.readonly();
+export const chartDataLabelSettingsSchema: z.ZodType<ChartDataLabelSettings> =
+  rawChartDataLabelSettingsSchema satisfies z.ZodType<
+    AssertExact<
+      ChartDataLabelSettings,
+      z.infer<typeof rawChartDataLabelSettingsSchema>
+    > extends true
+      ? ChartDataLabelSettings
+      : never
+  >;
 
 const scatterDataLabelsObjectSchema = z.strictObject({
   ...dataLabelCommonFields,
   position: z.enum(["left", "right", "bottom", "top", "center"]).optional(),
 });
 
-export const scatterDataLabelsBaseSchema = scatterDataLabelsObjectSchema
+export type ScatterDataLabels = {
+  readonly value?: boolean | undefined;
+  readonly seriesName?: boolean | undefined;
+  readonly xValue?: boolean | undefined;
+  readonly separator?: string | undefined;
+  readonly numberFormat?: string | undefined;
+  readonly style?: ChartTextStyle | undefined;
+  readonly position?:
+    | "left"
+    | "right"
+    | "bottom"
+    | "top"
+    | "center"
+    | undefined;
+};
+const rawScatterDataLabelsBaseSchema = scatterDataLabelsObjectSchema
   .omit({ percent: true, category: true, leaderLines: true })
   .readonly();
-export type ScatterDataLabels = z.infer<typeof scatterDataLabelsBaseSchema>;
+export const scatterDataLabelsBaseSchema: z.ZodType<ScatterDataLabels> =
+  rawScatterDataLabelsBaseSchema satisfies z.ZodType<
+    AssertExact<
+      ScatterDataLabels,
+      z.infer<typeof rawScatterDataLabelsBaseSchema>
+    > extends true
+      ? ScatterDataLabels
+      : never
+  >;
 
-export const scatterDataLabelOverrideSchema = scatterDataLabelsObjectSchema
+export type ScatterDataLabelOverride = {
+  readonly value?: boolean | undefined;
+  readonly seriesName?: boolean | undefined;
+  readonly xValue?: boolean | undefined;
+  readonly separator?: string | undefined;
+  readonly numberFormat?: string | undefined;
+  readonly position?:
+    | "left"
+    | "right"
+    | "bottom"
+    | "top"
+    | "center"
+    | undefined;
+};
+const rawScatterDataLabelOverrideSchema = scatterDataLabelsObjectSchema
   .omit({
     style: true,
     percent: true,
@@ -316,14 +547,20 @@ export const scatterDataLabelOverrideSchema = scatterDataLabelsObjectSchema
     leaderLines: true,
   })
   .readonly();
-export type ScatterDataLabelOverride = z.infer<
-  typeof scatterDataLabelOverrideSchema
->;
+export const scatterDataLabelOverrideSchema: z.ZodType<ScatterDataLabelOverride> =
+  rawScatterDataLabelOverrideSchema satisfies z.ZodType<
+    AssertExact<
+      ScatterDataLabelOverride,
+      z.infer<typeof rawScatterDataLabelOverrideSchema>
+    > extends true
+      ? ScatterDataLabelOverride
+      : never
+  >;
 
 const ChartPointRawSchema = z
   .strictObject({
     color: colorValueSchema.optional(),
-    line: chartLineSchema.optional(),
+    line: rawChartLineSchema.optional(),
     marker: z.unknown().optional(),
     explosion: roundedIntInRangeSchema({
       minimum: 0,
@@ -334,35 +571,65 @@ const ChartPointRawSchema = z
     }).optional(),
     labelColor: colorValueSchema.optional(),
     dataLabels: z
-      .union([z.literal(false), chartDataLabelOverrideSchema])
+      .union([z.literal(false), rawChartDataLabelOverrideSchema])
       .optional(),
   })
   .readonly();
 
-export type ChartPoint = Omit<
-  z.infer<typeof ChartPointRawSchema>,
-  "dataLabels" | "marker"
-> & {
+export type ChartPoint = {
+  readonly color?: ColorValue | undefined;
+  readonly line?: ChartLine | undefined;
+  readonly explosion?: number | undefined;
+  readonly labelColor?: ColorValue | undefined;
   readonly marker?: boolean | ChartMarker | undefined;
   readonly dataLabels?: false | ChartDataLabelOverride | undefined;
 };
-export const chartPointSchema =
-  ChartPointRawSchema as unknown as z.ZodType<ChartPoint>;
+export const chartPointSchema: z.ZodType<ChartPoint> =
+  ChartPointRawSchema as unknown as z.ZodType<
+    AssertExact<
+      Omit<ChartPoint, "marker">,
+      Omit<z.infer<typeof ChartPointRawSchema>, "marker">
+    > extends true
+      ? ChartPoint
+      : never
+  >;
 
-export const scatterChartPointSchema = z
+export type ScatterChartPoint = {
+  readonly color?: ColorValue | undefined;
+  readonly line?: ChartLine | undefined;
+  readonly marker?: boolean | ChartMarker | undefined;
+  readonly labelColor?: ColorValue | undefined;
+  readonly dataLabels?: false | ScatterDataLabelOverride | undefined;
+};
+const rawScatterChartPointSchema = z
   .strictObject({
     color: colorValueSchema.optional(),
-    line: chartLineSchema.optional(),
-    marker: chartMarkerOptionSchema.optional(),
+    line: rawChartLineSchema.optional(),
+    marker: rawChartMarkerOptionSchema.optional(),
     labelColor: colorValueSchema.optional(),
     dataLabels: z
-      .union([z.literal(false), scatterDataLabelOverrideSchema])
+      .union([z.literal(false), rawScatterDataLabelOverrideSchema])
       .optional(),
   })
   .readonly();
-export type ScatterChartPoint = z.infer<typeof scatterChartPointSchema>;
+export const scatterChartPointSchema: z.ZodType<ScatterChartPoint> =
+  rawScatterChartPointSchema satisfies z.ZodType<
+    AssertExact<
+      ScatterChartPoint,
+      z.infer<typeof rawScatterChartPointSchema>
+    > extends true
+      ? ScatterChartPoint
+      : never
+  >;
 
-export const chartTrendlineTypeSchema = z.enum([
+export type ChartTrendlineType =
+  | "linear"
+  | "exponential"
+  | "logarithmic"
+  | "polynomial"
+  | "power"
+  | "movingAverage";
+const rawChartTrendlineTypeSchema = z.enum([
   "linear",
   "exponential",
   "logarithmic",
@@ -370,10 +637,18 @@ export const chartTrendlineTypeSchema = z.enum([
   "power",
   "movingAverage",
 ]);
-export type ChartTrendlineType = z.infer<typeof chartTrendlineTypeSchema>;
+export const chartTrendlineTypeSchema: z.ZodType<ChartTrendlineType> =
+  rawChartTrendlineTypeSchema satisfies z.ZodType<
+    AssertExact<
+      ChartTrendlineType,
+      z.infer<typeof rawChartTrendlineTypeSchema>
+    > extends true
+      ? ChartTrendlineType
+      : never
+  >;
 
 const trendlineBaseFields = {
-  line: chartLineSchema.optional(),
+  line: rawChartLineSchema.optional(),
   forward: z.number().finite().positive().optional(),
   backward: z.number().finite().positive().optional(),
 };
@@ -383,7 +658,52 @@ const trendlineDisplayFields = {
   displayRSquared: z.boolean().optional(),
 };
 
-export const chartTrendlineSchema = z.discriminatedUnion("type", [
+export type ChartTrendline =
+  | {
+      readonly line?: ChartLine | undefined;
+      readonly forward?: number | undefined;
+      readonly backward?: number | undefined;
+      readonly displayEquation?: boolean | undefined;
+      readonly displayRSquared?: boolean | undefined;
+      readonly type: "linear" | "exponential";
+      readonly intercept?: number | undefined;
+      readonly order?: undefined;
+      readonly period?: undefined;
+    }
+  | {
+      readonly line?: ChartLine | undefined;
+      readonly forward?: number | undefined;
+      readonly backward?: number | undefined;
+      readonly displayEquation?: boolean | undefined;
+      readonly displayRSquared?: boolean | undefined;
+      readonly type: "logarithmic" | "power";
+      readonly intercept?: undefined;
+      readonly order?: undefined;
+      readonly period?: undefined;
+    }
+  | {
+      readonly line?: ChartLine | undefined;
+      readonly forward?: number | undefined;
+      readonly backward?: number | undefined;
+      readonly displayEquation?: boolean | undefined;
+      readonly displayRSquared?: boolean | undefined;
+      readonly type: "polynomial";
+      readonly order: number;
+      readonly intercept?: number | undefined;
+      readonly period?: undefined;
+    }
+  | {
+      readonly line?: ChartLine | undefined;
+      readonly forward?: number | undefined;
+      readonly backward?: number | undefined;
+      readonly type: "movingAverage";
+      readonly period: number;
+      readonly intercept?: undefined;
+      readonly order?: undefined;
+      readonly displayEquation?: undefined;
+      readonly displayRSquared?: undefined;
+    };
+const rawChartTrendlineSchema = z.discriminatedUnion("type", [
   z
     .strictObject({
       ...trendlineBaseFields,
@@ -446,29 +766,83 @@ export const chartTrendlineSchema = z.discriminatedUnion("type", [
     })
     .readonly(),
 ]);
-export type ChartTrendline = z.infer<typeof chartTrendlineSchema>;
+export const chartTrendlineSchema: z.ZodType<ChartTrendline> =
+  rawChartTrendlineSchema satisfies z.ZodType<
+    AssertExact<
+      ChartTrendline,
+      z.infer<typeof rawChartTrendlineSchema>
+    > extends true
+      ? ChartTrendline
+      : never
+  >;
 
-export const chartErrorBarValuesSchema = z
+export type ChartErrorBarValues = readonly (number | null)[];
+const rawChartErrorBarValuesSchema = z
   .array(z.number().finite().nonnegative().nullable())
   .readonly();
-export type ChartErrorBarValues = z.infer<typeof chartErrorBarValuesSchema>;
+export const chartErrorBarValuesSchema: z.ZodType<ChartErrorBarValues> =
+  rawChartErrorBarValuesSchema satisfies z.ZodType<
+    AssertExact<
+      ChartErrorBarValues,
+      z.infer<typeof rawChartErrorBarValuesSchema>
+    > extends true
+      ? ChartErrorBarValues
+      : never
+  >;
 
-export const chartErrorBarIncludeSchema = z.enum(["both", "plus", "minus"]);
-export type ChartErrorBarInclude = z.infer<typeof chartErrorBarIncludeSchema>;
+export type ChartErrorBarInclude = "both" | "plus" | "minus";
+const rawChartErrorBarIncludeSchema = z.enum(["both", "plus", "minus"]);
+export const chartErrorBarIncludeSchema: z.ZodType<ChartErrorBarInclude> =
+  rawChartErrorBarIncludeSchema satisfies z.ZodType<
+    AssertExact<
+      ChartErrorBarInclude,
+      z.infer<typeof rawChartErrorBarIncludeSchema>
+    > extends true
+      ? ChartErrorBarInclude
+      : never
+  >;
 
 const errorBarStyleFields = {
   endCap: z.boolean().optional(),
-  line: chartLineSchema.optional(),
+  line: rawChartLineSchema.optional(),
 };
 
-export const chartCustomErrorBarsSchema = z.union([
+export type ChartCustomErrorBars =
+  | {
+      readonly endCap?: boolean | undefined;
+      readonly line?: ChartLine | undefined;
+      readonly type: "custom";
+      readonly include?: "both" | undefined;
+      readonly plus: ChartErrorBarValues;
+      readonly minus: ChartErrorBarValues;
+      readonly value?: undefined;
+    }
+  | {
+      readonly endCap?: boolean | undefined;
+      readonly line?: ChartLine | undefined;
+      readonly type: "custom";
+      readonly include: "plus";
+      readonly plus: ChartErrorBarValues;
+      readonly minus?: undefined;
+      readonly value?: undefined;
+    }
+  | {
+      readonly endCap?: boolean | undefined;
+      readonly line?: ChartLine | undefined;
+      readonly type: "custom";
+      readonly include: "minus";
+      readonly minus: ChartErrorBarValues;
+      readonly plus?: undefined;
+      readonly value?: undefined;
+    };
+const rawChartCustomErrorBarsSchema = z.union([
   z
     .strictObject({
       ...errorBarStyleFields,
       type: z.literal("custom"),
       include: z.literal("both").optional(),
-      plus: chartErrorBarValuesSchema,
-      minus: chartErrorBarValuesSchema,
+      plus: rawChartErrorBarValuesSchema,
+      minus: rawChartErrorBarValuesSchema,
       value: z.never().optional(),
     })
     .readonly(),
@@ -477,7 +851,7 @@ export const chartCustomErrorBarsSchema = z.union([
       ...errorBarStyleFields,
       type: z.literal("custom"),
       include: z.literal("plus"),
-      plus: chartErrorBarValuesSchema,
+      plus: rawChartErrorBarValuesSchema,
       minus: z.never().optional(),
       value: z.never().optional(),
     })
@@ -487,19 +861,47 @@ export const chartCustomErrorBarsSchema = z.union([
       ...errorBarStyleFields,
       type: z.literal("custom"),
       include: z.literal("minus"),
-      minus: chartErrorBarValuesSchema,
+      minus: rawChartErrorBarValuesSchema,
       plus: z.never().optional(),
       value: z.never().optional(),
     })
     .readonly(),
 ]);
-export type ChartCustomErrorBars = z.infer<typeof chartCustomErrorBarsSchema>;
+export const chartCustomErrorBarsSchema: z.ZodType<ChartCustomErrorBars> =
+  rawChartCustomErrorBarsSchema satisfies z.ZodType<
+    AssertExact<
+      ChartCustomErrorBars,
+      z.infer<typeof rawChartCustomErrorBarsSchema>
+    > extends true
+      ? ChartCustomErrorBars
+      : never
+  >;
 
-export const chartErrorBarsSchema = z.union([
+export type ChartErrorBars =
+  | {
+      readonly endCap?: boolean | undefined;
+      readonly line?: ChartLine | undefined;
+      readonly include?: ChartErrorBarInclude | undefined;
+      readonly type: "fixed" | "percentage" | "standardDeviation";
+      readonly value: number;
+      readonly plus?: undefined;
+      readonly minus?: undefined;
+    }
+  | {
+      readonly endCap?: boolean | undefined;
+      readonly line?: ChartLine | undefined;
+      readonly include?: ChartErrorBarInclude | undefined;
+      readonly type: "standardError";
+      readonly value?: undefined;
+      readonly plus?: undefined;
+      readonly minus?: undefined;
+    }
+  | ChartCustomErrorBars;
+const rawChartErrorBarsSchema = z.union([
   z
     .strictObject({
       ...errorBarStyleFields,
-      include: chartErrorBarIncludeSchema.optional(),
+      include: rawChartErrorBarIncludeSchema.optional(),
       type: z.enum(["fixed", "percentage", "standardDeviation"]),
       value: z.number().finite().nonnegative(),
       plus: z.never().optional(),
@@ -509,21 +911,33 @@ export const chartErrorBarsSchema = z.union([
   z
     .strictObject({
       ...errorBarStyleFields,
-      include: chartErrorBarIncludeSchema.optional(),
+      include: rawChartErrorBarIncludeSchema.optional(),
       type: z.literal("standardError"),
       value: z.never().optional(),
       plus: z.never().optional(),
       minus: z.never().optional(),
     })
     .readonly(),
-  chartCustomErrorBarsSchema,
+  rawChartCustomErrorBarsSchema,
 ]);
-export type ChartErrorBars = z.infer<typeof chartErrorBarsSchema>;
+export const chartErrorBarsSchema: z.ZodType<ChartErrorBars> =
+  rawChartErrorBarsSchema satisfies z.ZodType<
+    AssertExact<
+      ChartErrorBars,
+      z.infer<typeof rawChartErrorBarsSchema>
+    > extends true
+      ? ChartErrorBars
+      : never
+  >;
 
-export const scatterErrorBarsSchema = z
+export type ScatterErrorBars = {
+  readonly x?: ChartErrorBars | undefined;
+  readonly y?: ChartErrorBars | undefined;
+};
+const rawScatterErrorBarsSchema = z
   .strictObject({
-    x: chartErrorBarsSchema.optional(),
-    y: chartErrorBarsSchema.optional(),
+    x: rawChartErrorBarsSchema.optional(),
+    y: rawChartErrorBarsSchema.optional(),
   })
   .readonly()
   .superRefine((value, ctx) => {
@@ -535,7 +949,15 @@ export const scatterErrorBarsSchema = z
       );
     }
   });
-export type ScatterErrorBars = z.infer<typeof scatterErrorBarsSchema>;
+export const scatterErrorBarsSchema: z.ZodType<ScatterErrorBars> =
+  rawScatterErrorBarsSchema satisfies z.ZodType<
+    AssertExact<
+      ScatterErrorBars,
+      z.infer<typeof rawScatterErrorBarsSchema>
+    > extends true
+      ? ScatterErrorBars
+      : never
+  >;
 
 const chartSeriesFormatFields = {
   name: nonEmptyStringSchema(
@@ -543,7 +965,7 @@ const chartSeriesFormatFields = {
     "Series.name must be a non-empty string",
   ),
   color: colorValueSchema.optional(),
-  line: chartLineSchema.optional(),
+  line: rawChartLineSchema.optional(),
   explosion: roundedIntInRangeSchema({
     minimum: 0,
     maximum: maximumExplosionForCurrentValidationProfile,
@@ -556,51 +978,82 @@ const chartSeriesFormatFields = {
     .optional(),
   marker: z.unknown().optional(),
   points: z.record(z.string(), chartPointSchema).readonly().optional(),
-  trendlines: z.array(chartTrendlineSchema).readonly().optional(),
+  trendlines: z.array(rawChartTrendlineSchema).readonly().optional(),
 };
 
 const ChartSeriesRawSchema = z
   .strictObject({
     ...chartSeriesFormatFields,
-    values: chartSeriesValuesSchema,
+    values: rawChartSeriesValuesSchema,
     smooth: z.boolean().optional(),
-    errorBars: chartErrorBarsSchema.optional(),
+    errorBars: rawChartErrorBarsSchema.optional(),
   })
   .readonly();
 
-export type ChartSeries = Omit<
-  z.infer<typeof ChartSeriesRawSchema>,
-  "points" | "dataLabels" | "marker"
-> & {
-  readonly marker?: boolean | ChartMarker | undefined;
+export type ChartSeries = {
+  readonly name: string;
+  readonly color?: ColorValue | undefined;
+  readonly line?: ChartLine | undefined;
+  readonly explosion?: number | undefined;
   readonly dataLabels?: false | ChartSeriesDataLabelOverride | undefined;
+  readonly marker?: boolean | ChartMarker | undefined;
   readonly points?: Readonly<Record<number, ChartPoint>> | undefined;
+  readonly trendlines?: readonly ChartTrendline[] | undefined;
+  readonly values: readonly (number | null)[];
+  readonly smooth?: boolean | undefined;
+  readonly errorBars?: ChartErrorBars | undefined;
 };
 
-export const chartSeriesSchema =
-  ChartSeriesRawSchema as unknown as z.ZodType<ChartSeries>;
+export const chartSeriesSchema: z.ZodType<ChartSeries> =
+  ChartSeriesRawSchema as unknown as z.ZodType<
+    AssertExact<
+      Omit<ChartSeries, "points" | "dataLabels" | "marker">,
+      Omit<
+        z.infer<typeof ChartSeriesRawSchema>,
+        "points" | "dataLabels" | "marker"
+      >
+    > extends true
+      ? ChartSeries
+      : never
+  >;
 
 const IndependentCategorySeriesRawSchema = z
   .strictObject({
     ...chartSeriesFormatFields,
-    categories: chartCategoriesSchema,
-    values: chartSeriesValuesSchema,
+    categories: rawChartCategoriesSchema,
+    values: rawChartSeriesValuesSchema,
     smooth: z.boolean().optional(),
-    errorBars: chartErrorBarsSchema.optional(),
+    errorBars: rawChartErrorBarsSchema.optional(),
   })
   .readonly();
 
-export type IndependentCategorySeries = Omit<
-  z.infer<typeof IndependentCategorySeriesRawSchema>,
-  "points" | "dataLabels" | "marker"
-> & {
-  readonly marker?: boolean | ChartMarker | undefined;
+export type IndependentCategorySeries = {
+  readonly name: string;
+  readonly color?: ColorValue | undefined;
+  readonly line?: ChartLine | undefined;
+  readonly explosion?: number | undefined;
   readonly dataLabels?: false | ChartSeriesDataLabelOverride | undefined;
+  readonly marker?: boolean | ChartMarker | undefined;
   readonly points?: Readonly<Record<number, ChartPoint>> | undefined;
+  readonly trendlines?: readonly ChartTrendline[] | undefined;
+  readonly categories: readonly string[];
+  readonly values: readonly (number | null)[];
+  readonly smooth?: boolean | undefined;
+  readonly errorBars?: ChartErrorBars | undefined;
 };
 
-export const independentCategorySeriesSchema =
-  IndependentCategorySeriesRawSchema as unknown as z.ZodType<IndependentCategorySeries>;
+export const independentCategorySeriesSchema: z.ZodType<IndependentCategorySeries> =
+  IndependentCategorySeriesRawSchema as unknown as z.ZodType<
+    AssertExact<
+      Omit<IndependentCategorySeries, "points" | "dataLabels" | "marker">,
+      Omit<
+        z.infer<typeof IndependentCategorySeriesRawSchema>,
+        "points" | "dataLabels" | "marker"
+      >
+    > extends true
+      ? IndependentCategorySeries
+      : never
+  >;
 
 const ScatterChartSeriesRawSchema = z
   .strictObject({
@@ -608,99 +1061,198 @@ const ScatterChartSeriesRawSchema = z
       "invalid-data",
       "Series.name must be a non-empty string",
     ),
-    x: chartSeriesValuesSchema,
-    y: chartSeriesValuesSchema,
+    x: rawChartSeriesValuesSchema,
+    y: rawChartSeriesValuesSchema,
     color: colorValueSchema.optional(),
-    line: chartLineSchema.optional(),
+    line: rawChartLineSchema.optional(),
     dataLabels: z
-      .union([z.literal(false), scatterDataLabelOverrideSchema])
+      .union([z.literal(false), rawScatterDataLabelOverrideSchema])
       .optional(),
-    marker: chartMarkerOptionSchema.optional(),
-    points: z.record(z.string(), scatterChartPointSchema).readonly().optional(),
-    trendlines: z.array(chartTrendlineSchema).readonly().optional(),
-    errorBars: scatterErrorBarsSchema.optional(),
+    marker: rawChartMarkerOptionSchema.optional(),
+    points: z
+      .record(z.string(), rawScatterChartPointSchema)
+      .readonly()
+      .optional(),
+    trendlines: z.array(rawChartTrendlineSchema).readonly().optional(),
+    errorBars: rawScatterErrorBarsSchema.optional(),
   })
   .readonly();
 
-export type ScatterChartSeries = Omit<
-  z.infer<typeof ScatterChartSeriesRawSchema>,
-  "points"
-> & {
+export type ScatterChartSeries = {
+  readonly name: string;
+  readonly x: readonly (number | null)[];
+  readonly y: readonly (number | null)[];
+  readonly color?: ColorValue | undefined;
+  readonly line?: ChartLine | undefined;
+  readonly dataLabels?: false | ScatterDataLabelOverride | undefined;
+  readonly marker?: boolean | ChartMarker | undefined;
   readonly points?: Readonly<Record<number, ScatterChartPoint>> | undefined;
+  readonly trendlines?: readonly ChartTrendline[] | undefined;
+  readonly errorBars?: ScatterErrorBars | undefined;
 };
 
-export const scatterChartSeriesSchema =
-  ScatterChartSeriesRawSchema as unknown as z.ZodType<ScatterChartSeries>;
+export const scatterChartSeriesSchema: z.ZodType<ScatterChartSeries> =
+  ScatterChartSeriesRawSchema as unknown as z.ZodType<
+    AssertExact<
+      Omit<ScatterChartSeries, "points">,
+      Omit<z.infer<typeof ScatterChartSeriesRawSchema>, "points">
+    > extends true
+      ? ScatterChartSeries
+      : never
+  >;
 
-export const sharedCategoryDataSchema = z
+export type SharedCategoryData = {
+  readonly kind: "shared-categories";
+  readonly categories: readonly string[];
+};
+const rawSharedCategoryDataSchema = z
   .strictObject({
     kind: z.literal("shared-categories"),
-    categories: chartCategoriesSchema,
+    categories: rawChartCategoriesSchema,
   })
   .readonly();
-export type SharedCategoryData = z.infer<typeof sharedCategoryDataSchema>;
+export const sharedCategoryDataSchema: z.ZodType<SharedCategoryData> =
+  rawSharedCategoryDataSchema satisfies z.ZodType<
+    AssertExact<
+      SharedCategoryData,
+      z.infer<typeof rawSharedCategoryDataSchema>
+    > extends true
+      ? SharedCategoryData
+      : never
+  >;
 export type ChartGroupData = SharedCategoryData;
 
-export const independentCategoryDataSchema = z
+export type IndependentCategoryData = {
+  readonly kind: "independent-categories";
+};
+const rawIndependentCategoryDataSchema = z
   .strictObject({
     kind: z.literal("independent-categories"),
   })
   .readonly();
-export type IndependentCategoryData = z.infer<
-  typeof independentCategoryDataSchema
->;
+export const independentCategoryDataSchema: z.ZodType<IndependentCategoryData> =
+  rawIndependentCategoryDataSchema satisfies z.ZodType<
+    AssertExact<
+      IndependentCategoryData,
+      z.infer<typeof rawIndependentCategoryDataSchema>
+    > extends true
+      ? IndependentCategoryData
+      : never
+  >;
 
-export const scatterDataSchema = z
+export type ScatterData = {
+  readonly kind: "xy";
+};
+const rawScatterDataSchema = z
   .strictObject({
     kind: z.literal("xy"),
   })
   .readonly();
-export type ScatterData = z.infer<typeof scatterDataSchema>;
+export const scatterDataSchema: z.ZodType<ScatterData> =
+  rawScatterDataSchema satisfies z.ZodType<
+    AssertExact<ScatterData, z.infer<typeof rawScatterDataSchema>> extends true
+      ? ScatterData
+      : never
+  >;
 
-export const chartTickMarkSchema = z.enum(["none", "in", "out", "cross"]);
-export type ChartTickMark = z.infer<typeof chartTickMarkSchema>;
+export type ChartTickMark = "none" | "in" | "out" | "cross";
+const rawChartTickMarkSchema = z.enum(["none", "in", "out", "cross"]);
+export const chartTickMarkSchema: z.ZodType<ChartTickMark> =
+  rawChartTickMarkSchema satisfies z.ZodType<
+    AssertExact<
+      ChartTickMark,
+      z.infer<typeof rawChartTickMarkSchema>
+    > extends true
+      ? ChartTickMark
+      : never
+  >;
 
-export const chartTickLabelPositionSchema = z.enum([
+export type ChartTickLabelPosition = "nextTo" | "high" | "low" | "none";
+const rawChartTickLabelPositionSchema = z.enum([
   "nextTo",
   "high",
   "low",
   "none",
 ]);
-export type ChartTickLabelPosition = z.infer<
-  typeof chartTickLabelPositionSchema
->;
+export const chartTickLabelPositionSchema: z.ZodType<ChartTickLabelPosition> =
+  rawChartTickLabelPositionSchema satisfies z.ZodType<
+    AssertExact<
+      ChartTickLabelPosition,
+      z.infer<typeof rawChartTickLabelPositionSchema>
+    > extends true
+      ? ChartTickLabelPosition
+      : never
+  >;
 
-export const chartAxisCrossingSchema = z.enum(["autoZero", "max", "min"]);
-export type ChartAxisCrossing = z.infer<typeof chartAxisCrossingSchema>;
+export type ChartAxisCrossing = "autoZero" | "max" | "min";
+const rawChartAxisCrossingSchema = z.enum(["autoZero", "max", "min"]);
+export const chartAxisCrossingSchema: z.ZodType<ChartAxisCrossing> =
+  rawChartAxisCrossingSchema satisfies z.ZodType<
+    AssertExact<
+      ChartAxisCrossing,
+      z.infer<typeof rawChartAxisCrossingSchema>
+    > extends true
+      ? ChartAxisCrossing
+      : never
+  >;
 
-export const chartAxisPositionSchema = z.enum([
-  "bottom",
-  "top",
-  "left",
-  "right",
-]);
-export type ChartAxisPosition = z.infer<typeof chartAxisPositionSchema>;
+export type ChartAxisPosition = "bottom" | "top" | "left" | "right";
+const rawChartAxisPositionSchema = z.enum(["bottom", "top", "left", "right"]);
+export const chartAxisPositionSchema: z.ZodType<ChartAxisPosition> =
+  rawChartAxisPositionSchema satisfies z.ZodType<
+    AssertExact<
+      ChartAxisPosition,
+      z.infer<typeof rawChartAxisPositionSchema>
+    > extends true
+      ? ChartAxisPosition
+      : never
+  >;
 
-export const chartDisplayBlanksAsSchema = z.enum(["gap", "zero", "span"]);
-export type ChartDisplayBlanksAs = z.infer<typeof chartDisplayBlanksAsSchema>;
+export type ChartDisplayBlanksAs = "gap" | "zero" | "span";
+const rawChartDisplayBlanksAsSchema = z.enum(["gap", "zero", "span"]);
+export const chartDisplayBlanksAsSchema: z.ZodType<ChartDisplayBlanksAs> =
+  rawChartDisplayBlanksAsSchema satisfies z.ZodType<
+    AssertExact<
+      ChartDisplayBlanksAs,
+      z.infer<typeof rawChartDisplayBlanksAsSchema>
+    > extends true
+      ? ChartDisplayBlanksAs
+      : never
+  >;
 
 const axisBaseFields = {
   visible: z.boolean().optional(),
-  gridlines: z.union([z.boolean(), chartLineSchema]).optional(),
-  minorGridlines: z.union([z.boolean(), chartLineSchema]).optional(),
-  line: z.union([z.boolean(), chartLineSchema]).optional(),
-  style: chartTextStyleSchema.optional(),
-  title: chartTitleSchema.optional(),
-  majorTickMark: chartTickMarkSchema.optional(),
-  minorTickMark: chartTickMarkSchema.optional(),
-  tickLabelPosition: chartTickLabelPositionSchema.optional(),
+  gridlines: z.union([z.boolean(), rawChartLineSchema]).optional(),
+  minorGridlines: z.union([z.boolean(), rawChartLineSchema]).optional(),
+  line: z.union([z.boolean(), rawChartLineSchema]).optional(),
+  style: rawChartTextStyleSchema.optional(),
+  title: rawChartTitleSchema.optional(),
+  majorTickMark: rawChartTickMarkSchema.optional(),
+  minorTickMark: rawChartTickMarkSchema.optional(),
+  tickLabelPosition: rawChartTickLabelPositionSchema.optional(),
   reversed: z.boolean().optional(),
-  position: chartAxisPositionSchema.optional(),
-  crosses: chartAxisCrossingSchema.optional(),
+  position: rawChartAxisPositionSchema.optional(),
+  crosses: rawChartAxisCrossingSchema.optional(),
   crossesAt: z.number().finite().optional(),
 };
 
-export const chartCategoryAxisSchema = z
+export type ChartCategoryAxis = {
+  readonly kind: "category";
+  readonly visible?: boolean | undefined;
+  readonly gridlines?: boolean | ChartLine | undefined;
+  readonly minorGridlines?: boolean | ChartLine | undefined;
+  readonly line?: boolean | ChartLine | undefined;
+  readonly style?: ChartTextStyle | undefined;
+  readonly title?: ChartTitle | undefined;
+  readonly majorTickMark?: ChartTickMark | undefined;
+  readonly minorTickMark?: ChartTickMark | undefined;
+  readonly tickLabelPosition?: ChartTickLabelPosition | undefined;
+  readonly reversed?: boolean | undefined;
+  readonly position?: ChartAxisPosition | undefined;
+  readonly crosses?: ChartAxisCrossing | undefined;
+  readonly crossesAt?: number | undefined;
+};
+const rawChartCategoryAxisSchema = z
   .strictObject({
     kind: z.literal("category"),
     ...axisBaseFields,
@@ -726,9 +1278,39 @@ export const chartCategoryAxisSchema = z
       );
     }
   });
-export type ChartCategoryAxis = z.infer<typeof chartCategoryAxisSchema>;
+export const chartCategoryAxisSchema: z.ZodType<ChartCategoryAxis> =
+  rawChartCategoryAxisSchema satisfies z.ZodType<
+    AssertExact<
+      ChartCategoryAxis,
+      z.infer<typeof rawChartCategoryAxisSchema>
+    > extends true
+      ? ChartCategoryAxis
+      : never
+  >;
 
-export const chartValueAxisSchema = z
+export type ChartValueAxis = {
+  readonly kind: "value";
+  readonly visible?: boolean | undefined;
+  readonly gridlines?: boolean | ChartLine | undefined;
+  readonly minorGridlines?: boolean | ChartLine | undefined;
+  readonly line?: boolean | ChartLine | undefined;
+  readonly style?: ChartTextStyle | undefined;
+  readonly title?: ChartTitle | undefined;
+  readonly majorTickMark?: ChartTickMark | undefined;
+  readonly minorTickMark?: ChartTickMark | undefined;
+  readonly tickLabelPosition?: ChartTickLabelPosition | undefined;
+  readonly reversed?: boolean | undefined;
+  readonly position?: ChartAxisPosition | undefined;
+  readonly crosses?: ChartAxisCrossing | undefined;
+  readonly crossesAt?: number | undefined;
+  readonly min?: number | undefined;
+  readonly max?: number | undefined;
+  readonly majorUnit?: number | undefined;
+  readonly minorUnit?: number | undefined;
+  readonly numberFormat?: string | undefined;
+  readonly logBase?: number | undefined;
+};
+const rawChartValueAxisSchema = z
   .strictObject({
     kind: z.literal("value"),
     ...axisBaseFields,
@@ -785,16 +1367,32 @@ export const chartValueAxisSchema = z
       );
     }
   });
-export type ChartValueAxis = z.infer<typeof chartValueAxisSchema>;
+export const chartValueAxisSchema: z.ZodType<ChartValueAxis> =
+  rawChartValueAxisSchema satisfies z.ZodType<
+    AssertExact<
+      ChartValueAxis,
+      z.infer<typeof rawChartValueAxisSchema>
+    > extends true
+      ? ChartValueAxis
+      : never
+  >;
 
-export const chartAxisSchema = z.discriminatedUnion("kind", [
-  chartCategoryAxisSchema,
-  chartValueAxisSchema,
+export type ChartAxis = ChartCategoryAxis | ChartValueAxis;
+const rawChartAxisSchema = z.discriminatedUnion("kind", [
+  rawChartCategoryAxisSchema,
+  rawChartValueAxisSchema,
 ]);
-export type ChartAxis = z.infer<typeof chartAxisSchema>;
+export const chartAxisSchema: z.ZodType<ChartAxis> =
+  rawChartAxisSchema satisfies z.ZodType<
+    AssertExact<ChartAxis, z.infer<typeof rawChartAxisSchema>> extends true
+      ? ChartAxis
+      : never
+  >;
 
-export const chartAxesSchema = z
-  .record(z.string(), chartAxisSchema)
+export type ChartAxes = Readonly<Record<string, ChartAxis>>;
+const rawChartAxesSchema = z
+  .record(z.string(), rawChartAxisSchema)
+  .readonly()
   .superRefine((axes, ctx) => {
     const names = Object.keys(axes);
     if (names.length === 0) {
@@ -815,9 +1413,18 @@ export const chartAxesSchema = z
       }
     }
   });
-export type ChartAxes = Readonly<Record<string, ChartAxis>>;
+export const chartAxesSchema: z.ZodType<ChartAxes> =
+  rawChartAxesSchema satisfies z.ZodType<
+    AssertExact<ChartAxes, z.infer<typeof rawChartAxesSchema>> extends true
+      ? ChartAxes
+      : never
+  >;
 
-export const chartCategoryAxisReferencesSchema = z
+export type ChartCategoryAxisReferences = {
+  readonly category: string;
+  readonly value: string;
+};
+const rawChartCategoryAxisReferencesSchema = z
   .strictObject({
     category: nonEmptyStringSchema(
       "invalid-chart-axes",
@@ -829,11 +1436,21 @@ export const chartCategoryAxisReferencesSchema = z
     ),
   })
   .readonly();
-export type ChartCategoryAxisReferences = z.infer<
-  typeof chartCategoryAxisReferencesSchema
->;
+export const chartCategoryAxisReferencesSchema: z.ZodType<ChartCategoryAxisReferences> =
+  rawChartCategoryAxisReferencesSchema satisfies z.ZodType<
+    AssertExact<
+      ChartCategoryAxisReferences,
+      z.infer<typeof rawChartCategoryAxisReferencesSchema>
+    > extends true
+      ? ChartCategoryAxisReferences
+      : never
+  >;
 
-export const chartXYAxisReferencesSchema = z
+export type ChartXYAxisReferences = {
+  readonly x: string;
+  readonly y: string;
+};
+const rawChartXYAxisReferencesSchema = z
   .strictObject({
     x: nonEmptyStringSchema(
       "invalid-chart-axes",
@@ -854,20 +1471,45 @@ export const chartXYAxisReferencesSchema = z
       );
     }
   });
-export type ChartXYAxisReferences = z.infer<typeof chartXYAxisReferencesSchema>;
+export const chartXYAxisReferencesSchema: z.ZodType<ChartXYAxisReferences> =
+  rawChartXYAxisReferencesSchema satisfies z.ZodType<
+    AssertExact<
+      ChartXYAxisReferences,
+      z.infer<typeof rawChartXYAxisReferencesSchema>
+    > extends true
+      ? ChartXYAxisReferences
+      : never
+  >;
 
-export const chartAxisReferencesSchema = z.union([
-  chartCategoryAxisReferencesSchema,
-  chartXYAxisReferencesSchema,
+export type ChartAxisReferences =
+  | ChartCategoryAxisReferences
+  | ChartXYAxisReferences;
+const rawChartAxisReferencesSchema = z.union([
+  rawChartCategoryAxisReferencesSchema,
+  rawChartXYAxisReferencesSchema,
 ]);
-export type ChartAxisReferences = z.infer<typeof chartAxisReferencesSchema>;
+export const chartAxisReferencesSchema: z.ZodType<ChartAxisReferences> =
+  rawChartAxisReferencesSchema satisfies z.ZodType<
+    AssertExact<
+      ChartAxisReferences,
+      z.infer<typeof rawChartAxisReferencesSchema>
+    > extends true
+      ? ChartAxisReferences
+      : never
+  >;
 
-export const scatterLineSchema = z.union([
+export type ScatterLine = false | "straight" | "smooth";
+const rawScatterLineSchema = z.union([
   z.literal(false),
   z.literal("straight"),
   z.literal("smooth"),
 ]);
-export type ScatterLine = z.infer<typeof scatterLineSchema>;
+export const scatterLineSchema: z.ZodType<ScatterLine> =
+  rawScatterLineSchema satisfies z.ZodType<
+    AssertExact<ScatterLine, z.infer<typeof rawScatterLineSchema>> extends true
+      ? ScatterLine
+      : never
+  >;
 
 function validatePointIndexKeys(
   points: Readonly<Record<string, unknown>> | undefined,
@@ -1342,9 +1984,9 @@ function validateCategoryGroupSeries(
 
 const columnOrBarCommonFields = {
   kind: z.enum(["column", "bar"]),
-  data: sharedCategoryDataSchema,
+  data: rawSharedCategoryDataSchema,
   series: z.array(chartSeriesSchema).min(1).readonly(),
-  axes: chartCategoryAxisReferencesSchema.optional(),
+  axes: rawChartCategoryAxisReferencesSchema.optional(),
   gapWidth: z.number().finite().min(0).max(500).optional(),
   overlap: z.number().finite().min(-100).max(100).optional(),
 };
@@ -1354,7 +1996,7 @@ const ColumnOrBarUnstackedGroupSchema = z
     ...columnOrBarCommonFields,
     stacking: z.undefined().optional(),
     dataLabels: z
-      .union([z.literal(false), chartDataLabelsBaseSchema])
+      .union([z.literal(false), rawChartDataLabelsBaseSchema])
       .optional(),
   })
   .readonly();
@@ -1364,24 +2006,38 @@ const ColumnOrBarStackedGroupSchema = z
     ...columnOrBarCommonFields,
     stacking: z.enum(["stacked", "percent"]),
     dataLabels: z
-      .union([z.literal(false), chartDataLabelsBaseSchema])
+      .union([z.literal(false), rawChartDataLabelsBaseSchema])
       .optional(),
   })
   .readonly();
 
 export type ColumnOrBarChartGroup =
-  | (Omit<z.infer<typeof ColumnOrBarUnstackedGroupSchema>, "dataLabels"> & {
+  | {
+      readonly kind: "column" | "bar";
+      readonly data: SharedCategoryData;
+      readonly series: readonly ChartSeries[];
+      readonly axes?: ChartCategoryAxisReferences | undefined;
+      readonly gapWidth?: number | undefined;
+      readonly overlap?: number | undefined;
+      readonly stacking?: undefined;
       readonly dataLabels?:
         | false
         | ChartDataLabels<"center" | "insideEnd" | "insideBase" | "outsideEnd">
         | undefined;
-    })
-  | (Omit<z.infer<typeof ColumnOrBarStackedGroupSchema>, "dataLabels"> & {
+    }
+  | {
+      readonly kind: "column" | "bar";
+      readonly data: SharedCategoryData;
+      readonly series: readonly ChartSeries[];
+      readonly axes?: ChartCategoryAxisReferences | undefined;
+      readonly gapWidth?: number | undefined;
+      readonly overlap?: number | undefined;
+      readonly stacking: "stacked" | "percent";
       readonly dataLabels?:
         | false
         | ChartDataLabels<"center" | "insideEnd" | "insideBase">
         | undefined;
-    });
+    };
 
 export const columnOrBarChartGroupSchema = z
   .union([ColumnOrBarUnstackedGroupSchema, ColumnOrBarStackedGroupSchema])
@@ -1392,12 +2048,12 @@ export const columnOrBarChartGroupSchema = z
 const LineChartGroupRawSchema = z
   .strictObject({
     kind: z.literal("line"),
-    data: sharedCategoryDataSchema,
+    data: rawSharedCategoryDataSchema,
     series: z.array(chartSeriesSchema).min(1).readonly(),
-    axes: chartCategoryAxisReferencesSchema.optional(),
+    axes: rawChartCategoryAxisReferencesSchema.optional(),
     stacking: z.enum(["stacked", "percent"]).optional(),
     dataLabels: z
-      .union([z.literal(false), chartDataLabelsBaseSchema])
+      .union([z.literal(false), rawChartDataLabelsBaseSchema])
       .optional(),
   })
   .readonly()
@@ -1405,10 +2061,12 @@ const LineChartGroupRawSchema = z
     validateCategoryGroupSeries(group, ctx);
   });
 
-export type LineChartGroup = Omit<
-  z.infer<typeof LineChartGroupRawSchema>,
-  "dataLabels"
-> & {
+export type LineChartGroup = {
+  readonly kind: "line";
+  readonly data: SharedCategoryData;
+  readonly series: readonly ChartSeries[];
+  readonly axes?: ChartCategoryAxisReferences | undefined;
+  readonly stacking?: "stacked" | "percent" | undefined;
   readonly dataLabels?:
     | false
     | ChartDataLabels<"left" | "right" | "bottom" | "top" | "center">
@@ -1420,12 +2078,12 @@ export const lineChartGroupSchema =
 const AreaChartGroupRawSchema = z
   .strictObject({
     kind: z.literal("area"),
-    data: sharedCategoryDataSchema,
+    data: rawSharedCategoryDataSchema,
     series: z.array(chartSeriesSchema).min(1).readonly(),
-    axes: chartCategoryAxisReferencesSchema.optional(),
+    axes: rawChartCategoryAxisReferencesSchema.optional(),
     stacking: z.enum(["stacked", "percent"]).optional(),
     dataLabels: z
-      .union([z.literal(false), chartDataLabelsBaseSchema])
+      .union([z.literal(false), rawChartDataLabelsBaseSchema])
       .optional(),
   })
   .readonly()
@@ -1433,10 +2091,12 @@ const AreaChartGroupRawSchema = z
     validateCategoryGroupSeries(group, ctx);
   });
 
-export type AreaChartGroup = Omit<
-  z.infer<typeof AreaChartGroupRawSchema>,
-  "dataLabels"
-> & {
+export type AreaChartGroup = {
+  readonly kind: "area";
+  readonly data: SharedCategoryData;
+  readonly series: readonly ChartSeries[];
+  readonly axes?: ChartCategoryAxisReferences | undefined;
+  readonly stacking?: "stacked" | "percent" | undefined;
   readonly dataLabels?:
     | false
     | (Omit<ChartDataLabels, "position"> & { readonly position?: never })
@@ -1467,11 +2127,11 @@ const pieOptionsFields = {
 const PieChartGroupRawSchema = z
   .strictObject({
     kind: z.literal("pie"),
-    data: sharedCategoryDataSchema,
+    data: rawSharedCategoryDataSchema,
     series: z.array(chartSeriesSchema).min(1).readonly(),
     ...pieOptionsFields,
     dataLabels: z
-      .union([z.literal(false), chartDataLabelsBaseSchema])
+      .union([z.literal(false), rawChartDataLabelsBaseSchema])
       .optional(),
   })
   .readonly()
@@ -1479,10 +2139,12 @@ const PieChartGroupRawSchema = z
     validateCategoryGroupSeries(group, ctx);
   });
 
-export type PieChartGroup = Omit<
-  z.infer<typeof PieChartGroupRawSchema>,
-  "dataLabels"
-> & {
+export type PieChartGroup = {
+  readonly kind: "pie";
+  readonly data: SharedCategoryData;
+  readonly series: readonly ChartSeries[];
+  readonly explosion?: number | undefined;
+  readonly firstSliceAngle?: number | undefined;
   readonly dataLabels?:
     | false
     | ChartDataLabels<"center" | "insideEnd" | "outsideEnd" | "bestFit">
@@ -1501,13 +2163,15 @@ const doughnutOptionsFields = {
     errorCode: "invalid-chart-option",
     label: "holeSize",
   }).optional(),
-  dataLabels: z.union([z.literal(false), chartDataLabelsBaseSchema]).optional(),
+  dataLabels: z
+    .union([z.literal(false), rawChartDataLabelsBaseSchema])
+    .optional(),
 };
 
 const DoughnutSharedGroupRawSchema = z
   .strictObject({
     ...doughnutOptionsFields,
-    data: sharedCategoryDataSchema,
+    data: rawSharedCategoryDataSchema,
     series: z.array(chartSeriesSchema).min(1).readonly(),
   })
   .readonly();
@@ -1515,24 +2179,36 @@ const DoughnutSharedGroupRawSchema = z
 const DoughnutIndependentGroupRawSchema = z
   .strictObject({
     ...doughnutOptionsFields,
-    data: independentCategoryDataSchema,
+    data: rawIndependentCategoryDataSchema,
     series: z.array(independentCategorySeriesSchema).min(1).readonly(),
   })
   .readonly();
 
 export type DoughnutChartGroup =
-  | (Omit<z.infer<typeof DoughnutSharedGroupRawSchema>, "dataLabels"> & {
+  | {
+      readonly kind: "doughnut";
+      readonly explosion?: number | undefined;
+      readonly firstSliceAngle?: number | undefined;
+      readonly holeSize?: number | undefined;
+      readonly data: SharedCategoryData;
+      readonly series: readonly ChartSeries[];
       readonly dataLabels?:
         | false
         | (Omit<ChartDataLabels, "position"> & { readonly position?: never })
         | undefined;
-    })
-  | (Omit<z.infer<typeof DoughnutIndependentGroupRawSchema>, "dataLabels"> & {
+    }
+  | {
+      readonly kind: "doughnut";
+      readonly explosion?: number | undefined;
+      readonly firstSliceAngle?: number | undefined;
+      readonly holeSize?: number | undefined;
+      readonly data: IndependentCategoryData;
+      readonly series: readonly IndependentCategorySeries[];
       readonly dataLabels?:
         | false
         | (Omit<ChartDataLabels, "position"> & { readonly position?: never })
         | undefined;
-    });
+    };
 
 export const doughnutChartGroupSchema = z
   .union([DoughnutSharedGroupRawSchema, DoughnutIndependentGroupRawSchema])
@@ -1540,13 +2216,13 @@ export const doughnutChartGroupSchema = z
     validateCategoryGroupSeries(group, ctx);
   }) as unknown as z.ZodType<DoughnutChartGroup>;
 
-export const scatterChartGroupSchema = z
+const rawScatterChartGroupSchema = z
   .strictObject({
     kind: z.literal("scatter"),
-    data: scatterDataSchema,
+    data: rawScatterDataSchema,
     series: z.array(scatterChartSeriesSchema).min(1).readonly(),
-    axes: chartXYAxisReferencesSchema.optional(),
-    line: scatterLineSchema.optional(),
+    axes: rawChartXYAxisReferencesSchema.optional(),
+    line: rawScatterLineSchema.optional(),
     markers: z.boolean().optional(),
     dataLabels: z
       .union([z.literal(false), scatterDataLabelsObjectSchema.readonly()])
@@ -1672,7 +2348,26 @@ export const scatterChartGroupSchema = z
       );
     }
   });
-export type ScatterChartGroup = z.infer<typeof scatterChartGroupSchema>;
+
+export type ScatterChartGroup = {
+  readonly kind: "scatter";
+  readonly data: ScatterData;
+  readonly series: readonly ScatterChartSeries[];
+  readonly axes?: ChartXYAxisReferences | undefined;
+  readonly line?: ScatterLine | undefined;
+  readonly markers?: boolean | undefined;
+  readonly dataLabels?: false | ScatterDataLabels | undefined;
+};
+
+export const scatterChartGroupSchema: z.ZodType<ScatterChartGroup> =
+  rawScatterChartGroupSchema satisfies z.ZodType<
+    AssertExact<
+      ScatterChartGroup,
+      z.infer<typeof rawScatterChartGroupSchema>
+    > extends true
+      ? ScatterChartGroup
+      : never
+  >;
 
 export type ChartGroup =
   | ColumnOrBarChartGroup
@@ -1687,16 +2382,39 @@ export const chartGroupSchema: z.ZodType<ChartGroup> = z.union([
   areaChartGroupSchema,
   pieChartGroupSchema,
   doughnutChartGroupSchema,
-  scatterChartGroupSchema,
+  rawScatterChartGroupSchema,
 ]);
 
-export const chartLegendSchema = z.union([
+export type ChartLegend =
+  | false
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "topRight";
+const rawChartLegendSchema = z.union([
   z.literal(false),
   z.enum(["top", "bottom", "left", "right", "topRight"]),
 ]);
-export type ChartLegend = z.infer<typeof chartLegendSchema>;
+export const chartLegendSchema: z.ZodType<ChartLegend> =
+  rawChartLegendSchema satisfies z.ZodType<
+    AssertExact<ChartLegend, z.infer<typeof rawChartLegendSchema>> extends true
+      ? ChartLegend
+      : never
+  >;
 
-export const chartPlotAreaSchema = z
+/**
+ * Explicit plot-area rectangle inside the chart box, in pixels (`px`) relative to the chart box's
+ * top-left corner (`{ left, top, width, height }`, not `0..1` fractions).
+ */
+export type ChartPlotArea = {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+};
+
+const rawChartPlotAreaSchema = z
   .strictObject({
     left: z.number().finite().nonnegative(),
     top: z.number().finite().nonnegative(),
@@ -1704,7 +2422,15 @@ export const chartPlotAreaSchema = z
     height: z.number().finite().positive(),
   })
   .readonly();
-export type ChartPlotArea = z.infer<typeof chartPlotAreaSchema>;
+export const chartPlotAreaSchema: z.ZodType<ChartPlotArea> =
+  rawChartPlotAreaSchema satisfies z.ZodType<
+    AssertExact<
+      ChartPlotArea,
+      z.infer<typeof rawChartPlotAreaSchema>
+    > extends true
+      ? ChartPlotArea
+      : never
+  >;
 
 export const chartCoordinateSchema = z
   .number()
@@ -1727,7 +2453,40 @@ export const chartExtentSchema = z
     }
   });
 
-const motionPropsShape = motionPropsSchema.unwrap().shape;
+export type ChartProps = MotionProps & {
+  readonly id?: AuthorId | undefined;
+  readonly name?: string | undefined;
+  readonly placeholder?: string | undefined;
+  readonly nativePlaceholder?: NativePlaceholderRef | undefined;
+  readonly morphKey?: MorphKey | undefined;
+  readonly link?: LinkTarget | undefined;
+  readonly axes?: ChartAxes | undefined;
+  /**
+   * Non-empty list of chart series groups; each group shares one `kind`, group options, `data` mode, and `series`.
+   *
+   * @example
+   * ```ts
+   * groups: [
+   *   {
+   *     kind: "column",
+   *     data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+   *     series: [{ name: "Revenue", values: [120, 150] }],
+   *   },
+   * ]
+   * ```
+   */
+  readonly groups: readonly ChartGroup[];
+  readonly title?: ChartTitle | undefined;
+  readonly displayBlanksAs?: ChartDisplayBlanksAs | undefined;
+  readonly legend?: ChartLegend | undefined;
+  /**
+   * Explicit plot-area rectangle `{ left, top, width, height }` in pixels (`px`) relative to the
+   * chart box's top-left corner (not `0..1` fractions). When omitted, automatic margins are computed.
+   */
+  readonly plotArea?: ChartPlotArea | undefined;
+  readonly style?: ChartStyle | undefined;
+};
+export type ChartBase = ChartProps;
 
 const chartPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
@@ -1738,24 +2497,27 @@ const chartPropsObjectSchema = z.strictObject({
   link: linkTargetSchema.optional(),
   axes: chartAxesSchema.optional(),
   groups: z.array(chartGroupSchema).min(1).readonly(),
-  title: chartTitleSchema.optional(),
-  displayBlanksAs: chartDisplayBlanksAsSchema.optional(),
-  legend: chartLegendSchema.optional(),
-  plotArea: chartPlotAreaSchema.optional(),
-  style: chartStyleSchema.optional(),
+  title: rawChartTitleSchema.optional(),
+  displayBlanksAs: rawChartDisplayBlanksAsSchema.optional(),
+  legend: rawChartLegendSchema.optional(),
+  plotArea: rawChartPlotAreaSchema.optional(),
+  style: rawChartStyleSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
   motion: motionPropsShape.motion,
 });
 
-export const chartPropsSchema = chartPropsObjectSchema.readonly();
+const rawChartPropsSchema = chartPropsObjectSchema.readonly();
+export const chartPropsSchema: z.ZodType<ChartProps> =
+  rawChartPropsSchema satisfies z.ZodType<
+    AssertExact<ChartProps, z.infer<typeof rawChartPropsSchema>> extends true
+      ? ChartProps
+      : never
+  >;
 
 export const chartAllowedPropKeys: readonly string[] = Object.keys(
   chartPropsObjectSchema.shape,
 );
-
-export type ChartProps = z.infer<typeof chartPropsSchema>;
-export type ChartBase = ChartProps;
 
 /** Maps a Zod validation issue inside chart authoring data to a stable `CapabilityError` code. */
 export function resolveChartZodError(
@@ -1991,7 +2753,7 @@ const groupOptionsByKind: Readonly<Record<ChartKind, readonly string[]>> = {
   doughnut: groupOptionKeysFromShape(
     DoughnutSharedGroupRawSchema.unwrap().shape,
   ),
-  scatter: groupOptionKeysFromShape(scatterChartGroupSchema.unwrap().shape),
+  scatter: groupOptionKeysFromShape(rawScatterChartGroupSchema.unwrap().shape),
 };
 
 /** Validates and parses one chart group entry via its kind-specific local Zod schema. */

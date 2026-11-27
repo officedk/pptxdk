@@ -2,6 +2,144 @@ import { z } from "zod";
 
 import { BuildError } from "#/diagnostics.ts";
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
+export type LayoutLength = number | `${number}%` | "auto";
+
+export type LayoutSpacing =
+  | number
+  | readonly [number, number]
+  | readonly [number, number, number, number];
+
+export type NonNegativeLayoutSpacing =
+  | number
+  | readonly [number, number]
+  | readonly [number, number, number, number];
+
+export type PaddingStyle = {
+  readonly padding?: NonNegativeLayoutSpacing | undefined;
+  readonly paddingTop?: number | undefined;
+  readonly paddingRight?: number | undefined;
+  readonly paddingBottom?: number | undefined;
+  readonly paddingLeft?: number | undefined;
+};
+
+/** Fixed canvas CSS layout subset; numeric lengths are interpreted in pixels. */
+export type LayoutStyle = {
+  readonly display?: "block" | "flex" | "grid" | "none" | undefined;
+  readonly position?: "static" | "relative" | "absolute" | undefined;
+  readonly inset?: LayoutLength | undefined;
+  readonly left?: LayoutLength | undefined;
+  readonly top?: LayoutLength | undefined;
+  readonly right?: LayoutLength | undefined;
+  readonly bottom?: LayoutLength | undefined;
+  readonly width?: LayoutLength | undefined;
+  readonly height?: LayoutLength | undefined;
+  readonly minWidth?: LayoutLength | undefined;
+  readonly minHeight?: LayoutLength | undefined;
+  readonly maxWidth?: LayoutLength | undefined;
+  readonly maxHeight?: LayoutLength | undefined;
+  readonly margin?: LayoutSpacing | undefined;
+  readonly marginTop?: number | undefined;
+  readonly marginRight?: number | undefined;
+  readonly marginBottom?: number | undefined;
+  readonly marginLeft?: number | undefined;
+  readonly padding?: NonNegativeLayoutSpacing | undefined;
+  readonly paddingTop?: number | undefined;
+  readonly paddingRight?: number | undefined;
+  readonly paddingBottom?: number | undefined;
+  readonly paddingLeft?: number | undefined;
+  readonly gap?: number | undefined;
+  readonly rowGap?: number | undefined;
+  readonly columnGap?: number | undefined;
+  readonly flexDirection?:
+    | "row"
+    | "column"
+    | "row-reverse"
+    | "column-reverse"
+    | undefined;
+  readonly flexWrap?: "nowrap" | "wrap" | undefined;
+  readonly justifyContent?:
+    | "start"
+    | "end"
+    | "center"
+    | "flex-start"
+    | "flex-end"
+    | "space-between"
+    | "space-around"
+    | "space-evenly"
+    | undefined;
+  readonly alignItems?:
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end"
+    | "baseline"
+    | undefined;
+  readonly alignSelf?:
+    | "auto"
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end"
+    | "baseline"
+    | undefined;
+  readonly alignContent?:
+    | "start"
+    | "end"
+    | "center"
+    | "flex-start"
+    | "flex-end"
+    | "space-between"
+    | "space-around"
+    | "space-evenly"
+    | "stretch"
+    | undefined;
+  /**
+   * Non-negative flex shorthand (equivalent to `flexGrow: value, flexShrink: 1, flexBasis: 0`).
+   *
+   * Flex items default to automatic minimum content size (`minWidth: "auto"` / `minHeight: "auto"`).
+   * For equal-width columns regardless of inner content size, also set `minWidth: 0` or use CSS Grid
+   * (`gridTemplateColumns: "1fr 1fr"`).
+   */
+  readonly flex?: number | undefined;
+  readonly flexGrow?: number | undefined;
+  readonly flexShrink?: number | undefined;
+  readonly flexBasis?: LayoutLength | undefined;
+  readonly aspectRatio?: number | undefined;
+  readonly gridTemplateColumns?: string | undefined;
+  readonly gridTemplateRows?: string | undefined;
+  /** Track sizes for implicit Grid rows, cycling in order like CSS `grid-auto-rows`; defaults to `auto`. */
+  readonly gridAutoRows?: string | undefined;
+  readonly gridColumn?: string | number | undefined;
+  readonly gridRow?: string | number | undefined;
+  readonly justifyItems?:
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end"
+    | undefined;
+  readonly justifySelf?:
+    | "auto"
+    | "start"
+    | "end"
+    | "center"
+    | "stretch"
+    | "flex-start"
+    | "flex-end"
+    | undefined;
+  readonly zIndex?: number | undefined;
+};
+
 const percentPattern = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u;
 const nonNegativePercentPattern = /^(\d+(?:\.\d*)?|\.\d+)%$/u;
 
@@ -19,21 +157,31 @@ const nonNegativePercentLengthSchema = z
     "must be a non-negative pixel number, percentage, or auto",
   ) as unknown as z.ZodType<`${number}%`>;
 
-/** Fixed canvas length; numeric values are interpreted in pixels, percentages are evaluated against the parent layout region. */
-export const layoutLengthSchema = z.union([
+const rawLayoutLengthSchema = z.union([
   z.number().finite(),
   percentLengthSchema,
   z.literal("auto"),
 ]);
-export type LayoutLength = z.infer<typeof layoutLengthSchema>;
+/** Fixed canvas length; numeric values are interpreted in pixels, percentages are evaluated against the parent layout region. */
+export const layoutLengthSchema: z.ZodType<LayoutLength> =
+  rawLayoutLengthSchema satisfies z.ZodType<
+    AssertExact<
+      LayoutLength,
+      z.infer<typeof rawLayoutLengthSchema>
+    > extends true
+      ? LayoutLength
+      : never
+  >;
 
-export const nonNegativeLayoutLengthSchema = z.union([
+const rawNonNegativeLayoutLengthSchema = z.union([
   z.number().finite().nonnegative(),
   nonNegativePercentLengthSchema,
   z.literal("auto"),
 ]);
+export const nonNegativeLayoutLengthSchema: z.ZodType<LayoutLength> =
+  rawNonNegativeLayoutLengthSchema;
 
-export const layoutSpacingSchema = z.union([
+const rawLayoutSpacingSchema = z.union([
   z.number().finite(),
   z.tuple([z.number().finite(), z.number().finite()]).readonly(),
   z
@@ -45,9 +193,17 @@ export const layoutSpacingSchema = z.union([
     ])
     .readonly(),
 ]);
-export type LayoutSpacing = z.infer<typeof layoutSpacingSchema>;
+export const layoutSpacingSchema: z.ZodType<LayoutSpacing> =
+  rawLayoutSpacingSchema satisfies z.ZodType<
+    AssertExact<
+      LayoutSpacing,
+      z.infer<typeof rawLayoutSpacingSchema>
+    > extends true
+      ? LayoutSpacing
+      : never
+  >;
 
-export const nonNegativeLayoutSpacingSchema = z.union([
+const rawNonNegativeLayoutSpacingSchema = z.union([
   z.number().finite().nonnegative(),
   z
     .tuple([
@@ -64,20 +220,34 @@ export const nonNegativeLayoutSpacingSchema = z.union([
     ])
     .readonly(),
 ]);
-export type NonNegativeLayoutSpacing = z.infer<
-  typeof nonNegativeLayoutSpacingSchema
->;
+export const nonNegativeLayoutSpacingSchema: z.ZodType<NonNegativeLayoutSpacing> =
+  rawNonNegativeLayoutSpacingSchema satisfies z.ZodType<
+    AssertExact<
+      NonNegativeLayoutSpacing,
+      z.infer<typeof rawNonNegativeLayoutSpacingSchema>
+    > extends true
+      ? NonNegativeLayoutSpacing
+      : never
+  >;
 
-export const paddingStyleSchema = z
-  .strictObject({
-    padding: nonNegativeLayoutSpacingSchema.optional(),
-    paddingTop: z.number().finite().nonnegative().optional(),
-    paddingRight: z.number().finite().nonnegative().optional(),
-    paddingBottom: z.number().finite().nonnegative().optional(),
-    paddingLeft: z.number().finite().nonnegative().optional(),
-  })
-  .readonly();
-export type PaddingStyle = z.infer<typeof paddingStyleSchema>;
+const paddingStyleObjectSchema = z.strictObject({
+  padding: rawNonNegativeLayoutSpacingSchema.optional(),
+  paddingTop: z.number().finite().nonnegative().optional(),
+  paddingRight: z.number().finite().nonnegative().optional(),
+  paddingBottom: z.number().finite().nonnegative().optional(),
+  paddingLeft: z.number().finite().nonnegative().optional(),
+});
+export const paddingStyleShape = paddingStyleObjectSchema.shape;
+const rawPaddingStyleSchema = paddingStyleObjectSchema.readonly();
+export const paddingStyleSchema: z.ZodType<PaddingStyle> =
+  rawPaddingStyleSchema satisfies z.ZodType<
+    AssertExact<
+      PaddingStyle,
+      z.infer<typeof rawPaddingStyleSchema>
+    > extends true
+      ? PaddingStyle
+      : never
+  >;
 
 export const layoutDisplaySchema = z.enum(["block", "flex", "grid", "none"]);
 export const layoutPositionSchema = z.enum(["static", "relative", "absolute"]);
@@ -150,23 +320,23 @@ export const justifySelfSchema = z.enum([
 const layoutStyleObjectSchema = z.strictObject({
   display: layoutDisplaySchema.optional(),
   position: layoutPositionSchema.optional(),
-  inset: layoutLengthSchema.optional(),
-  left: layoutLengthSchema.optional(),
-  top: layoutLengthSchema.optional(),
-  right: layoutLengthSchema.optional(),
-  bottom: layoutLengthSchema.optional(),
-  width: nonNegativeLayoutLengthSchema.optional(),
-  height: nonNegativeLayoutLengthSchema.optional(),
-  minWidth: nonNegativeLayoutLengthSchema.optional(),
-  minHeight: nonNegativeLayoutLengthSchema.optional(),
-  maxWidth: nonNegativeLayoutLengthSchema.optional(),
-  maxHeight: nonNegativeLayoutLengthSchema.optional(),
-  margin: layoutSpacingSchema.optional(),
+  inset: rawLayoutLengthSchema.optional(),
+  left: rawLayoutLengthSchema.optional(),
+  top: rawLayoutLengthSchema.optional(),
+  right: rawLayoutLengthSchema.optional(),
+  bottom: rawLayoutLengthSchema.optional(),
+  width: rawNonNegativeLayoutLengthSchema.optional(),
+  height: rawNonNegativeLayoutLengthSchema.optional(),
+  minWidth: rawNonNegativeLayoutLengthSchema.optional(),
+  minHeight: rawNonNegativeLayoutLengthSchema.optional(),
+  maxWidth: rawNonNegativeLayoutLengthSchema.optional(),
+  maxHeight: rawNonNegativeLayoutLengthSchema.optional(),
+  margin: rawLayoutSpacingSchema.optional(),
   marginTop: z.number().finite().optional(),
   marginRight: z.number().finite().optional(),
   marginBottom: z.number().finite().optional(),
   marginLeft: z.number().finite().optional(),
-  padding: nonNegativeLayoutSpacingSchema.optional(),
+  padding: rawNonNegativeLayoutSpacingSchema.optional(),
   paddingTop: z.number().finite().nonnegative().optional(),
   paddingRight: z.number().finite().nonnegative().optional(),
   paddingBottom: z.number().finite().nonnegative().optional(),
@@ -183,7 +353,7 @@ const layoutStyleObjectSchema = z.strictObject({
   flex: z.number().finite().nonnegative().optional(),
   flexGrow: z.number().finite().nonnegative().optional(),
   flexShrink: z.number().finite().nonnegative().optional(),
-  flexBasis: nonNegativeLayoutLengthSchema.optional(),
+  flexBasis: rawNonNegativeLayoutLengthSchema.optional(),
   aspectRatio: z.number().finite().positive().optional(),
   gridTemplateColumns: z.string().optional(),
   gridTemplateRows: z.string().optional(),
@@ -196,14 +366,21 @@ const layoutStyleObjectSchema = z.strictObject({
   zIndex: z.number().finite().optional(),
 });
 
-export const layoutStyleSchema = layoutStyleObjectSchema.readonly();
-export type LayoutStyle = z.infer<typeof layoutStyleSchema>;
+export const layoutStyleShape = layoutStyleObjectSchema.shape;
+const rawLayoutStyleSchema = layoutStyleObjectSchema.readonly();
+export const layoutStyleSchema: z.ZodType<LayoutStyle> =
+  rawLayoutStyleSchema satisfies z.ZodType<
+    AssertExact<LayoutStyle, z.infer<typeof rawLayoutStyleSchema>> extends true
+      ? LayoutStyle
+      : never
+  >;
 
 const slideLayoutStyleObjectSchema = layoutStyleObjectSchema.omit({
   zIndex: true,
 });
 export const slideLayoutStyleShape = slideLayoutStyleObjectSchema.shape;
-export const slideLayoutStyleSchema = slideLayoutStyleObjectSchema.readonly();
+export const slideLayoutStyleSchema: z.ZodType<Omit<LayoutStyle, "zIndex">> =
+  slideLayoutStyleObjectSchema.readonly();
 
 const layoutSchemaKeys = new Set<string>(
   Object.keys(layoutStyleObjectSchema.shape),

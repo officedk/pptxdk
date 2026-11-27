@@ -2,10 +2,12 @@ import {
   CapabilityError,
   applyFormatColorTransforms,
   slideBackgroundSchema,
+  type BoundSlideCapability,
   type CapabilityInput,
   type ColorValue,
   type FormatColorTransform,
   type ResolvedColor,
+  type SealedCanvasMechanism,
   type SlideResolution,
   type SlideBackground,
   type SlideCapabilityModule,
@@ -394,7 +396,15 @@ export const slideBackgroundRefMechanism = defineCanvasMechanism({
  * Bound slide-background module: validates and resolves background declarations once per build
  * and owns both PresentationML `<p:bg>` emission and static preview canvas painting.
  */
-export const slideBackgroundCapability = {
+export const slideBackgroundCapability: SlideCapabilityModule<
+  BoundSlideCapability,
+  readonly [
+    SealedCanvasMechanism<"slide-background-solid">,
+    SealedCanvasMechanism<"slide-background-gradient">,
+    SealedCanvasMechanism<"slide-background-image">,
+    SealedCanvasMechanism<"slide-background-ref">,
+  ]
+> = {
   declaration: "slide-background",
   slideProp: "background",
   consumesOwnerBackgroundStyle: true,

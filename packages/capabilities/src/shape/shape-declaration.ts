@@ -1,19 +1,34 @@
 import {
   authorIdSchema,
-  layoutStyleSchema,
+  layoutStyleShape,
   linkTargetSchema,
-  textStyleSchema,
-  visualStyleSchema,
+  textStyleShape,
+  visualStyleShape,
+  type AuthorId,
+  type LayoutStyle,
+  type LinkTarget,
+  type TextStyle,
 } from "@pptxdk/core/capability";
 import { RichTextContainer } from "@pptxdk/core/document";
 import { pxToEmu } from "@pptxdk/emit";
 import { z } from "zod";
 
-import { motionPropsSchema } from "../motion/motion-schemas.ts";
-import { geometrySchema } from "../shared/geometry.ts";
+import {
+  motionPropsShape,
+  type MotionProps,
+} from "../motion/motion-schemas.ts";
+import { geometrySchema, type Geometry } from "../shared/geometry.ts";
 import { optionalNameSchema } from "../shared/identity.ts";
-import { morphKeySchema } from "../shared/morph-api.ts";
-import { shapeBorderValueSchema } from "../shared/visual.ts";
+import { morphKeySchema, type MorphKey } from "../shared/morph-api.ts";
+import {
+  shapeBorderValueSchema,
+  type ShapeVisualStyle,
+} from "../shared/visual.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
 
 export const shapeCoordinateSchema = z
   .number()
@@ -30,17 +45,33 @@ export const shapeSizeSchema = z
     return extentEmu >= 1 && extentEmu <= 2_147_483_647;
   });
 
+export type ShapeStyle = LayoutStyle & ShapeVisualStyle & TextStyle;
+
 const shapeStyleObjectSchema = z.strictObject({
-  ...layoutStyleSchema.unwrap().shape,
-  ...visualStyleSchema.unwrap().shape,
-  ...textStyleSchema.unwrap().shape,
+  ...layoutStyleShape,
+  ...visualStyleShape,
+  ...textStyleShape,
   border: shapeBorderValueSchema.optional(),
 });
+export const shapeStyleKeyList: readonly string[] = Object.keys(
+  shapeStyleObjectSchema.shape,
+);
+const rawShapeStyleSchema = shapeStyleObjectSchema.readonly();
+export const shapeStyleSchema: z.ZodType<ShapeStyle> =
+  rawShapeStyleSchema satisfies z.ZodType<
+    AssertExact<ShapeStyle, z.infer<typeof rawShapeStyleSchema>> extends true
+      ? ShapeStyle
+      : never
+  >;
 
-export const shapeStyleSchema = shapeStyleObjectSchema.readonly();
-export type ShapeStyle = z.infer<typeof shapeStyleSchema>;
-
-const motionPropsShape = motionPropsSchema.unwrap().shape;
+export type ShapeDeclarationProps = MotionProps & {
+  readonly id?: AuthorId | undefined;
+  readonly name?: string | undefined;
+  readonly morphKey?: MorphKey | undefined;
+  readonly link?: LinkTarget | undefined;
+  readonly geometry?: Geometry | undefined;
+  readonly style?: ShapeStyle | undefined;
+};
 
 const shapeDeclarationPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
@@ -48,21 +79,32 @@ const shapeDeclarationPropsObjectSchema = z.strictObject({
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   geometry: geometrySchema.optional(),
-  style: shapeStyleSchema.optional(),
+  style: rawShapeStyleSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
   motion: motionPropsShape.motion,
 });
 
+export const shapeAllowedPropKeyList: readonly string[] = Object.keys(
+  shapeDeclarationPropsObjectSchema.shape,
+);
+
 export const shapeDeclarationPropsKeys = [
-  ...Object.keys(shapeDeclarationPropsObjectSchema.shape),
+  ...shapeAllowedPropKeyList,
   "children",
 ] as const;
 
-export const shapeDeclarationPropsSchema =
+const rawShapeDeclarationPropsSchema =
   shapeDeclarationPropsObjectSchema.readonly();
-
-export type ShapeDeclarationProps = z.infer<typeof shapeDeclarationPropsSchema>;
+export const shapeDeclarationPropsSchema: z.ZodType<ShapeDeclarationProps> =
+  rawShapeDeclarationPropsSchema satisfies z.ZodType<
+    AssertExact<
+      ShapeDeclarationProps,
+      z.infer<typeof rawShapeDeclarationPropsSchema>
+    > extends true
+      ? ShapeDeclarationProps
+      : never
+  >;
 
 /** Creates the editable native shape shared by the command factory and the Shape JSX element. */
 export function createShapeNode(

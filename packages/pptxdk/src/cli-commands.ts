@@ -34,7 +34,6 @@ import {
   fatalImportIssueSchema,
   fontEmbeddingModeSchema,
   importDiagnosticSchema,
-  previewErrorSchema,
   previewPlaceholderSchema,
   targetNameSchema,
   targets,
@@ -56,6 +55,7 @@ import {
   PreviewPageRangeError,
   previewPageNumberSchema,
 } from "@officedk/pptxdk/preview";
+import { previewErrorOptionSchemas } from "@pptxdk/core/build";
 import { strToU8, zipSync } from "fflate";
 import { z } from "zod";
 
@@ -91,11 +91,11 @@ const previewPageItemSchema = z.object({
 });
 
 const previewErrorWithPageSchema = z.discriminatedUnion("code", [
-  previewErrorSchema.options[0].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[1].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[2].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[3].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[4].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[0].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[1].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[2].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[3].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[4].extend({ page: previewPageNumberSchema }),
 ]);
 
 export const buildInputSchema = z.object({

@@ -4,7 +4,11 @@ import { registerHooks } from "node:module";
 import { extname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { toBuildDiagnostic } from "@pptxdk/core/build";
+import {
+  buildOptionsShape,
+  resolveOptionsShape,
+  toBuildDiagnostic,
+} from "@pptxdk/core/build";
 import { CommonNode } from "@pptxdk/core/document";
 import { validateOptions } from "@pptxdk/emit";
 import { transformSync, type Loader } from "esbuild";
@@ -17,7 +21,6 @@ import {
   ImportError,
   build,
   buildDiagnosticSchema,
-  buildOptionsSchema,
   importPptx,
   previewErrorSchema,
   previewPlaceholderSchema,
@@ -38,6 +41,11 @@ import {
 } from "./index.ts";
 import type { PreviewOptions, PreviewResult } from "./preview.ts";
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
 const sourceLoaders: Readonly<Record<string, Loader>> = {
   ".ts": "ts",
   ".tsx": "tsx",
@@ -45,41 +53,74 @@ const sourceLoaders: Readonly<Record<string, Loader>> = {
   ".jsx": "jsx",
 };
 
-export const exportNameSchema = z.string().min(1);
+const rawExportNameSchema = z.string().min(1);
+export const exportNameSchema: z.ZodType<string> = rawExportNameSchema;
 
-export const buildFromSourceOptionsSchema = buildOptionsSchema
-  .unwrap()
-  .extend({
-    /** Use the named export of the entry module as the deck; defaults to "default". */
-    exportName: exportNameSchema.optional(),
+export type BuildFromSourceOptions = BuildOptions & {
+  /** Use the named export of the entry module as the deck; defaults to "default". */
+  readonly exportName?: string | undefined;
+};
+
+const rawBuildFromSourceOptionsSchema = z
+  .strictObject({
+    ...buildOptionsShape,
+    exportName: rawExportNameSchema.optional(),
   })
   .readonly();
-export type BuildFromSourceOptions = z.infer<
-  typeof buildFromSourceOptionsSchema
->;
+export const buildFromSourceOptionsSchema: z.ZodType<BuildFromSourceOptions> =
+  rawBuildFromSourceOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      BuildFromSourceOptions,
+      z.infer<typeof rawBuildFromSourceOptionsSchema>
+    > extends true
+      ? BuildFromSourceOptions
+      : never
+  >;
 
-export const previewFromSourceOptionsSchema = z
+export type PreviewFromSourceOptions = {
+  readonly pages?: readonly number[] | undefined;
+  readonly signal?: AbortSignal | undefined;
+  /** Use the named export of the entry module as the deck; defaults to "default". */
+  readonly exportName?: string | undefined;
+};
+
+const rawPreviewFromSourceOptionsSchema = z
   .strictObject({
     pages: z.array(z.int().positive()).readonly().optional(),
     signal: z.instanceof(AbortSignal).optional(),
-    /** Use the named export of the entry module as the deck; defaults to "default". */
-    exportName: exportNameSchema.optional(),
+    exportName: rawExportNameSchema.optional(),
   })
   .readonly();
-export type PreviewFromSourceOptions = z.infer<
-  typeof previewFromSourceOptionsSchema
->;
+export const previewFromSourceOptionsSchema: z.ZodType<PreviewFromSourceOptions> =
+  rawPreviewFromSourceOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      PreviewFromSourceOptions,
+      z.infer<typeof rawPreviewFromSourceOptionsSchema>
+    > extends true
+      ? PreviewFromSourceOptions
+      : never
+  >;
 
-export const resolveFromSourceOptionsSchema = resolveOptionsSchema
-  .unwrap()
-  .extend({
-    /** Use the named export of the entry module as the deck; defaults to "default". */
-    exportName: exportNameSchema.optional(),
+export type ResolveFromSourceOptions = ResolveOptions & {
+  /** Use the named export of the entry module as the deck; defaults to "default". */
+  readonly exportName?: string | undefined;
+};
+
+const rawResolveFromSourceOptionsSchema = z
+  .strictObject({
+    ...resolveOptionsShape,
+    exportName: rawExportNameSchema.optional(),
   })
   .readonly();
-export type ResolveFromSourceOptions = z.infer<
-  typeof resolveFromSourceOptionsSchema
->;
+export const resolveFromSourceOptionsSchema: z.ZodType<ResolveFromSourceOptions> =
+  rawResolveFromSourceOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      ResolveFromSourceOptions,
+      z.infer<typeof rawResolveFromSourceOptionsSchema>
+    > extends true
+      ? ResolveFromSourceOptions
+      : never
+  >;
 
 export type {
   BuildDiagnostic,

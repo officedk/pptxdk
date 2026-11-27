@@ -11,29 +11,21 @@ import { CommonNode } from "@pptxdk/core/document";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
 import {
-  paragraphAuthorPropsSchema,
+  paragraphAuthorPropsKeys,
   paragraphStyleSchema,
   runStyleSchema,
-  slideNumberAuthorPropsSchema,
-  spanAuthorPropsSchema,
-  textAuthorPropsSchema,
+  slideNumberAuthorPropsKeys,
+  spanAuthorPropsKeys,
+  textAuthorPropsKeys,
   textBoxStyleSchema,
 } from "../shared/text-schemas.ts";
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
-const textAllowedPropKeys = new Set(
-  Object.keys(textAuthorPropsSchema.unwrap().shape),
-);
-const paragraphAllowedPropKeys = new Set(
-  Object.keys(paragraphAuthorPropsSchema.unwrap().shape),
-);
-const spanAllowedPropKeys = new Set(
-  Object.keys(spanAuthorPropsSchema.unwrap().shape),
-);
-const slideNumberAllowedPropKeys = new Set(
-  Object.keys(slideNumberAuthorPropsSchema.unwrap().shape),
-);
+const textAllowedPropKeys = new Set(textAuthorPropsKeys);
+const paragraphAllowedPropKeys = new Set(paragraphAuthorPropsKeys);
+const spanAllowedPropKeys = new Set(spanAuthorPropsKeys);
+const slideNumberAllowedPropKeys = new Set(slideNumberAuthorPropsKeys);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

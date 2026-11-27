@@ -2,12 +2,19 @@ import {
   CapabilityError,
   backgroundValueSchema,
   borderValueSchema,
-  layoutStyleSchema,
+  layoutStyleShape,
   linkTargetSchema,
   nativePlaceholderRefSchema,
-  textStyleSchema,
+  textStyleShape,
+  type BackgroundValue,
+  type BorderValue,
   type ColorValue,
+  type LayoutStyle,
+  type LinkTarget,
+  type NativePlaceholderRef,
+  type NonNegativeLayoutSpacing,
   type ResolvedColor,
+  type TextStyle,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { pxToEmu } from "@pptxdk/emit";
@@ -18,9 +25,12 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
-import { motionPropsSchema } from "../motion/motion-schemas.ts";
+import {
+  motionPropsShape,
+  type MotionProps,
+} from "../motion/motion-schemas.ts";
 import { optionalNameSchema } from "../shared/identity.ts";
-import { morphKeySchema } from "../shared/morph-api.ts";
+import { morphKeySchema, type MorphKey } from "../shared/morph-api.ts";
 import {
   parseTextInsets,
   textCoordinateSchema,
@@ -33,6 +43,11 @@ import type {
   TableCellPadding,
 } from "./table-xml.ts";
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
 const frColumnPattern = /^\d+(?:\.\d+)?fr$/u;
 const maximumExtentEmu = 2_147_483_647;
 
@@ -41,8 +56,17 @@ export type TableTrack =
   | { readonly kind: "fr"; readonly value: number }
   | { readonly kind: "auto" };
 
-export const tableVerticalAlignSchema = z.enum(["top", "middle", "bottom"]);
-export type TableVerticalAlign = z.infer<typeof tableVerticalAlignSchema>;
+export type TableVerticalAlign = "top" | "middle" | "bottom";
+const rawTableVerticalAlignSchema = z.enum(["top", "middle", "bottom"]);
+export const tableVerticalAlignSchema: z.ZodType<TableVerticalAlign> =
+  rawTableVerticalAlignSchema satisfies z.ZodType<
+    AssertExact<
+      TableVerticalAlign,
+      z.infer<typeof rawTableVerticalAlignSchema>
+    > extends true
+      ? TableVerticalAlign
+      : never
+  >;
 
 const tableColumnPxSchema = z.number().finite().positive();
 const tableColumnFrSchema = z
@@ -52,46 +76,92 @@ const tableColumnFrSchema = z
     (value) => Number(value.slice(0, -2)) > 0,
   ) as unknown as z.ZodType<`${number}fr`>;
 
-/** Column width in px; Nfr allocates from remaining width, auto uses shared font measurement. */
-export const tableColumnSchema = z.union([
+export type TableColumn = number | `${number}fr` | "auto";
+const rawTableColumnSchema = z.union([
   tableColumnPxSchema,
   tableColumnFrSchema,
   z.literal("auto"),
 ]);
-export type TableColumn = z.infer<typeof tableColumnSchema>;
+/** Column width in px; Nfr allocates from remaining width, auto uses shared font measurement. */
+export const tableColumnSchema: z.ZodType<TableColumn> =
+  rawTableColumnSchema satisfies z.ZodType<
+    AssertExact<TableColumn, z.infer<typeof rawTableColumnSchema>> extends true
+      ? TableColumn
+      : never
+  >;
 
-export const tableSpacingSchema = textPaddingValueSchema;
-export type TableSpacing = z.infer<typeof tableSpacingSchema>;
+export type TableSpacing = NonNegativeLayoutSpacing;
+export const tableSpacingSchema: z.ZodType<TableSpacing> =
+  textPaddingValueSchema;
 
-const coreTextStyleShape = textStyleSchema.unwrap().shape;
+export type TableTextStyle = Pick<
+  TextStyle,
+  | "fontFamily"
+  | "fontSize"
+  | "fontWeight"
+  | "fontStyle"
+  | "color"
+  | "lineHeight"
+  | "verticalAlign"
+  | "letterSpacing"
+  | "textTransform"
+  | "textDecoration"
+  | "textShadow"
+  | "lang"
+>;
 
 const tableTextStyleObjectSchema = z.strictObject({
-  fontFamily: coreTextStyleShape.fontFamily,
-  fontSize: coreTextStyleShape.fontSize,
-  fontWeight: coreTextStyleShape.fontWeight,
-  fontStyle: coreTextStyleShape.fontStyle,
-  color: coreTextStyleShape.color,
-  lineHeight: coreTextStyleShape.lineHeight,
-  verticalAlign: coreTextStyleShape.verticalAlign,
-  letterSpacing: coreTextStyleShape.letterSpacing,
-  textTransform: coreTextStyleShape.textTransform,
-  textDecoration: coreTextStyleShape.textDecoration,
-  textShadow: coreTextStyleShape.textShadow,
-  lang: coreTextStyleShape.lang,
+  fontFamily: textStyleShape.fontFamily,
+  fontSize: textStyleShape.fontSize,
+  fontWeight: textStyleShape.fontWeight,
+  fontStyle: textStyleShape.fontStyle,
+  color: textStyleShape.color,
+  lineHeight: textStyleShape.lineHeight,
+  verticalAlign: textStyleShape.verticalAlign,
+  letterSpacing: textStyleShape.letterSpacing,
+  textTransform: textStyleShape.textTransform,
+  textDecoration: textStyleShape.textDecoration,
+  textShadow: textStyleShape.textShadow,
+  lang: textStyleShape.lang,
 });
 
-export const tableTextStyleSchema = tableTextStyleObjectSchema.readonly();
-export type TableTextStyle = z.infer<typeof tableTextStyleSchema>;
+const rawTableTextStyleSchema = tableTextStyleObjectSchema.readonly();
+export const tableTextStyleSchema: z.ZodType<TableTextStyle> =
+  rawTableTextStyleSchema satisfies z.ZodType<
+    AssertExact<
+      TableTextStyle,
+      z.infer<typeof rawTableTextStyleSchema>
+    > extends true
+      ? TableTextStyle
+      : never
+  >;
 
-export const tableStyleSchema = z
-  .strictObject({
-    ...tableTextStyleObjectSchema.shape,
-    ...layoutStyleSchema.unwrap().shape,
-    background: backgroundValueSchema.optional(),
-    border: borderValueSchema.optional(),
-  })
-  .readonly();
-export type TableStyle = z.infer<typeof tableStyleSchema>;
+export type TableStyle = TableTextStyle &
+  LayoutStyle & {
+    readonly background?: BackgroundValue | undefined;
+    readonly border?: BorderValue | undefined;
+  };
+
+const tableStyleObjectSchema = z.strictObject({
+  ...tableTextStyleObjectSchema.shape,
+  ...layoutStyleShape,
+  background: backgroundValueSchema.optional(),
+  border: borderValueSchema.optional(),
+});
+const rawTableStyleSchema = tableStyleObjectSchema.readonly();
+export const tableStyleSchema: z.ZodType<TableStyle> =
+  rawTableStyleSchema satisfies z.ZodType<
+    AssertExact<TableStyle, z.infer<typeof rawTableStyleSchema>> extends true
+      ? TableStyle
+      : never
+  >;
+
+export type TableRowStyle = TableTextStyle & {
+  /** When unspecified, row height is determined from text measurement of unmerged cells in this row. */
+  readonly height?: number | undefined;
+  readonly background?: BackgroundValue | undefined;
+  readonly border?: BorderValue | undefined;
+};
 
 const tableRowOwnStyleObjectSchema = z.strictObject({
   /** When unspecified, row height is determined from text measurement of unmerged cells in this row. */
@@ -100,13 +170,35 @@ const tableRowOwnStyleObjectSchema = z.strictObject({
   border: borderValueSchema.optional(),
 });
 
-export const tableRowStyleSchema = z
+const rawTableRowStyleSchema = z
   .strictObject({
     ...tableTextStyleObjectSchema.shape,
     ...tableRowOwnStyleObjectSchema.shape,
   })
   .readonly();
-export type TableRowStyle = z.infer<typeof tableRowStyleSchema>;
+export const tableRowStyleSchema: z.ZodType<TableRowStyle> =
+  rawTableRowStyleSchema satisfies z.ZodType<
+    AssertExact<
+      TableRowStyle,
+      z.infer<typeof rawTableRowStyleSchema>
+    > extends true
+      ? TableRowStyle
+      : never
+  >;
+
+export type TableCellStyle = TableTextStyle & {
+  readonly background?: BackgroundValue | undefined;
+  readonly border?: BorderValue | undefined;
+  readonly borderTop?: BorderValue | undefined;
+  readonly borderRight?: BorderValue | undefined;
+  readonly borderBottom?: BorderValue | undefined;
+  readonly borderLeft?: BorderValue | undefined;
+  readonly padding?: NonNegativeLayoutSpacing | undefined;
+  readonly paddingTop?: number | undefined;
+  readonly paddingRight?: number | undefined;
+  readonly paddingBottom?: number | undefined;
+  readonly paddingLeft?: number | undefined;
+};
 
 const tableCellOwnStyleObjectSchema = z.strictObject({
   background: backgroundValueSchema.optional(),
@@ -122,17 +214,33 @@ const tableCellOwnStyleObjectSchema = z.strictObject({
   paddingLeft: z.number().finite().nonnegative().optional(),
 });
 
-export const tableCellStyleSchema = z
-  .strictObject({
-    ...tableTextStyleObjectSchema.shape,
-    ...tableCellOwnStyleObjectSchema.shape,
-  })
-  .readonly();
-export type TableCellStyle = z.infer<typeof tableCellStyleSchema>;
+const tableCellStyleObjectSchema = z.strictObject({
+  ...tableTextStyleObjectSchema.shape,
+  ...tableCellOwnStyleObjectSchema.shape,
+});
+const rawTableCellStyleSchema = tableCellStyleObjectSchema.readonly();
+export const tableCellStyleSchema: z.ZodType<TableCellStyle> =
+  rawTableCellStyleSchema satisfies z.ZodType<
+    AssertExact<
+      TableCellStyle,
+      z.infer<typeof rawTableCellStyleSchema>
+    > extends true
+      ? TableCellStyle
+      : never
+  >;
 
 export const tableMergeSpanSchema = z.number().int().min(1);
 
-const motionPropsShape = motionPropsSchema.unwrap().shape;
+export type TableDeclarationProps = MotionProps & {
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly placeholder?: string | undefined;
+  readonly nativePlaceholder?: NativePlaceholderRef | undefined;
+  readonly morphKey?: MorphKey | undefined;
+  readonly link?: LinkTarget | undefined;
+  readonly columns: readonly TableColumn[];
+  readonly style?: TableStyle | undefined;
+};
 
 const tableDeclarationPropsObjectSchema = z.strictObject({
   id: optionalNameSchema.optional(),
@@ -141,37 +249,75 @@ const tableDeclarationPropsObjectSchema = z.strictObject({
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
-  columns: z.array(tableColumnSchema).nonempty().readonly(),
-  style: tableStyleSchema.optional(),
+  columns: z.array(rawTableColumnSchema).nonempty().readonly(),
+  style: rawTableStyleSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
   motion: motionPropsShape.motion,
 });
 
-export const tableDeclarationPropsSchema =
+const rawTableDeclarationPropsSchema =
   tableDeclarationPropsObjectSchema.readonly();
-export type TableDeclarationProps = z.infer<typeof tableDeclarationPropsSchema>;
+export const tableDeclarationPropsSchema: z.ZodType<TableDeclarationProps> =
+  rawTableDeclarationPropsSchema satisfies z.ZodType<
+    AssertExact<
+      TableDeclarationProps,
+      z.infer<typeof rawTableDeclarationPropsSchema>
+    > extends true
+      ? TableDeclarationProps
+      : never
+  >;
+
+export type RowDeclarationProps = {
+  readonly id?: string | undefined;
+  readonly style?: TableRowStyle | undefined;
+};
 
 const rowDeclarationPropsObjectSchema = z.strictObject({
   id: optionalNameSchema.optional(),
-  style: tableRowStyleSchema.optional(),
+  style: rawTableRowStyleSchema.optional(),
 });
-export const rowDeclarationPropsSchema =
-  rowDeclarationPropsObjectSchema.readonly();
-export type RowDeclarationProps = z.infer<typeof rowDeclarationPropsSchema>;
+const rawRowDeclarationPropsSchema = rowDeclarationPropsObjectSchema.readonly();
+export const rowDeclarationPropsSchema: z.ZodType<RowDeclarationProps> =
+  rawRowDeclarationPropsSchema satisfies z.ZodType<
+    AssertExact<
+      RowDeclarationProps,
+      z.infer<typeof rawRowDeclarationPropsSchema>
+    > extends true
+      ? RowDeclarationProps
+      : never
+  >;
+
+export type CellDeclarationProps = {
+  readonly id?: string | undefined;
+  readonly colSpan?: number | undefined;
+  readonly rowSpan?: number | undefined;
+  readonly style?: TableCellStyle | undefined;
+};
 
 const cellDeclarationPropsObjectSchema = z.strictObject({
   id: optionalNameSchema.optional(),
   colSpan: tableMergeSpanSchema.optional(),
   rowSpan: tableMergeSpanSchema.optional(),
-  style: tableCellStyleSchema.optional(),
+  style: rawTableCellStyleSchema.optional(),
 });
-export const cellDeclarationPropsSchema =
+const rawCellDeclarationPropsSchema =
   cellDeclarationPropsObjectSchema.readonly();
-export type CellDeclarationProps = z.infer<typeof cellDeclarationPropsSchema>;
+export const cellDeclarationPropsSchema: z.ZodType<CellDeclarationProps> =
+  rawCellDeclarationPropsSchema satisfies z.ZodType<
+    AssertExact<
+      CellDeclarationProps,
+      z.infer<typeof rawCellDeclarationPropsSchema>
+    > extends true
+      ? CellDeclarationProps
+      : never
+  >;
 
+export const tableDeclarationAllowedPropKeys: readonly string[] = Object.keys(
+  tableDeclarationPropsObjectSchema.shape,
+);
 export const tableAllowedParameters: readonly string[] = [
-  ...Object.keys(tableDeclarationPropsObjectSchema.shape),
+  ...tableDeclarationAllowedPropKeys,
   "children",
 ];
 export const rowAllowedParameters: readonly string[] = Object.keys(
@@ -184,13 +330,16 @@ export const tableTextStyleKeys: readonly string[] = Object.keys(
   tableTextStyleObjectSchema.shape,
 );
 export const tableStyleKeys: readonly string[] = Object.keys(
-  tableStyleSchema.unwrap().shape,
+  tableStyleObjectSchema.shape,
 );
 export const rowStyleKeys: readonly string[] = Object.keys(
   tableRowOwnStyleObjectSchema.shape,
 );
 export const cellStyleKeys: readonly string[] = Object.keys(
   tableCellOwnStyleObjectSchema.shape,
+);
+export const tableCellAllStyleKeys: readonly string[] = Object.keys(
+  tableCellStyleObjectSchema.shape,
 );
 
 /** OOXML `<p:cNvPr>` attribute fragment schema inside `<p:graphicFrame>`. */

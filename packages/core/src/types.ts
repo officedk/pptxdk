@@ -859,9 +859,11 @@ export type BoundObjectCapability = {
  */
 export type ObjectCapabilityModule<
   Bound extends BoundObjectCapability = BoundObjectCapability,
+  Mechanisms extends readonly NativeMechanismDefinition[] =
+    readonly NativeMechanismDefinition[],
 > = {
   readonly declaration: string;
-  readonly mechanisms?: readonly NativeMechanismDefinition[];
+  readonly mechanisms?: Mechanisms;
   readonly codegen?: unknown;
   bind(input: CapabilityInput, context: CapabilityParseContext): Bound;
 };
@@ -1056,6 +1058,8 @@ export type MastersEmitDriver = {
 /** Slide capability module that binds per-build slide declaration state into a closed handle. */
 export type SlideCapabilityModule<
   Bound extends BoundSlideCapability = BoundSlideCapability,
+  Mechanisms extends readonly NativeMechanismDefinition[] =
+    readonly NativeMechanismDefinition[],
 > = {
   /** Slide property name handled by this module when applicable to Slide declarations. */
   readonly slideProp?: string;
@@ -1071,7 +1075,7 @@ export type SlideCapabilityModule<
   readonly declaration: string;
   /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
-  readonly mechanisms?: readonly NativeMechanismDefinition[];
+  readonly mechanisms?: Mechanisms;
   readonly codegen?: unknown;
   readonly mastersCanvas?: {
     paintBackdrop(input: {

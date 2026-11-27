@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   cp,
   copyFile,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -13,6 +15,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { z } from "zod";
+
+async function collectDtsFiles(directory: string): Promise<readonly string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const fullPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectDtsFiles(fullPath)));
+    } else if (entry.name.endsWith(".d.ts")) {
+      files.push(fullPath);
+    }
+  }
+  return files.toSorted();
+}
+
+const maxTotalDtsBytes = 350 * 1024;
 
 const spec = process.argv[2];
 assert(spec, "Expected an npm tarball or package spec");
@@ -84,6 +102,54 @@ try {
     await readFile(join(installedPackage, "LICENSE"), "utf8"),
     /MIT License[\s\S]+Copyright \(c\) 2026 officedk/u,
   );
+  assert.equal(
+    existsSync(join(installedPackage, "README.md")),
+    false,
+    "Packed @officedk/pptxdk must not ship README.md",
+  );
+  const dtsFiles = await collectDtsFiles(join(installedPackage, "dist"));
+  assert(dtsFiles.length > 0, "Expected packed .d.ts files under dist/");
+  let totalDtsBytes = 0;
+  const dtsChunks: string[] = [];
+  for (const file of dtsFiles) {
+    const content = await readFile(file, "utf8");
+    totalDtsBytes += Buffer.byteLength(content, "utf8");
+    assert.doesNotMatch(
+      content,
+      /\bfontkit\b/u,
+      `Unexpected fontkit reference leaked in ${file}`,
+    );
+    assert.doesNotMatch(
+      content,
+      /\bZodObject<|\bZodReadonly<|\bZodDiscriminatedUnion<|z\.infer</u,
+      `Unexpected expanded Zod AST or z.infer leaked in ${file}`,
+    );
+    dtsChunks.push(content);
+  }
+  assert(
+    totalDtsBytes < maxTotalDtsBytes,
+    `Packed dist/*.d.ts size ${totalDtsBytes} bytes exceeds ${maxTotalDtsBytes} byte budget`,
+  );
+  const combinedDts = dtsChunks.join("\n");
+  for (const [label, pattern] of [
+    [
+      "GradientStop.position JSDoc",
+      /Normalized stop position in the closed interval `\[0, 1\]`/u,
+    ],
+    [
+      "ChartProps.groups example JSDoc",
+      /groups:\s*\[\s*\*\s*\{\s*\*\s*kind: "column"/u,
+    ],
+    ["ChartPlotArea / plotArea px JSDoc", /top-left corner/u],
+    [
+      "FontSize unit JSDoc",
+      /Positive numbers default to pixels \(`px`\) converted at `96 dpi`/u,
+    ],
+    ["Image src / SVG JSDoc", /\.svg` files are not\s+\*\s*supported/u],
+    ["LayoutStyle.flex JSDoc", /minWidth: "auto"/u],
+  ] as const) {
+    assert.match(combinedDts, pattern, `Missing ${label} in packed .d.ts`);
+  }
   run(process.execPath, ["verify.ts"]);
   const cli = join(consumer, "node_modules", ".bin", "pptxdk");
   for (const [target, entry] of [

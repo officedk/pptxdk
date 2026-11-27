@@ -1,26 +1,20 @@
 import { CommonNode, RichTextContainer } from "@pptxdk/core/document";
-import type { z } from "zod";
 
 import type {
-  paragraphAuthorPropsSchema,
-  slideNumberAuthorPropsSchema,
-  spanAuthorPropsSchema,
-  textAuthorPropsSchema,
+  ParagraphDeclarationProps,
+  SlideNumberDeclarationProps,
+  SpanDeclarationProps,
+  TextDeclarationProps,
   TextStyle,
 } from "../shared/text-schemas.ts";
 
 /** Pure text box declaration shared by JSX and command authoring. */
-export type TextDeclarationProps = z.infer<typeof textAuthorPropsSchema>;
-
-export type ParagraphDeclarationProps = z.infer<
-  typeof paragraphAuthorPropsSchema
->;
-
-export type SpanDeclarationProps = z.infer<typeof spanAuthorPropsSchema>;
-
-export type SlideNumberDeclarationProps = z.infer<
-  typeof slideNumberAuthorPropsSchema
->;
+export type {
+  ParagraphDeclarationProps,
+  SlideNumberDeclarationProps,
+  SpanDeclarationProps,
+  TextDeclarationProps,
+};
 
 /** Pure text style type for Shape; does not depend on the text box capability module. */
 export type ShapeTextStyle = TextStyle;

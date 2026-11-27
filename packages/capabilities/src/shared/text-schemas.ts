@@ -1,26 +1,39 @@
 import {
   CapabilityError,
   authorIdSchema,
-  layoutStyleSchema,
+  layoutStyleShape,
   linkTargetSchema,
   nativePlaceholderRefSchema,
   nonNegativeLayoutSpacingSchema,
   textListBulletSchema,
   textListNumberSchema,
   textListSchema,
-  textStyleSchema,
+  textStyleShape,
   validateTextStyle,
-  visualStyleSchema,
+  visualStyleShape,
+  type AuthorId,
+  type LayoutStyle,
+  type LinkTarget,
+  type NativePlaceholderRef,
   type NonNegativeLayoutSpacing,
   type TextList,
   type TextStyle,
+  type VisualStyle,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { z } from "zod";
 
-import { motionPropsSchema } from "../motion/motion-schemas.ts";
+import {
+  motionPropsShape,
+  type MotionProps,
+} from "../motion/motion-schemas.ts";
 import { optionalNameSchema } from "./identity.ts";
-import { morphKeySchema } from "./morph-api.ts";
+import { morphKeySchema, type MorphKey } from "./morph-api.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
 
 export { textListBulletSchema, textListNumberSchema, textListSchema };
 export type { TextList, TextStyle };
@@ -29,35 +42,65 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const coreTextStyleShape = textStyleSchema.unwrap().shape;
+export type RunTextStyle = Pick<
+  TextStyle,
+  | "fontFamily"
+  | "fontSize"
+  | "fontWeight"
+  | "fontStyle"
+  | "color"
+  | "letterSpacing"
+  | "textTransform"
+  | "textDecoration"
+  | "textShadow"
+  | "lang"
+>;
 
 const runStyleObjectSchema = z.strictObject({
-  fontFamily: coreTextStyleShape.fontFamily,
-  fontSize: coreTextStyleShape.fontSize,
-  fontWeight: coreTextStyleShape.fontWeight,
-  fontStyle: coreTextStyleShape.fontStyle,
-  color: coreTextStyleShape.color,
-  letterSpacing: coreTextStyleShape.letterSpacing,
-  textTransform: coreTextStyleShape.textTransform,
-  textDecoration: coreTextStyleShape.textDecoration,
-  textShadow: coreTextStyleShape.textShadow,
-  lang: coreTextStyleShape.lang,
+  fontFamily: textStyleShape.fontFamily,
+  fontSize: textStyleShape.fontSize,
+  fontWeight: textStyleShape.fontWeight,
+  fontStyle: textStyleShape.fontStyle,
+  color: textStyleShape.color,
+  letterSpacing: textStyleShape.letterSpacing,
+  textTransform: textStyleShape.textTransform,
+  textDecoration: textStyleShape.textDecoration,
+  textShadow: textStyleShape.textShadow,
+  lang: textStyleShape.lang,
 });
 
+const rawRunStyleSchema = runStyleObjectSchema.readonly();
 /** Run-level style schema shared by `Span` and `SlideNumber`. */
-export const runStyleSchema = runStyleObjectSchema.readonly();
-export type RunTextStyle = z.infer<typeof runStyleSchema>;
+export const runStyleSchema: z.ZodType<RunTextStyle> =
+  rawRunStyleSchema satisfies z.ZodType<
+    AssertExact<RunTextStyle, z.infer<typeof rawRunStyleSchema>> extends true
+      ? RunTextStyle
+      : never
+  >;
+
+export type ParagraphStyle = RunTextStyle &
+  Pick<TextStyle, "lineHeight" | "align" | "spacingAfter"> & {
+    readonly list?: TextList | undefined;
+  };
 
 const paragraphStyleObjectSchema = runStyleObjectSchema.extend({
-  lineHeight: coreTextStyleShape.lineHeight,
-  align: coreTextStyleShape.align,
-  spacingAfter: coreTextStyleShape.spacingAfter,
+  lineHeight: textStyleShape.lineHeight,
+  align: textStyleShape.align,
+  spacingAfter: textStyleShape.spacingAfter,
   list: textListSchema.optional(),
 });
 
+const rawParagraphStyleSchema = paragraphStyleObjectSchema.readonly();
 /** Paragraph-level style schema shared by `P` across Text, Shape, Table Cell, and Notes. */
-export const paragraphStyleSchema = paragraphStyleObjectSchema.readonly();
-export type ParagraphStyle = z.infer<typeof paragraphStyleSchema>;
+export const paragraphStyleSchema: z.ZodType<ParagraphStyle> =
+  rawParagraphStyleSchema satisfies z.ZodType<
+    AssertExact<
+      ParagraphStyle,
+      z.infer<typeof rawParagraphStyleSchema>
+    > extends true
+      ? ParagraphStyle
+      : never
+  >;
 
 export const runStyleKeys = new Set(Object.keys(runStyleObjectSchema.shape));
 export const paragraphStyleKeys = new Set(
@@ -112,16 +155,36 @@ export const textInsetsStyleSchema = z
   })
   .readonly();
 
-export const textBoxStyleSchema = z
-  .strictObject({
-    ...layoutStyleSchema.unwrap().shape,
-    ...coreTextStyleShape,
-    ...visualStyleSchema.unwrap().shape,
-  })
-  .readonly();
-export type TextBoxStyle = z.infer<typeof textBoxStyleSchema>;
+export type TextBoxStyle = LayoutStyle & TextStyle & VisualStyle;
 
-const motionPropsShape = motionPropsSchema.unwrap().shape;
+const textBoxStyleObjectSchema = z.strictObject({
+  ...layoutStyleShape,
+  ...textStyleShape,
+  ...visualStyleShape,
+});
+export const textBoxStyleKeys: readonly string[] = Object.keys(
+  textBoxStyleObjectSchema.shape,
+);
+const rawTextBoxStyleSchema = textBoxStyleObjectSchema.readonly();
+export const textBoxStyleSchema: z.ZodType<TextBoxStyle> =
+  rawTextBoxStyleSchema satisfies z.ZodType<
+    AssertExact<
+      TextBoxStyle,
+      z.infer<typeof rawTextBoxStyleSchema>
+    > extends true
+      ? TextBoxStyle
+      : never
+  >;
+
+export type TextDeclarationProps = MotionProps & {
+  readonly id?: AuthorId | undefined;
+  readonly name?: string | undefined;
+  readonly placeholder?: string | undefined;
+  readonly nativePlaceholder?: NativePlaceholderRef | undefined;
+  readonly morphKey?: MorphKey | undefined;
+  readonly link?: LinkTarget | undefined;
+  readonly style?: TextBoxStyle | undefined;
+};
 
 const textAuthorPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
@@ -130,34 +193,82 @@ const textAuthorPropsObjectSchema = z.strictObject({
   nativePlaceholder: nativePlaceholderRefSchema.optional(),
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
-  style: textBoxStyleSchema.optional(),
+  style: rawTextBoxStyleSchema.optional(),
   enter: motionPropsShape.enter,
   emphasis: motionPropsShape.emphasis,
   motion: motionPropsShape.motion,
 });
 
-export const textAuthorPropsSchema = textAuthorPropsObjectSchema.readonly();
+export const textAuthorPropsKeys: readonly string[] = Object.keys(
+  textAuthorPropsObjectSchema.shape,
+);
+const rawTextAuthorPropsSchema = textAuthorPropsObjectSchema.readonly();
+export const textAuthorPropsSchema: z.ZodType<TextDeclarationProps> =
+  rawTextAuthorPropsSchema satisfies z.ZodType<
+    AssertExact<
+      TextDeclarationProps,
+      z.infer<typeof rawTextAuthorPropsSchema>
+    > extends true
+      ? TextDeclarationProps
+      : never
+  >;
 
 export const textBoxAllowedParamKeys = new Set([
-  ...Object.keys(textAuthorPropsObjectSchema.shape),
+  ...textAuthorPropsKeys,
   "children",
 ]);
 
-export const paragraphAuthorPropsSchema = z
-  .strictObject({
-    id: authorIdSchema.optional(),
-    style: paragraphStyleSchema.optional(),
-  })
-  .readonly();
+export type ParagraphDeclarationProps = {
+  readonly id?: AuthorId | undefined;
+  readonly style?: ParagraphStyle | undefined;
+};
 
-export const spanAuthorPropsSchema = z
-  .strictObject({
-    id: authorIdSchema.optional(),
-    style: runStyleSchema.optional(),
-  })
-  .readonly();
+const paragraphAuthorPropsObjectSchema = z.strictObject({
+  id: authorIdSchema.optional(),
+  style: rawParagraphStyleSchema.optional(),
+});
+export const paragraphAuthorPropsKeys: readonly string[] = Object.keys(
+  paragraphAuthorPropsObjectSchema.shape,
+);
+const rawParagraphAuthorPropsSchema =
+  paragraphAuthorPropsObjectSchema.readonly();
+export const paragraphAuthorPropsSchema: z.ZodType<ParagraphDeclarationProps> =
+  rawParagraphAuthorPropsSchema satisfies z.ZodType<
+    AssertExact<
+      ParagraphDeclarationProps,
+      z.infer<typeof rawParagraphAuthorPropsSchema>
+    > extends true
+      ? ParagraphDeclarationProps
+      : never
+  >;
 
-export const slideNumberAuthorPropsSchema = spanAuthorPropsSchema;
+export type SpanDeclarationProps = {
+  readonly id?: AuthorId | undefined;
+  readonly style?: RunTextStyle | undefined;
+};
+
+const spanAuthorPropsObjectSchema = z.strictObject({
+  id: authorIdSchema.optional(),
+  style: rawRunStyleSchema.optional(),
+});
+export const spanAuthorPropsKeys: readonly string[] = Object.keys(
+  spanAuthorPropsObjectSchema.shape,
+);
+const rawSpanAuthorPropsSchema = spanAuthorPropsObjectSchema.readonly();
+export const spanAuthorPropsSchema: z.ZodType<SpanDeclarationProps> =
+  rawSpanAuthorPropsSchema satisfies z.ZodType<
+    AssertExact<
+      SpanDeclarationProps,
+      z.infer<typeof rawSpanAuthorPropsSchema>
+    > extends true
+      ? SpanDeclarationProps
+      : never
+  >;
+
+export type SlideNumberDeclarationProps = SpanDeclarationProps;
+export const slideNumberAuthorPropsKeys = spanAuthorPropsKeys;
+export const slideNumberAuthorPropsSchema: z.ZodType<SlideNumberDeclarationProps> =
+  spanAuthorPropsSchema;
 
 /** Parses and validates a paragraph list declaration, preserving DrawingML error codes. */
 export function parseTextList(value: unknown): TextList {

@@ -1,17 +1,39 @@
 import { z } from "zod";
 
-import { geometrySchema } from "#/geometry-schemas.ts";
+import { geometrySchema, type Geometry } from "#/geometry-schemas.ts";
 import { resolvePercent } from "#/layout-protocol.ts";
 import {
-  layoutStyleSchema,
-  paddingStyleSchema,
+  layoutStyleShape,
+  paddingStyleShape,
   type LayoutLength,
+  type LayoutStyle,
+  type PaddingStyle,
 } from "#/layout-schemas.ts";
 import {
   textStyleShape,
-  visualStyleSchema,
+  visualStyleShape,
+  type TextStyle,
   type ThemeContext,
+  type VisualStyle,
 } from "#/theme.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
+export type TextList =
+  | {
+      readonly type: "bullet";
+      readonly character?: string | undefined;
+      readonly level?: number | undefined;
+    }
+  | {
+      readonly type: "number";
+      readonly style?: "arabicPeriod" | undefined;
+      readonly startAt?: number | undefined;
+      readonly level?: number | undefined;
+    };
 
 const singleUnicodeCharacterSchema = z.string().refine((character) => {
   const codePoint = character.codePointAt(0);
@@ -37,12 +59,17 @@ export const textListNumberSchema = z
   })
   .readonly();
 
-/** Native paragraph list schema (bullets and Arabic period numbering). */
-export const textListSchema = z.discriminatedUnion("type", [
+const rawTextListSchema = z.discriminatedUnion("type", [
   textListBulletSchema,
   textListNumberSchema,
 ]);
-export type TextList = z.infer<typeof textListSchema>;
+/** Native paragraph list schema (bullets and Arabic period numbering). */
+export const textListSchema: z.ZodType<TextList> =
+  rawTextListSchema satisfies z.ZodType<
+    AssertExact<TextList, z.infer<typeof rawTextListSchema>> extends true
+      ? TextList
+      : never
+  >;
 
 export const textPlaceholderRoles = [
   "title",
@@ -54,8 +81,17 @@ export const textPlaceholderRoles = [
   "hdr",
 ] as const;
 
-export const textPlaceholderRoleSchema = z.enum(textPlaceholderRoles);
-export type TextPlaceholderRole = z.infer<typeof textPlaceholderRoleSchema>;
+export type TextPlaceholderRole = (typeof textPlaceholderRoles)[number];
+const rawTextPlaceholderRoleSchema = z.enum(textPlaceholderRoles);
+export const textPlaceholderRoleSchema: z.ZodType<TextPlaceholderRole> =
+  rawTextPlaceholderRoleSchema satisfies z.ZodType<
+    AssertExact<
+      TextPlaceholderRole,
+      z.infer<typeof rawTextPlaceholderRoleSchema>
+    > extends true
+      ? TextPlaceholderRole
+      : never
+  >;
 
 export const contentPlaceholderRoles = [
   ...textPlaceholderRoles,
@@ -69,80 +105,171 @@ export const contentPlaceholderRoles = [
   "media",
 ] as const;
 
-export const placeholderRoleSchema = z.enum(contentPlaceholderRoles);
-export type ContentPlaceholderRole = z.infer<typeof placeholderRoleSchema>;
+export type ContentPlaceholderRole = (typeof contentPlaceholderRoles)[number];
+const rawPlaceholderRoleSchema = z.enum(contentPlaceholderRoles);
+export const placeholderRoleSchema: z.ZodType<ContentPlaceholderRole> =
+  rawPlaceholderRoleSchema satisfies z.ZodType<
+    AssertExact<
+      ContentPlaceholderRole,
+      z.infer<typeof rawPlaceholderRoleSchema>
+    > extends true
+      ? ContentPlaceholderRole
+      : never
+  >;
 
+export type PlaceholderSize = "full" | "half" | "quarter";
+const rawPlaceholderSizeSchema = z.enum(["full", "half", "quarter"]);
 /** Official OOXML ST_PlaceholderSize values for placeholder slots. */
-export const placeholderSizeSchema = z.enum(["full", "half", "quarter"]);
-export type PlaceholderSize = z.infer<typeof placeholderSizeSchema>;
+export const placeholderSizeSchema: z.ZodType<PlaceholderSize> =
+  rawPlaceholderSizeSchema satisfies z.ZodType<
+    AssertExact<
+      PlaceholderSize,
+      z.infer<typeof rawPlaceholderSizeSchema>
+    > extends true
+      ? PlaceholderSize
+      : never
+  >;
 
-export const placeholderOrientSchema = z.enum(["horz", "vert"]);
-export type PlaceholderOrient = z.infer<typeof placeholderOrientSchema>;
+export type PlaceholderOrient = "horz" | "vert";
+const rawPlaceholderOrientSchema = z.enum(["horz", "vert"]);
+export const placeholderOrientSchema: z.ZodType<PlaceholderOrient> =
+  rawPlaceholderOrientSchema satisfies z.ZodType<
+    AssertExact<
+      PlaceholderOrient,
+      z.infer<typeof rawPlaceholderOrientSchema>
+    > extends true
+      ? PlaceholderOrient
+      : never
+  >;
 
-export const placeholderLevelStyleSchema = z
+export type PlaceholderLevelStyle = TextStyle & {
+  readonly list?: TextList | undefined;
+  readonly marginLeft?: number | undefined;
+  readonly indent?: number | undefined;
+  readonly spacingBefore?: number | undefined;
+};
+
+const rawPlaceholderLevelStyleSchema = z
   .strictObject({
     ...textStyleShape,
-    list: textListSchema.optional(),
+    list: rawTextListSchema.optional(),
     marginLeft: z.number().finite().nonnegative().optional(),
     indent: z.number().finite().optional(),
     spacingBefore: z.number().finite().nonnegative().optional(),
   })
   .readonly();
-export type PlaceholderLevelStyle = z.infer<typeof placeholderLevelStyleSchema>;
+export const placeholderLevelStyleSchema: z.ZodType<PlaceholderLevelStyle> =
+  rawPlaceholderLevelStyleSchema satisfies z.ZodType<
+    AssertExact<
+      PlaceholderLevelStyle,
+      z.infer<typeof rawPlaceholderLevelStyleSchema>
+    > extends true
+      ? PlaceholderLevelStyle
+      : never
+  >;
 
-export const placeholderListStylesSchema = z
+export type PlaceholderListStyles = {
+  readonly 1?: PlaceholderLevelStyle | undefined;
+  readonly 2?: PlaceholderLevelStyle | undefined;
+  readonly 3?: PlaceholderLevelStyle | undefined;
+  readonly 4?: PlaceholderLevelStyle | undefined;
+  readonly 5?: PlaceholderLevelStyle | undefined;
+  readonly 6?: PlaceholderLevelStyle | undefined;
+  readonly 7?: PlaceholderLevelStyle | undefined;
+  readonly 8?: PlaceholderLevelStyle | undefined;
+  readonly 9?: PlaceholderLevelStyle | undefined;
+};
+
+const rawPlaceholderListStylesSchema = z
   .strictObject({
-    1: placeholderLevelStyleSchema.optional(),
-    2: placeholderLevelStyleSchema.optional(),
-    3: placeholderLevelStyleSchema.optional(),
-    4: placeholderLevelStyleSchema.optional(),
-    5: placeholderLevelStyleSchema.optional(),
-    6: placeholderLevelStyleSchema.optional(),
-    7: placeholderLevelStyleSchema.optional(),
-    8: placeholderLevelStyleSchema.optional(),
-    9: placeholderLevelStyleSchema.optional(),
+    1: rawPlaceholderLevelStyleSchema.optional(),
+    2: rawPlaceholderLevelStyleSchema.optional(),
+    3: rawPlaceholderLevelStyleSchema.optional(),
+    4: rawPlaceholderLevelStyleSchema.optional(),
+    5: rawPlaceholderLevelStyleSchema.optional(),
+    6: rawPlaceholderLevelStyleSchema.optional(),
+    7: rawPlaceholderLevelStyleSchema.optional(),
+    8: rawPlaceholderLevelStyleSchema.optional(),
+    9: rawPlaceholderLevelStyleSchema.optional(),
   })
   .readonly();
-export type PlaceholderListStyles = z.infer<typeof placeholderListStylesSchema>;
+export const placeholderListStylesSchema: z.ZodType<PlaceholderListStyles> =
+  rawPlaceholderListStylesSchema satisfies z.ZodType<
+    AssertExact<
+      PlaceholderListStyles,
+      z.infer<typeof rawPlaceholderListStylesSchema>
+    > extends true
+      ? PlaceholderListStyles
+      : never
+  >;
 
-export const placeholderStyleSchema = z
+export type PlaceholderStyle = LayoutStyle &
+  PaddingStyle &
+  TextStyle &
+  VisualStyle;
+
+const rawPlaceholderStyleSchema = z
   .strictObject({
-    ...layoutStyleSchema.unwrap().shape,
-    ...paddingStyleSchema.unwrap().shape,
+    ...layoutStyleShape,
+    ...paddingStyleShape,
     ...textStyleShape,
-    ...visualStyleSchema.unwrap().shape,
+    ...visualStyleShape,
   })
   .readonly();
-export type PlaceholderStyle = z.infer<typeof placeholderStyleSchema>;
-
-const basePlaceholderSpecSchema = z.strictObject({
-  type: placeholderRoleSchema,
-  explicitType: z.boolean().optional(),
-  idx: z.number().int().nonnegative().optional(),
-  size: placeholderSizeSchema.optional(),
-  orient: placeholderOrientSchema.optional(),
-  hasCustomPrompt: z.boolean().optional(),
-  name: z.string().optional(),
-  geometry: geometrySchema.optional(),
-  style: placeholderStyleSchema.optional(),
-  listStyles: placeholderListStylesSchema.optional(),
-  promptText: z.string().optional(),
-});
-
-export const layoutPlaceholderSpecSchema = basePlaceholderSpecSchema.readonly();
+export const placeholderStyleSchema: z.ZodType<PlaceholderStyle> =
+  rawPlaceholderStyleSchema satisfies z.ZodType<
+    AssertExact<
+      PlaceholderStyle,
+      z.infer<typeof rawPlaceholderStyleSchema>
+    > extends true
+      ? PlaceholderStyle
+      : never
+  >;
 
 export type LayoutPlaceholderSpec<
   Role extends ContentPlaceholderRole = ContentPlaceholderRole,
-> = Omit<z.infer<typeof layoutPlaceholderSpecSchema>, "type"> & {
+> = {
   readonly type: Role;
+  readonly explicitType?: boolean | undefined;
+  readonly idx?: number | undefined;
+  readonly size?: PlaceholderSize | undefined;
+  readonly orient?: PlaceholderOrient | undefined;
+  readonly hasCustomPrompt?: boolean | undefined;
+  readonly name?: string | undefined;
+  readonly geometry?: Geometry | undefined;
+  readonly style?: PlaceholderStyle | undefined;
+  readonly listStyles?: PlaceholderListStyles | undefined;
+  readonly promptText?: string | undefined;
 };
 
-export const masterPlaceholderSpecSchema = layoutPlaceholderSpecSchema;
-export type MasterPlaceholderSpec = LayoutPlaceholderSpec;
+const basePlaceholderSpecSchema = z.strictObject({
+  type: rawPlaceholderRoleSchema,
+  explicitType: z.boolean().optional(),
+  idx: z.number().int().nonnegative().optional(),
+  size: rawPlaceholderSizeSchema.optional(),
+  orient: rawPlaceholderOrientSchema.optional(),
+  hasCustomPrompt: z.boolean().optional(),
+  name: z.string().optional(),
+  geometry: geometrySchema.optional(),
+  style: rawPlaceholderStyleSchema.optional(),
+  listStyles: rawPlaceholderListStylesSchema.optional(),
+  promptText: z.string().optional(),
+});
 
-export const placeholderMapSchema = z
-  .record(z.string().min(1), layoutPlaceholderSpecSchema)
-  .readonly();
+const rawLayoutPlaceholderSpecSchema = basePlaceholderSpecSchema.readonly();
+export const layoutPlaceholderSpecSchema: z.ZodType<LayoutPlaceholderSpec> =
+  rawLayoutPlaceholderSpecSchema satisfies z.ZodType<
+    AssertExact<
+      LayoutPlaceholderSpec,
+      z.infer<typeof rawLayoutPlaceholderSpecSchema>
+    > extends true
+      ? LayoutPlaceholderSpec
+      : never
+  >;
+
+export type MasterPlaceholderSpec = LayoutPlaceholderSpec;
+export const masterPlaceholderSpecSchema: z.ZodType<MasterPlaceholderSpec> =
+  layoutPlaceholderSpecSchema;
 
 export type PlaceholderMap = Readonly<Record<string, LayoutPlaceholderSpec>>;
 export type EmptyPlaceholderMap = Readonly<
@@ -152,28 +279,64 @@ export type MasterPlaceholderMap = Readonly<
   Record<string, MasterPlaceholderSpec>
 >;
 
-export const masterPlaceholderMapSchema = placeholderMapSchema;
+export const placeholderMapSchema: z.ZodType<PlaceholderMap> = z
+  .record(z.string().min(1), rawLayoutPlaceholderSpecSchema)
+  .readonly();
 
-export const masterTextStylesSchema = z
+export const masterPlaceholderMapSchema: z.ZodType<MasterPlaceholderMap> =
+  placeholderMapSchema;
+
+export type MasterTextStyles = {
+  readonly titleStyle?: PlaceholderListStyles | undefined;
+  readonly bodyStyle?: PlaceholderListStyles | undefined;
+  readonly otherStyle?: PlaceholderListStyles | undefined;
+};
+
+const rawMasterTextStylesSchema = z
   .strictObject({
-    titleStyle: placeholderListStylesSchema.optional(),
-    bodyStyle: placeholderListStylesSchema.optional(),
-    otherStyle: placeholderListStylesSchema.optional(),
+    titleStyle: rawPlaceholderListStylesSchema.optional(),
+    bodyStyle: rawPlaceholderListStylesSchema.optional(),
+    otherStyle: rawPlaceholderListStylesSchema.optional(),
   })
   .readonly();
-export type MasterTextStyles = z.infer<typeof masterTextStylesSchema>;
+export const masterTextStylesSchema: z.ZodType<MasterTextStyles> =
+  rawMasterTextStylesSchema satisfies z.ZodType<
+    AssertExact<
+      MasterTextStyles,
+      z.infer<typeof rawMasterTextStylesSchema>
+    > extends true
+      ? MasterTextStyles
+      : never
+  >;
 
-export const nativePlaceholderRefSchema = z
+export type NativePlaceholderRef = {
+  readonly type: ContentPlaceholderRole;
+  readonly explicitType?: boolean | undefined;
+  readonly idx?: number | undefined;
+  readonly size?: PlaceholderSize | undefined;
+  readonly orient?: PlaceholderOrient | undefined;
+  readonly hasCustomPrompt?: boolean | undefined;
+};
+
+const rawNativePlaceholderRefSchema = z
   .strictObject({
-    type: placeholderRoleSchema,
+    type: rawPlaceholderRoleSchema,
     explicitType: z.boolean().optional(),
     idx: z.number().int().nonnegative().optional(),
-    size: placeholderSizeSchema.optional(),
-    orient: placeholderOrientSchema.optional(),
+    size: rawPlaceholderSizeSchema.optional(),
+    orient: rawPlaceholderOrientSchema.optional(),
     hasCustomPrompt: z.boolean().optional(),
   })
   .readonly();
-export type NativePlaceholderRef = z.infer<typeof nativePlaceholderRefSchema>;
+export const nativePlaceholderRefSchema: z.ZodType<NativePlaceholderRef> =
+  rawNativePlaceholderRefSchema satisfies z.ZodType<
+    AssertExact<
+      NativePlaceholderRef,
+      z.infer<typeof rawNativePlaceholderRefSchema>
+    > extends true
+      ? NativePlaceholderRef
+      : never
+  >;
 
 export type PlaceholderResolutionContext = {
   readonly key?: string;

@@ -3,8 +3,22 @@ import { z } from "zod";
 import { CapabilityError } from "#/diagnostics.ts";
 import { snapshotValue } from "#/input-values.ts";
 
-export const fontFaceStyleSchema = z.enum(["normal", "italic"]);
-export type FontFaceStyle = z.infer<typeof fontFaceStyleSchema>;
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
+export type FontFaceStyle = "normal" | "italic";
+const rawFontFaceStyleSchema = z.enum(["normal", "italic"]);
+export const fontFaceStyleSchema: z.ZodType<FontFaceStyle> =
+  rawFontFaceStyleSchema satisfies z.ZodType<
+    AssertExact<
+      FontFaceStyle,
+      z.infer<typeof rawFontFaceStyleSchema>
+    > extends true
+      ? FontFaceStyle
+      : never
+  >;
 
 const fontWeightNumberSchema = z
   .int()
@@ -26,48 +40,90 @@ export const uint8ArraySchema = z.instanceof(
 ) as unknown as z.ZodType<Uint8Array>;
 
 /** Font files provided by the caller can be used for measurement or embedded according to build options. */
-export const fontFaceSchema = z
+export type FontFace = {
+  readonly weight?: number | undefined;
+  readonly style?: FontFaceStyle | undefined;
+  readonly data?: Uint8Array | undefined;
+};
+
+const rawFontFaceSchema = z
   .strictObject({
     weight: fontWeightNumberSchema.optional(),
-    style: fontFaceStyleSchema.optional(),
+    style: rawFontFaceStyleSchema.optional(),
     data: uint8ArraySchema
       .refine((bytes) => bytes.byteLength > 0, "Font face data cannot be empty")
       .optional(),
   })
   .readonly();
-export type FontFace = z.infer<typeof fontFaceSchema>;
+/** Font files provided by the caller can be used for measurement or embedded according to build options. */
+export const fontFaceSchema: z.ZodType<FontFace> =
+  rawFontFaceSchema satisfies z.ZodType<
+    AssertExact<FontFace, z.infer<typeof rawFontFaceSchema>> extends true
+      ? FontFace
+      : never
+  >;
 
 const nonEmptyTrimmedStringSchema = z
   .string()
   .refine((value) => value.trim() !== "", "Value cannot be empty");
 
 /** Font family and explicit measurement resources referenceable across deck themes and components. */
-export const fontSchema = z
+export type Font = {
+  readonly family: string;
+  readonly faces?: readonly FontFace[] | undefined;
+  readonly substitute?: boolean | undefined;
+  readonly embeddable?: boolean | undefined;
+};
+
+const rawFontSchema = z
   .strictObject({
     family: nonEmptyTrimmedStringSchema,
-    faces: z.array(fontFaceSchema).readonly().optional(),
+    faces: z.array(rawFontFaceSchema).readonly().optional(),
     substitute: z.boolean().optional(),
     embeddable: z.boolean().optional(),
   })
   .readonly();
-export type Font = z.infer<typeof fontSchema>;
+/** Font family and explicit measurement resources referenceable across deck themes and components. */
+export const fontSchema: z.ZodType<Font> = rawFontSchema satisfies z.ZodType<
+  AssertExact<Font, z.infer<typeof rawFontSchema>> extends true ? Font : never
+>;
 
-export const fontOptionsSchema = z
+export type FontOptions = {
+  readonly substitute?: boolean | undefined;
+  readonly embeddable?: boolean | undefined;
+};
+
+const rawFontOptionsSchema = z
   .strictObject({
     substitute: z.boolean().optional(),
     embeddable: z.boolean().optional(),
   })
   .readonly();
-export type FontOptions = z.infer<typeof fontOptionsSchema>;
+export const fontOptionsSchema: z.ZodType<FontOptions> =
+  rawFontOptionsSchema satisfies z.ZodType<
+    AssertExact<FontOptions, z.infer<typeof rawFontOptionsSchema>> extends true
+      ? FontOptions
+      : never
+  >;
 
-export const fontReferenceSchema = z.union([
+export type FontReference = string | Font;
+export type FontToken = FontReference;
+
+const rawFontReferenceSchema = z.union([
   nonEmptyTrimmedStringSchema,
-  fontSchema,
+  rawFontSchema,
 ]);
-export type FontReference = z.infer<typeof fontReferenceSchema>;
+export const fontReferenceSchema: z.ZodType<FontReference> =
+  rawFontReferenceSchema satisfies z.ZodType<
+    AssertExact<
+      FontReference,
+      z.infer<typeof rawFontReferenceSchema>
+    > extends true
+      ? FontReference
+      : never
+  >;
 
-export const fontTokenSchema = fontReferenceSchema;
-export type FontToken = z.infer<typeof fontTokenSchema>;
+export const fontTokenSchema: z.ZodType<FontToken> = fontReferenceSchema;
 
 const textLengthPattern = /^(\d+(?:\.\d+)?)(px|pt)$/u;
 const textLengthStringSchema = z
@@ -91,32 +147,50 @@ function fontSizeToPoints(value: string | number): number {
   return textLengthToPixels(value) * 0.75;
 }
 
-export const fontSizeSchema = z.union([
+/**
+ * Font size for text runs and paragraphs.
+ *
+ * Positive numbers default to pixels (`px`) converted at `96 dpi` (`1pt = 4/3 px`, so `16` or
+ * `"16px"` equals `"12pt"`). Explicit `"pt"` strings such as `"12pt"` are also accepted.
+ * Converted sizes must fall within `1pt` to `4000pt`.
+ */
+export type FontSize = number | `${number}px` | `${number}pt`;
+
+const rawFontSizeSchema = z.union([
   z.number().finite().positive(),
   textLengthStringSchema.refine(
     (value) => textLengthToPixels(value) > 0,
     "Text length must be greater than 0",
   ),
 ]);
-export type FontSize = z.infer<typeof fontSizeSchema>;
+export const fontSizeSchema: z.ZodType<FontSize> =
+  rawFontSizeSchema satisfies z.ZodType<
+    AssertExact<FontSize, z.infer<typeof rawFontSizeSchema>> extends true
+      ? FontSize
+      : never
+  >;
 
-const validatedFontSizeSchema = fontSizeSchema.refine((value) => {
+const validatedFontSizeSchema = rawFontSizeSchema.refine((value) => {
   const serialized = Math.round(fontSizeToPoints(value) * 100);
   return serialized >= 100 && serialized <= 400_000;
 }, "fontSize converted value must be within DrawingML range of 1 to 4000pt");
 
-const validatedLineHeightSchema = fontSizeSchema.refine((value) => {
+const validatedLineHeightSchema = rawFontSizeSchema.refine((value) => {
   const centipoints = Math.round(textLengthToPixels(value) * 75);
   return centipoints >= 0 && centipoints <= 158_400;
 }, "lineHeight converted value must be within DrawingML range of 0 to 1584pt");
 
-export const textAlignmentSchema = z.enum([
-  "left",
-  "center",
-  "right",
-  "justify",
-]);
-export type TextAlignment = z.infer<typeof textAlignmentSchema>;
+export type TextAlignment = "left" | "center" | "right" | "justify";
+const rawTextAlignmentSchema = z.enum(["left", "center", "right", "justify"]);
+export const textAlignmentSchema: z.ZodType<TextAlignment> =
+  rawTextAlignmentSchema satisfies z.ZodType<
+    AssertExact<
+      TextAlignment,
+      z.infer<typeof rawTextAlignmentSchema>
+    > extends true
+      ? TextAlignment
+      : never
+  >;
 
 export const nativeColorSlots = [
   "dk1",
@@ -133,8 +207,17 @@ export const nativeColorSlots = [
   "folHlink",
 ] as const;
 
-export const nativeColorSlotSchema = z.enum(nativeColorSlots);
-export type NativeColorSlot = z.infer<typeof nativeColorSlotSchema>;
+export type NativeColorSlot = (typeof nativeColorSlots)[number];
+const rawNativeColorSlotSchema = z.enum(nativeColorSlots);
+export const nativeColorSlotSchema: z.ZodType<NativeColorSlot> =
+  rawNativeColorSlotSchema satisfies z.ZodType<
+    AssertExact<
+      NativeColorSlot,
+      z.infer<typeof rawNativeColorSlotSchema>
+    > extends true
+      ? NativeColorSlot
+      : never
+  >;
 
 export const schemeColorSlots = [
   "bg1",
@@ -151,8 +234,17 @@ export const schemeColorSlots = [
   "folHlink",
 ] as const;
 
-export const schemeColorSlotSchema = z.enum(schemeColorSlots);
-export type SchemeColorSlot = z.infer<typeof schemeColorSlotSchema>;
+export type SchemeColorSlot = (typeof schemeColorSlots)[number];
+const rawSchemeColorSlotSchema = z.enum(schemeColorSlots);
+export const schemeColorSlotSchema: z.ZodType<SchemeColorSlot> =
+  rawSchemeColorSlotSchema satisfies z.ZodType<
+    AssertExact<
+      SchemeColorSlot,
+      z.infer<typeof rawSchemeColorSlotSchema>
+    > extends true
+      ? SchemeColorSlot
+      : never
+  >;
 
 export const schemeColorNames = [
   "dk1",
@@ -173,27 +265,57 @@ export const schemeColorNames = [
   "folHlink",
 ] as const;
 
-export const schemeColorNameSchema = z.enum(schemeColorNames);
-export type SchemeColorName = z.infer<typeof schemeColorNameSchema>;
+export type SchemeColorName = (typeof schemeColorNames)[number];
+const rawSchemeColorNameSchema = z.enum(schemeColorNames);
+export const schemeColorNameSchema: z.ZodType<SchemeColorName> =
+  rawSchemeColorNameSchema satisfies z.ZodType<
+    AssertExact<
+      SchemeColorName,
+      z.infer<typeof rawSchemeColorNameSchema>
+    > extends true
+      ? SchemeColorName
+      : never
+  >;
 
 /** Native `<p:clrMap>` / `<a:overrideClrMapping>` mapping the 12 scheme slots to 12 theme palette slots. */
-export const colorMapSchema = z
+export type ColorMap = {
+  readonly bg1: NativeColorSlot;
+  readonly tx1: NativeColorSlot;
+  readonly bg2: NativeColorSlot;
+  readonly tx2: NativeColorSlot;
+  readonly accent1: NativeColorSlot;
+  readonly accent2: NativeColorSlot;
+  readonly accent3: NativeColorSlot;
+  readonly accent4: NativeColorSlot;
+  readonly accent5: NativeColorSlot;
+  readonly accent6: NativeColorSlot;
+  readonly hlink: NativeColorSlot;
+  readonly folHlink: NativeColorSlot;
+};
+
+const rawColorMapSchema = z
   .strictObject({
-    bg1: nativeColorSlotSchema,
-    tx1: nativeColorSlotSchema,
-    bg2: nativeColorSlotSchema,
-    tx2: nativeColorSlotSchema,
-    accent1: nativeColorSlotSchema,
-    accent2: nativeColorSlotSchema,
-    accent3: nativeColorSlotSchema,
-    accent4: nativeColorSlotSchema,
-    accent5: nativeColorSlotSchema,
-    accent6: nativeColorSlotSchema,
-    hlink: nativeColorSlotSchema,
-    folHlink: nativeColorSlotSchema,
+    bg1: rawNativeColorSlotSchema,
+    tx1: rawNativeColorSlotSchema,
+    bg2: rawNativeColorSlotSchema,
+    tx2: rawNativeColorSlotSchema,
+    accent1: rawNativeColorSlotSchema,
+    accent2: rawNativeColorSlotSchema,
+    accent3: rawNativeColorSlotSchema,
+    accent4: rawNativeColorSlotSchema,
+    accent5: rawNativeColorSlotSchema,
+    accent6: rawNativeColorSlotSchema,
+    hlink: rawNativeColorSlotSchema,
+    folHlink: rawNativeColorSlotSchema,
   })
   .readonly();
-export type ColorMap = z.infer<typeof colorMapSchema>;
+/** Native `<p:clrMap>` / `<a:overrideClrMapping>` mapping the 12 scheme slots to 12 theme palette slots. */
+export const colorMapSchema: z.ZodType<ColorMap> =
+  rawColorMapSchema satisfies z.ZodType<
+    AssertExact<ColorMap, z.infer<typeof rawColorMapSchema>> extends true
+      ? ColorMap
+      : never
+  >;
 
 export const defaultColorMap: ColorMap = Object.freeze({
   bg1: "lt1",
@@ -210,78 +332,187 @@ export const defaultColorMap: ColorMap = Object.freeze({
   folHlink: "folHlink",
 });
 
-export const colorMapOverrideSchema = z.union([
+export type ColorMapOverride = "master" | ColorMap;
+const rawColorMapOverrideSchema = z.union([
   z.literal("master"),
-  colorMapSchema,
+  rawColorMapSchema,
 ]);
-export type ColorMapOverride = z.infer<typeof colorMapOverrideSchema>;
+export const colorMapOverrideSchema: z.ZodType<ColorMapOverride> =
+  rawColorMapOverrideSchema satisfies z.ZodType<
+    AssertExact<
+      ColorMapOverride,
+      z.infer<typeof rawColorMapOverrideSchema>
+    > extends true
+      ? ColorMapOverride
+      : never
+  >;
 
 /** Native theme color represented with DrawingML luminance modulation. */
-export const themeShadeSchema = z
+export type ThemeShade = {
+  readonly slot: SchemeColorName;
+  readonly lumMod: number;
+  readonly lumOff?: number | undefined;
+};
+
+const rawThemeShadeSchema = z
   .strictObject({
-    slot: schemeColorNameSchema,
+    slot: rawSchemeColorNameSchema,
     lumMod: z.number().finite().min(0).max(1),
     lumOff: z.number().finite().min(0).max(1).optional(),
   })
   .readonly();
-export type ThemeShade = z.infer<typeof themeShadeSchema>;
+/** Native theme color represented with DrawingML luminance modulation. */
+export const themeShadeSchema: z.ZodType<ThemeShade> =
+  rawThemeShadeSchema satisfies z.ZodType<
+    AssertExact<ThemeShade, z.infer<typeof rawThemeShadeSchema>> extends true
+      ? ThemeShade
+      : never
+  >;
 
-export const themeColorSchema = z.union([z.string(), themeShadeSchema]);
-export type ThemeColor = z.infer<typeof themeColorSchema>;
+export type ThemeColor = string | ThemeShade;
+const rawThemeColorSchema = z.union([z.string(), rawThemeShadeSchema]);
+export const themeColorSchema: z.ZodType<ThemeColor> =
+  rawThemeColorSchema satisfies z.ZodType<
+    AssertExact<ThemeColor, z.infer<typeof rawThemeColorSchema>> extends true
+      ? ThemeColor
+      : never
+  >;
 
 /** Color entry can directly provide color, theme slot, or theme token, optionally with alpha. */
-export const colorValueSchema = z.union([
+export type ColorValue =
+  | string
+  | ThemeShade
+  | {
+      readonly color: ThemeColor;
+      readonly alpha?: number | undefined;
+    };
+
+const rawColorValueSchema = z.union([
   z.string(),
-  themeShadeSchema,
+  rawThemeShadeSchema,
   z
     .strictObject({
-      color: themeColorSchema,
+      color: rawThemeColorSchema,
       alpha: z.number().finite().min(0).max(1).optional(),
     })
     .readonly(),
 ]);
-export type ColorValue = z.infer<typeof colorValueSchema>;
+/** Color entry can directly provide color, theme slot, or theme token, optionally with alpha. */
+export const colorValueSchema: z.ZodType<ColorValue> =
+  rawColorValueSchema satisfies z.ZodType<
+    AssertExact<ColorValue, z.infer<typeof rawColorValueSchema>> extends true
+      ? ColorValue
+      : never
+  >;
 
 /** Final theme value applied to a color entry. */
-export const resolvedColorSchema = z
+export type ResolvedColor = {
+  readonly hex: string;
+  readonly alpha?: number | undefined;
+  readonly slot?: NativeColorSlot | undefined;
+  readonly scheme?: SchemeColorName | undefined;
+  readonly lumMod?: number | undefined;
+  readonly lumOff?: number | undefined;
+};
+
+const rawResolvedColorSchema = z
   .strictObject({
     hex: z.string(),
     alpha: z.number().finite().min(0).max(1).optional(),
-    slot: nativeColorSlotSchema.optional(),
-    scheme: schemeColorNameSchema.optional(),
+    slot: rawNativeColorSlotSchema.optional(),
+    scheme: rawSchemeColorNameSchema.optional(),
     lumMod: z.number().finite().min(0).max(1).optional(),
     lumOff: z.number().finite().min(0).max(1).optional(),
   })
   .readonly();
-export type ResolvedColor = z.infer<typeof resolvedColorSchema>;
+/** Final theme value applied to a color entry. */
+export const resolvedColorSchema: z.ZodType<ResolvedColor> =
+  rawResolvedColorSchema satisfies z.ZodType<
+    AssertExact<
+      ResolvedColor,
+      z.infer<typeof rawResolvedColorSchema>
+    > extends true
+      ? ResolvedColor
+      : never
+  >;
 
-export const gradientStopSchema = z
+export type GradientStop = {
+  readonly color: ColorValue;
+  /** Normalized stop position in the closed interval `[0, 1]` (`0` = `0%` start, `1` = `100%` end). */
+  readonly position: number;
+};
+
+const rawGradientStopSchema = z
   .strictObject({
-    color: colorValueSchema,
+    color: rawColorValueSchema,
     position: z.number().finite(),
   })
   .readonly();
-export type GradientStop = z.infer<typeof gradientStopSchema>;
+export const gradientStopSchema: z.ZodType<GradientStop> =
+  rawGradientStopSchema satisfies z.ZodType<
+    AssertExact<
+      GradientStop,
+      z.infer<typeof rawGradientStopSchema>
+    > extends true
+      ? GradientStop
+      : never
+  >;
 
-export const linearGradientSchema = z
+export type LinearGradient = {
+  readonly type: "linear-gradient";
+  readonly angle: number;
+  readonly stops: readonly GradientStop[];
+};
+
+const rawLinearGradientSchema = z
   .strictObject({
     type: z.literal("linear-gradient"),
     angle: z.number().finite(),
-    stops: z.array(gradientStopSchema).readonly(),
+    stops: z.array(rawGradientStopSchema).readonly(),
   })
   .readonly();
-export type LinearGradient = z.infer<typeof linearGradientSchema>;
+export const linearGradientSchema: z.ZodType<LinearGradient> =
+  rawLinearGradientSchema satisfies z.ZodType<
+    AssertExact<
+      LinearGradient,
+      z.infer<typeof rawLinearGradientSchema>
+    > extends true
+      ? LinearGradient
+      : never
+  >;
 
-export const radialGradientSchema = z
+export type RadialGradient = {
+  readonly type: "radial-gradient";
+  readonly stops: readonly GradientStop[];
+};
+
+const rawRadialGradientSchema = z
   .strictObject({
     type: z.literal("radial-gradient"),
-    stops: z.array(gradientStopSchema).readonly(),
+    stops: z.array(rawGradientStopSchema).readonly(),
   })
   .readonly();
-export type RadialGradient = z.infer<typeof radialGradientSchema>;
+export const radialGradientSchema: z.ZodType<RadialGradient> =
+  rawRadialGradientSchema satisfies z.ZodType<
+    AssertExact<
+      RadialGradient,
+      z.infer<typeof rawRadialGradientSchema>
+    > extends true
+      ? RadialGradient
+      : never
+  >;
 
-export const imageBackgroundFitSchema = z.enum(["fill", "cover", "contain"]);
-export type ImageBackgroundFit = z.infer<typeof imageBackgroundFitSchema>;
+export type ImageBackgroundFit = "fill" | "cover" | "contain";
+const rawImageBackgroundFitSchema = z.enum(["fill", "cover", "contain"]);
+export const imageBackgroundFitSchema: z.ZodType<ImageBackgroundFit> =
+  rawImageBackgroundFitSchema satisfies z.ZodType<
+    AssertExact<
+      ImageBackgroundFit,
+      z.infer<typeof rawImageBackgroundFitSchema>
+    > extends true
+      ? ImageBackgroundFit
+      : never
+  >;
 
 const percentPositionPattern = /^(-?(?:\d+(?:\.\d*)?|\.\d+))%$/u;
 const positionPercentSchema = z
@@ -292,7 +523,18 @@ const positionCoordinateSchema = z.union([
   positionPercentSchema,
 ]);
 
-export const imageBackgroundPositionKeywordSchema = z.enum([
+export type ImageBackgroundPositionKeyword =
+  | "center"
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "top left"
+  | "top right"
+  | "bottom left"
+  | "bottom right";
+
+const rawImageBackgroundPositionKeywordSchema = z.enum([
   "center",
   "top",
   "bottom",
@@ -303,9 +545,25 @@ export const imageBackgroundPositionKeywordSchema = z.enum([
   "bottom left",
   "bottom right",
 ]);
+export const imageBackgroundPositionKeywordSchema: z.ZodType<ImageBackgroundPositionKeyword> =
+  rawImageBackgroundPositionKeywordSchema satisfies z.ZodType<
+    AssertExact<
+      ImageBackgroundPositionKeyword,
+      z.infer<typeof rawImageBackgroundPositionKeywordSchema>
+    > extends true
+      ? ImageBackgroundPositionKeyword
+      : never
+  >;
 
-export const imageBackgroundPositionSchema = z.union([
-  imageBackgroundPositionKeywordSchema,
+export type ImageBackgroundPosition =
+  | ImageBackgroundPositionKeyword
+  | {
+      readonly x?: number | `${number}%` | undefined;
+      readonly y?: number | `${number}%` | undefined;
+    };
+
+const rawImageBackgroundPositionSchema = z.union([
+  rawImageBackgroundPositionKeywordSchema,
   z
     .strictObject({
       x: positionCoordinateSchema.optional(),
@@ -313,92 +571,217 @@ export const imageBackgroundPositionSchema = z.union([
     })
     .readonly(),
 ]);
-export type ImageBackgroundPosition = z.infer<
-  typeof imageBackgroundPositionSchema
->;
+export const imageBackgroundPositionSchema: z.ZodType<ImageBackgroundPosition> =
+  rawImageBackgroundPositionSchema satisfies z.ZodType<
+    AssertExact<
+      ImageBackgroundPosition,
+      z.infer<typeof rawImageBackgroundPositionSchema>
+    > extends true
+      ? ImageBackgroundPosition
+      : never
+  >;
 
-export const externalImageFillSourceSchema = z
+export type ExternalImageFillSource = {
+  readonly externalUrl: string;
+};
+
+const rawExternalImageFillSourceSchema = z
   .strictObject({
     externalUrl: z.string().min(1),
   })
   .readonly();
-export type ExternalImageFillSource = z.infer<
-  typeof externalImageFillSourceSchema
->;
+export const externalImageFillSourceSchema: z.ZodType<ExternalImageFillSource> =
+  rawExternalImageFillSourceSchema satisfies z.ZodType<
+    AssertExact<
+      ExternalImageFillSource,
+      z.infer<typeof rawExternalImageFillSourceSchema>
+    > extends true
+      ? ExternalImageFillSource
+      : never
+  >;
 
-export const imageFillSourceSchema = z.union([
+export type ImageFillSource =
+  | string
+  | URL
+  | Uint8Array
+  | ExternalImageFillSource;
+
+const rawImageFillSourceSchema = z.union([
   z.string(),
   z.instanceof(URL),
   uint8ArraySchema,
-  externalImageFillSourceSchema,
+  rawExternalImageFillSourceSchema,
 ]);
-export type ImageFillSource = z.infer<typeof imageFillSourceSchema>;
+export const imageFillSourceSchema: z.ZodType<ImageFillSource> =
+  rawImageFillSourceSchema satisfies z.ZodType<
+    AssertExact<
+      ImageFillSource,
+      z.infer<typeof rawImageFillSourceSchema>
+    > extends true
+      ? ImageFillSource
+      : never
+  >;
 
-export const imageBackgroundSchema = z
+export type ImageBackground = {
+  readonly image: ImageFillSource;
+  readonly fit?: ImageBackgroundFit | undefined;
+  readonly position?: ImageBackgroundPosition | undefined;
+  readonly opacity?: number | undefined;
+};
+
+const rawImageBackgroundSchema = z
   .strictObject({
-    image: imageFillSourceSchema,
-    fit: imageBackgroundFitSchema.optional(),
-    position: imageBackgroundPositionSchema.optional(),
+    image: rawImageFillSourceSchema,
+    fit: rawImageBackgroundFitSchema.optional(),
+    position: rawImageBackgroundPositionSchema.optional(),
     opacity: z.number().finite().min(0).max(1).optional(),
   })
   .readonly();
-export type ImageBackground = z.infer<typeof imageBackgroundSchema>;
+export const imageBackgroundSchema: z.ZodType<ImageBackground> =
+  rawImageBackgroundSchema satisfies z.ZodType<
+    AssertExact<
+      ImageBackground,
+      z.infer<typeof rawImageBackgroundSchema>
+    > extends true
+      ? ImageBackground
+      : never
+  >;
 
-export const backgroundValueSchema = z.union([
+/** Fill value (`"none"`, color token/hex, gradient, or image background). */
+export type BackgroundValue =
+  | ColorValue
+  | LinearGradient
+  | RadialGradient
+  | ImageBackground;
+
+const rawBackgroundValueSchema = z.union([
   z.literal("none"),
-  colorValueSchema,
-  linearGradientSchema,
-  radialGradientSchema,
-  imageBackgroundSchema,
+  rawColorValueSchema,
+  rawLinearGradientSchema,
+  rawRadialGradientSchema,
+  rawImageBackgroundSchema,
 ]);
-export type BackgroundValue = z.infer<typeof backgroundValueSchema>;
+export const backgroundValueSchema: z.ZodType<BackgroundValue> =
+  rawBackgroundValueSchema satisfies z.ZodType<
+    AssertExact<
+      BackgroundValue,
+      z.infer<typeof rawBackgroundValueSchema>
+    > extends true
+      ? BackgroundValue
+      : never
+  >;
 
-export const borderStyleSchema = z.enum(["solid", "dashed", "dotted"]);
-export type BorderStyle = z.infer<typeof borderStyleSchema>;
+export type BorderStyle = "solid" | "dashed" | "dotted";
+const rawBorderStyleSchema = z.enum(["solid", "dashed", "dotted"]);
+export const borderStyleSchema: z.ZodType<BorderStyle> =
+  rawBorderStyleSchema satisfies z.ZodType<
+    AssertExact<BorderStyle, z.infer<typeof rawBorderStyleSchema>> extends true
+      ? BorderStyle
+      : never
+  >;
 
-export const borderObjectSchema = z
-  .strictObject({
-    color: colorValueSchema,
-    width: z.number().finite().nonnegative().optional(),
-    style: borderStyleSchema.optional(),
-  })
-  .readonly();
-export type BorderObject = z.infer<typeof borderObjectSchema>;
+export type BorderObject = {
+  readonly color: ColorValue;
+  readonly width?: number | undefined;
+  readonly style?: BorderStyle | undefined;
+};
 
-export const borderValueSchema = z.union([
+const borderObjectRawSchema = z.strictObject({
+  color: rawColorValueSchema,
+  width: z.number().finite().nonnegative().optional(),
+  style: rawBorderStyleSchema.optional(),
+});
+export const borderObjectShape = borderObjectRawSchema.shape;
+const rawBorderObjectSchema = borderObjectRawSchema.readonly();
+export const borderObjectSchema: z.ZodType<BorderObject> =
+  rawBorderObjectSchema satisfies z.ZodType<
+    AssertExact<
+      BorderObject,
+      z.infer<typeof rawBorderObjectSchema>
+    > extends true
+      ? BorderObject
+      : never
+  >;
+
+export type BorderValue = "none" | BorderObject;
+const rawBorderValueSchema = z.union([
   z.literal("none"),
-  borderObjectSchema,
+  rawBorderObjectSchema,
 ]);
-export type BorderValue = z.infer<typeof borderValueSchema>;
+export const borderValueSchema: z.ZodType<BorderValue> =
+  rawBorderValueSchema satisfies z.ZodType<
+    AssertExact<BorderValue, z.infer<typeof rawBorderValueSchema>> extends true
+      ? BorderValue
+      : never
+  >;
 
-export const shadowSchema = z
+export type Shadow = {
+  readonly color?: ColorValue | undefined;
+  readonly blur?: number | undefined;
+  readonly distance?: number | undefined;
+  readonly angle?: number | undefined;
+};
+
+const rawShadowSchema = z
   .strictObject({
-    color: colorValueSchema.optional(),
+    color: rawColorValueSchema.optional(),
     blur: z.number().finite().nonnegative().optional(),
     distance: z.number().finite().nonnegative().optional(),
     angle: z.number().finite().optional(),
   })
   .readonly();
-export type Shadow = z.infer<typeof shadowSchema>;
+export const shadowSchema: z.ZodType<Shadow> =
+  rawShadowSchema satisfies z.ZodType<
+    AssertExact<Shadow, z.infer<typeof rawShadowSchema>> extends true
+      ? Shadow
+      : never
+  >;
 
-export const boxShadowValueSchema = z.union([z.literal("none"), shadowSchema]);
-export type BoxShadowValue = z.infer<typeof boxShadowValueSchema>;
+export type BoxShadowValue = "none" | Shadow;
+const rawBoxShadowValueSchema = z.union([z.literal("none"), rawShadowSchema]);
+export const boxShadowValueSchema: z.ZodType<BoxShadowValue> =
+  rawBoxShadowValueSchema satisfies z.ZodType<
+    AssertExact<
+      BoxShadowValue,
+      z.infer<typeof rawBoxShadowValueSchema>
+    > extends true
+      ? BoxShadowValue
+      : never
+  >;
 
 /** Visual fields shared across native DrawingML shapes, images, text boxes, and visible Boxes. */
-export const visualStyleSchema = z
-  .strictObject({
-    background: backgroundValueSchema.optional(),
-    border: borderValueSchema.optional(),
-    borderRadius: z.number().finite().optional(),
-    opacity: z.number().finite().optional(),
-    boxShadow: boxShadowValueSchema.optional(),
-    softEdge: z.number().finite().optional(),
-    rotate: z.number().finite().optional(),
-    flipH: z.boolean().optional(),
-    flipV: z.boolean().optional(),
-  })
-  .readonly();
-export type VisualStyle = z.infer<typeof visualStyleSchema>;
+export type VisualStyle = {
+  readonly background?: BackgroundValue | undefined;
+  readonly border?: BorderValue | undefined;
+  readonly borderRadius?: number | undefined;
+  readonly opacity?: number | undefined;
+  readonly boxShadow?: BoxShadowValue | undefined;
+  readonly softEdge?: number | undefined;
+  readonly rotate?: number | undefined;
+  readonly flipH?: boolean | undefined;
+  readonly flipV?: boolean | undefined;
+};
+
+const visualStyleObjectSchema = z.strictObject({
+  background: rawBackgroundValueSchema.optional(),
+  border: rawBorderValueSchema.optional(),
+  borderRadius: z.number().finite().optional(),
+  opacity: z.number().finite().optional(),
+  boxShadow: rawBoxShadowValueSchema.optional(),
+  softEdge: z.number().finite().optional(),
+  rotate: z.number().finite().optional(),
+  flipH: z.boolean().optional(),
+  flipV: z.boolean().optional(),
+});
+export const visualStyleShape = visualStyleObjectSchema.shape;
+const rawVisualStyleSchema = visualStyleObjectSchema.readonly();
+/** Visual fields shared across native DrawingML shapes, images, text boxes, and visible Boxes. */
+export const visualStyleSchema: z.ZodType<VisualStyle> =
+  rawVisualStyleSchema satisfies z.ZodType<
+    AssertExact<VisualStyle, z.infer<typeof rawVisualStyleSchema>> extends true
+      ? VisualStyle
+      : never
+  >;
 
 export const bcp47LangSchema = z
   .string()
@@ -416,16 +799,40 @@ export const bcp47LangSchema = z
     }
   }, "Text language must be a valid BCP 47 language tag");
 
+/** Inheritable text style fields shared across text objects and containers. */
+export type TextStyle = {
+  readonly fontFamily?: FontReference | undefined;
+  readonly fontSize?: FontSize | undefined;
+  readonly fontWeight?: "normal" | "bold" | number | undefined;
+  readonly fontStyle?: FontFaceStyle | undefined;
+  readonly color?: ColorValue | undefined;
+  readonly lineHeight?: FontSize | undefined;
+  readonly verticalAlign?: "top" | "middle" | "bottom" | undefined;
+  /** Paragraph alignment when not explicitly overridden. */
+  readonly align?: TextAlignment | undefined;
+  /** Paragraph space-after when not explicitly overridden, in pixels. */
+  readonly spacingAfter?: number | undefined;
+  /** Character spacing in pixels. */
+  readonly letterSpacing?: number | undefined;
+  readonly textTransform?: "none" | "uppercase" | undefined;
+  readonly textDecoration?: "none" | "underline" | "line-through" | undefined;
+  readonly textShadow?: Shadow | "none" | undefined;
+  /** Whether the text box wraps normally or keeps each line on a single line. */
+  readonly textWrap?: "normal" | "nowrap" | undefined;
+  /** Natural language (BCP 47 language tag, e.g. zh-CN, en-US). */
+  readonly lang?: string | undefined;
+};
+
 const textStyleObjectSchema = z.strictObject({
-  fontFamily: fontReferenceSchema.optional(),
+  fontFamily: rawFontReferenceSchema.optional(),
   fontSize: validatedFontSizeSchema.optional(),
   fontWeight: fontWeightSchema.optional(),
-  fontStyle: fontFaceStyleSchema.optional(),
-  color: colorValueSchema.optional(),
+  fontStyle: rawFontFaceStyleSchema.optional(),
+  color: rawColorValueSchema.optional(),
   lineHeight: validatedLineHeightSchema.optional(),
   verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
   /** Paragraph alignment when not explicitly overridden. */
-  align: textAlignmentSchema.optional(),
+  align: rawTextAlignmentSchema.optional(),
   /** Paragraph space-after when not explicitly overridden, in pixels. */
   spacingAfter: z
     .number()
@@ -447,7 +854,7 @@ const textStyleObjectSchema = z.strictObject({
     .optional(),
   textTransform: z.enum(["none", "uppercase"]).optional(),
   textDecoration: z.enum(["none", "underline", "line-through"]).optional(),
-  textShadow: z.union([shadowSchema, z.literal("none")]).optional(),
+  textShadow: z.union([rawShadowSchema, z.literal("none")]).optional(),
   /** Whether the text box wraps normally or keeps each line on a single line. */
   textWrap: z.enum(["normal", "nowrap"]).optional(),
   /** Natural language (BCP 47 language tag, e.g. zh-CN, en-US). */
@@ -456,13 +863,28 @@ const textStyleObjectSchema = z.strictObject({
 
 export const textStyleShape = textStyleObjectSchema.shape;
 
+const rawTextStyleSchema = textStyleObjectSchema.readonly();
 /** Inheritable text style fields shared across text objects and containers. */
-export const textStyleSchema = textStyleObjectSchema.readonly();
-export type TextStyle = z.infer<typeof textStyleSchema>;
+export const textStyleSchema: z.ZodType<TextStyle> =
+  rawTextStyleSchema satisfies z.ZodType<
+    AssertExact<TextStyle, z.infer<typeof rawTextStyleSchema>> extends true
+      ? TextStyle
+      : never
+  >;
 
-export const formatColorTransformSchema = z
+export type FormatColorTransform = {
+  readonly color: string;
+  readonly alpha?: number | undefined;
+  readonly lumMod?: number | undefined;
+  readonly lumOff?: number | undefined;
+  readonly tint?: number | undefined;
+  readonly shade?: number | undefined;
+  readonly satMod?: number | undefined;
+};
+
+const rawFormatColorTransformSchema = z
   .strictObject({
-    color: z.union([z.literal("phClr"), schemeColorNameSchema, z.string()]),
+    color: z.union([z.literal("phClr"), rawSchemeColorNameSchema, z.string()]),
     alpha: z.number().finite().min(0).max(1).optional(),
     lumMod: z.number().finite().min(0).max(1).optional(),
     lumOff: z.number().finite().min(0).max(1).optional(),
@@ -471,17 +893,66 @@ export const formatColorTransformSchema = z
     satMod: z.number().finite().min(0).optional(),
   })
   .readonly();
-export type FormatColorTransform = z.infer<typeof formatColorTransformSchema>;
+export const formatColorTransformSchema: z.ZodType<FormatColorTransform> =
+  rawFormatColorTransformSchema satisfies z.ZodType<
+    AssertExact<
+      FormatColorTransform,
+      z.infer<typeof rawFormatColorTransformSchema>
+    > extends true
+      ? FormatColorTransform
+      : never
+  >;
 
-export const formatGradientStopSchema = z
+export type FormatGradientStop = {
+  readonly position: number;
+  readonly color: FormatColorTransform;
+};
+
+const rawFormatGradientStopSchema = z
   .strictObject({
     position: z.number().finite().min(0).max(1),
-    color: formatColorTransformSchema,
+    color: rawFormatColorTransformSchema,
   })
   .readonly();
-export type FormatGradientStop = z.infer<typeof formatGradientStopSchema>;
+export const formatGradientStopSchema: z.ZodType<FormatGradientStop> =
+  rawFormatGradientStopSchema satisfies z.ZodType<
+    AssertExact<
+      FormatGradientStop,
+      z.infer<typeof rawFormatGradientStopSchema>
+    > extends true
+      ? FormatGradientStop
+      : never
+  >;
 
-export const formatFillStyleSchema = z.union([
+export type FormatFillStyle =
+  | { readonly kind: "none" }
+  | { readonly kind: "solid"; readonly color: FormatColorTransform }
+  | {
+      readonly kind: "gradient";
+      readonly rotWithShape?: boolean | undefined;
+      readonly stops: readonly FormatGradientStop[];
+      readonly linear?:
+        | {
+            readonly angle: number;
+            readonly scaled?: boolean | undefined;
+          }
+        | undefined;
+      readonly path?:
+        | {
+            readonly shape: "circle" | "rect" | "shape";
+            readonly fillToRect?:
+              | {
+                  readonly l: number;
+                  readonly t: number;
+                  readonly r: number;
+                  readonly b: number;
+                }
+              | undefined;
+          }
+        | undefined;
+    };
+
+const rawFormatFillStyleSchema = z.union([
   z
     .strictObject({
       kind: z.literal("none"),
@@ -490,14 +961,14 @@ export const formatFillStyleSchema = z.union([
   z
     .strictObject({
       kind: z.literal("solid"),
-      color: formatColorTransformSchema,
+      color: rawFormatColorTransformSchema,
     })
     .readonly(),
   z
     .strictObject({
       kind: z.literal("gradient"),
       rotWithShape: z.boolean().optional(),
-      stops: z.array(formatGradientStopSchema).readonly(),
+      stops: z.array(rawFormatGradientStopSchema).readonly(),
       linear: z
         .strictObject({
           angle: z.number().finite(),
@@ -523,9 +994,32 @@ export const formatFillStyleSchema = z.union([
     })
     .readonly(),
 ]);
-export type FormatFillStyle = z.infer<typeof formatFillStyleSchema>;
+export const formatFillStyleSchema: z.ZodType<FormatFillStyle> =
+  rawFormatFillStyleSchema satisfies z.ZodType<
+    AssertExact<
+      FormatFillStyle,
+      z.infer<typeof rawFormatFillStyleSchema>
+    > extends true
+      ? FormatFillStyle
+      : never
+  >;
 
-export const formatLineStyleSchema = z
+export type FormatLineStyle = {
+  readonly widthEmu?: number | undefined;
+  readonly cap?: "rnd" | "sq" | "flat" | undefined;
+  readonly compound?:
+    | "sng"
+    | "dbl"
+    | "thickThin"
+    | "thinThick"
+    | "tri"
+    | undefined;
+  readonly align?: "ctr" | "in" | undefined;
+  readonly dash?: string | undefined;
+  readonly fill?: FormatFillStyle | undefined;
+};
+
+const rawFormatLineStyleSchema = z
   .strictObject({
     widthEmu: z.number().int().nonnegative().optional(),
     cap: z.enum(["rnd", "sq", "flat"]).optional(),
@@ -534,32 +1028,100 @@ export const formatLineStyleSchema = z
       .optional(),
     align: z.enum(["ctr", "in"]).optional(),
     dash: z.string().optional(),
-    fill: formatFillStyleSchema.optional(),
+    fill: rawFormatFillStyleSchema.optional(),
   })
   .readonly();
-export type FormatLineStyle = z.infer<typeof formatLineStyleSchema>;
+export const formatLineStyleSchema: z.ZodType<FormatLineStyle> =
+  rawFormatLineStyleSchema satisfies z.ZodType<
+    AssertExact<
+      FormatLineStyle,
+      z.infer<typeof rawFormatLineStyleSchema>
+    > extends true
+      ? FormatLineStyle
+      : never
+  >;
 
-export const formatEffectStyleSchema = z
+export type FormatEffectStyle = {
+  readonly shadow?: Shadow | undefined;
+};
+
+const rawFormatEffectStyleSchema = z
   .strictObject({
-    shadow: shadowSchema.optional(),
+    shadow: rawShadowSchema.optional(),
   })
   .readonly();
-export type FormatEffectStyle = z.infer<typeof formatEffectStyleSchema>;
+export const formatEffectStyleSchema: z.ZodType<FormatEffectStyle> =
+  rawFormatEffectStyleSchema satisfies z.ZodType<
+    AssertExact<
+      FormatEffectStyle,
+      z.infer<typeof rawFormatEffectStyleSchema>
+    > extends true
+      ? FormatEffectStyle
+      : never
+  >;
 
 /** DrawingML `<a:fmtScheme>` style matrix stored on a native theme or theme override. */
-export const formatSchemeSchema = z
+export type FormatScheme = {
+  readonly name?: string | undefined;
+  readonly fillStyles?: readonly FormatFillStyle[] | undefined;
+  readonly lineStyles?: readonly FormatLineStyle[] | undefined;
+  readonly effectStyles?: readonly FormatEffectStyle[] | undefined;
+  readonly bgFillStyles?: readonly FormatFillStyle[] | undefined;
+};
+
+const rawFormatSchemeSchema = z
   .strictObject({
     name: z.string().optional(),
-    fillStyles: z.array(formatFillStyleSchema).readonly().optional(),
-    lineStyles: z.array(formatLineStyleSchema).readonly().optional(),
-    effectStyles: z.array(formatEffectStyleSchema).readonly().optional(),
-    bgFillStyles: z.array(formatFillStyleSchema).readonly().optional(),
+    fillStyles: z.array(rawFormatFillStyleSchema).readonly().optional(),
+    lineStyles: z.array(rawFormatLineStyleSchema).readonly().optional(),
+    effectStyles: z.array(rawFormatEffectStyleSchema).readonly().optional(),
+    bgFillStyles: z.array(rawFormatFillStyleSchema).readonly().optional(),
   })
   .readonly();
-export type FormatScheme = z.infer<typeof formatSchemeSchema>;
+/** DrawingML `<a:fmtScheme>` style matrix stored on a native theme or theme override. */
+export const formatSchemeSchema: z.ZodType<FormatScheme> =
+  rawFormatSchemeSchema satisfies z.ZodType<
+    AssertExact<
+      FormatScheme,
+      z.infer<typeof rawFormatSchemeSchema>
+    > extends true
+      ? FormatScheme
+      : never
+  >;
 
 /** Deck-level or master-level theme input; major/minor fonts are written to native PPTX theme. */
-export const themeInputSchema = z
+export type ThemeInput = {
+  readonly name?: string | undefined;
+  readonly colors?:
+    | Readonly<
+        {
+          dk1?: string | undefined;
+          lt1?: string | undefined;
+          dk2?: string | undefined;
+          lt2?: string | undefined;
+          accent1?: string | undefined;
+          accent2?: string | undefined;
+          accent3?: string | undefined;
+          accent4?: string | undefined;
+          accent5?: string | undefined;
+          accent6?: string | undefined;
+          hlink?: string | undefined;
+          folHlink?: string | undefined;
+        } & Record<string, ThemeColor>
+      >
+    | undefined;
+  readonly fonts?:
+    | Readonly<
+        {
+          major?: FontToken | undefined;
+          minor?: FontToken | undefined;
+        } & Record<string, FontToken>
+      >
+    | undefined;
+  readonly formatScheme?: FormatScheme | undefined;
+};
+
+const rawThemeInputSchema = z
   .strictObject({
     name: z.string().optional(),
     colors: z
@@ -577,24 +1139,56 @@ export const themeInputSchema = z
         hlink: z.string().optional(),
         folHlink: z.string().optional(),
       })
-      .catchall(themeColorSchema)
+      .catchall(rawThemeColorSchema)
       .readonly()
       .optional(),
     fonts: z
       .object({
-        major: fontTokenSchema.optional(),
-        minor: fontTokenSchema.optional(),
+        major: rawFontReferenceSchema.optional(),
+        minor: rawFontReferenceSchema.optional(),
       })
-      .catchall(fontTokenSchema)
+      .catchall(rawFontReferenceSchema)
       .readonly()
       .optional(),
-    formatScheme: formatSchemeSchema.optional(),
+    formatScheme: rawFormatSchemeSchema.optional(),
   })
   .readonly();
-export type ThemeInput = z.infer<typeof themeInputSchema>;
+/** Deck-level or master-level theme input; major/minor fonts are written to native PPTX theme. */
+export const themeInputSchema: z.ZodType<ThemeInput> =
+  rawThemeInputSchema satisfies z.ZodType<
+    AssertExact<ThemeInput, z.infer<typeof rawThemeInputSchema>> extends true
+      ? ThemeInput
+      : never
+  >;
 
 /** Native `<a:themeOverride>` partial override for a SlideLayout or Slide. */
-export const themeOverrideSchema = z
+export type ThemeOverride = {
+  readonly colors?:
+    | {
+        readonly dk1?: string | undefined;
+        readonly lt1?: string | undefined;
+        readonly dk2?: string | undefined;
+        readonly lt2?: string | undefined;
+        readonly accent1?: string | undefined;
+        readonly accent2?: string | undefined;
+        readonly accent3?: string | undefined;
+        readonly accent4?: string | undefined;
+        readonly accent5?: string | undefined;
+        readonly accent6?: string | undefined;
+        readonly hlink?: string | undefined;
+        readonly folHlink?: string | undefined;
+      }
+    | undefined;
+  readonly fonts?:
+    | {
+        readonly major?: FontToken | undefined;
+        readonly minor?: FontToken | undefined;
+      }
+    | undefined;
+  readonly formatScheme?: FormatScheme | undefined;
+};
+
+const rawThemeOverrideSchema = z
   .strictObject({
     colors: z
       .strictObject({
@@ -615,17 +1209,53 @@ export const themeOverrideSchema = z
       .optional(),
     fonts: z
       .strictObject({
-        major: fontTokenSchema.optional(),
-        minor: fontTokenSchema.optional(),
+        major: rawFontReferenceSchema.optional(),
+        minor: rawFontReferenceSchema.optional(),
       })
       .readonly()
       .optional(),
-    formatScheme: formatSchemeSchema.optional(),
+    formatScheme: rawFormatSchemeSchema.optional(),
   })
   .readonly();
-export type ThemeOverride = z.infer<typeof themeOverrideSchema>;
+/** Native `<a:themeOverride>` partial override for a SlideLayout or Slide. */
+export const themeOverrideSchema: z.ZodType<ThemeOverride> =
+  rawThemeOverrideSchema satisfies z.ZodType<
+    AssertExact<
+      ThemeOverride,
+      z.infer<typeof rawThemeOverrideSchema>
+    > extends true
+      ? ThemeOverride
+      : never
+  >;
 
-export const themeDataSchema = z
+export type ThemeData = {
+  readonly name: string;
+  readonly colors: Readonly<
+    {
+      dk1: string;
+      lt1: string;
+      dk2: string;
+      lt2: string;
+      accent1: string;
+      accent2: string;
+      accent3: string;
+      accent4: string;
+      accent5: string;
+      accent6: string;
+      hlink: string;
+      folHlink: string;
+    } & Record<string, ThemeColor>
+  >;
+  readonly fonts: Readonly<
+    {
+      major: FontToken;
+      minor: FontToken;
+    } & Record<string, FontToken>
+  >;
+  readonly formatScheme?: FormatScheme | undefined;
+};
+
+const rawThemeDataSchema = z
   .strictObject({
     name: z.string(),
     colors: z
@@ -643,46 +1273,76 @@ export const themeDataSchema = z
         hlink: z.string(),
         folHlink: z.string(),
       })
-      .catchall(themeColorSchema)
+      .catchall(rawThemeColorSchema)
       .readonly(),
     fonts: z
       .object({
-        major: fontTokenSchema,
-        minor: fontTokenSchema,
+        major: rawFontReferenceSchema,
+        minor: rawFontReferenceSchema,
       })
-      .catchall(fontTokenSchema)
+      .catchall(rawFontReferenceSchema)
       .readonly(),
-    formatScheme: formatSchemeSchema.optional(),
+    formatScheme: rawFormatSchemeSchema.optional(),
   })
   .readonly();
-export type ThemeData = z.infer<typeof themeDataSchema>;
+export const themeDataSchema: z.ZodType<ThemeData> =
+  rawThemeDataSchema satisfies z.ZodType<
+    AssertExact<ThemeData, z.infer<typeof rawThemeDataSchema>> extends true
+      ? ThemeData
+      : never
+  >;
 
 export type Theme = ThemeData & {
   /** Updates this theme in place while preserving instance identity across all referencing SlideMasters. */
   set(patch: ThemeInput): Theme;
 };
 
-export const themeSchema: z.ZodType<Theme> = themeDataSchema.transform((data) =>
-  defineTheme(data),
+export const themeSchema: z.ZodType<Theme> = rawThemeDataSchema.transform(
+  (data) => defineTheme(data),
 );
 
 /** Local theme scopes on slides or containers can only override color and font tokens already present in the deck. */
-export const themeScopeSchema = z
+export type ThemeScope = {
+  readonly colors?: Readonly<Record<string, ThemeColor>> | undefined;
+  readonly fonts?: Readonly<Record<string, FontToken>> | undefined;
+};
+
+const rawThemeScopeSchema = z
   .strictObject({
-    colors: z.record(z.string(), themeColorSchema).readonly().optional(),
-    fonts: z.record(z.string(), fontTokenSchema).readonly().optional(),
+    colors: z.record(z.string(), rawThemeColorSchema).readonly().optional(),
+    fonts: z.record(z.string(), rawFontReferenceSchema).readonly().optional(),
   })
   .readonly();
-export type ThemeScope = z.infer<typeof themeScopeSchema>;
+/** Local theme scopes on slides or containers can only override color and font tokens already present in the deck. */
+export const themeScopeSchema: z.ZodType<ThemeScope> =
+  rawThemeScopeSchema satisfies z.ZodType<
+    AssertExact<ThemeScope, z.infer<typeof rawThemeScopeSchema>> extends true
+      ? ThemeScope
+      : never
+  >;
 
-export const resolvedThemeFontSchema = z
+export type ResolvedThemeFont = {
+  readonly family: string;
+  readonly font?: Font | undefined;
+  readonly themeFont?: "major" | "minor" | undefined;
+};
+
+const rawResolvedThemeFontSchema = z
   .strictObject({
     family: z.string(),
-    font: fontSchema.optional(),
+    font: rawFontSchema.optional(),
     themeFont: z.enum(["major", "minor"]).optional(),
   })
   .readonly();
-export type ResolvedThemeFont = z.infer<typeof resolvedThemeFontSchema>;
+export const resolvedThemeFontSchema: z.ZodType<ResolvedThemeFont> =
+  rawResolvedThemeFontSchema satisfies z.ZodType<
+    AssertExact<
+      ResolvedThemeFont,
+      z.infer<typeof rawResolvedThemeFontSchema>
+    > extends true
+      ? ResolvedThemeFont
+      : never
+  >;
 
 /** Theme, local scopes, active color map, native overrides, and accumulated container text defaults in a single build. */
 export type ThemeContext = {

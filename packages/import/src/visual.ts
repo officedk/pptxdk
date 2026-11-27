@@ -2,6 +2,7 @@ import type {
   ColorValue,
   Geometry,
   GradientStop,
+  HexColor,
   LinearGradient,
   RadialGradient,
   SchemeColorName,
@@ -105,7 +106,7 @@ export function readDrawingColor(
   diagnostics: ImportDiagnostic[],
 ): ColorValue | undefined {
   let colorCursor: XmlElementCursor | undefined;
-  let baseHex: string | undefined;
+  let baseHex: HexColor | undefined;
   let slot: SchemeColorName | undefined;
 
   for (const child of parentCursor.remainingElementChildren()) {

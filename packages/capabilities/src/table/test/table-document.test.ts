@@ -44,7 +44,7 @@ function slideXml(result: { readonly pptx: Uint8Array }, index = 1): string {
 describe("table authoring through the common document", () => {
   it("creates an editable native table, preserves rich text, spans, styles, and measured tracks, then edits it", async () => {
     const columns: TableColumn[] = ["auto", "1fr"];
-    const mergedStyle = { background: "#DDEEFF" };
+    const mergedStyle: { background: `#${string}` } = { background: "#DDEEFF" };
     const merged = cell(
       paragraph().append(
         span("North").style({ fontWeight: "bold", color: "#AA0000" }),

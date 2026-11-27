@@ -13,6 +13,7 @@ import {
   type ResolvedMarker,
 } from "./markers.ts";
 import {
+  chartAccentSlot,
   resolveChartLineStroke,
   resolveSeriesColor,
   type ResolvedStroke,
@@ -58,7 +59,7 @@ export function renderScatterGroup(options: {
     if (series.x.length === 0 || series.y.length === 0) continue;
 
     const baseStroke = resolveChartLineStroke(series.line, theme, {
-      color: series.color ?? `accent${(series.seriesIndex % 6) + 1}`,
+      color: series.color ?? chartAccentSlot(series.seriesIndex),
       width: 2,
     })!;
 

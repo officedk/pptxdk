@@ -71,12 +71,12 @@ export type {
   FontReference,
   FontSize,
   GradientStop,
+  HexColor,
   ImageBackground,
   ImageBackgroundFit,
   ImageBackgroundPosition,
   ImageFillSource,
   LinearGradient,
-  FontToken,
   NativeColorSlot,
   ResolvedColor,
   ResolvedThemeFont,
@@ -88,8 +88,8 @@ export type {
   Theme,
   ThemeColor,
   ThemeContext,
+  ThemeFontSlot,
   ThemeInput,
-  ThemeScope,
   ThemeShade,
 } from "#/theme.ts";
 

@@ -183,14 +183,14 @@ describe("public document authoring entry", () => {
 
   it("takes nested getter and class style values at declaration time", async () => {
     let getterReads = 0;
-    let sourceColor = "#AA0000";
+    let sourceColor: `#${string}` = "#AA0000";
     const getterStyle = {
       position: "absolute" as const,
       left: 0,
       top: 0,
       width: 300,
       height: 40,
-      get color() {
+      get color(): `#${string}` {
         getterReads += 1;
         return sourceColor;
       },
@@ -202,7 +202,7 @@ describe("public document authoring entry", () => {
       top = 50;
       width = 300;
       height = 40;
-      color = "#00AA00";
+      color: `#${string}` = "#00AA00";
       fontSize = 18;
     }
     const classStyle = new StyleConfig();
@@ -244,7 +244,7 @@ describe("public document authoring entry", () => {
         top: 0,
         width: 300,
         height: 40,
-        color: "#AA0000",
+        color: "#AA0000" as const,
       };
     }
 
@@ -415,8 +415,8 @@ describe("public document authoring entry", () => {
       [{ weight: 400, data: sourceFontBytes }],
       { substitute: true },
     );
-    const colors = { accent1: "#112233" };
-    const stops = [
+    const colors: { accent1: `#${string}` } = { accent1: "#112233" };
+    const stops: { color: `#${string}`; position: number }[] = [
       { color: "#AA0000", position: 0 },
       { color: "#00AA00", position: 1 },
     ];
@@ -425,7 +425,13 @@ describe("public document authoring entry", () => {
       angle: 0,
       stops,
     };
-    const boxStyle = {
+    const boxStyle: {
+      background: LinearGradient;
+      width: number;
+      height: number;
+      color: `#${string}`;
+      fontSize: number;
+    } = {
       background: gradient,
       width: 600,
       height: 200,
@@ -525,7 +531,7 @@ describe("public document authoring entry", () => {
   });
 
   it("isolates author style objects at creation and update like the React cleanup handoff", async () => {
-    const creationStyle = { color: "#FF0000" };
+    const creationStyle: { color: `#${string}` } = { color: "#FF0000" };
     const title = text("Owned input", { style: creationStyle }).style({
       position: "absolute",
       left: 0,
@@ -543,7 +549,7 @@ describe("public document authoring entry", () => {
     assert.match(slideXml(created), /FF0000/u);
     assert.doesNotMatch(slideXml(created), /0000FF/u);
 
-    const updateStyle = { color: "#00AA00" };
+    const updateStyle: { color: `#${string}` } = { color: "#00AA00" };
     title.style(updateStyle);
     updateStyle.color = "#0000FF";
     const updated = await build(document);
@@ -605,7 +611,7 @@ describe("public document authoring entry", () => {
     const scope = createMorphScope();
     const hero = scope.handle("hero");
     const morphStyle = {
-      background: "#FFFFFF",
+      background: "#FFFFFF" as const,
       width: 80,
       height: 30,
     };

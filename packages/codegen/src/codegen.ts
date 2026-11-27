@@ -94,7 +94,6 @@ const coreSlidePropKeys = new Set([
   "name",
   "layout",
   "placeholders",
-  "theme",
   "colorMapOverride",
   "themeOverride",
   "style",

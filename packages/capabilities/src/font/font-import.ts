@@ -38,7 +38,10 @@ type EmbeddedFontLookup = {
   readonly slotWeightsByKey: ReadonlyMap<string, EmbeddedSlotWeights>;
 };
 
-type ThemeFontMap = Readonly<Record<string, Font | string | undefined>>;
+type ThemeFontMap = {
+  readonly major?: Font | string | undefined;
+  readonly minor?: Font | string | undefined;
+};
 
 type FontCascadeContext = {
   readonly themeFonts: ThemeFontMap;
@@ -127,7 +130,7 @@ function resolveEffectiveFamilyKey(
   if (typeof fontFamily !== "string" || fontFamily.trim() === "") {
     return undefined;
   }
-  if (Object.hasOwn(themeFonts, fontFamily)) {
+  if (fontFamily === "major" || fontFamily === "minor") {
     const mapped = themeFonts[fontFamily];
     if (isFont(mapped)) return fontFamilyKey(mapped.family);
     if (typeof mapped === "string" && mapped.trim() !== "") {
@@ -447,13 +450,17 @@ function upgradeThemeFontMap(
   fonts: Readonly<Record<string, unknown>> | undefined,
   fontsByKey: ReadonlyMap<string, Font>,
 ): {
-  readonly fonts?: Record<string, Font | string>;
+  readonly fonts?: {
+    readonly major?: Font | string;
+    readonly minor?: Font | string;
+  };
   readonly changed: boolean;
 } {
   if (fonts === undefined) return { changed: false };
-  const nextFonts: Record<string, Font | string> = {};
+  const nextFonts: { major?: Font | string; minor?: Font | string } = {};
   let changed = false;
-  for (const [slot, token] of Object.entries(fonts)) {
+  for (const slot of ["major", "minor"] as const) {
+    const token = fonts[slot];
     if (token === undefined) continue;
     if (typeof token === "string") {
       const matched = fontsByKey.get(fontFamilyKey(token));
@@ -891,40 +898,15 @@ function attachEmbeddedFontsToSubtree(
       mutableNode,
       lookup.fontsByKey,
     );
-    const localThemeFonts = extractThemeFonts(node.props["theme"]);
     const baseFonts = nextLayout?.themeFonts ?? inherited.themeFonts;
     const effectiveThemeFonts = {
       ...baseFonts,
       ...overrideFonts,
-      ...localThemeFonts,
     };
     currentContext = {
       ...inherited,
       themeFonts: effectiveThemeFonts,
     };
-  } else if (node.props["theme"] !== undefined && node.type !== "deck") {
-    const rawTheme = node.props["theme"];
-    if (isPlainRecord(rawTheme) && isPlainRecord(rawTheme["fonts"])) {
-      const upgraded = upgradeThemeFontMap(
-        rawTheme["fonts"],
-        lookup.fontsByKey,
-      );
-      if (upgraded.changed && upgraded.fonts !== undefined) {
-        mutableNode.set({
-          theme: {
-            ...rawTheme,
-            fonts: upgraded.fonts,
-          },
-        });
-      }
-    }
-    const localThemeFonts = extractThemeFonts(node.props["theme"]);
-    if (Object.keys(localThemeFonts).length > 0) {
-      currentContext = {
-        ...currentContext,
-        themeFonts: { ...currentContext.themeFonts, ...localThemeFonts },
-      };
-    }
   }
 
   let childPlaceholderContext = placeholderContext;
@@ -1212,9 +1194,10 @@ export function readEmbeddedFontsIntoDeck(
   } => {
     if (existing === undefined) return { changed: false };
     const existingFonts = existing.fonts ?? {};
-    const nextFonts: Record<string, Font | string> = {};
+    const nextFonts: { major?: Font | string; minor?: Font | string } = {};
     let changed = false;
-    for (const [slot, token] of Object.entries(existingFonts)) {
+    for (const slot of ["major", "minor"] as const) {
+      const token = existingFonts[slot];
       if (token === undefined) continue;
       if (typeof token === "string") {
         const matched = fontsByKey.get(fontFamilyKey(token));
@@ -1292,9 +1275,10 @@ export function readEmbeddedFontsIntoDeck(
       const upgradedBase =
         attachFontsToThemeInput(baseDeckTheme).theme ?? baseDeckTheme;
       const themeName = scheme.themeName ?? upgradedBase?.name;
-      const nextFonts: Record<string, Font | string> = {};
+      const nextFonts: { major?: Font | string; minor?: Font | string } = {};
       if (upgradedBase?.fonts !== undefined) {
-        for (const [slot, token] of Object.entries(upgradedBase.fonts)) {
+        for (const slot of ["major", "minor"] as const) {
+          const token = upgradedBase.fonts[slot];
           if (token !== undefined) {
             nextFonts[slot] = token;
           }

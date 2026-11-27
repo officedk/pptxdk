@@ -41,7 +41,7 @@ const widePng = new Uint8Array(
 
 describe("native content in the common document", () => {
   it("creates editable shapes with geometry, rich text, and value-isolated visuals", async () => {
-    const stops = [
+    const stops: { color: `#${string}`; position: number }[] = [
       { color: "#AA0000", position: 0 },
       { color: "#00AA00", position: 1 },
     ];
@@ -58,14 +58,14 @@ describe("native content in the common document", () => {
       height: 72,
       background: gradient,
       border: {
-        color: "#123456",
+        color: "#123456" as `#${string}`,
         width: 2,
         style: "dashed" as const,
       },
       flipH: true,
       rotate: -15,
       boxShadow: {
-        color: { color: "#000000", alpha: 0.4 },
+        color: { color: "#000000" as const, alpha: 0.4 },
         blur: 3,
         distance: 2,
         angle: 125,

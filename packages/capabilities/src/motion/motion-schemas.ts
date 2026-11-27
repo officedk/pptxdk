@@ -205,7 +205,9 @@ export const easingSchema: z.ZodType<Easing> =
   >;
 
 /** Hex RGB color (`#RRGGBB`) validated against core's color value domain and normalized to uppercase. */
-export const motionHexColorSchema: z.ZodType<string> = colorValueSchema
+export const motionHexColorSchema: z.ZodType<string> = (
+  colorValueSchema as unknown as z.ZodType<string>
+)
   .pipe(z.string().regex(/^#[0-9a-f]{6}$/iu, "color must be a #RRGGBB color"))
   .transform((value) => value.toUpperCase());
 

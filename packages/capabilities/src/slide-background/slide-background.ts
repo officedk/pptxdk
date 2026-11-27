@@ -82,7 +82,7 @@ function resolveFormatColor(
   const base =
     transform.color === "phClr"
       ? refColor
-      : theme.resolveColor(transform.color);
+      : theme.resolveColor(transform.color as ColorValue);
   return applyFormatColorTransforms(base, transform);
 }
 
@@ -128,6 +128,12 @@ function resolveSlideBackground(
 
   const parsed = slideBackgroundSchema.safeParse(background);
   if (!parsed.success) {
+    if (typeof background === "string") {
+      return {
+        kind: "solid",
+        color: theme.resolveColor(background as ColorValue),
+      };
+    }
     // Preserve clear diagnostic codes for gradient/image subfields when author passed a malformed variant.
     if (
       typeof background === "object" &&

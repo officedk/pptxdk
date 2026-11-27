@@ -5,6 +5,7 @@ import {
   placeholderStyleSchema,
   schemeColorNameSchema,
   type ColorValue,
+  type HexColor,
   type NativeColorSlot,
   type NativePlaceholderRef,
   type SchemeColorName,
@@ -226,7 +227,7 @@ function readColorElement(
   const colorCursor = srgb ?? scheme;
   if (colorCursor === undefined) return undefined;
 
-  let baseString: string | undefined;
+  let baseString: HexColor | undefined;
   let schemeSlot: SchemeColorName | undefined;
 
   if (srgb !== undefined) {

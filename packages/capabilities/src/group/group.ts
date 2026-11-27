@@ -363,27 +363,25 @@ export const groupCapability: ObjectCapabilityModule<
           const memberBounds = geometry.pixels;
           if (layoutBox !== undefined) {
             const resolvedWidth =
-              fixedAxes.width ||
-              (hasLayoutWidth && layoutBox.width > 0) ||
-              layoutBox.width > 0
+              fixedAxes.width || (hasLayoutWidth && layoutBox.width > 0)
                 ? layoutBox.width
                 : memberBounds.width > 0
                   ? Math.max(
+                      layoutBox.width,
                       memberBounds.width,
                       memberBounds.x + memberBounds.width - layoutBox.x,
                     )
-                  : 0;
+                  : layoutBox.width;
             const resolvedHeight =
-              fixedAxes.height ||
-              (hasLayoutHeight && layoutBox.height > 0) ||
-              layoutBox.height > 0
+              fixedAxes.height || (hasLayoutHeight && layoutBox.height > 0)
                 ? layoutBox.height
                 : memberBounds.height > 0
                   ? Math.max(
+                      layoutBox.height,
                       memberBounds.height,
                       memberBounds.y + memberBounds.height - layoutBox.y,
                     )
-                  : 0;
+                  : layoutBox.height;
             outputGeometry = {
               x: layoutBox.x,
               y: layoutBox.y,

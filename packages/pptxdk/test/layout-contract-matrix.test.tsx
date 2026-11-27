@@ -1065,4 +1065,102 @@ describe("Ticket 01: layout contract and min-content propagation", () => {
     assert.equal(jsxPreview.pages.length, capabilities.length + 1);
     assert.equal(vanillaPreview.pages.length, capabilities.length + 1);
   });
+
+  it("preserves member union bounds on auto-sized positioned Group with in-flow and out-of-bounds absolute children across React JSX and Vanilla", async () => {
+    const jsxDoc = createElement(
+      Deck,
+      { width: 400, height: 300, style: { fontFamily: jostFont } },
+      createElement(
+        Slide,
+        { id: "group-auto-pos" },
+        createElement(
+          Group,
+          {
+            id: "auto-pos-group",
+            style: { position: "absolute", left: 10, top: 10 },
+          },
+          createElement(Shape, {
+            id: "in-flow",
+            style: { width: 40, height: 30, background: "#2563EB" },
+          }),
+          createElement(Shape, {
+            id: "abs-child",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 10,
+              width: 100,
+              height: 80,
+              background: "#16A34A",
+            },
+          }),
+        ),
+      ),
+    );
+
+    const vanillaDoc = deck({
+      width: 400,
+      height: 300,
+      style: { fontFamily: jostFont },
+    }).append(
+      slide({ id: "group-auto-pos" }).append(
+        group({
+          id: "auto-pos-group",
+          style: { position: "absolute", left: 10, top: 10 },
+        }).append(
+          shape({
+            id: "in-flow",
+            style: { width: 40, height: 30, background: "#2563EB" },
+          }),
+          shape({
+            id: "abs-child",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 10,
+              width: 100,
+              height: 80,
+              background: "#16A34A",
+            },
+          }),
+        ),
+      ),
+    );
+
+    const jsxExpanded = await expandDocument(jsxDoc);
+    const jsxRes = resolve(jsxExpanded);
+    const vanillaRes = resolve(vanillaDoc);
+
+    for (const res of [jsxRes, vanillaRes]) {
+      const s = res.slide("group-auto-pos");
+      const grp = s.get("auto-pos-group");
+      assert.deepEqual(grp.get("in-flow").box, {
+        x: 10,
+        y: 10,
+        width: 40,
+        height: 30,
+      });
+      assert.deepEqual(grp.get("abs-child").box, {
+        x: 30,
+        y: 20,
+        width: 100,
+        height: 80,
+      });
+      assert.deepEqual(grp.box, {
+        x: 10,
+        y: 10,
+        width: 120,
+        height: 90,
+      });
+    }
+
+    const jsxBuilt = await build(jsxExpanded);
+    const vanillaBuilt = await build(vanillaDoc);
+    assert.deepEqual((await validatePptx(jsxBuilt.pptx)).errors, []);
+    assert.deepEqual((await validatePptx(vanillaBuilt.pptx)).errors, []);
+    const jsxPreview = await preview(jsxExpanded);
+    const vanillaPreview = await preview(vanillaDoc);
+    assert.deepEqual(jsxPreview.pages[0]?.errors, []);
+    assert.deepEqual(vanillaPreview.pages[0]?.errors, []);
+  });
 });

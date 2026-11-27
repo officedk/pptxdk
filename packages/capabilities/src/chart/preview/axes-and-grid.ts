@@ -435,23 +435,14 @@ export function renderAxesSvg(options: {
         }
 
         if (scale.kind === "value") {
-          const lineHeightMultiplier =
-            typeof axisTextStyle?.lineHeight === "number" &&
-            Number.isFinite(axisTextStyle.lineHeight)
-              ? Math.max(1.4, axisTextStyle.lineHeight + 0.15)
-              : 1.4;
           const measuredLineH = measureChartText({
-            text: "Ay0",
+            text: "",
             style: axisTextStyle,
             theme,
             slideNumber,
             labelPath: `Chart.axes.${axis.name}.style`,
           }).height;
-          const labelH = Math.max(
-            axisFontPx * lineHeightMultiplier,
-            Math.ceil(measuredLineH) + 2,
-            12,
-          );
+          const labelH = Math.max(Math.ceil(measuredLineH) + 2, 12);
           for (const val of scale.majorTicks) {
             const cy = scale.valueToScreen(val, plotRect);
             const text = formatChartNumber(val, scale.numberFormat);

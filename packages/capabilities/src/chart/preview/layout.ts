@@ -497,10 +497,6 @@ export function computeChartLayout(options: {
       baseChartTextStyle,
       axis.spec.style,
     );
-    const effectiveFontPx =
-      axisTextStyle?.fontSize !== undefined
-        ? resolveChartFontSizePixels(axisTextStyle.fontSize)
-        : baseFontSizePx;
     const tickProtrusion =
       axis.spec.majorTickMark === "out" || axis.spec.majorTickMark === "cross"
         ? 4
@@ -552,8 +548,18 @@ export function computeChartLayout(options: {
             avail.width * 0.42,
           );
           addLabelZone(axis.name, labelSide, depth);
+          const singleLineH =
+            maxH > 0
+              ? maxH
+              : measureChartText({
+                  text: "",
+                  style: axisTextStyle,
+                  theme,
+                  slideNumber,
+                  labelPath: `Chart.axes.${axis.name}.style`,
+                }).height;
           const vOverhang = Math.min(
-            Math.ceil(Math.max(maxH, effectiveFontPx * 1.4) / 2) + 2,
+            Math.ceil(singleLineH / 2) + 2,
             avail.height * 0.15,
           );
           overhang.top = Math.max(overhang.top, vOverhang);
@@ -584,7 +590,7 @@ export function computeChartLayout(options: {
         }
         if (axis.direction === "horizontal") {
           const singleLineH = measureChartText({
-            text: "Ay",
+            text: "",
             style: axisTextStyle,
             theme,
             slideNumber,

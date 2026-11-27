@@ -75,6 +75,7 @@ export type CliRuntime = {
 type CliDependencies = {
   readonly cwd: string;
   readonly signal?: AbortSignal;
+  readonly codegen?: typeof codegen | undefined;
 };
 
 // Source and bundled modules have different depths. Both report the installed SDK version.
@@ -1176,9 +1177,10 @@ const codegenCommand = define.command("codegen")({
         }
 
         const importDiagnostics = [...imported.report.diagnostics];
+        const runCodegen = dependencies.codegen ?? codegen;
         let generated: ReturnType<typeof codegen>;
         try {
-          generated = codegen(imported.document, { target: input.target });
+          generated = runCodegen(imported.document, { target: input.target });
         } catch (error) {
           if (isCancelledError(error, dependencies.signal)) {
             return outcome.failure.cancelled({});

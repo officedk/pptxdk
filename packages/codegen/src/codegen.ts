@@ -1,7 +1,10 @@
 import {
   isSlideLayoutDefinition,
+  themeInputSchema,
+  themeOverrideSchema,
   type LayoutPlaceholderSpec,
   type PlaceholderMap,
+  type ThemeInput,
 } from "@pptxdk/core";
 import type { DeclarationChild, DeclarationText } from "@pptxdk/core/build";
 import {
@@ -272,6 +275,56 @@ function failAt(
       break;
   }
   throw new CodegenError([diagnostic]);
+}
+
+function parseCoreSchemaProp<T>(
+  ownerPath: string,
+  propName: string,
+  value: unknown,
+  schema: {
+    readonly safeParse: (input: unknown) =>
+      | { readonly success: true; readonly data: T }
+      | {
+          readonly success: false;
+          readonly error: {
+            readonly issues: readonly {
+              readonly path: readonly PropertyKey[];
+              readonly message: string;
+              readonly code?: string;
+              readonly keys?: readonly string[];
+            }[];
+          };
+        };
+  },
+): T {
+  const parsed = schema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  const issue = parsed.error.issues[0];
+  const segments = (issue?.path ?? []).map(String);
+  if (
+    issue?.code === "unrecognized_keys" &&
+    issue.keys !== undefined &&
+    issue.keys[0] !== undefined
+  ) {
+    segments.push(issue.keys[0]);
+  }
+  const subPath =
+    segments.length > 0 ? `@${propName}.${segments.join(".")}` : `@${propName}`;
+  failAt(
+    `${ownerPath}${subPath}`,
+    "unexpressible-value",
+    issue?.message ?? `Invalid ${propName} declaration on ${ownerPath}`,
+  );
+}
+
+function validateCoreThemeProp(
+  ownerPath: string,
+  value: unknown,
+): Theme | ThemeInput {
+  if (isTheme(value)) return value;
+  return parseCoreSchemaProp(ownerPath, "theme", value, themeInputSchema);
 }
 
 function childPathLabel(node: CommonNode, index: number): string {
@@ -823,7 +876,8 @@ export function createCodegen(
       }
     }
 
-    // Validate Deck props
+    // Validate and normalize Deck props
+    const deckPropsEntries: [string, unknown][] = [];
     for (const [key, value] of Object.entries(document.props)) {
       if (!isDefined(value)) continue;
       if (!coreDeckPropKeys.has(key)) {
@@ -833,6 +887,10 @@ export function createCodegen(
           `Deck does not support property ${JSON.stringify(key)}`,
         );
       }
+      deckPropsEntries.push([
+        key,
+        key === "theme" ? validateCoreThemeProp("deck", value) : value,
+      ]);
     }
 
     const usesSections = bodyNodes.some((node) => node.type === "section");
@@ -882,7 +940,12 @@ export function createCodegen(
       const masterPropsEntries: [string, unknown][] = [];
       for (const [key, value] of Object.entries(masterNode.props)) {
         if (!isDefined(value)) continue;
-        if (coreMasterPropKeys.has(key)) {
+        if (key === "theme") {
+          masterPropsEntries.push([
+            key,
+            validateCoreThemeProp(masterPath, value),
+          ]);
+        } else if (coreMasterPropKeys.has(key)) {
           masterPropsEntries.push([key, value]);
         } else {
           masterPropsEntries.push([
@@ -939,7 +1002,17 @@ export function createCodegen(
         const layoutSpecEntries: [string, unknown][] = [];
         for (const [key, value] of Object.entries(layoutNode.props)) {
           if (!isDefined(value) || key === "layout") continue;
-          if (coreLayoutPropKeys.has(key)) {
+          if (key === "themeOverride") {
+            layoutSpecEntries.push([
+              key,
+              parseCoreSchemaProp(
+                layoutPath,
+                "themeOverride",
+                value,
+                themeOverrideSchema,
+              ),
+            ]);
+          } else if (coreLayoutPropKeys.has(key)) {
             layoutSpecEntries.push([key, value]);
           } else {
             layoutSpecEntries.push([
@@ -1067,6 +1140,16 @@ export function createCodegen(
             );
           }
           slidePropsEntries.push([key, value]);
+        } else if (key === "themeOverride") {
+          slidePropsEntries.push([
+            key,
+            parseCoreSchemaProp(
+              slidePath,
+              "themeOverride",
+              value,
+              themeOverrideSchema,
+            ),
+          ]);
         } else if (coreSlidePropKeys.has(key)) {
           slidePropsEntries.push([key, value]);
         } else {
@@ -1238,11 +1321,6 @@ export function createCodegen(
     }
 
     // Section 4: Default export Deck entry
-    const deckPropsEntries: [string, unknown][] = [];
-    for (const [key, value] of Object.entries(document.props)) {
-      if (!isDefined(value)) continue;
-      deckPropsEntries.push([key, value]);
-    }
     const deckCtx = makeContext("deck");
     const deckChildren = [...masterRefsForDeck, ...bodyRefsForDeck];
 

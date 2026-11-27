@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CapabilityError } from "@pptxdk/core";
+import { CapabilityError, deckPropsSchema } from "@pptxdk/core";
 import {
   backgroundValueSchema,
   borderObjectSchema,
@@ -403,6 +403,22 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
     );
 
     assert.throws(() => defaultTheme.set({ name: "Mutated" }), TypeError);
+
+    // deckPropsSchema accepts both identity-bearing Theme instances and inline ThemeInput.
+    const parsedBrandDeck = deckPropsSchema.parse({ theme: brand });
+    assert.equal(parsedBrandDeck.theme, brand);
+    assert.equal(isTheme(parsedBrandDeck.theme), true);
+    const parsedInlineDeck = deckPropsSchema.parse({
+      theme: { name: "Inline", colors: { accent1: "#abc" } },
+    });
+    assert.equal(isTheme(parsedInlineDeck.theme), false);
+    assert.equal(parsedInlineDeck.theme?.colors?.accent1, "#AABBCC");
+    assert.equal(
+      deckPropsSchema.safeParse({
+        theme: { colors: { followHlink: "#112233" } },
+      }).success,
+      false,
+    );
   });
 
   it("validates color maps, format schemes, and theme overrides and resolves scheme colors through active colorMap", () => {

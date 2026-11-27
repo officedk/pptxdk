@@ -168,7 +168,6 @@ const styleErrorCodes = new Set([
   "invalid-grid-placement",
   "invalid-grid-tracks",
   "invalid-color",
-  "unknown-color-token",
   "invalid-shadow",
   "invalid-font-size",
   "invalid-letter-spacing",

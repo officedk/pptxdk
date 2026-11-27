@@ -12,6 +12,7 @@ import {
   backgroundValueSchema,
   colorMapOverrideSchema,
   colorValueSchema,
+  isTheme,
   textStyleSchema,
   textStyleShape,
   themeInputSchema,
@@ -19,6 +20,7 @@ import {
   type BackgroundValue,
   type ColorMapOverride,
   type TextStyle,
+  type Theme,
   type ThemeInput,
   type ThemeOverride,
 } from "#/theme.ts";
@@ -113,7 +115,7 @@ export type DeckProps = {
   /** Slide canvas height in CSS pixels (`px`); defaults to `720` (16:9 widescreen) when omitted. */
   readonly height?: number | undefined;
   /** Deck-level theme definition or inline theme input inherited by slides unless overridden. */
-  readonly theme?: ThemeInput | undefined;
+  readonly theme?: ThemeInput | Theme | undefined;
   /** Inherited root text style applied across slides unless overridden. */
   readonly style?: TextStyle | undefined;
   /** Presentation metadata title written to core document properties. */
@@ -123,7 +125,7 @@ export type DeckProps = {
 const deckPropsObjectSchema = z.strictObject({
   width: slideDimensionSchema.optional(),
   height: slideDimensionSchema.optional(),
-  theme: themeInputSchema.optional(),
+  theme: z.union([z.custom<Theme>(isTheme), themeInputSchema]).optional(),
   style: textStyleSchema.optional(),
   title: xml10StringSchema.optional(),
 });

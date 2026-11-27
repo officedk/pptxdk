@@ -614,7 +614,7 @@ export type CapabilityLayoutRequest = {
   readonly heightMode?: "at-most" | "exactly";
   /** Distinguishes baseline queries from general intrinsic sizing queries. */
   readonly purpose?: "baseline" | "layout";
-  /** Theme, local scope, and container text defaults shared between measurement and object compilation. */
+  /** Theme, native overrides, and container text defaults shared between measurement and object compilation. */
   readonly theme: ThemeContext;
   /** 1-based slide number in the deck, used by shared text service to measure native slide number fields. */
   readonly slideNumber: number;

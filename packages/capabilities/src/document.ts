@@ -468,7 +468,7 @@ export function image(props: ImageAuthorProps): ImageNode {
   return createImageNode(props);
 }
 
-/** Creates a native group preserving member identity, local theme, and layout children. */
+/** Creates a native group preserving member identity and layout children. */
 export function group(props: GroupAuthorProps = {}): GroupNode {
   return createGroupNode(props);
 }

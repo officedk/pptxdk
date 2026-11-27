@@ -8,6 +8,7 @@ import {
   layoutSpacingSchema,
   layoutStyleSchema,
   linkTargetSchema,
+  nonNegativeLayoutSpacingSchema,
   paddingStyleSchema,
   placeholderSizeSchema,
   placeholderStyleSchema,
@@ -16,10 +17,16 @@ import {
   type LayoutSpacing,
   type LayoutStyle,
   type LinkTarget,
+  type NonNegativeLayoutSpacing,
   type PaddingStyle,
   type PlaceholderSize,
 } from "@pptxdk/core";
-import { parseLinkTarget, readAuthorId } from "@pptxdk/core/capability";
+import {
+  layoutStyleKeys,
+  parseCapabilityLayoutContract,
+  parseLinkTarget,
+  readAuthorId,
+} from "@pptxdk/core/capability";
 import { describe, it } from "vitest";
 
 describe("Slice 1: core author primitives & layout schemas", () => {
@@ -203,5 +210,61 @@ describe("Slice 1: core author primitives & layout schemas", () => {
         },
       );
     }
+  });
+
+  it("exports readonly nonNegativeLayoutSpacingSchema and derives explicitPixelSize, fixedAxes, positioned, and auto preservesIntrinsicSize in parseCapabilityLayoutContract", () => {
+    const pad2 = [9, 12] as const;
+    const pad4 = [9, 12, 9, 12] as const;
+    const parsed2: NonNegativeLayoutSpacing =
+      nonNegativeLayoutSpacingSchema.parse(pad2);
+    const parsed4: NonNegativeLayoutSpacing =
+      nonNegativeLayoutSpacingSchema.parse(pad4);
+    assert.deepEqual(parsed2, [9, 12]);
+    assert.deepEqual(parsed4, [9, 12, 9, 12]);
+    assert.equal(nonNegativeLayoutSpacingSchema.safeParse(-1).success, false);
+    assert.equal(
+      nonNegativeLayoutSpacingSchema.safeParse([4, -1]).success,
+      false,
+    );
+
+    const allowed = new Set<string>(layoutStyleKeys);
+
+    const percentContract = parseCapabilityLayoutContract({
+      nativeKind: "graphicFrame",
+      props: { style: { width: "100%", height: "auto" } },
+      allowedStyleKeys: allowed,
+    });
+    assert.deepEqual(percentContract.explicitPixelSize, {});
+    assert.deepEqual(percentContract.fixedAxes, { width: true, height: false });
+    assert.equal(percentContract.positioned, false);
+
+    const pixelContract = parseCapabilityLayoutContract({
+      nativeKind: "sp",
+      props: { style: { position: "relative", width: 240, height: 120 } },
+      allowedStyleKeys: allowed,
+    });
+    assert.deepEqual(pixelContract.explicitPixelSize, {
+      width: 240,
+      height: 120,
+    });
+    assert.deepEqual(pixelContract.fixedAxes, { width: true, height: true });
+    assert.equal(pixelContract.positioned, true);
+
+    const insetContract = parseCapabilityLayoutContract({
+      nativeKind: "sp",
+      props: { style: { position: "absolute", inset: 24 } },
+      allowedStyleKeys: allowed,
+    });
+    assert.deepEqual(insetContract.explicitPixelSize, {});
+    assert.deepEqual(insetContract.fixedAxes, { width: true, height: true });
+    assert.equal(insetContract.positioned, true);
+
+    const autoWidthGroup = parseCapabilityLayoutContract({
+      nativeKind: "grpSp",
+      props: { style: { width: "auto" } },
+      allowedStyleKeys: allowed,
+    });
+    assert.equal(autoWidthGroup.preservesIntrinsicSize, true);
+    assert.deepEqual(autoWidthGroup.fixedAxes, { width: false, height: false });
   });
 });

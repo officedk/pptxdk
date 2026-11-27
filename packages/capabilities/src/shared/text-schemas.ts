@@ -4,12 +4,14 @@ import {
   layoutStyleSchema,
   linkTargetSchema,
   nativePlaceholderRefSchema,
+  nonNegativeLayoutSpacingSchema,
   textListBulletSchema,
   textListNumberSchema,
   textListSchema,
   textStyleSchema,
   validateTextStyle,
   visualStyleSchema,
+  type NonNegativeLayoutSpacing,
   type TextList,
   type TextStyle,
 } from "@pptxdk/core/capability";
@@ -88,16 +90,17 @@ const nonNegativeInsetSchema = z
     return Number.isSafeInteger(converted);
   }, "Inset must be within DrawingML EMU range");
 
-export const textPaddingValueSchema = z.union([
-  nonNegativeInsetSchema,
-  z.tuple([nonNegativeInsetSchema, nonNegativeInsetSchema]),
-  z.tuple([
-    nonNegativeInsetSchema,
-    nonNegativeInsetSchema,
-    nonNegativeInsetSchema,
-    nonNegativeInsetSchema,
-  ]),
-]);
+const spacingValuesWithinEmuRange = (
+  spacing: NonNegativeLayoutSpacing,
+): boolean =>
+  typeof spacing === "number"
+    ? Number.isSafeInteger(pxToEmu(spacing))
+    : spacing.every((entry) => Number.isSafeInteger(pxToEmu(entry)));
+
+export const textPaddingValueSchema = nonNegativeLayoutSpacingSchema.refine(
+  spacingValuesWithinEmuRange,
+  "Inset must be within DrawingML EMU range",
+);
 
 export const textInsetsStyleSchema = z
   .object({
@@ -347,7 +350,22 @@ export function parseTextExtent(
   label: string,
   path?: string,
 ): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 0 || pxToEmu(value) === 0) {
+      throw new CapabilityError(
+        "invalid-text-box",
+        `Computed ${label} is 0px; ${label} must be greater than 0px`,
+        path,
+      );
+    }
+    if (value < 0 || pxToEmu(value) < 1) {
+      throw new CapabilityError(
+        "invalid-text-box",
+        `Computed ${label} is ${value}px; ${label} must be greater than 0px`,
+        path,
+      );
+    }
+  } else {
     throw new CapabilityError(
       "invalid-text-box",
       `${label} must be a finite positive pixel number`,

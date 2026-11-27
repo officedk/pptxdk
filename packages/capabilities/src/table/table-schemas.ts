@@ -60,26 +60,7 @@ export const tableColumnSchema = z.union([
 ]);
 export type TableColumn = z.infer<typeof tableColumnSchema>;
 
-const nonNegativeTableInsetSchema = z
-  .number()
-  .finite()
-  .nonnegative()
-  .refine((value) => Number.isSafeInteger(pxToEmu(value)));
-
-export const tableSpacingSchema = z.union([
-  nonNegativeTableInsetSchema,
-  z
-    .tuple([nonNegativeTableInsetSchema, nonNegativeTableInsetSchema])
-    .readonly(),
-  z
-    .tuple([
-      nonNegativeTableInsetSchema,
-      nonNegativeTableInsetSchema,
-      nonNegativeTableInsetSchema,
-      nonNegativeTableInsetSchema,
-    ])
-    .readonly(),
-]);
+export const tableSpacingSchema = textPaddingValueSchema;
 export type TableSpacing = z.infer<typeof tableSpacingSchema>;
 
 const coreTextStyleShape = textStyleSchema.unwrap().shape;
@@ -322,7 +303,22 @@ export function parseTablePositiveSize(
   label: string,
   path?: string,
 ): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 0 || pxToEmu(value) === 0) {
+      throw new CapabilityError(
+        "invalid-table-geometry",
+        `Computed ${label} is 0px; ${label} must be greater than 0px`,
+        path,
+      );
+    }
+    if (value < 0 || pxToEmu(value) < 1) {
+      throw new CapabilityError(
+        "invalid-table-geometry",
+        `Computed ${label} is ${value}px; ${label} must be greater than 0px`,
+        path,
+      );
+    }
+  } else {
     throw new CapabilityError(
       "invalid-table-geometry",
       `${label} must be a finite positive pixel number`,
@@ -347,7 +343,21 @@ export function assertTableEmuExtent(
   path?: string,
 ): number {
   const emu = pxToEmu(value);
-  if (!Number.isSafeInteger(emu) || emu < 1 || emu > maximumExtentEmu) {
+  if (Number.isFinite(value) && (value === 0 || emu === 0)) {
+    throw new CapabilityError(
+      "invalid-table-geometry",
+      `Computed ${label} is 0px; ${label} must be greater than 0px`,
+      path,
+    );
+  }
+  if (Number.isFinite(value) && (value < 0 || emu < 1)) {
+    throw new CapabilityError(
+      "invalid-table-geometry",
+      `Computed ${label} is ${value}px; ${label} must be greater than 0px`,
+      path,
+    );
+  }
+  if (!Number.isSafeInteger(emu) || emu > maximumExtentEmu) {
     throw new CapabilityError(
       "invalid-table-geometry",
       `${label} exceeds writable table dimension range after conversion`,

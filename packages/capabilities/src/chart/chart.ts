@@ -1242,17 +1242,17 @@ export const chartCapability = {
       placeholder === undefined
         ? undefined
         : resolvePlaceholderGeometry(placeholder, input.props);
-    const rawWidth = placeholderGeometry?.width ?? contract.layoutStyle.width;
-    const rawHeight =
-      placeholderGeometry?.height ?? contract.layoutStyle.height;
-    const declaredWidth =
-      rawWidth !== undefined
-        ? parseChartExtentBySchema(rawWidth, "width")
+    const placeholderWidth =
+      typeof placeholderGeometry?.width === "number"
+        ? placeholderGeometry.width
         : undefined;
+    const placeholderHeight =
+      typeof placeholderGeometry?.height === "number"
+        ? placeholderGeometry.height
+        : undefined;
+    const declaredWidth = placeholderWidth ?? contract.explicitPixelSize?.width;
     const declaredHeight =
-      rawHeight !== undefined
-        ? parseChartExtentBySchema(rawHeight, "height")
-        : undefined;
+      placeholderHeight ?? contract.explicitPixelSize?.height;
     const rawX = placeholderGeometry?.x;
     const rawY = placeholderGeometry?.y;
     const declaredX =
@@ -1261,12 +1261,7 @@ export const chartCapability = {
       rawY !== undefined ? parseChartCoordinateBySchema(rawY, "y") : undefined;
 
     const legend = parseChartLegendBySchema(input.props["legend"]);
-    const checkedPlotArea = parseChartPlotAreaBySchema(
-      input.props["plotArea"],
-      declaredWidth !== undefined && declaredHeight !== undefined
-        ? { width: declaredWidth, height: declaredHeight }
-        : undefined,
-    );
+    const checkedPlotArea = parseChartPlotAreaBySchema(input.props["plotArea"]);
     const title = parseChartTitleBySchema(input.props["title"], "Chart.title");
     const blanks = displayBlanksAs(input.props["displayBlanksAs"], drafts);
 
@@ -1337,16 +1332,24 @@ export const chartCapability = {
         };
       },
       resolve(resolveContext: ObjectResolveContext): ObjectResolution {
-        const x = resolveContext.layoutBox?.x ?? declaredX ?? 0;
-        const y = resolveContext.layoutBox?.y ?? declaredY ?? 0;
-        const width =
+        const x = parseChartCoordinateBySchema(
+          resolveContext.layoutBox?.x ?? declaredX ?? 0,
+          "x",
+        );
+        const y = parseChartCoordinateBySchema(
+          resolveContext.layoutBox?.y ?? declaredY ?? 0,
+          "y",
+        );
+        const rawBoxWidth =
           resolveContext.layoutBox?.width ??
           declaredWidth ??
           (declaredHeight === undefined ? 320 : declaredHeight * (16 / 9));
-        const height =
+        const rawBoxHeight =
           resolveContext.layoutBox?.height ??
           declaredHeight ??
-          width * (9 / 16);
+          rawBoxWidth * (9 / 16);
+        const width = parseChartExtentBySchema(rawBoxWidth, "width");
+        const height = parseChartExtentBySchema(rawBoxHeight, "height");
         const box: Rect = { x, y, width, height };
 
         if (parsed.plotArea !== undefined) {

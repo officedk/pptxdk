@@ -21,12 +21,9 @@ import {
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
-const imageDescriptorAllowedKeys = new Set([
-  "image",
-  "fit",
-  "position",
-  "opacity",
-]);
+const imageDescriptorAllowedKeys = new Set(
+  Object.keys(imageBackgroundSchema.unwrap().shape),
+);
 
 const imageAllowedPropKeys = new Set(
   Object.keys(imageDeclarationPropsSchema.unwrap().shape),

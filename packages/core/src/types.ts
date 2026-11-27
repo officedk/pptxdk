@@ -52,6 +52,7 @@ export type {
   LayoutLength,
   LayoutSpacing,
   LayoutStyle,
+  NonNegativeLayoutSpacing,
   PaddingStyle,
 } from "#/layout-schemas.ts";
 
@@ -620,6 +621,16 @@ export type NativeElementKind =
   | "graphicFrame"
   | "cxnSp";
 
+export type CapabilityLayoutAxes = {
+  readonly width: boolean;
+  readonly height: boolean;
+};
+
+export type CapabilityExplicitPixelSize = {
+  readonly width?: number;
+  readonly height?: number;
+};
+
 export type CapabilityLayoutContract = {
   readonly nativeKind: NativeElementKind;
   readonly layoutStyle: LayoutStyle;
@@ -629,6 +640,12 @@ export type CapabilityLayoutContract = {
     readonly bottom: number;
     readonly left: number;
   };
+  /** Finite numeric pixel width/height explicitly declared on `style` (percentages and `"auto"` remain `undefined`). */
+  readonly explicitPixelSize?: CapabilityExplicitPixelSize;
+  /** Axes constrained by explicit width/height (pixel or percentage) or opposing absolute offsets (`left+right`, `top+bottom`, `inset`). */
+  readonly fixedAxes?: CapabilityLayoutAxes;
+  /** True when `style.position` is `"relative"` or `"absolute"`. */
+  readonly positioned?: boolean;
   /** Prevents `display: "block"` `alignItems: "stretch"` from expanding auto-width replaced items to container width. */
   readonly preservesIntrinsicSize?: boolean;
   /** Enforces measured content/track dimensions as lower bounds and preserves explicit row sums over target dimensions (CSS table sizing). */
@@ -754,6 +771,8 @@ export type ObjectResolveContext = {
   readonly options: ResolveOptions;
   readonly slideNumber: number;
   readonly layoutBox?: Rect;
+  /** Axes whose final size is determined by layout constraints (explicit/percentage size, opposing offsets, flex sizing, or grid/flex stretch). */
+  readonly layoutSizedAxes?: CapabilityLayoutAxes;
   readonly placeholder?: PlaceholderResolutionContext;
   /** Convert an explicit continuity handle into an OOXML object name; objects without declared continuity omit this value. */
   readonly morphName?: string;

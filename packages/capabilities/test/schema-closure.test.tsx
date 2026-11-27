@@ -64,6 +64,7 @@ import { describe, it } from "vitest";
 import {
   boxDeclarationPropsSchema,
   boxStyleSchema,
+  type BoxStyle,
 } from "../src/box/box-declaration.ts";
 import { chartPropsSchema } from "../src/chart/chart-schemas.ts";
 import {
@@ -74,8 +75,13 @@ import { imageDeclarationPropsSchema } from "../src/image/image-schemas.ts";
 import { spinOptionsSchema } from "../src/motion/motion-schemas.ts";
 import { notesDeclarationPropsSchema } from "../src/notes/notes-schemas.ts";
 import {
+  placeholderDeclarationPropsSchema,
+  placeholderObjectStyleSchema,
+} from "../src/placeholder/placeholder-schemas.ts";
+import {
   shapeDeclarationPropsSchema,
   shapeStyleSchema,
+  type ShapeStyle,
 } from "../src/shape/shape-declaration.ts";
 import {
   paragraphAuthorPropsSchema,
@@ -83,12 +89,17 @@ import {
   spanAuthorPropsSchema,
   textAuthorPropsSchema,
   textBoxStyleSchema,
+  type TextBoxStyle,
 } from "../src/shared/text-schemas.ts";
 import {
   shapeBorderObjectSchema,
   shapeBorderValueSchema,
 } from "../src/shared/visual.ts";
-import { tableDeclarationPropsSchema } from "../src/table/table-schemas.ts";
+import {
+  tableCellStyleSchema,
+  tableDeclarationPropsSchema,
+  type TableCellStyle,
+} from "../src/table/table-schemas.ts";
 import {
   transitionKindSchema,
   transitionSchema,
@@ -1093,5 +1104,44 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       message: "Cannot serialize value",
     };
     assert.equal(codegenDiagnosticSchema.safeParse(codegenDiag).success, true);
+  });
+
+  it("shares readonly non-negative padding tuples across Box, Text, Shape, Table Cell, and validates Placeholder schemas", () => {
+    const pad2 = [9, 12] as const;
+    const pad4 = [9, 12, 9, 12] as const;
+
+    const boxStyle: BoxStyle = { padding: pad4 };
+    const textStyle: TextBoxStyle = { padding: pad2 };
+    const shapeStyle: ShapeStyle = { padding: pad4 };
+    const cellStyle: TableCellStyle = { padding: pad4 };
+    const cellStyle2: TableCellStyle = { padding: pad2 };
+
+    assert.equal(boxStyleSchema.safeParse(boxStyle).success, true);
+    assert.equal(textBoxStyleSchema.safeParse(textStyle).success, true);
+    assert.equal(shapeStyleSchema.safeParse(shapeStyle).success, true);
+    assert.equal(tableCellStyleSchema.safeParse(cellStyle).success, true);
+    assert.equal(tableCellStyleSchema.safeParse(cellStyle2).success, true);
+    assert.equal(
+      tableCellStyleSchema.safeParse({ padding: [9, -1] }).success,
+      false,
+    );
+
+    assert.equal(
+      placeholderObjectStyleSchema.safeParse({ width: 200, height: 100 })
+        .success,
+      true,
+    );
+    assert.equal(
+      placeholderDeclarationPropsSchema.safeParse({
+        placeholder: "body",
+        style: { left: 10, top: 20 },
+      }).success,
+      true,
+    );
+    assert.equal(
+      placeholderDeclarationPropsSchema.safeParse({ unknownProp: true })
+        .success,
+      false,
+    );
   });
 });

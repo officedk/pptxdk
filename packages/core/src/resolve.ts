@@ -88,6 +88,7 @@ import type {
   CapabilityElement,
   CapabilityFontUsageClaim,
   CapabilityInput,
+  CapabilityLayoutAxes,
   CapabilityLayoutContract,
   CapabilityModule,
   CapabilityResourceClaim,
@@ -1501,6 +1502,7 @@ function createObjectResolveContext(args: {
   readonly id: number;
   readonly path: string;
   readonly layoutBox: Rect | undefined;
+  readonly layoutSizedAxes?: CapabilityLayoutAxes | undefined;
   readonly theme: ThemeContext;
   readonly placeholder: PlaceholderResolutionContext | undefined;
   readonly insideGroup: boolean;
@@ -1514,6 +1516,7 @@ function createObjectResolveContext(args: {
     id,
     path,
     layoutBox,
+    layoutSizedAxes,
     theme,
     placeholder,
     insideGroup,
@@ -1529,6 +1532,7 @@ function createObjectResolveContext(args: {
     options: resolveContext.options,
     slideNumber: resolveContext.slideNumber,
     ...(layoutBox === undefined ? {} : { layoutBox }),
+    ...(layoutSizedAxes === undefined ? {} : { layoutSizedAxes }),
     ...(placeholder === undefined ? {} : { placeholder }),
     ...(morphName === undefined ? {} : { morphName }),
     ...(link === undefined ? {} : { link }),
@@ -1650,6 +1654,7 @@ function resolveChildrenPass(
       return;
     }
     const layoutBox = context.layout.boxes.get(child);
+    const layoutSizedAxes = context.layout.sizedAxes.get(child);
     const placeholder = context.placeholderContexts.get(child);
     const theme =
       placeholder !== undefined
@@ -1759,6 +1764,7 @@ function resolveChildrenPass(
           id,
           path,
           layoutBox,
+          layoutSizedAxes,
           theme,
           placeholder,
           insideGroup,
@@ -1917,6 +1923,7 @@ function resolveBoundContainer(args: {
     content,
   } = args;
   const box = context.layout.boxes.get(child);
+  const layoutSizedAxes = context.layout.sizedAxes.get(child);
   if (box === undefined) {
     context.slide.diagnostics.push(
       diagnostic(
@@ -2013,6 +2020,7 @@ function resolveBoundContainer(args: {
         id: objectId,
         path,
         layoutBox: box,
+        layoutSizedAxes,
         theme,
         placeholder: undefined,
         insideGroup,

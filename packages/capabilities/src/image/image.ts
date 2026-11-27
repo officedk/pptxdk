@@ -479,6 +479,20 @@ function dimension(
 ): number {
   const actual = value === undefined ? fallback : value;
   const isExtent = name === "width" || name === "height";
+  if (isExtent && typeof actual === "number" && Number.isFinite(actual)) {
+    if (actual === 0 || pxToEmu(actual) === 0) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${name} is 0px; ${name} must be greater than 0px`,
+      );
+    }
+    if (actual < 0 || pxToEmu(actual) < 1) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${name} is ${actual}px; ${name} must be greater than 0px`,
+      );
+    }
+  }
   const parsed = isExtent
     ? imageExtentValueSchema.safeParse(actual)
     : imageCoordinateValueSchema.safeParse(actual);
@@ -498,14 +512,6 @@ function dimension(
     }
   }
   return parsed.data;
-}
-
-function requestedDimension(
-  style: Readonly<Record<string, unknown>>,
-  name: "width" | "height",
-): unknown {
-  const styled = style[name];
-  return typeof styled === "number" ? styled : undefined;
 }
 
 function parseCropValues(
@@ -691,11 +697,17 @@ export const imageCapability = {
     const declaredX = placeholderGeometry?.x;
     const declaredY = placeholderGeometry?.y;
     const requestedWidth =
-      placeholderGeometry?.width ??
-      requestedDimension(rawSlideStyle ?? {}, "width");
+      placeholderGeometry?.width ?? contract.explicitPixelSize?.width;
     const requestedHeight =
-      placeholderGeometry?.height ??
-      requestedDimension(rawSlideStyle ?? {}, "height");
+      placeholderGeometry?.height ?? contract.explicitPixelSize?.height;
+    const hasFixedWidth =
+      (placeholderGeometry?.width !== undefined &&
+        placeholderGeometry.width !== "auto") ||
+      (contract.fixedAxes?.width ?? false);
+    const hasFixedHeight =
+      (placeholderGeometry?.height !== undefined &&
+        placeholderGeometry.height !== "auto") ||
+      (contract.fixedAxes?.height ?? false);
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -736,8 +748,8 @@ export const imageCapability = {
             return {
               width: declaredWidth,
               height: declaredHeight,
-              minContentWidth: declaredWidth,
-              minContentHeight: declaredHeight,
+              minContentWidth: hasFixedWidth ? 0 : declaredWidth,
+              minContentHeight: hasFixedHeight ? 0 : declaredHeight,
             };
           }
           return undefined;
@@ -746,13 +758,24 @@ export const imageCapability = {
           declaredWidth ??
           (declaredHeight !== undefined
             ? (declaredHeight * image.width) / image.height
-            : Math.min(image.width, request.availableWidth ?? image.width));
+            : request.widthMode === "exactly" &&
+                request.availableWidth !== undefined
+              ? request.availableWidth
+              : Math.min(image.width, request.availableWidth ?? image.width));
         const height = declaredHeight ?? (width * image.height) / image.width;
+        const intrinsicMinWidth =
+          declaredHeight !== undefined
+            ? (declaredHeight * image.width) / image.height
+            : image.width;
+        const intrinsicMinHeight =
+          declaredWidth !== undefined
+            ? (declaredWidth * image.height) / image.width
+            : image.height;
         return {
           width,
           height,
-          minContentWidth: image.width,
-          minContentHeight: image.height,
+          minContentWidth: hasFixedWidth ? 0 : intrinsicMinWidth,
+          minContentHeight: hasFixedHeight ? 0 : intrinsicMinHeight,
         };
       },
 

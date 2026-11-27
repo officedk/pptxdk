@@ -29,6 +29,7 @@ import {
   parseMorphKey,
 } from "../shared/identity.ts";
 import {
+  assertVisualBoxExtent,
   emitVisualModel,
   hasVisibleBoxStyle,
   paintVisualModel,
@@ -171,6 +172,9 @@ export const boxCapability: ObjectCapabilityModule = {
           box,
           layoutOnlyWhenInvisible: true,
         });
+        if (visual.hasVisibleStyle) {
+          assertVisualBoxExtent(box);
+        }
         const geometryName =
           visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
         const motionTarget = {

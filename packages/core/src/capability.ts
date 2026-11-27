@@ -48,6 +48,7 @@ export {
   layoutLengthSchema,
   layoutSpacingSchema,
   layoutStyleSchema,
+  nonNegativeLayoutSpacingSchema,
   paddingStyleSchema,
 } from "#/layout-schemas.ts";
 export {
@@ -246,8 +247,10 @@ export type {
   CapabilityAnnotation,
   CapabilityChild,
   CapabilityContribution,
+  CapabilityExplicitPixelSize,
   CapabilityFontUsageClaim,
   CapabilityInput,
+  CapabilityLayoutAxes,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
   CapabilityLayoutRequest,
@@ -279,6 +282,7 @@ export type {
   MastersEmitDriver,
   NativeElementKind,
   NativeLink,
+  NonNegativeLayoutSpacing,
   ObjectCapabilityModule,
   ObjectResolution,
   ObjectResolveContext,

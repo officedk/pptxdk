@@ -30,6 +30,8 @@ import type {
   BuildDiagnostic,
   CapabilityChild,
   CapabilityElement,
+  CapabilityExplicitPixelSize,
+  CapabilityLayoutAxes,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
   LayoutStyle,
@@ -61,6 +63,7 @@ function roundRect(box: Rect): Rect {
 
 export type LayoutPassResult = {
   readonly boxes: WeakMap<CapabilityElement, Rect>;
+  readonly sizedAxes: WeakMap<CapabilityElement, CapabilityLayoutAxes>;
   readonly gridTracks: WeakMap<CapabilityElement, LayoutGridTracks>;
   readonly gridAreas: WeakMap<CapabilityElement, Rect>;
   readonly themes: WeakMap<CapabilityElement, ThemeContext>;
@@ -160,6 +163,105 @@ function readStyle(
   return value;
 }
 
+function hasOppositeOffsets(
+  style: LayoutStyle,
+  startKey: "left" | "top",
+  endKey: "right" | "bottom",
+): boolean {
+  if (style.position !== "absolute") return false;
+  const start = style[startKey] ?? style.inset;
+  const end = style[endKey] ?? style.inset;
+  return (
+    start !== undefined &&
+    start !== "auto" &&
+    end !== undefined &&
+    end !== "auto"
+  );
+}
+
+function computeFixedAxes(style: LayoutStyle): CapabilityLayoutAxes {
+  return {
+    width:
+      (style.width !== undefined && style.width !== "auto") ||
+      hasOppositeOffsets(style, "left", "right"),
+    height:
+      (style.height !== undefined && style.height !== "auto") ||
+      hasOppositeOffsets(style, "top", "bottom"),
+  };
+}
+
+function computeExplicitPixelSize(
+  style: LayoutStyle,
+): CapabilityExplicitPixelSize {
+  const width =
+    typeof style.width === "number" && Number.isFinite(style.width)
+      ? style.width
+      : undefined;
+  const height =
+    typeof style.height === "number" && Number.isFinite(style.height)
+      ? style.height
+      : undefined;
+  return {
+    ...(width === undefined ? {} : { width }),
+    ...(height === undefined ? {} : { height }),
+  };
+}
+
+function computeLayoutSizedAxes(
+  contract: CapabilityLayoutContract,
+  parentStyle: LayoutStyle,
+): CapabilityLayoutAxes {
+  const style = contract.layoutStyle;
+  const fixed = contract.fixedAxes ?? computeFixedAxes(style);
+  let width = fixed.width;
+  let height = fixed.height;
+
+  if (style.position !== "absolute") {
+    if (parentStyle.display === "flex") {
+      const direction = parentStyle.flexDirection ?? "row";
+      const isRow = direction === "row" || direction === "row-reverse";
+      const isMainFlexSized =
+        style.flex !== undefined ||
+        (style.flexGrow !== undefined && style.flexGrow > 0) ||
+        (style.flexBasis !== undefined && style.flexBasis !== "auto");
+      const effectiveAlign =
+        style.alignSelf === undefined || style.alignSelf === "auto"
+          ? (parentStyle.alignItems ?? "stretch")
+          : style.alignSelf;
+      const isCrossStretched = effectiveAlign === "stretch";
+      if (isRow) {
+        width ||= isMainFlexSized;
+        height ||= isCrossStretched;
+      } else {
+        height ||= isMainFlexSized;
+        width ||= isCrossStretched;
+      }
+    } else if (parentStyle.display === "grid") {
+      const effectiveJustify =
+        style.justifySelf === undefined || style.justifySelf === "auto"
+          ? (parentStyle.justifyItems ?? "stretch")
+          : style.justifySelf;
+      const effectiveAlign =
+        style.alignSelf === undefined || style.alignSelf === "auto"
+          ? (parentStyle.alignItems ?? "stretch")
+          : style.alignSelf;
+      if (effectiveJustify === "stretch") width = true;
+      if (effectiveAlign === "stretch" && style.aspectRatio === undefined) {
+        height = true;
+      }
+    } else if (!contract.preservesIntrinsicSize) {
+      width = true;
+    }
+  }
+
+  if (style.aspectRatio !== undefined) {
+    if (width && !height) height = true;
+    else if (height && !width) width = true;
+  }
+
+  return { width, height };
+}
+
 /**
  * Parses and validates host props into a CapabilityLayoutContract for object capabilities.
  */
@@ -246,16 +348,23 @@ export function parseCapabilityLayoutContract(options: {
     }
   }
 
+  const explicitPixelSize = computeExplicitPixelSize(layoutStyle);
+  const fixedAxes = computeFixedAxes(layoutStyle);
+  const positioned =
+    layoutStyle.position === "relative" || layoutStyle.position === "absolute";
+
   const isIntrinsicWidthObject =
     nativeKind === "pic" ||
     (nativeKind === "grpSp" &&
-      layoutStyle.position !== "relative" &&
-      layoutStyle.position !== "absolute" &&
-      layoutStyle.width === undefined);
+      !positioned &&
+      (layoutStyle.width === undefined || layoutStyle.width === "auto"));
 
   return {
     nativeKind,
     layoutStyle,
+    explicitPixelSize,
+    fixedAxes,
+    positioned,
     ...(padding === undefined ? {} : { padding }),
     ...(isIntrinsicWidthObject ? { preservesIntrinsicSize: true } : {}),
   };
@@ -316,6 +425,7 @@ export class LayoutPass {
   readonly #slideNumber: number;
   readonly #options: ResolveOptions;
   readonly #boxes = new WeakMap<CapabilityElement, Rect>();
+  readonly #sizedAxes = new WeakMap<CapabilityElement, CapabilityLayoutAxes>();
   readonly #gridTracks = new WeakMap<CapabilityElement, LayoutGridTracks>();
   readonly #gridAreas = new WeakMap<CapabilityElement, Rect>();
   readonly #themes = new WeakMap<CapabilityElement, ThemeContext>();
@@ -383,6 +493,7 @@ export class LayoutPass {
     });
     return {
       boxes: this.#boxes,
+      sizedAxes: this.#sizedAxes,
       gridTracks: this.#gridTracks,
       gridAreas: this.#gridAreas,
       themes: this.#themes,
@@ -512,6 +623,7 @@ export class LayoutPass {
     const style = contract.layoutStyle;
     const theme = container.theme ?? themeContext;
     this.#themes.set(input, theme);
+    this.#sizedAxes.set(input, computeLayoutSizedAxes(contract, parent.style));
     const node = this.#solver.createNode(
       {
         path,
@@ -542,6 +654,7 @@ export class LayoutPass {
     bound: BoundObjectCapability,
     contract: CapabilityLayoutContract,
   ): LayoutSolverNode {
+    this.#sizedAxes.set(input, computeLayoutSizedAxes(contract, parent.style));
     const node = this.#solver.createNode(
       {
         path,

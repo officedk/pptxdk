@@ -229,8 +229,9 @@ describe("core author Zod schemas & dual-entry parity", () => {
       "unsupported-declaration",
     );
     assert.equal(
-      themeInputSchema.parse({ colors: { ink: "dk1" } }).colors?.["ink"],
-      "dk1",
+      themeInputSchema.parse({ colors: { accent1: "#112233" } }).colors
+        ?.accent1,
+      "#112233",
     );
     assert.equal(themeSchema.parse(defineTheme()).name, "Office Theme");
     assert.equal(
@@ -242,7 +243,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
   it("produces identical valid documents and PPTX outputs from @officedk/pptxdk/react and @officedk/pptxdk/vanilla", async () => {
     const theme = defineTheme({
       name: "Shared Brand",
-      colors: { ink: "#1E293B", accent: "accent1" },
+      colors: { dk1: "#1E293B", accent1: "#2563EB" },
       fonts: { major: jostFont, minor: jostFont },
     });
 
@@ -252,12 +253,12 @@ describe("core author Zod schemas & dual-entry parity", () => {
         height={540}
         theme={theme}
         title="Dual Entry Parity"
-        style={{ fontFamily: "minor", color: "ink", fontSize: 18 }}
+        style={{ fontFamily: "minor", color: "dk1", fontSize: 18 }}
       >
         <Section name="Overview">
           <Slide
             id="cover"
-            theme={{ colors: { ink: "#0F172A" } }}
+            themeOverride={{ colors: { dk1: "#0F172A" } }}
             style={{
               display: "flex",
               flexDirection: "column",
@@ -286,7 +287,10 @@ describe("core author Zod schemas & dual-entry parity", () => {
                   </Span>
                 </P>
               </Text>
-              <Text id="px-title" style={{ fontSize: "32px", color: "accent" }}>
+              <Text
+                id="px-title"
+                style={{ fontSize: "32px", color: "accent1" }}
+              >
                 32px Title
               </Text>
             </Box>
@@ -315,12 +319,12 @@ describe("core author Zod schemas & dual-entry parity", () => {
       height: 540,
       theme,
       title: "Dual Entry Parity",
-      style: { fontFamily: "minor", color: "ink", fontSize: 18 },
+      style: { fontFamily: "minor", color: "dk1", fontSize: 18 },
     }).append(
       section({ name: "Overview" }).append(
         slide({
           id: "cover",
-          theme: { colors: { ink: "#0F172A" } },
+          themeOverride: { colors: { dk1: "#0F172A" } },
           style: {
             display: "flex",
             flexDirection: "column",
@@ -357,7 +361,7 @@ describe("core author Zod schemas & dual-entry parity", () => {
             ),
             text("32px Title", {
               id: "px-title",
-              style: { fontSize: "32px", color: "accent" },
+              style: { fontSize: "32px", color: "accent1" },
             }),
           ),
         ),

@@ -985,7 +985,7 @@ describe("public React fragment append", () => {
         {
           width: 480,
           height: 320,
-          theme: defineTheme({ colors: { accent: "#336699" } }),
+          theme: defineTheme({ colors: { accent1: "#336699" } }),
         },
         createElement(
           Slide,
@@ -1098,7 +1098,7 @@ describe("public React fragment append", () => {
             top: 200,
             width: 180,
             height: 30,
-            color: "accent",
+            color: "accent1",
           },
         },
         "Themed",
@@ -1176,7 +1176,11 @@ describe("public React fragment append", () => {
       objects.find(({ authorId }) => authorId === "flowed")?.box?.width,
       220,
     );
-    assert.match(slideXml(result, 1), /336699/u);
+    assert.match(slideXml(result, 1), /<a:schemeClr val="accent1"\/>/u);
+    assert.match(
+      strFromU8(unzipSync(result.pptx)["ppt/theme/theme1.xml"]!),
+      /336699/u,
+    );
 
     const motion = motionSchedule(result.slides[0]!);
     assert.ok(motion);

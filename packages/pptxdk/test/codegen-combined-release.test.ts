@@ -8,7 +8,6 @@ import {
   codegen,
   defineTheme,
   importPptx,
-  lighter,
   type CodegenResult,
 } from "@officedk/pptxdk";
 import {
@@ -35,7 +34,6 @@ import {
   Text,
   after,
   createMorphScope,
-  darker as reactDarker,
   defineSlideLayout,
   expandDocument,
   fade,
@@ -51,7 +49,6 @@ import {
   cell,
   chart,
   createMotionScopeHandle,
-  darker as vanillaDarker,
   deck,
   font as vanillaFont,
   group,
@@ -184,8 +181,6 @@ function buildCombinedReleaseDecks() {
       colors: {
         accent1: "#1D4ED8",
         accent2: "#059669",
-        brandTint: lighter("accent1", 0.35),
-        brandShade: vanillaDarker("accent2", 0.25),
       },
       fonts: { major: fontValue, minor: fontValue },
     });
@@ -196,8 +191,6 @@ function buildCombinedReleaseDecks() {
     colors: {
       accent1: "#1D4ED8",
       accent2: "#059669",
-      brandTint: lighter("accent1", 0.35),
-      brandShade: vanillaDarker("accent2", 0.25),
     },
     fonts: { major: vFont, minor: vFont },
   });
@@ -206,8 +199,6 @@ function buildCombinedReleaseDecks() {
     colors: {
       accent1: "#1D4ED8",
       accent2: "#059669",
-      brandTint: lighter("accent1", 0.35),
-      brandShade: reactDarker("accent2", 0.25),
     },
     fonts: { major: rFont, minor: rFont },
   });
@@ -216,8 +207,6 @@ function buildCombinedReleaseDecks() {
     colors: {
       accent1: "#1D4ED8",
       accent2: "#059669",
-      brandTint: lighter("accent1", 0.35),
-      brandShade: reactDarker("accent2", 0.25),
     },
     fonts: { major: rFont, minor: rFont },
   });

@@ -116,8 +116,8 @@ try {
     totalDtsBytes += Buffer.byteLength(content, "utf8");
     assert.doesNotMatch(
       content,
-      /\bfontkit\b/u,
-      `Unexpected fontkit reference leaked in ${file}`,
+      /\b(?:fontkit|harfbuzzjs)\b/u,
+      `Unexpected internal font library reference leaked in ${file}`,
     );
     assert.doesNotMatch(
       content,
@@ -147,8 +147,57 @@ try {
     ],
     ["Image src / SVG JSDoc", /\.svg` files are not\s+\*\s*supported/u],
     ["LayoutStyle.flex JSDoc", /minWidth: "auto"/u],
+    [
+      "FontFace metadata inference & Name ID 1 JSDoc",
+      /When `data` is a static single-font binary and `weight` or `style` is omitted[\s\S]*?native Unicode legacy family name \(`Name ID 1`\)/u,
+    ],
+    [
+      "DeckProps pixel dimensions JSDoc",
+      /canvas `width` and `height` are in CSS pixels \(`1280 × 720` default\)/u,
+    ],
+    [
+      "DeckProps default width JSDoc",
+      /defaults to `1280` \(16:9 widescreen\) when omitted/u,
+    ],
+    ["SectionProps section JSDoc", /native `p14:sectionLst` section/u],
+    [
+      "SectionProps extension JSDoc",
+      /Office 2010 `p14:sectionLst` presentation extension/u,
+    ],
   ] as const) {
     assert.match(combinedDts, pattern, `Missing ${label} in packed .d.ts`);
+  }
+  const reactDts = await readFile(
+    join(installedPackage, "dist/react.d.ts"),
+    "utf8",
+  );
+  for (const [label, pattern] of [
+    [
+      "Mount flat declaration",
+      /export declare function Mount\(props: MountProps\): ReactNode;/u,
+    ],
+    ["MountProps flat type", /type MountProps =/u],
+    ["MountProps export", /\btype MountProps\b/u],
+    [
+      "fromVanilla flat declaration",
+      /export declare function fromVanilla<[\s\S]*?>\(/u,
+    ],
+    [
+      "VanillaSlotResult flat type",
+      /type VanillaSlotResult<Node extends CommonNode = CommonNode, Slot extends CommonContainer = CommonContainer> =/u,
+    ],
+    ["VanillaSlotResult export", /\btype VanillaSlotResult\b/u],
+    [
+      "expandFragment flat declaration",
+      /export declare function expandFragment\(element: ReactNode, options\?: ExpandFragmentOptions\): Promise<readonly CommonNode\[\]>;/u,
+    ],
+    [
+      "ExpandFragmentOptions flat type",
+      /type ExpandFragmentOptions = ExpandDocumentOptions;/u,
+    ],
+    ["ExpandFragmentOptions export", /\btype ExpandFragmentOptions\b/u],
+  ] as const) {
+    assert.match(reactDts, pattern, `Missing ${label} in dist/react.d.ts`);
   }
   run(process.execPath, ["verify.ts"]);
   const cli = join(consumer, "node_modules", ".bin", "pptxdk");

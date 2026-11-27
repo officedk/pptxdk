@@ -18,7 +18,7 @@ import {
   SemanticTag,
 } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors, motionTiming } from "../theme.ts";
+import { colors, fonts, motionTiming } from "../theme.ts";
 
 const fiveStages = [
   {
@@ -121,7 +121,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
             top: 184,
             width: 324,
             height: 20,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 12,
             fontWeight: 700,
             color: colors.commText,
@@ -307,7 +307,7 @@ export function DecodePipelinePage({ scope }: { readonly scope: MorphScope }) {
                   enter={fade({ duration: 280 })}
                   text={s.step}
                   textStyle={{
-                    fontFamily: "metric",
+                    fontFamily: fonts.metric,
                     fontSize: 11.5,
                     fontWeight: 700,
                     color: colors.steel,

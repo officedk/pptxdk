@@ -17,7 +17,7 @@ import { ProductionMetricsPage } from "./pages/production-metrics.tsx";
 import { R1RlDistillPage } from "./pages/r1-rl-distill.tsx";
 import { ThreeFsPage } from "./pages/three-fs.tsx";
 import { TrainingCostPage } from "./pages/training-cost.tsx";
-import { colors, theme } from "./theme.ts";
+import { colors, fonts, theme } from "./theme.ts";
 
 /**
  * 15-slide technical architecture presentation deck for DeepSeek-V3 / R1
@@ -42,7 +42,7 @@ export function DeepSeekSystemsDeck({
       title="稀疏激活与通信隐藏：DeepSeek-V3 / R1 训练与推理全栈架构剖析"
       theme={theme}
       style={{
-        fontFamily: "body",
+        fontFamily: fonts.body,
         fontSize: 14,
         color: colors.ink,
       }}

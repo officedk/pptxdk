@@ -7,7 +7,7 @@ import {
   SemanticTag,
 } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const epScaleCategories = ["16 GPU", "32 GPU", "64 GPU", "128 GPU"] as const;
 const dispatchBandwidth = [42.47, 58.02, 50.58, 45.34] as const;
@@ -59,7 +59,11 @@ export function MpftDeepEpPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10.5,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -69,7 +73,11 @@ export function MpftDeepEpPage() {
               numberFormat: "0",
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -95,7 +103,11 @@ export function MpftDeepEpPage() {
                 value: true,
                 position: "outsideEnd",
                 numberFormat: "0.0",
-                style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+                style: {
+                  fontFamily: fonts.body,
+                  fontSize: 10,
+                  color: colors.ink,
+                },
               },
             },
           ]}
@@ -105,7 +117,7 @@ export function MpftDeepEpPage() {
             top: 168,
             width: 556,
             height: 252,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10.5,
             color: colors.ink,
           }}
@@ -263,7 +275,7 @@ export function MpftDeepEpPage() {
               height: 34,
               background: plane % 2 === 0 ? colors.comm : colors.commSoft,
               border: { color: colors.comm, width: 1 },
-              fontFamily: "metric",
+              fontFamily: fonts.metric,
               fontSize: 10,
               fontWeight: 700,
               color: plane % 2 === 0 ? colors.surface : colors.commText,
@@ -285,7 +297,7 @@ export function MpftDeepEpPage() {
               height: 44,
               background: colors.surface,
               border: { color: colors.compute, width: 1 },
-              fontFamily: "metric",
+              fontFamily: fonts.metric,
               fontSize: 9.5,
               fontWeight: 700,
               color: colors.compute,

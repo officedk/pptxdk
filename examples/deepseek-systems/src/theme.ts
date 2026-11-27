@@ -75,13 +75,10 @@ export const theme = defineTheme({
     accent6: colors.baseline,
     hlink: colors.compute,
     folHlink: colors.comm,
-    ...colors,
   },
   fonts: {
     major: fonts.body,
     minor: fonts.body,
-    body: fonts.body,
-    metric: fonts.metric,
   },
 });
 

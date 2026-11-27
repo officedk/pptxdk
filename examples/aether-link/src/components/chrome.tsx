@@ -18,11 +18,11 @@ import {
   jostFont,
 } from "../theme.ts";
 import {
-  createBeamDivergenceDiagram,
   createMetricTile,
   createTakeawayStrip,
   createTelemetryPanel,
-} from "./vanilla.ts";
+} from "./cards.ts";
+import { createBeamDivergenceDiagram } from "./diagrams.ts";
 
 // React component bridges generated from the zero-React Vanilla library.
 export const MetricTile = fromVanilla(createMetricTile);

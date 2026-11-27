@@ -1,9 +1,11 @@
 import {
   CapabilityError,
   resolvePlaceholderBoxFromLayers,
+  type BoundSlideCapability,
   type CapabilityInput,
   type LayoutPlaceholderSpec,
   type Rect,
+  type SealedShowMechanism,
   type SlideResolution,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
@@ -2931,9 +2933,22 @@ const motionMechanisms = [
 ] as const;
 
 /** Slide-level motion module binds choreography, writes object timing, and leaves preview on the static edit canvas. */
-export const motionCapability: SlideCapabilityModule & {
-  readonly mechanisms: typeof motionMechanisms;
-} = Object.freeze({
+export const motionCapability: SlideCapabilityModule<
+  BoundSlideCapability,
+  readonly [
+    SealedShowMechanism<"motion-fade">,
+    SealedShowMechanism<"motion-wipe">,
+    SealedShowMechanism<"motion-zoom">,
+    SealedShowMechanism<"motion-fly">,
+    SealedShowMechanism<"motion-float">,
+    SealedShowMechanism<"motion-spin-in">,
+    SealedShowMechanism<"motion-stretch">,
+    SealedShowMechanism<"motion-spin">,
+    SealedShowMechanism<"motion-breathe">,
+    SealedShowMechanism<"motion-fill-color">,
+    SealedShowMechanism<"motion-choreography">,
+  ]
+> = Object.freeze({
   declaration: "motion",
   slideProp: "motion",
   slot: "timing",

@@ -9,15 +9,13 @@ import { CommonNode } from "@pptxdk/core/document";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
 import {
-  shapeDeclarationPropsSchema,
+  shapeAllowedPropKeyList,
   shapeStyleSchema,
 } from "./shape-declaration.ts";
 
 const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
 
-const shapeAllowedPropKeys = new Set(
-  Object.keys(shapeDeclarationPropsSchema.unwrap().shape),
-);
+const shapeAllowedPropKeys = new Set(shapeAllowedPropKeyList);
 
 const shapeAllowedChildKinds = new Set([
   "paragraph",

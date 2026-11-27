@@ -450,7 +450,16 @@ export function computeChartLayout(options: {
   }
 
   // Reserve edge space for axes ticks, tick marks, and axis titles.
+  const AXIS_TITLE_GAP = 6;
+  const AXIS_TITLE_BOX_PAD = 4;
+  const VERTICAL_VALUE_LABEL_PAD = 4;
   const edges: Record<EdgeSide, number> = {
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  };
+  const overhang: Record<EdgeSide, number> = {
     top: 0,
     bottom: 0,
     left: 0,
@@ -470,10 +479,11 @@ export function computeChartLayout(options: {
     edges[side] = offset + depth;
     labelDepths.set(axisName, { side, depth, offset });
   };
-  const axisTitleSpecs: {
+  const pendingTitles: {
     readonly axis: ParsedChartAxis;
     readonly side: EdgeSide;
-    readonly thickness: number;
+    readonly text: string;
+    readonly style: TextStyle | undefined;
   }[] = [];
 
   for (const axis of parsed.axes) {
@@ -500,7 +510,10 @@ export function computeChartLayout(options: {
         );
         let maxW = 0;
         let maxH = 0;
-        for (const text of formattedTicks) {
+        let firstW = 0;
+        let lastW = 0;
+        for (let i = 0; i < formattedTicks.length; i += 1) {
+          const text = formattedTicks[i]!;
           const m = measureChartText({
             text,
             style: axisTextStyle,
@@ -508,30 +521,58 @@ export function computeChartLayout(options: {
             slideNumber,
             labelPath: `Chart.axes.${axis.name}.style`,
           });
+          if (i === 0) firstW = m.width;
+          if (i === formattedTicks.length - 1) lastW = m.width;
           maxW = Math.max(maxW, m.width);
           maxH = Math.max(maxH, m.height);
         }
         if (axis.direction === "horizontal") {
-          const depth = maxH + labelGap + tickProtrusion;
+          const depth = Math.ceil(maxH) + labelGap + tickProtrusion;
           addLabelZone(axis.name, labelSide, depth);
-          const overhang = Math.min(maxW / 2, avail.width * 0.1);
-          edges.left = Math.max(edges.left, overhang);
-          edges.right = Math.max(edges.right, overhang);
+          const leftTickW = scale.reversed ? lastW : firstW;
+          const rightTickW = scale.reversed ? firstW : lastW;
+          overhang.left = Math.max(
+            overhang.left,
+            Math.min(Math.ceil(leftTickW / 2) + 2, avail.width * 0.15),
+          );
+          overhang.right = Math.max(
+            overhang.right,
+            Math.min(Math.ceil(rightTickW / 2) + 2, avail.width * 0.15),
+          );
         } else {
           const depth = Math.min(
-            maxW + labelGap + tickProtrusion,
-            avail.width * 0.32,
+            Math.ceil(maxW) +
+              VERTICAL_VALUE_LABEL_PAD +
+              labelGap +
+              tickProtrusion,
+            avail.width * 0.42,
           );
           addLabelZone(axis.name, labelSide, depth);
-          const overhang = Math.min(maxH / 2, avail.height * 0.1);
-          edges.top = Math.max(edges.top, overhang);
-          edges.bottom = Math.max(edges.bottom, overhang);
+          const singleLineH =
+            maxH > 0
+              ? maxH
+              : measureChartText({
+                  text: "",
+                  style: axisTextStyle,
+                  theme,
+                  slideNumber,
+                  labelPath: `Chart.axes.${axis.name}.style`,
+                }).height;
+          const vOverhang = Math.min(
+            Math.ceil(singleLineH / 2) + 2,
+            avail.height * 0.15,
+          );
+          overhang.top = Math.max(overhang.top, vOverhang);
+          overhang.bottom = Math.max(overhang.bottom, vOverhang);
         }
       } else {
         let maxW = 0;
         let maxH = 0;
+        let firstW = 0;
+        let lastW = 0;
         const estSlot = Math.max(12, (avail.width * 0.8) / scale.count);
-        for (const cat of scale.categories) {
+        for (let i = 0; i < scale.categories.length; i += 1) {
+          const cat = scale.categories[i]!;
           const m = measureChartText({
             text: cat,
             style: axisTextStyle,
@@ -542,12 +583,14 @@ export function computeChartLayout(options: {
               ? { availableWidth: estSlot }
               : {}),
           });
+          if (i === 0) firstW = m.width;
+          if (i === scale.categories.length - 1) lastW = m.width;
           maxW = Math.max(maxW, m.width);
           maxH = Math.max(maxH, m.height);
         }
         if (axis.direction === "horizontal") {
           const singleLineH = measureChartText({
-            text: "Ay",
+            text: "",
             style: axisTextStyle,
             theme,
             slideNumber,
@@ -560,33 +603,66 @@ export function computeChartLayout(options: {
           );
           const depth = cappedH + labelGap + tickProtrusion;
           addLabelZone(axis.name, labelSide, depth);
+          if (scale.crossBetween === "midCat" && scale.categories.length > 1) {
+            const leftCatW = scale.reversed ? lastW : firstW;
+            const rightCatW = scale.reversed ? firstW : lastW;
+            overhang.left = Math.max(
+              overhang.left,
+              Math.min(Math.ceil(leftCatW / 2) + 2, avail.width * 0.15),
+            );
+            overhang.right = Math.max(
+              overhang.right,
+              Math.min(Math.ceil(rightCatW / 2) + 2, avail.width * 0.15),
+            );
+          }
         } else {
           const depth = Math.min(
-            maxW + labelGap + tickProtrusion,
+            Math.ceil(maxW) +
+              VERTICAL_VALUE_LABEL_PAD +
+              labelGap +
+              tickProtrusion,
             avail.width * 0.34,
           );
           addLabelZone(axis.name, labelSide, depth);
+          if (scale.crossBetween === "midCat" && scale.categories.length > 1) {
+            const vOverhang = Math.min(
+              Math.ceil(maxH / 2) + 2,
+              avail.height * 0.15,
+            );
+            overhang.top = Math.max(overhang.top, vOverhang);
+            overhang.bottom = Math.max(overhang.bottom, vOverhang);
+          }
         }
       }
+    } else if (tickProtrusion > 0) {
+      overhang[axis.position] = Math.max(
+        overhang[axis.position],
+        tickProtrusion,
+      );
     }
 
     if (axis.spec.title !== undefined) {
       const titleSide = resolveAxisTitleSide(axis, crossScale);
       const t = titleTextOf(axis.spec.title);
       const titleStyle = mergeChartTextStyle(axisTextStyle, t.style);
-      const m = measureChartText({
+      pendingTitles.push({
+        axis,
+        side: titleSide,
         text: t.text,
         style: titleStyle,
-        theme,
-        slideNumber,
-        labelPath: `Chart.axes.${axis.name}.title`,
       });
-      const thickness = m.height + 4;
-      axisTitleSpecs.push({ axis, side: titleSide, thickness });
     }
   }
 
+  // Merge cross-axis end-label overhangs after all label zone offsets are fixed,
+  // so perpendicular overhangs never shift labelZones into axis titles or frame edges.
+  for (const side of ["top", "bottom", "left", "right"] as const) {
+    edges[side] = Math.max(edges[side], overhang[side]);
+  }
+
   // Reserve outer band for axis titles beyond label bands.
+  // Converge available length in up to 3 passes so wrapped horizontal/vertical titles
+  // reflect the resulting plotRect width and height.
   const axisTitleBoxes = new Map<string, Rect>();
   const titleEdgeOffset: Record<EdgeSide, number> = {
     top: edges.top,
@@ -594,8 +670,56 @@ export function computeChartLayout(options: {
     left: edges.left,
     right: edges.right,
   };
-  for (const item of axisTitleSpecs) {
-    edges[item.side] += item.thickness;
+  let axisTitleSpecs: {
+    readonly axis: ParsedChartAxis;
+    readonly side: EdgeSide;
+    readonly thickness: number;
+  }[] = [];
+
+  if (pendingTitles.length > 0) {
+    let estEdges = { ...titleEdgeOffset };
+    for (let pass = 0; pass < 3; pass += 1) {
+      const estPlotW = Math.max(
+        24,
+        avail.width - estEdges.left - estEdges.right,
+      );
+      const estPlotH = Math.max(
+        24,
+        avail.height - estEdges.top - estEdges.bottom,
+      );
+      const nextSpecs = pendingTitles.map((item) => {
+        const availableWidth =
+          item.side === "top" || item.side === "bottom" ? estPlotW : estPlotH;
+        const m = measureChartText({
+          text: item.text,
+          style: item.style,
+          theme,
+          slideNumber,
+          labelPath: `Chart.axes.${item.axis.name}.title`,
+          availableWidth,
+        });
+        return {
+          axis: item.axis,
+          side: item.side,
+          thickness: Math.ceil(m.height) + AXIS_TITLE_BOX_PAD,
+        };
+      });
+      const nextEdges = { ...titleEdgeOffset };
+      for (const item of nextSpecs) {
+        nextEdges[item.side] += AXIS_TITLE_GAP + item.thickness;
+      }
+      const converged =
+        axisTitleSpecs.length === nextSpecs.length &&
+        nextSpecs.every(
+          (spec, idx) => spec.thickness === axisTitleSpecs[idx]?.thickness,
+        );
+      axisTitleSpecs = nextSpecs;
+      estEdges = nextEdges;
+      if (converged) break;
+    }
+    for (const side of ["top", "bottom", "left", "right"] as const) {
+      edges[side] = estEdges[side];
+    }
   }
 
   // Reserve space for outsideEnd bar labels and edge-adjacent point data labels.
@@ -639,20 +763,26 @@ export function computeChartLayout(options: {
 
   // Proportional safety cap for compact frames so plotRect always has positive dimensions.
   const maxHorizSum = Math.max(0, avail.width - 4);
-  if (edges.left + edges.right > maxHorizSum && edges.left + edges.right > 0) {
-    const ratio = maxHorizSum / (edges.left + edges.right);
-    edges.left *= ratio;
-    edges.right *= ratio;
-    titleEdgeOffset.left *= ratio;
-    titleEdgeOffset.right *= ratio;
+  const rawHorizSum = edges.left + edges.right;
+  const hRatio =
+    rawHorizSum > maxHorizSum && rawHorizSum > 0
+      ? maxHorizSum / rawHorizSum
+      : 1;
+  if (hRatio < 1) {
+    edges.left *= hRatio;
+    edges.right *= hRatio;
+    titleEdgeOffset.left *= hRatio;
+    titleEdgeOffset.right *= hRatio;
   }
   const maxVertSum = Math.max(0, avail.height - 4);
-  if (edges.top + edges.bottom > maxVertSum && edges.top + edges.bottom > 0) {
-    const ratio = maxVertSum / (edges.top + edges.bottom);
-    edges.top *= ratio;
-    edges.bottom *= ratio;
-    titleEdgeOffset.top *= ratio;
-    titleEdgeOffset.bottom *= ratio;
+  const rawVertSum = edges.top + edges.bottom;
+  const vRatio =
+    rawVertSum > maxVertSum && rawVertSum > 0 ? maxVertSum / rawVertSum : 1;
+  if (vRatio < 1) {
+    edges.top *= vRatio;
+    edges.bottom *= vRatio;
+    titleEdgeOffset.top *= vRatio;
+    titleEdgeOffset.bottom *= vRatio;
   }
 
   const plotRect: Rect = {
@@ -662,25 +792,19 @@ export function computeChartLayout(options: {
     height: Math.max(4, avail.height - edges.top - edges.bottom),
   };
 
-  // Position axis title boxes around plotRect.
+  // Position axis title boxes around plotRect with explicit clearance from label bands.
   const titleCursors: Record<EdgeSide, number> = {
     top: plotRect.y - titleEdgeOffset.top,
     bottom: plotRect.y + plotRect.height + titleEdgeOffset.bottom,
     left: plotRect.x - titleEdgeOffset.left,
     right: plotRect.x + plotRect.width + titleEdgeOffset.right,
   };
+  const hTitleGap = AXIS_TITLE_GAP * hRatio;
+  const vTitleGap = AXIS_TITLE_GAP * vRatio;
   for (const item of axisTitleSpecs) {
-    const hRatio =
-      avail.width > 4 && edges.left + edges.right > 0
-        ? Math.min(1, maxHorizSum / (edges.left + edges.right))
-        : 1;
-    const vRatio =
-      avail.height > 4 && edges.top + edges.bottom > 0
-        ? Math.min(1, maxVertSum / (edges.top + edges.bottom))
-        : 1;
     if (item.side === "top") {
       const th = item.thickness * vRatio;
-      const y = titleCursors.top - th;
+      const y = titleCursors.top - vTitleGap - th;
       axisTitleBoxes.set(item.axis.name, {
         x: plotRect.x,
         y,
@@ -690,7 +814,7 @@ export function computeChartLayout(options: {
       titleCursors.top = y;
     } else if (item.side === "bottom") {
       const th = item.thickness * vRatio;
-      const y = titleCursors.bottom;
+      const y = titleCursors.bottom + vTitleGap;
       axisTitleBoxes.set(item.axis.name, {
         x: plotRect.x,
         y,
@@ -700,7 +824,7 @@ export function computeChartLayout(options: {
       titleCursors.bottom = y + th;
     } else if (item.side === "left") {
       const tw = item.thickness * hRatio;
-      const x = titleCursors.left - tw;
+      const x = titleCursors.left - hTitleGap - tw;
       axisTitleBoxes.set(item.axis.name, {
         x,
         y: plotRect.y,
@@ -710,7 +834,7 @@ export function computeChartLayout(options: {
       titleCursors.left = x;
     } else {
       const tw = item.thickness * hRatio;
-      const x = titleCursors.right;
+      const x = titleCursors.right + hTitleGap;
       axisTitleBoxes.set(item.axis.name, {
         x,
         y: plotRect.y,

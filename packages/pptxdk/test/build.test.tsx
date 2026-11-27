@@ -38,6 +38,12 @@ import {
   Table,
   Text,
 } from "@officedk/pptxdk/react";
+import {
+  deck as vanillaDeck,
+  slide as vanillaSlide,
+  span as vanillaSpan,
+  text as vanillaText,
+} from "@officedk/pptxdk/vanilla";
 import type { BoundObjectCapabilityModule } from "@pptxdk/core";
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -146,6 +152,24 @@ function withFontFsType(bytes: Uint8Array, fsType: number): Uint8Array {
     }
   }
   throw new Error("Jost fixture must contain an OS/2 table");
+}
+
+function withFontWeightClass(
+  bytes: Uint8Array,
+  weightClass: number,
+): Uint8Array {
+  const copy = new Uint8Array(bytes);
+  const view = new DataView(copy.buffer, copy.byteOffset, copy.byteLength);
+  const tableCount = view.getUint16(4);
+  for (let index = 0; index < tableCount; index += 1) {
+    const record = 12 + index * 16;
+    const tag = String.fromCharCode(...copy.subarray(record, record + 4));
+    if (tag === "OS/2") {
+      view.setUint16(view.getUint32(record + 8) + 4, weightClass);
+      return copy;
+    }
+  }
+  throw new Error("Font fixture must contain an OS/2 table");
 }
 
 const notoSansScRegular = testFont("./assets/fonts/NotoSansSC-Regular.woff2");
@@ -2080,6 +2104,501 @@ describe("public build entry", () => {
         return true;
       },
     );
+  });
+
+  it("reports OOXML four-slot font embedding conflicts clearly across single-text, multi-text, cross-slide, and case variants in JSX and vanilla", async () => {
+    const jostMedium = withFontWeightClass(jostBook, 500);
+    const jostSemiBold = withFontWeightClass(jostBold, 600);
+    const regularFaces = font("Jost*", [
+      { weight: 400, data: jostBook },
+      { weight: 500, data: jostMedium },
+    ]);
+    const boldFaces = font("Jost*", [
+      { weight: 600, data: jostSemiBold },
+      { weight: 700, data: jostBold },
+    ]);
+    const lowerRegular = font("jost*", [{ weight: 500, data: jostMedium }]);
+
+    const conflictCases = [
+      {
+        label: "single-text-regular-slot",
+        expectedSlot: "regular",
+        expectedFamily: "Jost*",
+        jsx: () => (
+          <Deck width={960} height={540}>
+            <Slide id="s1">
+              <Text
+                id="conflict-single"
+                style={{
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 60,
+                  fontFamily: regularFaces,
+                }}
+              >
+                <Span style={{ fontWeight: 400 }}>Book </Span>
+                <Span style={{ fontWeight: 500 }}>Medium</Span>
+              </Text>
+            </Slide>
+          </Deck>
+        ),
+        vanilla: () =>
+          vanillaDeck({ width: 960, height: 540 }).append(
+            vanillaSlide({ id: "s1" }).append(
+              vanillaText(undefined, {
+                id: "conflict-single",
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 60,
+                  fontFamily: regularFaces,
+                },
+              }).content(
+                vanillaSpan("Book ", { style: { fontWeight: 400 } }),
+                vanillaSpan("Medium", { style: { fontWeight: 500 } }),
+              ),
+            ),
+          ),
+      },
+      {
+        label: "cross-text-regular-slot-case-insensitive",
+        expectedSlot: "regular",
+        expectedFamily: "jost*",
+        jsx: () => (
+          <Deck width={960} height={540}>
+            <Slide id="s1">
+              <Text
+                id="book"
+                style={{
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 40,
+                  fontFamily: regularFaces,
+                  fontWeight: 400,
+                }}
+              >
+                Book
+              </Text>
+              <Text
+                id="medium"
+                style={{
+                  position: "absolute",
+                  left: 24,
+                  top: 72,
+                  width: 320,
+                  height: 40,
+                  fontFamily: lowerRegular,
+                  fontWeight: 500,
+                }}
+              >
+                Medium
+              </Text>
+            </Slide>
+          </Deck>
+        ),
+        vanilla: () =>
+          vanillaDeck({ width: 960, height: 540 }).append(
+            vanillaSlide({ id: "s1" }).append(
+              vanillaText("Book", {
+                id: "book",
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 40,
+                  fontFamily: regularFaces,
+                  fontWeight: 400,
+                },
+              }),
+              vanillaText("Medium", {
+                id: "medium",
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 72,
+                  width: 320,
+                  height: 40,
+                  fontFamily: lowerRegular,
+                  fontWeight: 500,
+                },
+              }),
+            ),
+          ),
+      },
+      {
+        label: "cross-slide-bold-slot",
+        expectedSlot: "bold",
+        expectedFamily: "Jost*",
+        jsx: () => (
+          <Deck width={960} height={540}>
+            <Slide id="s1">
+              <Text
+                id="semibold"
+                style={{
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 40,
+                  fontFamily: boldFaces,
+                  fontWeight: 600,
+                }}
+              >
+                SemiBold
+              </Text>
+            </Slide>
+            <Slide id="s2">
+              <Text
+                id="bold"
+                style={{
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 40,
+                  fontFamily: boldFaces,
+                  fontWeight: 700,
+                }}
+              >
+                Bold
+              </Text>
+            </Slide>
+          </Deck>
+        ),
+        vanilla: () =>
+          vanillaDeck({ width: 960, height: 540 }).append(
+            vanillaSlide({ id: "s1" }).append(
+              vanillaText("SemiBold", {
+                id: "semibold",
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 40,
+                  fontFamily: boldFaces,
+                  fontWeight: 600,
+                },
+              }),
+            ),
+            vanillaSlide({ id: "s2" }).append(
+              vanillaText("Bold", {
+                id: "bold",
+                style: {
+                  position: "absolute",
+                  left: 24,
+                  top: 24,
+                  width: 320,
+                  height: 40,
+                  fontFamily: boldFaces,
+                  fontWeight: 700,
+                },
+              }),
+            ),
+          ),
+      },
+    ] as const;
+
+    for (const entry of conflictCases) {
+      for (const embedFonts of ["subset", "full"] as const) {
+        for (const doc of [entry.jsx(), entry.vanilla()]) {
+          await assert.rejects(build(doc, { embedFonts }), (error: unknown) => {
+            assert.ok(error instanceof BuildError, entry.label);
+            const diag = error.diagnostics[0];
+            assert.equal(diag?.code, "font-unavailable", entry.label);
+            if (diag?.code === "font-unavailable") {
+              assert.equal(diag.reason, "not-embeddable", entry.label);
+              assert.equal(diag.font.family, entry.expectedFamily);
+            }
+            const message = diag?.message ?? "";
+            assert.ok(
+              message.includes(entry.expectedFamily),
+              `${entry.label}: missing family in "${message}"`,
+            );
+            assert.ok(
+              message.includes(entry.expectedSlot),
+              `${entry.label}: missing slot in "${message}"`,
+            );
+            assert.match(message, /<p:embeddedFont>/u);
+            assert.match(message, /regular,\s*bold,\s*italic,\s*boldItalic/u);
+            assert.match(message, /separate font family/iu);
+            assert.doesNotMatch(message, /presentation-level record/iu);
+            return true;
+          });
+        }
+      }
+    }
+  });
+
+  it("allows unused redundant weights, unembedded multiple same-slot weights, case-insensitive distinct slots, and separate font families across JSX and vanilla", async () => {
+    const jostMedium = withFontWeightClass(jostBook, 500);
+    const jostBookAndMedium = font("Jost*", [
+      { weight: 400, data: jostBook },
+      { weight: 500, data: jostMedium },
+    ]);
+    const jostBookOnly = font("Jost*", [{ weight: 400, data: jostBook }]);
+    const jostLowerBold = font("jost*", [{ weight: 700, data: jostBold }]);
+    const separateSemiBold = font("Darker Grotesque SemiBold", [
+      { weight: 600, data: darkerGrotesqueSemiBold },
+    ]);
+
+    // 1. Registered 400 + 500, only 400 actually used -> embeds cleanly
+    for (const embedFonts of ["subset", "full"] as const) {
+      for (const doc of [
+        <Deck width={960} height={540}>
+          <Slide id="unused-weight">
+            <Text
+              id="only-400"
+              style={{
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 320,
+                height: 40,
+                fontFamily: jostBookAndMedium,
+                fontWeight: 400,
+              }}
+            >
+              Only Book
+            </Text>
+          </Slide>
+        </Deck>,
+        vanillaDeck({ width: 960, height: 540 }).append(
+          vanillaSlide({ id: "unused-weight" }).append(
+            vanillaText("Only Book", {
+              id: "only-400",
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 320,
+                height: 40,
+                fontFamily: jostBookAndMedium,
+                fontWeight: 400,
+              },
+            }),
+          ),
+        ),
+      ]) {
+        const result = await build(doc, { embedFonts });
+        const parts = unzipSync(result.pptx);
+        const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+        assert.equal(
+          (presentation.match(/<p:embeddedFont>/gu) ?? []).length,
+          1,
+        );
+        assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+      }
+    }
+
+    // 2. Both 400 and 500 actually used, embedFonts not enabled -> builds without embedding
+    for (const doc of [
+      <Deck width={960} height={540}>
+        <Slide id="unembedded">
+          <Text
+            id="both-weights"
+            style={{
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 320,
+              height: 40,
+              fontFamily: jostBookAndMedium,
+            }}
+          >
+            <Span style={{ fontWeight: 400 }}>Book </Span>
+            <Span style={{ fontWeight: 500 }}>Medium</Span>
+          </Text>
+        </Slide>
+      </Deck>,
+      vanillaDeck({ width: 960, height: 540 }).append(
+        vanillaSlide({ id: "unembedded" }).append(
+          vanillaText(undefined, {
+            id: "both-weights",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 320,
+              height: 40,
+              fontFamily: jostBookAndMedium,
+            },
+          }).content(
+            vanillaSpan("Book ", { style: { fontWeight: 400 } }),
+            vanillaSpan("Medium", { style: { fontWeight: 500 } }),
+          ),
+        ),
+      ),
+    ]) {
+      const result = await build(doc);
+      const parts = unzipSync(result.pptx);
+      assert.deepEqual(
+        Object.keys(parts).filter((path) => path.startsWith("ppt/fonts/")),
+        [],
+      );
+      assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    }
+
+    // 3. Same family with different casing across distinct slots (400 regular + 700 bold) -> merges cleanly
+    for (const embedFonts of ["subset", "full"] as const) {
+      for (const doc of [
+        <Deck width={960} height={540}>
+          <Slide id="case-distinct-slots">
+            <Text
+              id="reg"
+              style={{
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 320,
+                height: 40,
+                fontFamily: jostBookOnly,
+                fontWeight: 400,
+              }}
+            >
+              Regular
+            </Text>
+            <Text
+              id="bld"
+              style={{
+                position: "absolute",
+                left: 24,
+                top: 72,
+                width: 320,
+                height: 40,
+                fontFamily: jostLowerBold,
+                fontWeight: 700,
+              }}
+            >
+              Bold
+            </Text>
+          </Slide>
+        </Deck>,
+        vanillaDeck({ width: 960, height: 540 }).append(
+          vanillaSlide({ id: "case-distinct-slots" }).append(
+            vanillaText("Regular", {
+              id: "reg",
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 320,
+                height: 40,
+                fontFamily: jostBookOnly,
+                fontWeight: 400,
+              },
+            }),
+            vanillaText("Bold", {
+              id: "bld",
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 72,
+                width: 320,
+                height: 40,
+                fontFamily: jostLowerBold,
+                fontWeight: 700,
+              },
+            }),
+          ),
+        ),
+      ]) {
+        const result = await build(doc, { embedFonts });
+        const parts = unzipSync(result.pptx);
+        const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+        assert.equal(
+          (presentation.match(/<p:embeddedFont>/gu) ?? []).length,
+          1,
+        );
+        assert.match(presentation, /<p:regular r:id="rId\d+"\/>/u);
+        assert.match(presentation, /<p:bold r:id="rId\d+"\/>/u);
+        assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+      }
+    }
+
+    // 4. Separate font family names for extra weights -> both embedded and valid in subset & full
+    for (const embedFonts of ["subset", "full"] as const) {
+      for (const doc of [
+        <Deck width={960} height={540}>
+          <Slide id="separate-families">
+            <Text
+              id="primary-family"
+              style={{
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 320,
+                height: 40,
+                fontFamily: jostBookOnly,
+                fontWeight: 400,
+              }}
+            >
+              Book text
+            </Text>
+            <Text
+              id="extra-weight-family"
+              style={{
+                position: "absolute",
+                left: 24,
+                top: 72,
+                width: 320,
+                height: 40,
+                fontFamily: separateSemiBold,
+                fontWeight: 600,
+              }}
+            >
+              SemiBold text
+            </Text>
+          </Slide>
+        </Deck>,
+        vanillaDeck({ width: 960, height: 540 }).append(
+          vanillaSlide({ id: "separate-families" }).append(
+            vanillaText("Book text", {
+              id: "primary-family",
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 24,
+                width: 320,
+                height: 40,
+                fontFamily: jostBookOnly,
+                fontWeight: 400,
+              },
+            }),
+            vanillaText("SemiBold text", {
+              id: "extra-weight-family",
+              style: {
+                position: "absolute",
+                left: 24,
+                top: 72,
+                width: 320,
+                height: 40,
+                fontFamily: separateSemiBold,
+                fontWeight: 600,
+              },
+            }),
+          ),
+        ),
+      ]) {
+        const result = await build(doc, { embedFonts });
+        const parts = unzipSync(result.pptx);
+        const presentation = strFromU8(parts["ppt/presentation.xml"]!);
+        assert.equal(
+          (presentation.match(/<p:embeddedFont>/gu) ?? []).length,
+          2,
+        );
+        assert.match(presentation, /typeface="Jost\*"/u);
+        assert.match(presentation, /typeface="Darker Grotesque SemiBold"/u);
+        assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+      }
+    }
   });
 
   it("measures Chinese and overly long words according to Unicode line break opportunities and grapheme boundaries", async () => {

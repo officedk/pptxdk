@@ -1,12 +1,13 @@
 import {
   CapabilityError,
-  borderObjectSchema,
+  borderObjectShape,
   borderValueSchema,
   imageBackgroundSchema,
   linearGradientSchema,
   radialGradientSchema,
   shadowSchema,
-  visualStyleSchema,
+  visualStyleShape,
+  type BorderObject,
   type CapabilityResource,
   type ColorValue,
   type GradientStop,
@@ -189,39 +190,67 @@ export type ResolvedVisualModel = {
 export { arrowTypeSchema, arrowTypes };
 export type { ArrowType };
 
-export const lineEndStyleSchema = z
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
+export type LineEndStyle = {
+  readonly startArrow?: ArrowType | undefined;
+  readonly endArrow?: ArrowType | undefined;
+};
+
+const lineEndStyleObjectSchema = z.strictObject({
+  startArrow: arrowTypeSchema.optional(),
+  endArrow: arrowTypeSchema.optional(),
+});
+const rawLineEndStyleSchema = lineEndStyleObjectSchema.readonly();
+export const lineEndStyleSchema: z.ZodType<LineEndStyle> =
+  rawLineEndStyleSchema satisfies z.ZodType<
+    AssertExact<
+      LineEndStyle,
+      z.infer<typeof rawLineEndStyleSchema>
+    > extends true
+      ? LineEndStyle
+      : never
+  >;
+
+const rawShapeBorderObjectSchema = z
   .strictObject({
+    ...borderObjectShape,
     startArrow: arrowTypeSchema.optional(),
     endArrow: arrowTypeSchema.optional(),
   })
   .readonly();
-export type LineEndStyle = z.infer<typeof lineEndStyleSchema>;
+export const shapeBorderObjectSchema: z.ZodType<BorderObject & LineEndStyle> =
+  rawShapeBorderObjectSchema;
 
-export const shapeBorderObjectSchema = borderObjectSchema
-  .unwrap()
-  .extend({
-    startArrow: arrowTypeSchema.optional(),
-    endArrow: arrowTypeSchema.optional(),
-  })
-  .strict()
-  .readonly();
+export type ShapeBorderValue = "none" | (BorderObject & LineEndStyle);
 
-export const shapeBorderValueSchema = z.union([
+const rawShapeBorderValueSchema = z.union([
   z.literal("none"),
-  shapeBorderObjectSchema,
+  rawShapeBorderObjectSchema,
 ]);
-export type ShapeBorderValue = z.infer<typeof shapeBorderValueSchema>;
+export const shapeBorderValueSchema: z.ZodType<ShapeBorderValue> =
+  rawShapeBorderValueSchema satisfies z.ZodType<
+    AssertExact<
+      ShapeBorderValue,
+      z.infer<typeof rawShapeBorderValueSchema>
+    > extends true
+      ? ShapeBorderValue
+      : never
+  >;
 
 export const lineEndStyleKeys = Object.keys(
-  lineEndStyleSchema.unwrap().shape,
+  lineEndStyleObjectSchema.shape,
 ) as readonly (keyof LineEndStyle)[];
 
 export type ShapeVisualStyle = Omit<CoreVisualStyle, "border"> & {
-  readonly border?: ShapeBorderValue;
+  readonly border?: ShapeBorderValue | undefined;
 };
 
 export const visualStyleKeys = Object.keys(
-  visualStyleSchema.unwrap().shape,
+  visualStyleShape,
 ) as readonly (keyof CoreVisualStyle)[];
 
 export type ShapePropertiesOptions = {
@@ -266,6 +295,20 @@ function emu(
   signed = false,
 ): number {
   const converted = pxToEmu(value);
+  if (!allowZero && !signed) {
+    if (!Number.isFinite(value) || value === 0 || converted === 0) {
+      invalid(
+        "invalid-visual-style",
+        `Computed ${label} is 0px; ${label} must be greater than 0px`,
+      );
+    }
+    if (value < 0 || converted < 1) {
+      invalid(
+        "invalid-visual-style",
+        `Computed ${label} is ${value}px; ${label} must be greater than 0px`,
+      );
+    }
+  }
   if (
     !Number.isSafeInteger(converted) ||
     (!signed && converted < (allowZero ? 0 : 1)) ||
@@ -277,6 +320,14 @@ function emu(
     );
   }
   return converted;
+}
+
+/** Validates that a visible object box has positive DrawingML EMU extents during resolve. */
+export function assertVisualBoxExtent(box: ShapeBox): void {
+  emu(box.x, "x", true, true);
+  emu(box.y, "y", true, true);
+  emu(box.width, "width", false);
+  emu(box.height, "height", false);
 }
 
 function lineWidthEmu(value: number): number {

@@ -290,8 +290,12 @@ describe("Motion mechanisms, roundtrip target identity, Morph continuity, owners
     for (const mechanism of motionCapability.mechanisms ?? []) {
       assert.equal(mechanism.role, "show");
       assert.equal(typeof mechanism.emit, "function");
-      assert.equal(mechanism.import.target, "slide");
-      assert.equal(mechanism.import.slot, "timing");
+      const importSpec = mechanism.import as {
+        readonly target: string;
+        readonly slot: string;
+      };
+      assert.equal(importSpec.target, "slide");
+      assert.equal(importSpec.slot, "timing");
       assert.equal("paint" in mechanism, false);
     }
   });

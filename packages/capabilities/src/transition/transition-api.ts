@@ -1,45 +1,76 @@
 import { z } from "zod";
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
+export type TransitionDuration = number;
 /** Transition duration in milliseconds; rounded to the nearest integer millisecond when written to p14:dur. */
-export const transitionDurationSchema = z
+export const transitionDurationSchema: z.ZodType<TransitionDuration> = z
   .number()
   .finite()
   .min(0)
   .max(Number.MAX_SAFE_INTEGER);
-export type TransitionDuration = z.infer<typeof transitionDurationSchema>;
 
 export const advanceAfterSchema = z.number().finite().min(0).max(4_294_967_295);
 
-export const transitionDirectionSchema = z.enum([
-  "left",
-  "right",
-  "top",
-  "bottom",
-]);
-export type TransitionDirection = z.infer<typeof transitionDirectionSchema>;
+export type TransitionDirection = "left" | "right" | "top" | "bottom";
+const rawTransitionDirectionSchema = z.enum(["left", "right", "top", "bottom"]);
+export const transitionDirectionSchema: z.ZodType<TransitionDirection> =
+  rawTransitionDirectionSchema satisfies z.ZodType<
+    AssertExact<
+      TransitionDirection,
+      z.infer<typeof rawTransitionDirectionSchema>
+    > extends true
+      ? TransitionDirection
+      : never
+  >;
 
-export const stripsDirectionSchema = z.enum([
+export type StripsDirection = "leftUp" | "rightUp" | "leftDown" | "rightDown";
+const rawStripsDirectionSchema = z.enum([
   "leftUp",
   "rightUp",
   "leftDown",
   "rightDown",
 ]);
-export type StripsDirection = z.infer<typeof stripsDirectionSchema>;
+export const stripsDirectionSchema: z.ZodType<StripsDirection> =
+  rawStripsDirectionSchema satisfies z.ZodType<
+    AssertExact<
+      StripsDirection,
+      z.infer<typeof rawStripsDirectionSchema>
+    > extends true
+      ? StripsDirection
+      : never
+  >;
 
-export const transitionSpeedSchema = z.enum(["fast", "med", "slow"]);
-export type TransitionSpeed = z.infer<typeof transitionSpeedSchema>;
+export type TransitionSpeed = "fast" | "med" | "slow";
+export const transitionSpeedSchema: z.ZodType<TransitionSpeed> = z.enum([
+  "fast",
+  "med",
+  "slow",
+]);
 
 export const flipDirectionSchema = z.enum(["left", "right"]);
 export const morphBySchema = z.enum(["object", "word", "character"]);
 
-export const transitionKindSchema = z.enum([
+export type TransitionKind = "fade" | "strips" | "push" | "flip" | "morph";
+const rawTransitionKindSchema = z.enum([
   "fade",
   "strips",
   "push",
   "flip",
   "morph",
 ]);
-export type TransitionKind = z.infer<typeof transitionKindSchema>;
+export const transitionKindSchema: z.ZodType<TransitionKind> =
+  rawTransitionKindSchema satisfies z.ZodType<
+    AssertExact<
+      TransitionKind,
+      z.infer<typeof rawTransitionKindSchema>
+    > extends true
+      ? TransitionKind
+      : never
+  >;
 
 const fadeTransitionObjectSchema = z.strictObject({
   type: z.literal("transition"),
@@ -52,7 +83,7 @@ const stripsTransitionObjectSchema = z.strictObject({
   type: z.literal("transition"),
   kind: z.literal("strips"),
   duration: transitionDurationSchema.optional(),
-  direction: stripsDirectionSchema,
+  direction: rawStripsDirectionSchema,
 });
 export const stripsTransitionSchema = stripsTransitionObjectSchema.readonly();
 
@@ -60,82 +91,207 @@ const pushTransitionObjectSchema = z.strictObject({
   type: z.literal("transition"),
   kind: z.literal("push"),
   duration: transitionDurationSchema.optional(),
-  from: transitionDirectionSchema,
+  from: rawTransitionDirectionSchema,
 });
 export const pushTransitionSchema = pushTransitionObjectSchema.readonly();
 
-/** Transitional baseline transition that does not depend on extension namespaces. */
-export const standardTransitionSchema = z.discriminatedUnion("kind", [
+export type StandardTransition =
+  | {
+      readonly type: "transition";
+      readonly kind: "fade";
+      readonly duration?: TransitionDuration | undefined;
+    }
+  | {
+      readonly type: "transition";
+      readonly kind: "strips";
+      readonly duration?: TransitionDuration | undefined;
+      readonly direction: StripsDirection;
+    }
+  | {
+      readonly type: "transition";
+      readonly kind: "push";
+      readonly duration?: TransitionDuration | undefined;
+      readonly from: TransitionDirection;
+    };
+
+const rawStandardTransitionSchema = z.discriminatedUnion("kind", [
   fadeTransitionSchema,
   stripsTransitionSchema,
   pushTransitionSchema,
 ]);
-export type StandardTransition = z.infer<typeof standardTransitionSchema>;
+/** Transitional baseline transition that does not depend on extension namespaces. */
+export const standardTransitionSchema: z.ZodType<StandardTransition> =
+  rawStandardTransitionSchema satisfies z.ZodType<
+    AssertExact<
+      StandardTransition,
+      z.infer<typeof rawStandardTransitionSchema>
+    > extends true
+      ? StandardTransition
+      : never
+  >;
+
+/** p14 Flip transition; must provide a baseline format fallback for other consumers. */
+export type FlipTransition = {
+  readonly type: "transition";
+  readonly kind: "flip";
+  readonly duration?: TransitionDuration | undefined;
+  readonly direction: "left" | "right";
+  readonly fallback: StandardTransition;
+};
 
 const flipTransitionObjectSchema = z.strictObject({
   type: z.literal("transition"),
   kind: z.literal("flip"),
   duration: transitionDurationSchema.optional(),
   direction: flipDirectionSchema,
-  fallback: standardTransitionSchema,
+  fallback: rawStandardTransitionSchema,
 });
+const rawFlipTransitionSchema = flipTransitionObjectSchema.readonly();
 /** p14 Flip transition; must provide a baseline format fallback for other consumers. */
-export const flipTransitionSchema = flipTransitionObjectSchema.readonly();
-export type FlipTransition = z.infer<typeof flipTransitionSchema>;
+export const flipTransitionSchema: z.ZodType<FlipTransition> =
+  rawFlipTransitionSchema satisfies z.ZodType<
+    AssertExact<
+      FlipTransition,
+      z.infer<typeof rawFlipTransitionSchema>
+    > extends true
+      ? FlipTransition
+      : never
+  >;
+
+/** p159 Morph transition; must provide a baseline format fallback for other consumers. */
+export type MorphTransition = {
+  readonly type: "transition";
+  readonly kind: "morph";
+  readonly duration?: TransitionDuration | undefined;
+  readonly by: "object" | "word" | "character";
+  readonly fallback: StandardTransition;
+};
 
 const morphTransitionObjectSchema = z.strictObject({
   type: z.literal("transition"),
   kind: z.literal("morph"),
   duration: transitionDurationSchema.optional(),
   by: morphBySchema,
-  fallback: standardTransitionSchema,
+  fallback: rawStandardTransitionSchema,
 });
+const rawMorphTransitionSchema = morphTransitionObjectSchema.readonly();
 /** p159 Morph transition; must provide a baseline format fallback for other consumers. */
-export const morphTransitionSchema = morphTransitionObjectSchema.readonly();
-export type MorphTransition = z.infer<typeof morphTransitionSchema>;
+export const morphTransitionSchema: z.ZodType<MorphTransition> =
+  rawMorphTransitionSchema satisfies z.ZodType<
+    AssertExact<
+      MorphTransition,
+      z.infer<typeof rawMorphTransitionSchema>
+    > extends true
+      ? MorphTransition
+      : never
+  >;
 
-/** Slide, layout, or master transition declaration; build fails when target forbids required mechanisms. */
-export const transitionSchema = z.discriminatedUnion("kind", [
+export type Transition = StandardTransition | FlipTransition | MorphTransition;
+
+const rawTransitionSchema = z.discriminatedUnion("kind", [
   fadeTransitionSchema,
   stripsTransitionSchema,
   pushTransitionSchema,
-  flipTransitionSchema,
-  morphTransitionSchema,
+  rawFlipTransitionSchema,
+  rawMorphTransitionSchema,
 ]);
-export type Transition = z.infer<typeof transitionSchema>;
+/** Slide, layout, or master transition declaration; build fails when target forbids required mechanisms. */
+export const transitionSchema: z.ZodType<Transition> =
+  rawTransitionSchema satisfies z.ZodType<
+    AssertExact<Transition, z.infer<typeof rawTransitionSchema>> extends true
+      ? Transition
+      : never
+  >;
 
-export const fadeTransitionOptionsSchema = fadeTransitionObjectSchema
+export type FadeTransitionOptions = {
+  readonly duration?: TransitionDuration | undefined;
+};
+const rawFadeTransitionOptionsSchema = fadeTransitionObjectSchema
   .pick({ duration: true })
   .readonly();
-export type FadeTransitionOptions = z.infer<typeof fadeTransitionOptionsSchema>;
+export const fadeTransitionOptionsSchema: z.ZodType<FadeTransitionOptions> =
+  rawFadeTransitionOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      FadeTransitionOptions,
+      z.infer<typeof rawFadeTransitionOptionsSchema>
+    > extends true
+      ? FadeTransitionOptions
+      : never
+  >;
 
-export const stripsTransitionOptionsSchema = stripsTransitionObjectSchema
+export type StripsTransitionOptions = {
+  readonly duration?: TransitionDuration | undefined;
+  readonly direction?: StripsDirection | undefined;
+};
+const rawStripsTransitionOptionsSchema = stripsTransitionObjectSchema
   .pick({ duration: true, direction: true })
   .partial({ direction: true })
   .readonly();
-export type StripsTransitionOptions = z.infer<
-  typeof stripsTransitionOptionsSchema
->;
+export const stripsTransitionOptionsSchema: z.ZodType<StripsTransitionOptions> =
+  rawStripsTransitionOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      StripsTransitionOptions,
+      z.infer<typeof rawStripsTransitionOptionsSchema>
+    > extends true
+      ? StripsTransitionOptions
+      : never
+  >;
 
-export const pushTransitionOptionsSchema = pushTransitionObjectSchema
+export type PushTransitionOptions = {
+  readonly duration?: TransitionDuration | undefined;
+  readonly from?: TransitionDirection | undefined;
+};
+const rawPushTransitionOptionsSchema = pushTransitionObjectSchema
   .pick({ duration: true, from: true })
   .partial({ from: true })
   .readonly();
-export type PushTransitionOptions = z.infer<typeof pushTransitionOptionsSchema>;
+export const pushTransitionOptionsSchema: z.ZodType<PushTransitionOptions> =
+  rawPushTransitionOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      PushTransitionOptions,
+      z.infer<typeof rawPushTransitionOptionsSchema>
+    > extends true
+      ? PushTransitionOptions
+      : never
+  >;
 
-export const flipTransitionOptionsSchema = flipTransitionObjectSchema
+export type FlipTransitionOptions = {
+  readonly duration?: TransitionDuration | undefined;
+  readonly direction?: "left" | "right" | undefined;
+  readonly fallback: StandardTransition;
+};
+const rawFlipTransitionOptionsSchema = flipTransitionObjectSchema
   .pick({ duration: true, direction: true, fallback: true })
   .partial({ direction: true })
   .readonly();
-export type FlipTransitionOptions = z.infer<typeof flipTransitionOptionsSchema>;
+export const flipTransitionOptionsSchema: z.ZodType<FlipTransitionOptions> =
+  rawFlipTransitionOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      FlipTransitionOptions,
+      z.infer<typeof rawFlipTransitionOptionsSchema>
+    > extends true
+      ? FlipTransitionOptions
+      : never
+  >;
 
-export const morphTransitionOptionsSchema = morphTransitionObjectSchema
+export type MorphTransitionOptions = {
+  readonly duration?: TransitionDuration | undefined;
+  readonly by?: "object" | "word" | "character" | undefined;
+  readonly fallback: StandardTransition;
+};
+const rawMorphTransitionOptionsSchema = morphTransitionObjectSchema
   .pick({ duration: true, by: true, fallback: true })
   .partial({ by: true })
   .readonly();
-export type MorphTransitionOptions = z.infer<
-  typeof morphTransitionOptionsSchema
->;
+export const morphTransitionOptionsSchema: z.ZodType<MorphTransitionOptions> =
+  rawMorphTransitionOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      MorphTransitionOptions,
+      z.infer<typeof rawMorphTransitionOptionsSchema>
+    > extends true
+      ? MorphTransitionOptions
+      : never
+  >;
 
 function declaration<Kind extends Transition["kind"]>(
   kind: Kind,

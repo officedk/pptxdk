@@ -12,6 +12,18 @@ import {
 } from "node:path";
 
 import {
+  CliWriteError,
+  defineCli,
+  executeCli,
+  helpCapability,
+  parseCliInvocation,
+  schemaCapability,
+  text,
+  versionCapability,
+  type WriteCliOutput,
+} from "@boringparts/cli-contract";
+import { isNodeBrokenPipe } from "@boringparts/cli-contract/node";
+import {
   BuildError,
   CodegenError,
   ImportError,
@@ -22,7 +34,6 @@ import {
   fatalImportIssueSchema,
   fontEmbeddingModeSchema,
   importDiagnosticSchema,
-  previewErrorSchema,
   previewPlaceholderSchema,
   targetNameSchema,
   targets,
@@ -44,18 +55,7 @@ import {
   PreviewPageRangeError,
   previewPageNumberSchema,
 } from "@officedk/pptxdk/preview";
-import {
-  CliWriteError,
-  defineCli,
-  executeCli,
-  helpCapability,
-  parseCliInvocation,
-  schemaCapability,
-  text,
-  versionCapability,
-  type WriteCliOutput,
-} from "@ykdz/cli-contract";
-import { isNodeBrokenPipe } from "@ykdz/cli-contract/node";
+import { previewErrorOptionSchemas } from "@pptxdk/core/build";
 import { strToU8, zipSync } from "fflate";
 import { z } from "zod";
 
@@ -75,6 +75,7 @@ export type CliRuntime = {
 type CliDependencies = {
   readonly cwd: string;
   readonly signal?: AbortSignal;
+  readonly codegen?: typeof codegen | undefined;
 };
 
 // Source and bundled modules have different depths. Both report the installed SDK version.
@@ -91,11 +92,11 @@ const previewPageItemSchema = z.object({
 });
 
 const previewErrorWithPageSchema = z.discriminatedUnion("code", [
-  previewErrorSchema.options[0].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[1].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[2].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[3].extend({ page: previewPageNumberSchema }),
-  previewErrorSchema.options[4].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[0].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[1].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[2].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[3].extend({ page: previewPageNumberSchema }),
+  previewErrorOptionSchemas[4].extend({ page: previewPageNumberSchema }),
 ]);
 
 export const buildInputSchema = z.object({
@@ -277,7 +278,7 @@ function isCancelledError(error: unknown, signal?: AbortSignal): boolean {
 
 /**
  * Normalize dynamic text into the non-empty, single-line, NUL-free tuple
- * required by `@ykdz/cli-contract`'s `text.lines(...)` invariant.
+ * required by `@boringparts/cli-contract`'s `text.lines(...)` invariant.
  */
 function toContractTextLines(lines: readonly string[]): [string, ...string[]] {
   const [first = "Unknown error", ...rest] = lines.flatMap((line) =>
@@ -372,16 +373,37 @@ function presentSourceLoadFailed({
   );
 }
 
+function formatBuildDiagnostic(
+  diagnostic: z.infer<typeof buildDiagnosticSchema>,
+): string {
+  const fieldSuffix = diagnostic.field ? ` (${diagnostic.field})` : "";
+  const base = `  ${diagnostic.path}${fieldSuffix} [${diagnostic.code}]: ${diagnostic.message}`;
+  const details: string[] = [];
+  if ("font" in diagnostic) {
+    const fontIdentity = [
+      diagnostic.font.family,
+      diagnostic.font.weight,
+      diagnostic.font.style,
+    ]
+      .filter((part) => part !== undefined)
+      .join(" ");
+    if (fontIdentity.length > 0) {
+      details.push(`font: ${fontIdentity}`);
+    }
+  }
+  if ("characters" in diagnostic && diagnostic.characters.length > 0) {
+    details.push(`missing characters: ${diagnostic.characters.join(", ")}`);
+  }
+  return details.length > 0 ? `${base} (${details.join("; ")})` : base;
+}
+
 function presentBuildFailed({
   diagnostics,
 }: z.infer<typeof buildFailedSchema>) {
   return text.lines(
     toContractTextLines([
       "Build failed:",
-      ...diagnostics.map(
-        (diagnostic) =>
-          `  ${diagnostic.path}${diagnostic.field ? ` (${diagnostic.field})` : ""} [${diagnostic.code}]: ${diagnostic.message}`,
-      ),
+      ...diagnostics.map(formatBuildDiagnostic),
     ]),
   );
 }
@@ -1155,9 +1177,10 @@ const codegenCommand = define.command("codegen")({
         }
 
         const importDiagnostics = [...imported.report.diagnostics];
+        const runCodegen = dependencies.codegen ?? codegen;
         let generated: ReturnType<typeof codegen>;
         try {
-          generated = codegen(imported.document, { target: input.target });
+          generated = runCodegen(imported.document, { target: input.target });
         } catch (error) {
           if (isCancelledError(error, dependencies.signal)) {
             return outcome.failure.cancelled({});
@@ -1318,7 +1341,7 @@ const codegenCommand = define.command("codegen")({
   },
 });
 
-const cliContract = define({
+export const cliContract = define({
   root: "pptxdk",
   help: helpCapability({
     shortAlias: "-h",
@@ -1332,8 +1355,11 @@ const cliContract = define({
     },
     wording: {
       commandPlaceholder: "command",
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      outputModePlaceholder: "mode",
+      choices: "{usage} (choices: {choices})",
+      default: "{usage} (default: {value})",
+      choicesAndDefault: "{usage} (choices: {choices}, default: {value})",
+      list: "{left}, {right}",
       countAtMost: "At most {max} of {fields} may be specified",
     },
   }),

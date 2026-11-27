@@ -42,11 +42,11 @@ import { createMorphScope } from "@pptxdk/core";
 import { Deck, Slide, SlideLayout, SlideMaster } from "@pptxdk/react";
 import { createElement } from "react";
 
-import type { CapabilityScenario } from "../../../test/acceptance-runner.ts";
 import type {
-  ExhaustiveMechanismVerificationMap,
-  ProductionMechanismKey,
-} from "../../../test/mechanism-verification.ts";
+  CapabilityScenario,
+  NativeRoundtripAssertContext,
+} from "../../../test/acceptance-runner.ts";
+import type { ExhaustiveMechanismVerificationMap } from "../../../test/mechanism-verification.ts";
 
 const jostFont = font("Jost*", [
   {
@@ -653,12 +653,21 @@ export const motionRoundtripScenario: CapabilityScenario = {
   },
 };
 
-type MotionMechanismKey = Extract<ProductionMechanismKey, `motion-${string}`>;
+type MotionMechanismKey =
+  | "motion-fade"
+  | "motion-wipe"
+  | "motion-zoom"
+  | "motion-fly"
+  | "motion-float"
+  | "motion-spin-in"
+  | "motion-stretch"
+  | "motion-spin"
+  | "motion-breathe"
+  | "motion-fill-color"
+  | "motion-choreography";
 
 function allEffectsOfSlide(
-  validation: Parameters<
-    ExhaustiveMechanismVerificationMap["motion-fade"]["assertNative"]
-  >[0]["validation"],
+  validation: NativeRoundtripAssertContext["validation"],
 ) {
   return validation.slides[0]?.animations?.flatMap((s) => s.effects) ?? [];
 }

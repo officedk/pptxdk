@@ -2,7 +2,11 @@ import { z } from "zod";
 
 import { authorIdSchema, readAuthorId, type AuthorId } from "#/author-ids.ts";
 import { BuildError, CapabilityError } from "#/diagnostics.ts";
-import { layoutStyleSchema, slideLayoutStyleShape } from "#/layout-schemas.ts";
+import {
+  layoutStyleShape,
+  slideLayoutStyleShape,
+  type LayoutStyle,
+} from "#/layout-schemas.ts";
 import { placeholderSizeSchema, type PlaceholderSize } from "#/placeholders.ts";
 import {
   backgroundValueSchema,
@@ -13,9 +17,18 @@ import {
   themeInputSchema,
   themeOverrideSchema,
   themeScopeSchema,
+  type BackgroundValue,
   type ColorMapOverride,
+  type TextStyle,
+  type ThemeInput,
   type ThemeOverride,
+  type ThemeScope,
 } from "#/theme.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
 
 const minimumSlideSizeEmu = 914_400;
 const maximumSlideSizeEmu = 51_206_400;
@@ -55,20 +68,53 @@ export const slideDimensionSchema = z
   );
 
 /** DrawingML `<p:bgRef idx="1001..1003">` reference resolved against `Theme.formatScheme.bgFillStyles`. */
-export const backgroundRefSchema = z
+export type BackgroundRef = {
+  readonly ref: 1001 | 1002 | 1003;
+  readonly color?: import("#/theme.ts").ColorValue | undefined;
+};
+
+const rawBackgroundRefSchema = z
   .strictObject({
     ref: z.union([z.literal(1001), z.literal(1002), z.literal(1003)]),
     color: colorValueSchema.optional(),
   })
   .readonly();
-export type BackgroundRef = z.infer<typeof backgroundRefSchema>;
+/** DrawingML `<p:bgRef idx="1001..1003">` reference resolved against `Theme.formatScheme.bgFillStyles`. */
+export const backgroundRefSchema: z.ZodType<BackgroundRef> =
+  rawBackgroundRefSchema satisfies z.ZodType<
+    AssertExact<
+      BackgroundRef,
+      z.infer<typeof rawBackgroundRefSchema>
+    > extends true
+      ? BackgroundRef
+      : never
+  >;
 
 /** Slide background can use theme colors, gradients supported by the shared visual writer, formal image resource inputs, `"none"`, or theme background fill references (`p:bgRef`). */
-export const slideBackgroundSchema = z.union([
+export type SlideBackground = BackgroundValue | BackgroundRef;
+
+const rawSlideBackgroundSchema = z.union([
   backgroundValueSchema,
-  backgroundRefSchema,
+  rawBackgroundRefSchema,
 ]);
-export type SlideBackground = z.infer<typeof slideBackgroundSchema>;
+/** Slide background can use theme colors, gradients supported by the shared visual writer, formal image resource inputs, `"none"`, or theme background fill references (`p:bgRef`). */
+export const slideBackgroundSchema: z.ZodType<SlideBackground> =
+  rawSlideBackgroundSchema satisfies z.ZodType<
+    AssertExact<
+      SlideBackground,
+      z.infer<typeof rawSlideBackgroundSchema>
+    > extends true
+      ? SlideBackground
+      : never
+  >;
+
+export type DeckProps = {
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
+  readonly theme?: ThemeInput | undefined;
+  readonly style?: TextStyle | undefined;
+  readonly title?: string | undefined;
+};
 
 const deckPropsObjectSchema = z.strictObject({
   width: slideDimensionSchema.optional(),
@@ -77,17 +123,32 @@ const deckPropsObjectSchema = z.strictObject({
   style: textStyleSchema.optional(),
   title: xml10StringSchema.optional(),
 });
-export const deckPropsSchema = deckPropsObjectSchema.readonly();
-export type DeckProps = z.infer<typeof deckPropsSchema>;
+const rawDeckPropsSchema = deckPropsObjectSchema.readonly();
+export const deckPropsSchema: z.ZodType<DeckProps> =
+  rawDeckPropsSchema satisfies z.ZodType<
+    AssertExact<DeckProps, z.infer<typeof rawDeckPropsSchema>> extends true
+      ? DeckProps
+      : never
+  >;
 
-export const slideStyleSchema = z
+export type SlideStyle = TextStyle &
+  Omit<LayoutStyle, "zIndex"> & {
+    readonly background?: SlideBackground | undefined;
+  };
+
+const rawSlideStyleSchema = z
   .strictObject({
     ...textStyleShape,
     ...slideLayoutStyleShape,
-    background: slideBackgroundSchema.optional(),
+    background: rawSlideBackgroundSchema.optional(),
   })
   .readonly();
-export type SlideStyle = z.infer<typeof slideStyleSchema>;
+export const slideStyleSchema: z.ZodType<SlideStyle> =
+  rawSlideStyleSchema satisfies z.ZodType<
+    AssertExact<SlideStyle, z.infer<typeof rawSlideStyleSchema>> extends true
+      ? SlideStyle
+      : never
+  >;
 
 const slideCorePropsObjectSchema = z.strictObject({
   /** Page author id; unique within the deck and written as the stable slide identifier. */
@@ -98,70 +159,157 @@ const slideCorePropsObjectSchema = z.strictObject({
   theme: themeScopeSchema.optional(),
   colorMapOverride: colorMapOverrideSchema.optional(),
   themeOverride: themeOverrideSchema.optional(),
-  style: slideStyleSchema.optional(),
+  style: rawSlideStyleSchema.optional(),
   hidden: z.boolean().optional(),
   showMasterPlaceholderAnimations: z.boolean().optional(),
   showMasterShapes: z.boolean().optional(),
 });
-export const slideCorePropsSchema = slideCorePropsObjectSchema.readonly();
+export const slideCorePropsSchema: z.ZodType<
+  Omit<
+    SlideProps,
+    | "transition"
+    | "advanceAfter"
+    | "background"
+    | "dateTime"
+    | "footer"
+    | "slideNumber"
+  >
+> = slideCorePropsObjectSchema.readonly();
 
 export { placeholderSizeSchema, type PlaceholderSize };
 
 /** Footer placeholder slot style combining inherited text styles and LayoutStyle placement. */
-export const footerPlaceholderStyleSchema = z
+export type FooterPlaceholderStyle = TextStyle & LayoutStyle;
+
+const rawFooterPlaceholderStyleSchema = z
   .strictObject({
     ...textStyleShape,
-    ...layoutStyleSchema.unwrap().shape,
+    ...layoutStyleShape,
   })
   .readonly();
-export type FooterPlaceholderStyle = z.infer<
-  typeof footerPlaceholderStyleSchema
->;
+/** Footer placeholder slot style combining inherited text styles and LayoutStyle placement. */
+export const footerPlaceholderStyleSchema: z.ZodType<FooterPlaceholderStyle> =
+  rawFooterPlaceholderStyleSchema satisfies z.ZodType<
+    AssertExact<
+      FooterPlaceholderStyle,
+      z.infer<typeof rawFooterPlaceholderStyleSchema>
+    > extends true
+      ? FooterPlaceholderStyle
+      : never
+  >;
 
 /** Per-slide dateTime/footer override declaration (`false` hides; string sets text; object overrides text/style/slot). */
-export const slideFooterValueSchema = z.union([
+export type SlideFooterValue =
+  | boolean
+  | string
+  | {
+      readonly text?: string | undefined;
+      readonly style?: FooterPlaceholderStyle | undefined;
+      readonly idx?: number | undefined;
+      readonly size?: PlaceholderSize | undefined;
+      readonly visible?: boolean | undefined;
+    };
+
+const rawSlideFooterValueSchema = z.union([
   z.boolean(),
   xml10StringSchema,
   z
     .strictObject({
       text: xml10StringSchema.optional(),
-      style: footerPlaceholderStyleSchema.optional(),
+      style: rawFooterPlaceholderStyleSchema.optional(),
       idx: z.number().int().nonnegative().optional(),
       size: placeholderSizeSchema.optional(),
       visible: z.boolean().optional(),
     })
     .readonly(),
 ]);
-export type SlideFooterValue = z.infer<typeof slideFooterValueSchema>;
+/** Per-slide dateTime/footer override declaration (`false` hides; string sets text; object overrides text/style/slot). */
+export const slideFooterValueSchema: z.ZodType<SlideFooterValue> =
+  rawSlideFooterValueSchema satisfies z.ZodType<
+    AssertExact<
+      SlideFooterValue,
+      z.infer<typeof rawSlideFooterValueSchema>
+    > extends true
+      ? SlideFooterValue
+      : never
+  >;
 
 /** Per-slide slide-number override declaration (`false` hides; `true` enables; object overrides style/slot). */
-export const slideNumberValueSchema = z.union([
+export type SlideNumberValue =
+  | boolean
+  | {
+      readonly style?: FooterPlaceholderStyle | undefined;
+      readonly idx?: number | undefined;
+      readonly size?: PlaceholderSize | undefined;
+      readonly visible?: boolean | undefined;
+    };
+
+const rawSlideNumberValueSchema = z.union([
   z.boolean(),
   z
     .strictObject({
-      style: footerPlaceholderStyleSchema.optional(),
+      style: rawFooterPlaceholderStyleSchema.optional(),
       idx: z.number().int().nonnegative().optional(),
       size: placeholderSizeSchema.optional(),
       visible: z.boolean().optional(),
     })
     .readonly(),
 ]);
-export type SlideNumberValue = z.infer<typeof slideNumberValueSchema>;
+/** Per-slide slide-number override declaration (`false` hides; `true` enables; object overrides style/slot). */
+export const slideNumberValueSchema: z.ZodType<SlideNumberValue> =
+  rawSlideNumberValueSchema satisfies z.ZodType<
+    AssertExact<
+      SlideNumberValue,
+      z.infer<typeof rawSlideNumberValueSchema>
+    > extends true
+      ? SlideNumberValue
+      : never
+  >;
 
-export const slidePropsSchema = slideCorePropsObjectSchema
+export type SlideProps = {
+  /** Page author id; unique within the deck and written as the stable slide identifier. */
+  readonly id: AuthorId;
+  /** Optional PowerPoint display name written to `<p:cSld name="...">` without altering the stable `id`. */
+  readonly name?: string | undefined;
+  readonly layout?: unknown;
+  readonly theme?: ThemeScope | undefined;
+  readonly colorMapOverride?: ColorMapOverride | undefined;
+  readonly themeOverride?: ThemeOverride | undefined;
+  readonly style?: SlideStyle | undefined;
+  readonly hidden?: boolean | undefined;
+  readonly showMasterPlaceholderAnimations?: boolean | undefined;
+  readonly showMasterShapes?: boolean | undefined;
+  readonly transition?: unknown;
+  readonly advanceAfter?: number | undefined;
+  readonly background?: SlideBackground | undefined;
+  readonly dateTime?: SlideFooterValue | undefined;
+  readonly footer?: SlideFooterValue | undefined;
+  readonly slideNumber?: SlideNumberValue | undefined;
+};
+
+const rawSlidePropsSchema = slideCorePropsObjectSchema
   .extend({
     transition: z.unknown().optional(),
     advanceAfter: z.number().optional(),
-    background: slideBackgroundSchema.optional(),
-    dateTime: slideFooterValueSchema.optional(),
-    footer: slideFooterValueSchema.optional(),
-    slideNumber: slideNumberValueSchema.optional(),
+    background: rawSlideBackgroundSchema.optional(),
+    dateTime: rawSlideFooterValueSchema.optional(),
+    footer: rawSlideFooterValueSchema.optional(),
+    slideNumber: rawSlideNumberValueSchema.optional(),
   })
   .readonly();
-export type SlideProps = z.infer<typeof slidePropsSchema>;
+export const slidePropsSchema: z.ZodType<SlideProps> =
+  rawSlidePropsSchema satisfies z.ZodType<
+    AssertExact<SlideProps, z.infer<typeof rawSlidePropsSchema>> extends true
+      ? SlideProps
+      : never
+  >;
 
 /** Organizes slides into collapsible flat sections in PowerPoint. */
-export const sectionPropsSchema = z
+export type SectionProps = {
+  readonly name: string;
+};
+
+const rawSectionPropsSchema = z
   .strictObject({
     name: z
       .string()
@@ -172,15 +320,35 @@ export const sectionPropsSchema = z
       .pipe(xml10StringSchema),
   })
   .readonly();
-export type SectionProps = z.infer<typeof sectionPropsSchema>;
+/** Organizes slides into collapsible flat sections in PowerPoint. */
+export const sectionPropsSchema: z.ZodType<SectionProps> =
+  rawSectionPropsSchema satisfies z.ZodType<
+    AssertExact<
+      SectionProps,
+      z.infer<typeof rawSectionPropsSchema>
+    > extends true
+      ? SectionProps
+      : never
+  >;
 
 /** Target declaration interpreted by PowerPoint upon clicking an object; internal targets are resolved by page author id. */
-export const linkTargetSchema = z.union([
+export type LinkTarget =
+  | { readonly id: string }
+  | { readonly url: string }
+  | { readonly action: "home" };
+
+const rawLinkTargetSchema = z.union([
   z.strictObject({ id: z.string() }).readonly(),
   z.strictObject({ url: z.string() }).readonly(),
   z.strictObject({ action: z.literal("home") }).readonly(),
 ]);
-export type LinkTarget = z.infer<typeof linkTargetSchema>;
+/** Target declaration interpreted by PowerPoint upon clicking an object; internal targets are resolved by page author id. */
+export const linkTargetSchema: z.ZodType<LinkTarget> =
+  rawLinkTargetSchema satisfies z.ZodType<
+    AssertExact<LinkTarget, z.infer<typeof rawLinkTargetSchema>> extends true
+      ? LinkTarget
+      : never
+  >;
 
 /** Validates link target declarations once during capability bind or resolve. */
 export function parseLinkTarget(

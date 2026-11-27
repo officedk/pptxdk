@@ -14,10 +14,12 @@ import {
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
+  type ObjectResolution,
   type PaintContext,
   type PaintOutput,
   type PreviewTransform,
-  type ObjectResolution,
+  type SealedCanvasMechanism,
+  type SealedShowMechanism,
   type SlideEmitOutput,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -41,12 +43,11 @@ import {
   resolvePlaceholderGeometry,
   resolvePlaceholderVisualStyle,
 } from "../shared/style-inheritance.ts";
-import { layoutStyleValue } from "../shared/style-parse.ts";
 import {
   parseTextCoordinate,
   parseTextExtent,
   textBoxAllowedParamKeys,
-  textBoxStyleSchema,
+  textBoxStyleKeys,
 } from "../shared/text-schemas.ts";
 import {
   computeTextMetrics,
@@ -114,22 +115,6 @@ function size(
   path?: string,
 ): number {
   return parseTextExtent(value, label, path);
-}
-
-function height(
-  value: unknown,
-  path?: string,
-):
-  | { readonly contentSized: true }
-  | { readonly contentSized: false; readonly value: number | undefined } {
-  if (value === "auto" || value === undefined) return { contentSized: true };
-  if (
-    typeof value === "string" &&
-    /^-?(?:\d+(?:\.\d*)?|\.\d+)%$/u.test(value)
-  ) {
-    return { contentSized: false, value: undefined };
-  }
-  return { contentSized: false, value: size(value, "height", path) };
 }
 
 function textStyle(value: unknown): unknown {
@@ -329,7 +314,15 @@ export const embeddedFontMechanism = defineShowMechanism({
 });
 
 /** Fixed-region and content-sized text box capability bound per formal build. */
-export const textCapability = {
+export const textCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"text-box">,
+    SealedCanvasMechanism<"text-placeholder">,
+    SealedCanvasMechanism<"text-field-slidenum">,
+    SealedShowMechanism<"embedded-font">,
+  ]
+> = {
   declaration: "text",
   codegen: textCodegen,
   mechanisms: [
@@ -381,9 +374,7 @@ export const textCapability = {
       size(declaredWidth, "width");
     }
 
-    const allowedStyleKeys = new Set<string>(
-      Object.keys(textBoxStyleSchema.unwrap().shape),
-    );
+    const allowedStyleKeys = new Set<string>(textBoxStyleKeys);
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "sp",
@@ -394,18 +385,15 @@ export const textCapability = {
     });
 
     const insets = textInsets(input.props["style"], placeholder);
-    const styleHeight = layoutStyleValue(input, "height");
-    const requestedHeight = height(placeholderGeometry?.height ?? styleHeight);
-    const ls = contract.layoutStyle;
-    const hasBothVerticalOffsets =
-      ls.position === "absolute" &&
-      ((ls.inset !== undefined && ls.inset !== "auto") ||
-        (ls.top !== undefined &&
-          ls.top !== "auto" &&
-          ls.bottom !== undefined &&
-          ls.bottom !== "auto"));
+    const placeholderHeight = placeholderGeometry?.height;
+    const placeholderFixedHeight =
+      placeholderHeight !== undefined && placeholderHeight !== "auto";
     const isContentSized =
-      requestedHeight.contentSized && !hasBothVerticalOffsets;
+      !placeholderFixedHeight && !(contract.fixedAxes?.height ?? false);
+    const declaredPixelHeight =
+      typeof placeholderHeight === "number"
+        ? size(placeholderHeight, "height")
+        : contract.explicitPixelSize?.height;
 
     const {
       paragraphs,
@@ -475,7 +463,9 @@ export const textCapability = {
         request: CapabilityLayoutRequest,
       ): CapabilityLayoutMeasurement | undefined {
         const width =
-          request.availableWidth ?? contract.layoutStyle.width ?? declaredWidth;
+          request.availableWidth ??
+          contract.explicitPixelSize?.width ??
+          declaredWidth;
         const innerWidth =
           request.availableWidth !== undefined
             ? request.availableWidth
@@ -515,13 +505,11 @@ export const textCapability = {
           width: size(
             resolveContext.layoutBox?.width ??
               declaredWidth ??
-              contract.layoutStyle.width,
+              contract.explicitPixelSize?.width,
             "width",
           ),
         };
-        const measuredHeight = requestedHeight.contentSized
-          ? undefined
-          : requestedHeight.value;
+        const measuredHeight = isContentSized ? undefined : declaredPixelHeight;
         const outputHeight = resolveContext.layoutBox?.height ?? measuredHeight;
         const innerWidth = Math.max(
           0,

@@ -48,6 +48,8 @@ export {
   layoutLengthSchema,
   layoutSpacingSchema,
   layoutStyleSchema,
+  layoutStyleShape,
+  nonNegativeLayoutSpacingSchema,
   paddingStyleSchema,
 } from "#/layout-schemas.ts";
 export {
@@ -78,6 +80,7 @@ export {
   backgroundValueSchema,
   bcp47LangSchema,
   borderObjectSchema,
+  borderObjectShape,
   borderStyleSchema,
   borderValueSchema,
   boxShadowValueSchema,
@@ -129,6 +132,7 @@ export {
   textStyleFrom,
   textStyleKeys,
   textStyleSchema,
+  textStyleShape,
   themeColorSchema,
   themeInputSchema,
   themeOverrideSchema,
@@ -137,6 +141,7 @@ export {
   themeShadeSchema,
   validateTextStyle,
   visualStyleSchema,
+  visualStyleShape,
 } from "#/theme.ts";
 export { createMorphScope, getMorphKeyLabel, isMorphKey } from "#/morph.ts";
 export {
@@ -183,6 +188,8 @@ export type {
 export type {
   CanvasMechanismDefinition,
   NativeMechanismDefinition,
+  SealedCanvasMechanism,
+  SealedShowMechanism,
   ShowMechanismDefinition,
 } from "#/mechanisms.ts";
 export type { MorphKey, MorphScope } from "#/morph.ts";
@@ -192,6 +199,11 @@ export {
   parseCapabilityLayoutContract,
 } from "#/layout.ts";
 export type {
+  BackgroundValue,
+  BorderObject,
+  BorderStyle,
+  BorderValue,
+  BoxShadowValue,
   ColorMap,
   ColorMapOverride,
   ColorValue,
@@ -246,8 +258,10 @@ export type {
   CapabilityAnnotation,
   CapabilityChild,
   CapabilityContribution,
+  CapabilityExplicitPixelSize,
   CapabilityFontUsageClaim,
   CapabilityInput,
+  CapabilityLayoutAxes,
   CapabilityLayoutContract,
   CapabilityLayoutMeasurement,
   CapabilityLayoutRequest,
@@ -279,6 +293,7 @@ export type {
   MastersEmitDriver,
   NativeElementKind,
   NativeLink,
+  NonNegativeLayoutSpacing,
   ObjectCapabilityModule,
   ObjectResolution,
   ObjectResolveContext,

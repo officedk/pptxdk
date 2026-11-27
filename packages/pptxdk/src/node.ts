@@ -4,22 +4,28 @@ import { registerHooks } from "node:module";
 import { extname, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { toBuildDiagnostic } from "@pptxdk/core/build";
+import {
+  buildOptionsShape,
+  resolveOptionsShape,
+  toBuildDiagnostic,
+} from "@pptxdk/core/build";
 import { CommonNode } from "@pptxdk/core/document";
 import { validateOptions } from "@pptxdk/emit";
 import { transformSync, type Loader } from "esbuild";
 import type { ComponentType, ReactNode } from "react";
 import { z } from "zod";
 
+import { resolveDocumentInput } from "./compose.ts";
 import {
   BuildError,
   ImportError,
   build,
   buildDiagnosticSchema,
-  buildOptionsSchema,
   importPptx,
   previewErrorSchema,
   previewPlaceholderSchema,
+  resolve,
+  resolveOptionsSchema,
   type BuildDiagnostic,
   type BuildOptions,
   type BuildResult,
@@ -30,8 +36,15 @@ import {
   type ImportResult,
   type PreviewError,
   type PreviewPlaceholder,
+  type Resolution,
+  type ResolveOptions,
 } from "./index.ts";
 import type { PreviewOptions, PreviewResult } from "./preview.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
 
 const sourceLoaders: Readonly<Record<string, Loader>> = {
   ".ts": "ts",
@@ -40,30 +53,74 @@ const sourceLoaders: Readonly<Record<string, Loader>> = {
   ".jsx": "jsx",
 };
 
-export const exportNameSchema = z.string().min(1);
+const rawExportNameSchema = z.string().min(1);
+export const exportNameSchema: z.ZodType<string> = rawExportNameSchema;
 
-export const buildFromSourceOptionsSchema = buildOptionsSchema
-  .unwrap()
-  .extend({
-    /** Use the named export of the entry module as the deck; defaults to "default". */
-    exportName: exportNameSchema.optional(),
+export type BuildFromSourceOptions = BuildOptions & {
+  /** Use the named export of the entry module as the deck; defaults to "default". */
+  readonly exportName?: string | undefined;
+};
+
+const rawBuildFromSourceOptionsSchema = z
+  .strictObject({
+    ...buildOptionsShape,
+    exportName: rawExportNameSchema.optional(),
   })
   .readonly();
-export type BuildFromSourceOptions = z.infer<
-  typeof buildFromSourceOptionsSchema
->;
+export const buildFromSourceOptionsSchema: z.ZodType<BuildFromSourceOptions> =
+  rawBuildFromSourceOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      BuildFromSourceOptions,
+      z.infer<typeof rawBuildFromSourceOptionsSchema>
+    > extends true
+      ? BuildFromSourceOptions
+      : never
+  >;
 
-export const previewFromSourceOptionsSchema = z
+export type PreviewFromSourceOptions = {
+  readonly pages?: readonly number[] | undefined;
+  readonly signal?: AbortSignal | undefined;
+  /** Use the named export of the entry module as the deck; defaults to "default". */
+  readonly exportName?: string | undefined;
+};
+
+const rawPreviewFromSourceOptionsSchema = z
   .strictObject({
     pages: z.array(z.int().positive()).readonly().optional(),
     signal: z.instanceof(AbortSignal).optional(),
-    /** Use the named export of the entry module as the deck; defaults to "default". */
-    exportName: exportNameSchema.optional(),
+    exportName: rawExportNameSchema.optional(),
   })
   .readonly();
-export type PreviewFromSourceOptions = z.infer<
-  typeof previewFromSourceOptionsSchema
->;
+export const previewFromSourceOptionsSchema: z.ZodType<PreviewFromSourceOptions> =
+  rawPreviewFromSourceOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      PreviewFromSourceOptions,
+      z.infer<typeof rawPreviewFromSourceOptionsSchema>
+    > extends true
+      ? PreviewFromSourceOptions
+      : never
+  >;
+
+export type ResolveFromSourceOptions = ResolveOptions & {
+  /** Use the named export of the entry module as the deck; defaults to "default". */
+  readonly exportName?: string | undefined;
+};
+
+const rawResolveFromSourceOptionsSchema = z
+  .strictObject({
+    ...resolveOptionsShape,
+    exportName: rawExportNameSchema.optional(),
+  })
+  .readonly();
+export const resolveFromSourceOptionsSchema: z.ZodType<ResolveFromSourceOptions> =
+  rawResolveFromSourceOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      ResolveFromSourceOptions,
+      z.infer<typeof rawResolveFromSourceOptionsSchema>
+    > extends true
+      ? ResolveFromSourceOptions
+      : never
+  >;
 
 export type {
   BuildDiagnostic,
@@ -78,12 +135,15 @@ export type {
   PreviewOptions,
   PreviewPlaceholder,
   PreviewResult,
+  Resolution,
+  ResolveOptions,
 };
 export {
   ImportError,
   buildDiagnosticSchema,
   previewErrorSchema,
   previewPlaceholderSchema,
+  resolveOptionsSchema,
 };
 
 /**
@@ -368,6 +428,82 @@ export async function previewFromSource(
   try {
     const deck = await loadDeck(url, exportName, previewOptions.signal);
     return await preview(deck, previewOptions);
+  } finally {
+    hooks.deregister();
+  }
+}
+
+/**
+ * Run a read-only resolve from a Node.js local ESM source entry. Shares source loading, export selection,
+ * and cancellation semantics with `buildFromSource` and `previewFromSource`, without emitting PPTX or PNGs.
+ * The return value is identical to `resolve`.
+ */
+export async function resolveFromSource(
+  entry: string | URL,
+  options: ResolveFromSourceOptions = {},
+): Promise<Resolution> {
+  const url = sourceUrl(entry);
+  const parsed = resolveFromSourceOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    if (
+      typeof options !== "object" ||
+      options === null ||
+      Array.isArray(options)
+    ) {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve",
+          "invalid-options",
+          "Resolve options must be an object",
+        ),
+      ]);
+    }
+    const issue = parsed.error.issues[0];
+    if (issue?.path.length === 0 && issue.code === "unrecognized_keys") {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve",
+          "unknown-parameter",
+          `Resolve options contain unknown parameter ${issue.keys[0]}`,
+          { prop: String(issue.keys[0]), scope: "options" },
+        ),
+      ]);
+    }
+    if (issue?.path[0] === "signal") {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve.signal",
+          "invalid-options",
+          "Resolve options signal must be an AbortSignal",
+          { field: "signal" },
+        ),
+      ]);
+    }
+    if (issue?.path[0] === "exportName") {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "resolve.exportName",
+          "invalid-options",
+          "exportName must be a non-empty string",
+          { field: "exportName" },
+        ),
+      ]);
+    }
+    throw new BuildError([
+      toBuildDiagnostic(
+        "resolve",
+        "invalid-options",
+        "Resolve options must be an object",
+      ),
+    ]);
+  }
+  const { exportName = "default", ...resolveOptions } = parsed.data;
+  if (resolveOptions.signal?.aborted) throw resolveOptions.signal.reason;
+
+  const hooks = registerSourceLoader();
+  try {
+    const deck = await loadDeck(url, exportName, resolveOptions.signal);
+    return await resolveDocumentInput(resolve, deck, resolveOptions);
   } finally {
     hooks.deregister();
   }

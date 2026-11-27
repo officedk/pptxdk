@@ -6,7 +6,7 @@ import type {
 } from "@pptxdk/core/capability";
 
 import type { TextStyle } from "../shared/text-service.ts";
-import { chartTextStyleSchema } from "./chart-schemas.ts";
+import { chartTextStyleKeys as chartTextStyleKeyList } from "./chart-schemas.ts";
 import type {
   ChartAxisCrossing,
   ChartAxisPosition,
@@ -24,9 +24,7 @@ import type {
   SharedCategoryData,
 } from "./chart-types.ts";
 
-export const chartTextStyleKeys = Object.keys(
-  chartTextStyleSchema.unwrap().shape,
-);
+export const chartTextStyleKeys: string[] = [...chartTextStyleKeyList];
 
 export function textOnlyChartStyle(value: unknown): TextStyle | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

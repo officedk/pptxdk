@@ -6,6 +6,8 @@ import {
   slideBackgroundSchema,
   slideStyleSchema,
   xml10StringSchema,
+  type FooterPlaceholderStyle,
+  type PlaceholderSize,
   type SlideBackground,
   type SlideStyle,
 } from "#/author-schemas.ts";
@@ -15,6 +17,7 @@ import {
   masterTextStylesSchema,
   placeholderMapSchema,
   placeholderRoleSchema,
+  type ContentPlaceholderRole,
   type EmptyPlaceholderMap,
   type MasterPlaceholderMap,
   type MasterTextStyles,
@@ -24,15 +27,28 @@ import {
   colorMapOverrideSchema,
   colorMapSchema,
   themeOverrideSchema,
+  type ColorMap,
   type ColorMapOverride,
   type Theme,
   type ThemeInput,
   type ThemeOverride,
 } from "#/theme.ts";
-import type { ResolvedObject } from "#/types.ts";
+import type { Rect, ResolvedObject } from "#/types.ts";
+
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
 
 /** OOXML `<p:hf>` header/footer visibility flags on SlideMaster and SlideLayout (ECMA-376 §19.3.1.24). */
-export const headerFooterSchema = z
+export type HeaderFooter = {
+  readonly dateTime?: boolean | undefined;
+  readonly footer?: boolean | undefined;
+  readonly header?: boolean | undefined;
+  readonly slideNumber?: boolean | undefined;
+};
+
+const rawHeaderFooterSchema = z
   .strictObject({
     dateTime: z.boolean().optional(),
     footer: z.boolean().optional(),
@@ -40,10 +56,27 @@ export const headerFooterSchema = z
     slideNumber: z.boolean().optional(),
   })
   .readonly();
-export type HeaderFooter = z.infer<typeof headerFooterSchema>;
+/** OOXML `<p:hf>` header/footer visibility flags on SlideMaster and SlideLayout (ECMA-376 §19.3.1.24). */
+export const headerFooterSchema: z.ZodType<HeaderFooter> =
+  rawHeaderFooterSchema satisfies z.ZodType<
+    AssertExact<
+      HeaderFooter,
+      z.infer<typeof rawHeaderFooterSchema>
+    > extends true
+      ? HeaderFooter
+      : never
+  >;
 
 /** Geometry, placeholder metadata, and default text/style for a `dt`, `ftr`, or `sldNum` slot. */
-export const footerPlaceholderSpecSchema = z
+export type FooterPlaceholderSpec = {
+  readonly idx?: number | undefined;
+  readonly size?: PlaceholderSize | undefined;
+  readonly text?: string | undefined;
+  readonly style?: FooterPlaceholderStyle | undefined;
+  readonly visible?: boolean | undefined;
+};
+
+const rawFooterPlaceholderSpecSchema = z
   .strictObject({
     idx: z.number().int().nonnegative().optional(),
     size: placeholderSizeSchema.optional(),
@@ -52,17 +85,41 @@ export const footerPlaceholderSpecSchema = z
     visible: z.boolean().optional(),
   })
   .readonly();
-export type FooterPlaceholderSpec = z.infer<typeof footerPlaceholderSpecSchema>;
+/** Geometry, placeholder metadata, and default text/style for a `dt`, `ftr`, or `sldNum` slot. */
+export const footerPlaceholderSpecSchema: z.ZodType<FooterPlaceholderSpec> =
+  rawFooterPlaceholderSpecSchema satisfies z.ZodType<
+    AssertExact<
+      FooterPlaceholderSpec,
+      z.infer<typeof rawFooterPlaceholderSpecSchema>
+    > extends true
+      ? FooterPlaceholderSpec
+      : never
+  >;
 
 /** Collection of date, footer, and slide-number metadata placeholder definitions on a master or layout. */
-export const footerPlaceholdersSchema = z
+export type FooterPlaceholders = {
+  readonly dateTime?: FooterPlaceholderSpec | undefined;
+  readonly footer?: FooterPlaceholderSpec | undefined;
+  readonly slideNumber?: FooterPlaceholderSpec | undefined;
+};
+
+const rawFooterPlaceholdersSchema = z
   .strictObject({
-    dateTime: footerPlaceholderSpecSchema.optional(),
-    footer: footerPlaceholderSpecSchema.optional(),
-    slideNumber: footerPlaceholderSpecSchema.optional(),
+    dateTime: rawFooterPlaceholderSpecSchema.optional(),
+    footer: rawFooterPlaceholderSpecSchema.optional(),
+    slideNumber: rawFooterPlaceholderSpecSchema.optional(),
   })
   .readonly();
-export type FooterPlaceholders = z.infer<typeof footerPlaceholdersSchema>;
+/** Collection of date, footer, and slide-number metadata placeholder definitions on a master or layout. */
+export const footerPlaceholdersSchema: z.ZodType<FooterPlaceholders> =
+  rawFooterPlaceholdersSchema satisfies z.ZodType<
+    AssertExact<
+      FooterPlaceholders,
+      z.infer<typeof rawFooterPlaceholdersSchema>
+    > extends true
+      ? FooterPlaceholders
+      : never
+  >;
 
 /** Official OOXML ST_SlideLayoutType enumeration values (ECMA-376 §19.7.15). */
 export const slideLayoutTypeValues = [
@@ -104,10 +161,35 @@ export const slideLayoutTypeValues = [
   "picTx",
 ] as const;
 
-export const slideLayoutTypeSchema = z.enum(slideLayoutTypeValues);
-export type SlideLayoutType = z.infer<typeof slideLayoutTypeSchema>;
+export type SlideLayoutType = (typeof slideLayoutTypeValues)[number];
+const rawSlideLayoutTypeSchema = z.enum(slideLayoutTypeValues);
+export const slideLayoutTypeSchema: z.ZodType<SlideLayoutType> =
+  rawSlideLayoutTypeSchema satisfies z.ZodType<
+    AssertExact<
+      SlideLayoutType,
+      z.infer<typeof rawSlideLayoutTypeSchema>
+    > extends true
+      ? SlideLayoutType
+      : never
+  >;
 
-export const slideMasterDataPropsSchema = z
+export type SlideMasterDataProps = {
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly preserve?: boolean | undefined;
+  readonly placeholders?: MasterPlaceholderMap | undefined;
+  readonly textStyles?: MasterTextStyles | undefined;
+  readonly colorMap?: ColorMap | undefined;
+  readonly style?: SlideStyle | undefined;
+  readonly background?: SlideBackground | undefined;
+  readonly headerFooter?: HeaderFooter | undefined;
+  readonly footerPlaceholders?: FooterPlaceholders | undefined;
+  readonly transition?: unknown;
+  readonly advanceAfter?: number | undefined;
+  readonly motion?: unknown;
+};
+
+const rawSlideMasterDataPropsSchema = z
   .strictObject({
     id: z.string().trim().min(1).optional(),
     name: z.string().optional(),
@@ -117,14 +199,22 @@ export const slideMasterDataPropsSchema = z
     colorMap: colorMapSchema.optional(),
     style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
-    headerFooter: headerFooterSchema.optional(),
-    footerPlaceholders: footerPlaceholdersSchema.optional(),
+    headerFooter: rawHeaderFooterSchema.optional(),
+    footerPlaceholders: rawFooterPlaceholdersSchema.optional(),
     transition: z.unknown().optional(),
     advanceAfter: z.number().optional(),
     motion: z.unknown().optional(),
   })
   .readonly();
-export type SlideMasterDataProps = z.infer<typeof slideMasterDataPropsSchema>;
+export const slideMasterDataPropsSchema: z.ZodType<SlideMasterDataProps> =
+  rawSlideMasterDataPropsSchema satisfies z.ZodType<
+    AssertExact<
+      SlideMasterDataProps,
+      z.infer<typeof rawSlideMasterDataPropsSchema>
+    > extends true
+      ? SlideMasterDataProps
+      : never
+  >;
 
 export type SlideMasterProps = SlideMasterDataProps & {
   readonly theme?: ThemeInput | Theme | undefined;
@@ -133,11 +223,34 @@ export type SlideMasterProps = SlideMasterDataProps & {
   readonly textStyles?: MasterTextStyles | undefined;
 };
 
-export const slideLayoutDataPropsSchema = z
+export type SlideLayoutDataProps<
+  P extends PlaceholderMap = EmptyPlaceholderMap,
+> = {
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly type?: SlideLayoutType | undefined;
+  readonly preserve?: boolean | undefined;
+  readonly matchingName?: string | undefined;
+  readonly userDrawn?: boolean | undefined;
+  readonly showMasterShapes?: boolean | undefined;
+  readonly showMasterPlaceholderAnimations?: boolean | undefined;
+  readonly placeholders?: P | undefined;
+  readonly colorMapOverride?: ColorMapOverride | undefined;
+  readonly themeOverride?: ThemeOverride | undefined;
+  readonly style?: SlideStyle | undefined;
+  readonly background?: SlideBackground | undefined;
+  readonly headerFooter?: HeaderFooter | undefined;
+  readonly footerPlaceholders?: FooterPlaceholders | undefined;
+  readonly transition?: unknown;
+  readonly advanceAfter?: number | undefined;
+  readonly motion?: unknown;
+};
+
+const rawSlideLayoutDataPropsSchema = z
   .strictObject({
     id: z.string().trim().min(1).optional(),
     name: z.string().optional(),
-    type: slideLayoutTypeSchema.optional(),
+    type: rawSlideLayoutTypeSchema.optional(),
     preserve: z.boolean().optional(),
     matchingName: z.string().optional(),
     userDrawn: z.boolean().optional(),
@@ -148,24 +261,23 @@ export const slideLayoutDataPropsSchema = z
     themeOverride: themeOverrideSchema.optional(),
     style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
-    headerFooter: headerFooterSchema.optional(),
-    footerPlaceholders: footerPlaceholdersSchema.optional(),
+    headerFooter: rawHeaderFooterSchema.optional(),
+    footerPlaceholders: rawFooterPlaceholdersSchema.optional(),
     transition: z.unknown().optional(),
     advanceAfter: z.number().optional(),
     motion: z.unknown().optional(),
   })
   .readonly();
-
-type BaseSlideLayoutDataProps = Omit<
-  z.infer<typeof slideLayoutDataPropsSchema>,
-  "placeholders"
+export const slideLayoutDataPropsSchema: z.ZodType<
+  SlideLayoutDataProps<PlaceholderMap>
+> = rawSlideLayoutDataPropsSchema satisfies z.ZodType<
+  AssertExact<
+    SlideLayoutDataProps<PlaceholderMap>,
+    z.infer<typeof rawSlideLayoutDataPropsSchema>
+  > extends true
+    ? SlideLayoutDataProps<PlaceholderMap>
+    : never
 >;
-
-export type SlideLayoutDataProps<
-  P extends PlaceholderMap = EmptyPlaceholderMap,
-> = BaseSlideLayoutDataProps & {
-  readonly placeholders?: P | undefined;
-};
 
 const rectObservationSchema = z
   .object({
@@ -176,7 +288,16 @@ const rectObservationSchema = z
   })
   .readonly();
 
-export const resolvedPlaceholderSchema = z
+export type ResolvedPlaceholder = {
+  readonly key: string;
+  readonly type: ContentPlaceholderRole;
+  readonly idx?: number | undefined;
+  readonly size?: PlaceholderSize | undefined;
+  readonly box?: Rect | undefined;
+  readonly style?: Readonly<Record<string, unknown>> | undefined;
+};
+
+const rawResolvedPlaceholderSchema = z
   .object({
     key: z.string().min(1),
     type: placeholderRoleSchema,
@@ -186,13 +307,40 @@ export const resolvedPlaceholderSchema = z
     style: z.record(z.string(), z.unknown()).readonly().optional(),
   })
   .readonly();
-export type ResolvedPlaceholder = z.infer<typeof resolvedPlaceholderSchema>;
+export const resolvedPlaceholderSchema: z.ZodType<ResolvedPlaceholder> =
+  rawResolvedPlaceholderSchema satisfies z.ZodType<
+    AssertExact<
+      ResolvedPlaceholder,
+      z.infer<typeof rawResolvedPlaceholderSchema>
+    > extends true
+      ? ResolvedPlaceholder
+      : never
+  >;
 
-export const resolvedSlideLayoutSchema = z
+export type ResolvedSlideLayout = {
+  readonly id: string;
+  readonly name?: string | undefined;
+  readonly type?: SlideLayoutType | undefined;
+  readonly preserve?: boolean | undefined;
+  readonly matchingName?: string | undefined;
+  readonly userDrawn?: boolean | undefined;
+  readonly showMasterShapes?: boolean | undefined;
+  readonly showMasterPlaceholderAnimations?: boolean | undefined;
+  readonly colorMapOverride?: ColorMapOverride | undefined;
+  readonly themeOverride?: ThemeOverride | undefined;
+  readonly style?: SlideStyle | undefined;
+  readonly background?: SlideBackground | undefined;
+  readonly headerFooter?: HeaderFooter | undefined;
+  readonly objects: readonly ResolvedObject[];
+  readonly placeholders: readonly ResolvedPlaceholder[];
+  readonly capabilities?: Readonly<Record<string, unknown>> | undefined;
+};
+
+const rawResolvedSlideLayoutSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().optional(),
-    type: slideLayoutTypeSchema.optional(),
+    type: rawSlideLayoutTypeSchema.optional(),
     preserve: z.boolean().optional(),
     matchingName: z.string().optional(),
     userDrawn: z.boolean().optional(),
@@ -202,28 +350,56 @@ export const resolvedSlideLayoutSchema = z
     themeOverride: themeOverrideSchema.optional(),
     style: slideStyleSchema.optional(),
     background: slideBackgroundSchema.optional(),
-    headerFooter: headerFooterSchema.optional(),
+    headerFooter: rawHeaderFooterSchema.optional(),
     objects: z.array(z.custom<ResolvedObject>()).readonly(),
-    placeholders: z.array(resolvedPlaceholderSchema).readonly(),
+    placeholders: z.array(rawResolvedPlaceholderSchema).readonly(),
     capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
   })
   .readonly();
-export type ResolvedSlideLayout = z.infer<typeof resolvedSlideLayoutSchema>;
+export const resolvedSlideLayoutSchema: z.ZodType<ResolvedSlideLayout> =
+  rawResolvedSlideLayoutSchema satisfies z.ZodType<
+    AssertExact<
+      ResolvedSlideLayout,
+      z.infer<typeof rawResolvedSlideLayoutSchema>
+    > extends true
+      ? ResolvedSlideLayout
+      : never
+  >;
 
-export const resolvedMasterSchema = z
+export type ResolvedMaster = {
+  readonly id: string;
+  readonly name?: string | undefined;
+  readonly preserve?: boolean | undefined;
+  readonly colorMap?: ColorMap | undefined;
+  readonly headerFooter?: HeaderFooter | undefined;
+  readonly objects: readonly ResolvedObject[];
+  readonly placeholders: readonly ResolvedPlaceholder[];
+  readonly capabilities?: Readonly<Record<string, unknown>> | undefined;
+  readonly layouts: readonly ResolvedSlideLayout[];
+};
+
+const rawResolvedMasterSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().optional(),
     preserve: z.boolean().optional(),
     colorMap: colorMapSchema.optional(),
-    headerFooter: headerFooterSchema.optional(),
+    headerFooter: rawHeaderFooterSchema.optional(),
     objects: z.array(z.custom<ResolvedObject>()).readonly(),
-    placeholders: z.array(resolvedPlaceholderSchema).readonly(),
+    placeholders: z.array(rawResolvedPlaceholderSchema).readonly(),
     capabilities: z.record(z.string(), z.unknown()).readonly().optional(),
-    layouts: z.array(resolvedSlideLayoutSchema).readonly(),
+    layouts: z.array(rawResolvedSlideLayoutSchema).readonly(),
   })
   .readonly();
-export type ResolvedMaster = z.infer<typeof resolvedMasterSchema>;
+export const resolvedMasterSchema: z.ZodType<ResolvedMaster> =
+  rawResolvedMasterSchema satisfies z.ZodType<
+    AssertExact<
+      ResolvedMaster,
+      z.infer<typeof rawResolvedMasterSchema>
+    > extends true
+      ? ResolvedMaster
+      : never
+  >;
 
 const slideLayoutDefinitionSymbol = Symbol.for(
   "@pptxdk/core/slide-layout-definition",

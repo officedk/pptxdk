@@ -4,11 +4,7 @@ import {
   blockRichTextChildKinds,
   createRichTextCodegenHandler,
 } from "../text/text-codegen.ts";
-import { notesDeclarationPropsSchema } from "./notes-schemas.ts";
-
-const notesAllowedPropKeys = new Set(
-  Object.keys(notesDeclarationPropsSchema.unwrap().shape),
-);
+import { notesAllowedPropKeys } from "./notes-schemas.ts";
 
 /**
  * Source codegen contribution for page-affiliated `notes` (`notes()` / `<Notes>`) declarations.

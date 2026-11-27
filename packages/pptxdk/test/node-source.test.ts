@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { BuildError } from "@officedk/pptxdk";
+import { BuildError, type Resolution } from "@officedk/pptxdk";
 import * as nodeEntry from "@officedk/pptxdk/node";
 import { preview } from "@officedk/pptxdk/preview";
 import { Deck, Shape, Slide } from "@officedk/pptxdk/react";
@@ -164,15 +164,30 @@ describe("@officedk/pptxdk/node source SDK", () => {
         ].join("\n"),
       );
 
-      const { buildFromSource, previewFromSource, SourceLoadError } =
-        nodeEntry as typeof nodeEntry & {
-          previewFromSource: (
-            entry: string | URL,
-            options?: { exportName?: string; pages?: readonly number[] },
-          ) => ReturnType<typeof preview>;
-        };
+      const {
+        buildFromSource,
+        previewFromSource,
+        resolveFromSource,
+        resolveFromSourceOptionsSchema,
+        SourceLoadError,
+      } = nodeEntry as typeof nodeEntry & {
+        previewFromSource: (
+          entry: string | URL,
+          options?: { exportName?: string; pages?: readonly number[] },
+        ) => ReturnType<typeof preview>;
+        resolveFromSource: (
+          entry: string | URL,
+          options?: { exportName?: string; signal?: AbortSignal },
+        ) => Promise<Resolution>;
+      };
 
       assert.equal(typeof previewFromSource, "function");
+      assert.equal(typeof resolveFromSource, "function");
+      assert.equal(resolveFromSourceOptionsSchema.safeParse({}).success, true);
+      assert.equal(
+        resolveFromSourceOptionsSchema.safeParse({ exportName: "" }).success,
+        false,
+      );
 
       await assert.rejects(
         buildFromSource(new URL("https://example.com/deck.tsx")),
@@ -181,6 +196,26 @@ describe("@officedk/pptxdk/node source SDK", () => {
       await assert.rejects(
         previewFromSource(new URL("https://example.com/deck.tsx")),
         (error: unknown) => error instanceof SourceLoadError,
+      );
+      await assert.rejects(
+        resolveFromSource(new URL("https://example.com/deck.tsx")),
+        (error: unknown) => error instanceof SourceLoadError,
+      );
+
+      const resolvedDefault = await resolveFromSource(tsxEntry);
+      assert.equal(resolvedDefault.slides.length, 2);
+      assert.equal(
+        resolvedDefault.slide("first").get("first-shape").text,
+        "Deferred MTS",
+      );
+
+      const resolvedFromUrl = await resolveFromSource(pathToFileURL(tsxEntry), {
+        exportName: "NamedElement",
+      });
+      assert.equal(resolvedFromUrl.slides.length, 1);
+      assert.equal(
+        resolvedFromUrl.slide("named-slide").get("named-shape").text,
+        "Named TSX",
       );
 
       const builtDefault = await buildFromSource(tsxEntry);
@@ -284,16 +319,30 @@ describe("@officedk/pptxdk/node source SDK", () => {
       assert.equal(mtsResult.report.slides[0]?.id, "mts-slide");
       const tsResult = await buildFromSource(tsEntry);
       assert.equal(tsResult.report.slides[0]?.id, "ts-slide");
+      assert.equal(
+        (await resolveFromSource(jsxEntry)).report.slides[0]?.id,
+        "jsx-only",
+      );
+      assert.equal(
+        (await resolveFromSource(mtsEntry)).report.slides[0]?.id,
+        "mts-slide",
+      );
+      assert.equal(
+        (await resolveFromSource(tsEntry)).report.slides[0]?.id,
+        "ts-slide",
+      );
 
       const relativeOutput = runInNode(
         ["--conditions=source"],
         [
           'import assert from "node:assert/strict";',
-          'import { buildFromSource, previewFromSource } from "@officedk/pptxdk/node";',
+          'import { buildFromSource, previewFromSource, resolveFromSource } from "@officedk/pptxdk/node";',
           'const b = await buildFromSource("./deck dir/multi deck.tsx");',
           'const p = await previewFromSource("./deck dir/multi deck.tsx", { pages: [1] });',
+          'const r = await resolveFromSource("./deck dir/multi deck.tsx");',
           "assert.equal(b.report.slides.length, 2);",
           'assert.equal(p.pages[0]?.id, "first");',
+          "assert.equal(r.slides.length, 2);",
           'process.stdout.write("ok");',
         ].join("\n"),
         root,
@@ -361,10 +410,19 @@ describe("@officedk/pptxdk/node source SDK", () => {
         ].join("\n"),
       );
 
-      const { buildFromSource, previewFromSource } = nodeEntry;
+      const { buildFromSource, previewFromSource, resolveFromSource } =
+        nodeEntry;
       const hookBuilt = await buildFromSource(shapesEntry, {
         exportName: "HookComponent",
       });
+      const hookResolved = await resolveFromSource(shapesEntry, {
+        exportName: "HookComponent",
+      });
+      assert.equal(hookResolved.slides.length, 1);
+      assert.equal(
+        hookResolved.slide("hook-comp").get("hook-box").text,
+        "Hook: committed",
+      );
       const hookValidated = await validatePptx(hookBuilt.pptx);
       assert.deepEqual(hookValidated.errors, []);
       assert.equal(
@@ -378,7 +436,7 @@ describe("@officedk/pptxdk/node source SDK", () => {
         'import { createElement } from "react";',
         'import { build, defineTheme, font } from "@officedk/pptxdk";',
         'import { preview } from "@officedk/pptxdk/preview";',
-        'import { buildFromSource, previewFromSource } from "@officedk/pptxdk/node";',
+        'import { buildFromSource, previewFromSource, resolveFromSource } from "@officedk/pptxdk/node";',
         'import { deck, shape, slide } from "@officedk/pptxdk/vanilla";',
         'import { Deck, Shape, Slide } from "@officedk/pptxdk/react";',
         "",
@@ -410,6 +468,9 @@ describe("@officedk/pptxdk/node source SDK", () => {
         "  assert.deepEqual(sourcePreview.pages[0]?.placeholders, []);",
         "  assert.equal((sourcePreview.pages[0]?.png?.byteLength ?? 0) > 0, true);",
         "  assert.deepEqual(sourcePreview.pages[0]?.png, directPreview.pages[0]?.png);",
+        '  const sourceResolved = await resolveFromSource("./four-shapes.tsx", { exportName: check.exportName });',
+        "  assert.deepEqual(sourceResolved.report, directPreview.report);",
+        "  assert.equal(sourceResolved.slides.length, 1);",
         "}",
         'process.stdout.write("ok");',
       ].join("\n");
@@ -472,7 +533,12 @@ describe("@officedk/pptxdk/node source SDK", () => {
       const probeUnloaded = join(root, "probe-unloaded.tsx");
       await writeFile(probeUnloaded, "export const x = <div />;\n");
 
-      const { buildFromSource, previewFromSource, SourceLoadError } = nodeEntry;
+      const {
+        buildFromSource,
+        previewFromSource,
+        resolveFromSource,
+        SourceLoadError,
+      } = nodeEntry;
 
       for (const exportName of [
         "missingExport",
@@ -495,6 +561,11 @@ describe("@officedk/pptxdk/node source SDK", () => {
           (error: unknown) => error instanceof SourceLoadError,
           `Expected SourceLoadError in preview for export ${exportName}`,
         );
+        await assert.rejects(
+          resolveFromSource(badExports, { exportName }),
+          (error: unknown) => error instanceof SourceLoadError,
+          `Expected SourceLoadError in resolve for export ${exportName}`,
+        );
       }
 
       await assert.rejects(
@@ -507,13 +578,18 @@ describe("@officedk/pptxdk/node source SDK", () => {
         (error: unknown) =>
           error instanceof SourceLoadError && error.cause instanceof Error,
       );
+      await assert.rejects(
+        resolveFromSource(promiseRejected),
+        (error: unknown) =>
+          error instanceof SourceLoadError && error.cause instanceof Error,
+      );
 
       const hookReleaseOutput = runInNode(
         ["--conditions=source"],
         [
           'import assert from "node:assert/strict";',
           'import { pathToFileURL } from "node:url";',
-          'import { buildFromSource, previewFromSource, SourceLoadError } from "@officedk/pptxdk/node";',
+          'import { buildFromSource, previewFromSource, resolveFromSource, SourceLoadError } from "@officedk/pptxdk/node";',
           `const badFiles = ${JSON.stringify([join(root, "does-not-exist.ts"), syntaxErr, runtimeErr])};`,
           `const probeBase = ${JSON.stringify(probeUnloaded)};`,
           "for (let i = 0; i < badFiles.length; i += 1) {",
@@ -523,6 +599,10 @@ describe("@officedk/pptxdk/node source SDK", () => {
           "  );",
           "  await assert.rejects(",
           "    previewFromSource(badFiles[i]),",
+          "    (error) => error instanceof SourceLoadError && error.cause !== undefined,",
+          "  );",
+          "  await assert.rejects(",
+          "    resolveFromSource(badFiles[i]),",
           "    (error) => error instanceof SourceLoadError && error.cause !== undefined,",
           "  );",
           "  await assert.rejects(",
@@ -545,6 +625,41 @@ describe("@officedk/pptxdk/node source SDK", () => {
         (error: unknown) => error instanceof BuildError,
       );
       await assert.rejects(
+        resolveFromSource(invalidDeck),
+        (error: unknown) => error instanceof BuildError,
+      );
+      await assert.rejects(
+        resolveFromSource(invalidDeck, null as never),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-options" &&
+          error.diagnostics[0]?.path === "resolve",
+      );
+      await assert.rejects(
+        resolveFromSource(invalidDeck, { target: "invalid" } as never),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "unknown-prop" &&
+          error.diagnostics[0]?.path === "resolve" &&
+          error.diagnostics[0]?.prop === "target",
+      );
+      await assert.rejects(
+        resolveFromSource(invalidDeck, { signal: "bad" } as never),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-options" &&
+          error.diagnostics[0]?.path === "resolve.signal" &&
+          error.diagnostics[0]?.field === "signal",
+      );
+      await assert.rejects(
+        resolveFromSource(invalidDeck, { exportName: "" }),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-options" &&
+          error.diagnostics[0]?.path === "resolve.exportName" &&
+          error.diagnostics[0]?.field === "exportName",
+      );
+      await assert.rejects(
         previewFromSource(invalidDeck, { pages: [0] }),
         (error: unknown) => error instanceof RangeError,
       );
@@ -560,7 +675,8 @@ describe("@officedk/pptxdk/node source SDK", () => {
   it("propagates cancellation reasons without unhandled rejections or leftover listeners across all stages", async () => {
     const root = await createSourceWorkspace();
     try {
-      const { buildFromSource, previewFromSource } = nodeEntry;
+      const { buildFromSource, previewFromSource, resolveFromSource } =
+        nodeEntry;
       const preEntry = join(root, "pre-cancel.tsx");
       await writeFile(
         preEntry,
@@ -572,7 +688,11 @@ describe("@officedk/pptxdk/node source SDK", () => {
         ].join("\n"),
       );
 
-      for (const invoke of [buildFromSource, previewFromSource]) {
+      for (const invoke of [
+        buildFromSource,
+        previewFromSource,
+        resolveFromSource,
+      ]) {
         const preController = new AbortController();
         const preReason = new Error("pre-cancelled");
         preController.abort(preReason);
@@ -601,6 +721,7 @@ describe("@officedk/pptxdk/node source SDK", () => {
         for (const [index, invoke] of [
           buildFromSource,
           previewFromSource,
+          resolveFromSource,
         ].entries()) {
           const importPending = join(root, `import-pending-${index}.tsx`);
           const importStarted = Promise.withResolvers<void>();
@@ -641,6 +762,7 @@ describe("@officedk/pptxdk/node source SDK", () => {
         for (const [index, invoke] of [
           buildFromSource,
           previewFromSource,
+          resolveFromSource,
         ].entries()) {
           const promisePending = join(root, `promise-pending-${index}.ts`);
           const exported = Promise.withResolvers<unknown>();
@@ -681,6 +803,7 @@ describe("@officedk/pptxdk/node source SDK", () => {
         for (const [index, invoke] of [
           buildFromSource,
           previewFromSource,
+          resolveFromSource,
         ].entries()) {
           const suspensePending = join(root, `suspense-pending-${index}.tsx`);
           const mounted = Promise.withResolvers<void>();
@@ -896,6 +1019,45 @@ describe("@officedk/pptxdk/node source SDK", () => {
         'process.stdout.write("ok");',
       ].join("\n");
 
+      const plainResolveScript = [
+        'import assert from "node:assert/strict";',
+        'import { registerHooks } from "node:module";',
+        "registerHooks({",
+        "  resolve(specifier, context, nextResolve) {",
+        `    if (${forbidReactAndPreview}) {`,
+        '      throw new Error("Plain resolve loaded forbidden dependency: " + specifier);',
+        "    }",
+        "    return nextResolve(specifier, context);",
+        "  },",
+        "});",
+        'const { resolveFromSource } = await import("@officedk/pptxdk/node");',
+        'const syncResolved = await resolveFromSource("./plain-vanilla.ts");',
+        'const asyncResolved = await resolveFromSource("./plain-vanilla.ts", { exportName: "asyncPlain" });',
+        "assert.equal(syncResolved.slides.length, 1);",
+        "assert.equal(asyncResolved.slides.length, 1);",
+        'assert.equal(syncResolved.report.slides[0]?.id, "sync-plain");',
+        'assert.equal(asyncResolved.report.slides[0]?.id, "async-plain");',
+        'process.stdout.write("ok");',
+      ].join("\n");
+
+      const jsxResolveScript = [
+        'import assert from "node:assert/strict";',
+        'import { registerHooks } from "node:module";',
+        "registerHooks({",
+        "  resolve(specifier, context, nextResolve) {",
+        `    if (${forbidPreviewOnly}) {`,
+        '      throw new Error("JSX source resolve loaded preview or validation: " + specifier);',
+        "    }",
+        "    return nextResolve(specifier, context);",
+        "  },",
+        "});",
+        'const { resolveFromSource } = await import("@officedk/pptxdk/node");',
+        'const resolved = await resolveFromSource("./jsx-source.tsx");',
+        "assert.equal(resolved.slides.length, 1);",
+        'assert.equal(resolved.report.slides[0]?.id, "jsx-src");',
+        'process.stdout.write("ok");',
+      ].join("\n");
+
       const preCancelIsolationScript = [
         'import assert from "node:assert/strict";',
         'import { registerHooks } from "node:module";',
@@ -907,19 +1069,22 @@ describe("@officedk/pptxdk/node source SDK", () => {
         "    return nextResolve(specifier, context);",
         "  },",
         "});",
-        'const { buildFromSource, previewFromSource } = await import("@officedk/pptxdk/node");',
+        'const { buildFromSource, previewFromSource, resolveFromSource } = await import("@officedk/pptxdk/node");',
         "const controller = new AbortController();",
         'const reason = new Error("pre-cancelled isolation");',
         "controller.abort(reason);",
         'await assert.rejects(buildFromSource("./jsx-source.tsx", { signal: controller.signal }), (e) => e === reason);',
         'await assert.rejects(previewFromSource("./jsx-source.tsx", { signal: controller.signal }), (e) => e === reason);',
+        'await assert.rejects(resolveFromSource("./jsx-source.tsx", { signal: controller.signal }), (e) => e === reason);',
         'process.stdout.write("ok");',
       ].join("\n");
 
       for (const conditions of [["--conditions=source"], []] as const) {
         assert.equal(runInNode(conditions, plainBuildScript, root), "ok");
         assert.equal(runInNode(conditions, plainPreviewScript, root), "ok");
+        assert.equal(runInNode(conditions, plainResolveScript, root), "ok");
         assert.equal(runInNode(conditions, jsxBuildScript, root), "ok");
+        assert.equal(runInNode(conditions, jsxResolveScript, root), "ok");
         assert.equal(
           runInNode(conditions, preCancelIsolationScript, root),
           "ok",

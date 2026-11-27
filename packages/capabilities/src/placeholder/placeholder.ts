@@ -1,15 +1,9 @@
 import {
   CapabilityError,
-  authorIdSchema,
-  isMorphKey,
-  layoutStyleKeys,
-  layoutStyleSchema,
-  linkTargetSchema,
   matchLayoutPlaceholderKey,
   matchMasterPlaceholderSpec,
   nativePlaceholderRefSchema,
   parseCapabilityLayoutContract,
-  visualStyleSchema,
   type BoundObjectCapability,
   type BoundObjectNativeCollaboration,
   type CapabilityInput,
@@ -17,14 +11,13 @@ import {
   type EmitContext,
   type EmitOutput,
   type Rect,
-  type MorphKey,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
   type ObjectResolveContext,
   type PaintOutput,
   type ObjectResolution,
+  type SealedCanvasMechanism,
 } from "@pptxdk/core/capability";
-import { CommonNode } from "@pptxdk/core/document";
 import {
   assertXml10Characters,
   placeholderRefXml,
@@ -50,7 +43,6 @@ import {
 import { z } from "zod";
 
 import {
-  optionalNameSchema,
   nativeLinkXml,
   parseLinkTarget,
   parseMorphKey,
@@ -69,14 +61,31 @@ import {
   resolvePlaceholderVisualStyle,
 } from "../shared/style-inheritance.ts";
 import {
+  assertVisualBoxExtent,
   emitPlaceholderVisualSpPr,
   readSpPrAppearance,
   resolveVisualModel,
-  visualStyleKeys,
   type PlaceholderSpPrFlags,
   type ResolvedVisualModel,
 } from "../shared/visual.ts";
 import { placeholderCodegen } from "./placeholder-codegen.ts";
+import {
+  createPlaceholderNode,
+  placeholderAllowedPropKeys,
+  placeholderDeclarationPropsSchema,
+  placeholderObjectStyleSchema,
+  placeholderStyleKeys,
+  type PlaceholderDeclarationProps,
+  type PlaceholderNode,
+} from "./placeholder-schemas.ts";
+
+export {
+  createPlaceholderNode,
+  placeholderDeclarationPropsSchema,
+  placeholderObjectStyleSchema,
+  type PlaceholderDeclarationProps,
+  type PlaceholderNode,
+};
 
 const NonVisualSpIdSchema = z.object({
   id: ooxmlNonNegativeIntSchema,
@@ -87,42 +96,7 @@ const NonVisualSpPrFlagsSchema = z.object({
   txBox: ooxmlBoolSchema.optional(),
 });
 
-export const placeholderObjectStyleSchema = z
-  .strictObject({
-    ...layoutStyleSchema.unwrap().shape,
-    ...visualStyleSchema.unwrap().shape,
-  })
-  .readonly();
-
-export const placeholderDeclarationPropsSchema = z.strictObject({
-  id: authorIdSchema.optional(),
-  name: optionalNameSchema.optional(),
-  morphKey: z.custom<MorphKey>(isMorphKey).optional(),
-  placeholder: z.string().min(1).optional(),
-  nativePlaceholder: nativePlaceholderRefSchema.optional(),
-  link: linkTargetSchema.optional(),
-  style: placeholderObjectStyleSchema.optional(),
-});
-
-export type PlaceholderDeclarationProps = z.infer<
-  typeof placeholderDeclarationPropsSchema
->;
-
-export type PlaceholderNode = CommonNode<
-  "placeholder",
-  PlaceholderDeclarationProps
->;
-
-const placeholderAllowedParameters = Object.keys(
-  placeholderDeclarationPropsSchema.shape,
-);
-
-/** Creates an editable AST node representing an unpopulated native content placeholder (`<p:sp><p:ph .../></p:sp>` without `<p:txBody>`). */
-export function createPlaceholderNode(
-  props: PlaceholderDeclarationProps,
-): PlaceholderNode {
-  return new CommonNode("placeholder", "placeholder", props);
-}
+const placeholderAllowedStyleKeys = new Set<string>(placeholderStyleKeys);
 
 type ResolvedPlaceholderModel = {
   readonly box: Rect;
@@ -455,7 +429,10 @@ export const contentPlaceholderMechanism = defineCanvasMechanism({
 });
 
 /** Capability preserving unpopulated non-text content placeholder slots across import/emit without synthesizing empty text bodies. */
-export const placeholderCapability = {
+export const placeholderCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [SealedCanvasMechanism<"content-placeholder">]
+> = {
   declaration: "placeholder",
   mechanisms: [contentPlaceholderMechanism] as const,
   codegen: placeholderCodegen,
@@ -465,7 +442,7 @@ export const placeholderCapability = {
     context: CapabilityParseContext,
   ): BoundObjectCapability {
     const unknown = Object.keys(input.props).find(
-      (key) => !placeholderAllowedParameters.includes(key),
+      (key) => !placeholderAllowedPropKeys.has(key),
     );
     if (unknown !== undefined) {
       throw new CapabilityError(
@@ -501,10 +478,7 @@ export const placeholderCapability = {
     const contract = parseCapabilityLayoutContract({
       nativeKind: "sp",
       props: input.props,
-      allowedStyleKeys: new Set<string>([
-        ...layoutStyleKeys,
-        ...visualStyleKeys,
-      ]),
+      allowedStyleKeys: placeholderAllowedStyleKeys,
       allowPadding: false,
       path: context.path,
     });
@@ -588,6 +562,9 @@ export const placeholderCapability = {
         const hasBox =
           placeholder === undefined ||
           placeholderGeometry?.hasLocalBoxOverride === true;
+        if (hasBox) {
+          assertVisualBoxExtent(box);
+        }
         const visual = resolveVisualModel({
           theme: placeholder?.masterTheme ?? resolveContext.theme,
           style: visualStyle,

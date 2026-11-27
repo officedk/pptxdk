@@ -9,21 +9,22 @@ import { CommonContainer } from "@pptxdk/core/document";
 import type { ReactNode } from "react";
 
 import {
-  breatheOptionsSchema,
+  breatheOptionsShape,
   easingSchema,
   effectDelaySchema,
   effectDurationSchema,
   effectPresetSchema,
-  entranceEffectSchema,
+  entranceEffectShape,
   intervalMsSchema,
   motionDirectionSchema,
   motionGranularitySchema,
   motionHexColorSchema,
   motionMomentOffsetSchema,
   motionMomentSchema,
-  motionScopeAuthorPropsSchema,
+  motionScopeAuthorPropKeys,
   motionScopeHandleSchema,
   motionScopeModeSchema,
+  motionStepAuthorPropKeys,
   motionStepAuthorPropsSchema,
   repeatCountSchema,
   spinAngleSchema,
@@ -158,6 +159,8 @@ export type MotionScopeDeclaration = {
   readonly startAt?: MotionTiming;
   readonly publishStart?: MotionMoment;
   readonly publishEnd?: MotionMoment;
+  /** Internal parallel grouping scope for explicit-motion containers; omitted from public scope observations. */
+  readonly implicit?: true;
 };
 
 export type MotionScopeProps = MotionScopeAuthorProps & {
@@ -386,7 +389,7 @@ export function fillColor(options: FillColorOptions): EmphasisEffect {
 // Retains extra options from structured JavaScript input for formal effect validation diagnostics.
 const breatheUnknownParameters = Symbol("breathe unknown parameters");
 const breatheOptionNames = new Set([
-  ...Object.keys(breatheOptionsSchema.unwrap().shape),
+  ...Object.keys(breatheOptionsShape),
   "by",
   "intervalMs",
 ]);
@@ -490,6 +493,7 @@ type LocalContainerValue = {
   readonly type: "container";
   readonly enabled: boolean;
   readonly defaultEnter?: readonly NormalizedEffect[];
+  readonly groupsAsParallelUnit?: true;
 };
 
 export type ResolvedMotionEffect = {
@@ -591,9 +595,7 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   breathe: "emphasis",
   fillColor: "emphasis",
 };
-const effectKeys: readonly string[] = Object.keys(
-  entranceEffectSchema.unwrap().shape,
-);
+const effectKeys: readonly string[] = Object.keys(entranceEffectShape);
 
 function normalizeColor(
   value: unknown,
@@ -1008,12 +1010,10 @@ function validatedPublisher(value: unknown): MotionMoment | undefined {
   return momentValue;
 }
 
-const motionScopeAllowedParameters = new Set(
-  Object.keys(motionScopeAuthorPropsSchema.unwrap().shape),
-);
+const motionScopeAllowedParameters = new Set(motionScopeAuthorPropKeys);
 
 const motionStepAllowedParameters = new Set([
-  ...Object.keys(motionStepAuthorPropsSchema.unwrap().shape),
+  ...motionStepAuthorPropKeys,
   "stepIdentity",
 ]);
 
@@ -1195,11 +1195,21 @@ export function motionAnnotations(
 export function motionContainerAnnotations(
   props: Readonly<Record<string, unknown>>,
   target: MotionTarget | undefined,
-  options: { readonly propagatesDefaultEnter?: boolean } = {},
+  options: {
+    readonly propagatesDefaultEnter?: boolean;
+    readonly groupsAsParallelUnit?: boolean;
+  } = {},
 ): readonly CapabilityAnnotation[] {
   validateMotionFlag(props["motion"]);
   const enabled = props["motion"] !== false;
   const propagatesDefaultEnter = options.propagatesDefaultEnter === true;
+  const hasExplicitMotion =
+    enabled &&
+    (props["enter"] !== undefined ||
+      props["emphasis"] !== undefined ||
+      props["motion"] === true);
+  const groupsAsParallelUnit =
+    options.groupsAsParallelUnit === true && hasExplicitMotion;
   let defaultEnter: readonly NormalizedEffect[] | undefined;
   if (enabled && propagatesDefaultEnter && props["enter"] !== undefined) {
     defaultEnter = Object.freeze(
@@ -1209,7 +1219,7 @@ export function motionContainerAnnotations(
     );
   }
   const annotations: CapabilityAnnotation[] = [];
-  if (!enabled || defaultEnter !== undefined) {
+  if (!enabled || defaultEnter !== undefined || groupsAsParallelUnit) {
     annotations.push({
       capability: "motion",
       optional: true,
@@ -1217,6 +1227,9 @@ export function motionContainerAnnotations(
         type: "container",
         enabled,
         ...(defaultEnter === undefined ? {} : { defaultEnter }),
+        ...(groupsAsParallelUnit
+          ? { groupsAsParallelUnit: true as const }
+          : {}),
       } satisfies LocalContainerValue),
       resolveContributions: resolveMotionContributions,
     });
@@ -1342,6 +1355,37 @@ export function resolveMotionContributions(
         | undefined;
       const enabled =
         childFrame.enabled && (container === undefined || container.enabled);
+      // Group explicit-motion containers (e.g., Box with enter/motion) inside an outer MotionScope
+      // as a single parallel unit before emitting the container's own background shape and children.
+      if (
+        container?.groupsAsParallelUnit === true &&
+        enabled &&
+        childFrame.scopes.length > 0
+      ) {
+        const parent = childFrame.scopes.at(-1);
+        const implicitScope: MotionScopeDeclaration = Object.freeze({
+          identity: createMotionIdentity("scope"),
+          ...(parent === undefined ? {} : { parent: parent.identity }),
+          ...(childFrame.step === undefined ? {} : { step: childFrame.step }),
+          mode: "parallel",
+          delay: 0,
+          implicit: true,
+        });
+        resolved.push(
+          Object.freeze({
+            ...containerContribution!,
+            optional: true,
+            value: Object.freeze({
+              type: "scope" as const,
+              scope: implicitScope,
+            }),
+          }),
+        );
+        childFrame = {
+          ...childFrame,
+          scopes: Object.freeze([...childFrame.scopes, implicitScope]),
+        };
+      }
       if (localContribution !== undefined && enabled) {
         const local = localContribution.value as LocalMotionValue;
         const inherited = local.enterDeclared

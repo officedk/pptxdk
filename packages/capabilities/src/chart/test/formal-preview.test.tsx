@@ -6,9 +6,10 @@ import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { chartCapability } from "@pptxdk/capabilities/chart";
 import { Chart } from "@pptxdk/capabilities/chart-elements";
 import { chart, deck, font, slide } from "@pptxdk/capabilities/document";
-import { type CapabilityModule, CommonNode } from "@pptxdk/core";
+import { type CapabilityModule, CommonNode, defineTheme } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
+import { createImporter } from "@pptxdk/import";
 import { paint } from "@pptxdk/preview";
 import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
@@ -1493,5 +1494,534 @@ describe("Chart static preview, layout parity, and textCapability isolation", ()
     expect(svg).toMatch(/<rect[^>]*fill="#1D4ED8"/);
     expect(svg).toMatch(/<rect[^>]*fill="#DC2626"/);
     expect(svg).toMatch(/<rect[^>]*fill="#047857"/);
+  });
+
+  it("reserves non-clipping margins for dual-axis combo charts with rotated vertical titles and multi-digit ticks when plotArea is omitted", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const chartStyle = {
+      position: "absolute" as const,
+      left: 20,
+      top: 20,
+      width: 560,
+      height: 320,
+      fontFamily: jostFont,
+      fontSize: 13,
+    };
+    const axes = {
+      quarter: { kind: "category" as const, title: "Quarter" },
+      primary: {
+        kind: "value" as const,
+        position: "left" as const,
+        title: "Revenue ($M, Adjusted)",
+        min: 0,
+        max: 1200,
+        majorUnit: 300,
+        numberFormat: "#,##0",
+      },
+      secondary: {
+        kind: "value" as const,
+        position: "right" as const,
+        title: "Operating Margin (%)",
+        min: 0,
+        max: 1.2,
+        majorUnit: 0.3,
+        numberFormat: "0%",
+      },
+    };
+    const groups = [
+      {
+        kind: "column" as const,
+        axes: { category: "quarter", value: "primary" },
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Q1", "Q2", "Q3", "Q4"],
+        },
+        series: [{ name: "Revenue", values: [450, 720, 960, 1150] }],
+      },
+      {
+        kind: "line" as const,
+        axes: { category: "quarter", value: "secondary" },
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["Q1", "Q2", "Q3", "Q4"],
+        },
+        series: [{ name: "Margin", values: [0.25, 0.45, 0.8, 1.1] }],
+      },
+    ];
+
+    const vanillaResult = await previewDoc(
+      deck({ width: 640, height: 360 }).append(
+        slide({ id: "dual-axis-margins", background: "#FFFFFF" }).append(
+          chart({
+            id: "dual-combo",
+            title: "Quarterly Revenue vs Margin",
+            legend: "bottom",
+            style: chartStyle,
+            axes,
+            groups,
+          }),
+        ),
+      ),
+    );
+    const jsxDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "dual-axis-margins", background: "#FFFFFF" },
+          createElement(Chart, {
+            id: "dual-combo",
+            title: "Quarterly Revenue vs Margin",
+            legend: "bottom",
+            style: chartStyle,
+            axes,
+            groups,
+          }),
+        ),
+      ),
+    );
+    const jsxResult = await previewDoc(jsxDoc);
+
+    assert.deepEqual((await validatePptx(vanillaResult.pptx)).errors, []);
+    const files = unzipSync(vanillaResult.pptx);
+    const chartXml = strFromU8(files["ppt/charts/chart1.xml"]!);
+    expect(chartXml).not.toContain("<c:manualLayout>");
+
+    const page = vanillaResult.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.ok(page.png !== undefined);
+    assert.ok(page.svg !== undefined);
+    assert.deepEqual(jsxResult.pages[0]?.png, page.png);
+
+    // Only the outer chart box clipPath and plotArea clipPath should exist;
+    // any additional clipPath indicates tick label or axis title overflow truncation.
+    const clipMatches = page.svg.match(/<clipPath\b/gu) ?? [];
+    expect(clipMatches).toHaveLength(2);
+
+    // Verify rendered PNG margins and separation on both left and right vertical bands.
+    const plotClipMatch = page.svg.match(
+      /<clipPath id="rp-chart-clip-[^"]+-2"[^>]*><rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"\/>/u,
+    );
+    assert.ok(plotClipMatch !== null);
+    const plotX = Number(plotClipMatch[1]);
+    const plotY = Number(plotClipMatch[2]);
+    const plotW = Number(plotClipMatch[3]);
+    const plotH = Number(plotClipMatch[4]);
+    const png = PNG.sync.read(Buffer.from(page.png));
+    const yStart = Math.ceil(plotY) + 6;
+    const yEnd = Math.floor(plotY + plotH) - 6;
+    const columnHasInk = (x: number) => {
+      for (let y = yStart; y <= yEnd; y += 1) {
+        const idx = (y * png.width + x) * 4;
+        if (
+          png.data[idx]! < 245 ||
+          png.data[idx + 1]! < 245 ||
+          png.data[idx + 2]! < 245
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+    const findInkBands = (fromX: number, toX: number) => {
+      const bands: { start: number; end: number }[] = [];
+      let start = -1;
+      for (let x = fromX; x <= toX; x += 1) {
+        if (columnHasInk(x)) {
+          if (start < 0) start = x;
+        } else if (start >= 0) {
+          bands.push({ start, end: x - 1 });
+          start = -1;
+        }
+      }
+      if (start >= 0) bands.push({ start, end: toX });
+      return bands;
+    };
+
+    // Left side: white outer margin before rotated title, >= 2 ink bands (title + ticks) separated by clear gap.
+    const leftBands = findInkBands(20, Math.floor(plotX) - 5);
+    expect(leftBands.length).toBeGreaterThanOrEqual(2);
+    expect(leftBands[0]!.start).toBeGreaterThanOrEqual(22);
+    const leftTitleBand = leftBands[0]!;
+    const leftTicksStart = leftBands[1]!.start;
+    expect(leftTicksStart - leftTitleBand.end).toBeGreaterThanOrEqual(4);
+
+    // Right side: ticks + rotated title separated by clear gap, white outer margin before box right edge (580).
+    const rightBands = findInkBands(Math.ceil(plotX + plotW) + 5, 579);
+    expect(rightBands.length).toBeGreaterThanOrEqual(2);
+    const rightTicksEnd = rightBands[rightBands.length - 2]!.end;
+    const rightTitleBand = rightBands[rightBands.length - 1]!;
+    expect(rightTitleBand.start - rightTicksEnd).toBeGreaterThanOrEqual(4);
+    expect(rightTitleBand.end).toBeLessThanOrEqual(577);
+  });
+
+  it("reserves non-clipping left margins for decimal-scale area, line, and scatter charts with rotated vertical titles and omitted fontSize", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const chartStyle = {
+      position: "absolute" as const,
+      left: 20,
+      top: 20,
+      width: 560,
+      height: 300,
+      fontFamily: jostFont,
+    };
+
+    const cases = [
+      {
+        label: "area-decimal-midCat",
+        axes: {
+          x: { kind: "category" as const, title: "Stage" },
+          y: {
+            kind: "value" as const,
+            position: "left" as const,
+            title: "Density (kg/L) and Cumulative Adjustment Across Batches",
+            min: 0,
+            max: 3.5,
+            majorUnit: 0.5,
+            numberFormat: "0.0",
+          },
+        },
+        groups: [
+          {
+            kind: "area" as const,
+            axes: { category: "x", value: "y" },
+            data: {
+              kind: "shared-categories" as const,
+              categories: ["Start", "Mid", "End"],
+            },
+            series: [{ name: "Batch A", values: [0.5, 2.25, 3.4] }],
+          },
+        ],
+      },
+      {
+        label: "line-decimal",
+        axes: {
+          x: { kind: "category" as const, title: "Sample" },
+          y: {
+            kind: "value" as const,
+            position: "left" as const,
+            title: "Score (0.0 - 3.5)",
+            min: 0,
+            max: 3.5,
+            majorUnit: 0.5,
+            numberFormat: "0.0",
+          },
+        },
+        groups: [
+          {
+            kind: "line" as const,
+            axes: { category: "x", value: "y" },
+            data: {
+              kind: "shared-categories" as const,
+              categories: ["S1", "S2", "S3"],
+            },
+            series: [{ name: "Observed", values: [0.8, 1.9, 3.2] }],
+          },
+        ],
+      },
+      {
+        label: "scatter-decimal-horizontal-axis-first",
+        axes: {
+          x: {
+            kind: "value" as const,
+            title: "Elapsed (h)",
+            min: 0,
+            max: 10,
+            majorUnit: 2,
+          },
+          y: {
+            kind: "value" as const,
+            position: "left" as const,
+            title: "Concentration (mg/mL)",
+            min: 0,
+            max: 3.5,
+            majorUnit: 0.5,
+            numberFormat: "0.0",
+          },
+        },
+        groups: [
+          {
+            kind: "scatter" as const,
+            axes: { x: "x", y: "y" },
+            data: { kind: "xy" as const },
+            series: [{ name: "Run 1", x: [0, 5, 10], y: [0.4, 2.1, 3.3] }],
+          },
+        ],
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const vanillaResult = await previewDoc(
+        deck({ width: 640, height: 360 }).append(
+          slide({ id: item.label, background: "#FFFFFF" }).append(
+            chart({
+              id: item.label,
+              style: chartStyle,
+              axes: item.axes,
+              groups: item.groups,
+            }),
+          ),
+        ),
+      );
+      const jsxDoc = await expandDocument(
+        createElement(
+          Deck,
+          { width: 640, height: 360 },
+          createElement(
+            Slide,
+            { id: item.label, background: "#FFFFFF" },
+            createElement(Chart, {
+              id: item.label,
+              style: chartStyle,
+              axes: item.axes,
+              groups: item.groups,
+            }),
+          ),
+        ),
+      );
+      const jsxResult = await previewDoc(jsxDoc);
+
+      assert.deepEqual(
+        (await validatePptx(vanillaResult.pptx)).errors,
+        [],
+        item.label,
+      );
+      const chartXml = strFromU8(
+        unzipSync(vanillaResult.pptx)["ppt/charts/chart1.xml"]!,
+      );
+      expect(chartXml, item.label).not.toContain("<c:manualLayout>");
+
+      const page = vanillaResult.pages[0]!;
+      assert.deepEqual(page.errors, [], item.label);
+      assert.ok(page.png !== undefined, item.label);
+      assert.ok(page.svg !== undefined, item.label);
+      assert.deepEqual(jsxResult.pages[0]?.png, page.png, item.label);
+
+      const clipMatches = page.svg.match(/<clipPath\b/gu) ?? [];
+      expect(clipMatches, item.label).toHaveLength(2);
+
+      const plotClipMatch = page.svg.match(
+        /<clipPath id="rp-chart-clip-[^"]+-2"[^>]*><rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"\/>/u,
+      );
+      assert.ok(plotClipMatch !== null, item.label);
+      const plotX = Number(plotClipMatch[1]);
+      const plotY = Number(plotClipMatch[2]);
+      const plotH = Number(plotClipMatch[4]);
+      const png = PNG.sync.read(Buffer.from(page.png));
+      const yStart = Math.ceil(plotY) + 6;
+      const yEnd = Math.floor(plotY + plotH) - 6;
+      const bands: { start: number; end: number }[] = [];
+      let start = -1;
+      for (let x = 20; x <= Math.floor(plotX) - 5; x += 1) {
+        let ink = false;
+        for (let y = yStart; y <= yEnd; y += 1) {
+          const idx = (y * png.width + x) * 4;
+          if (
+            png.data[idx]! < 245 ||
+            png.data[idx + 1]! < 245 ||
+            png.data[idx + 2]! < 245
+          ) {
+            ink = true;
+            break;
+          }
+        }
+        if (ink) {
+          if (start < 0) start = x;
+        } else if (start >= 0) {
+          bands.push({ start, end: x - 1 });
+          start = -1;
+        }
+      }
+      if (start >= 0) bands.push({ start, end: Math.floor(plotX) - 5 });
+      expect(bands.length, item.label).toBeGreaterThanOrEqual(2);
+      expect(bands[0]!.start, item.label).toBeGreaterThanOrEqual(22);
+      expect(
+        bands[1]!.start - bands[0]!.end,
+        item.label,
+      ).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("preserves exact explicit plotArea pixel coordinates and native manualLayout across JSX and Vanilla", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const explicitPlotArea = { left: 96, top: 44, width: 410, height: 210 };
+    const chartStyle = {
+      position: "absolute" as const,
+      left: 20,
+      top: 20,
+      width: 560,
+      height: 320,
+      fontFamily: jostFont,
+      fontSize: 13,
+    };
+    const groups = [
+      {
+        kind: "area" as const,
+        data: { kind: "shared-categories" as const, categories: ["A", "B"] },
+        series: [{ name: "S", values: [1.5, 3.0] }],
+      },
+    ];
+
+    const vanillaResult = await previewDoc(
+      deck({ width: 640, height: 360 }).append(
+        slide({ id: "explicit-plot", background: "#FFFFFF" }).append(
+          chart({
+            id: "explicit-area",
+            style: chartStyle,
+            plotArea: explicitPlotArea,
+            groups,
+          }),
+        ),
+      ),
+    );
+    const jsxDoc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "explicit-plot", background: "#FFFFFF" },
+          createElement(Chart, {
+            id: "explicit-area",
+            style: chartStyle,
+            plotArea: explicitPlotArea,
+            groups,
+          }),
+        ),
+      ),
+    );
+    const jsxResult = await previewDoc(jsxDoc);
+
+    assert.deepEqual((await validatePptx(vanillaResult.pptx)).errors, []);
+    const page = vanillaResult.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.deepEqual(jsxResult.pages[0]?.png, page.png);
+    expect(page.svg).toContain(
+      '<rect x="116" y="64" width="410" height="210"/>',
+    );
+
+    const chartXml = strFromU8(
+      unzipSync(vanillaResult.pptx)["ppt/charts/chart1.xml"]!,
+    );
+    expect(chartXml).toContain("<c:manualLayout>");
+    expect(chartXml).toContain('<c:x val="0.171429"/>');
+    expect(chartXml).toContain('<c:y val="0.1375"/>');
+    expect(chartXml).toContain('<c:w val="0.732143"/>');
+    expect(chartXml).toContain('<c:h val="0.65625"/>');
+  });
+
+  it("previews subset-embedded roundtrip chart without synthetic probe glyph errors", async () => {
+    const resolveWith = createResolver(documentCapabilities);
+    const importPptx = createImporter(documentCapabilities);
+    const doc = deck({
+      width: 640,
+      height: 360,
+      theme: defineTheme({
+        name: "SubsetChart",
+        fonts: { major: jostFont, minor: jostFont },
+      }),
+    }).append(
+      slide({ id: "subset-roundtrip", background: "#FFFFFF" }).append(
+        chart({
+          id: "subset-q",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 592,
+            height: 312,
+            fontFamily: jostFont,
+            fontSize: 12,
+          },
+          groups: [
+            {
+              kind: "column",
+              data: {
+                kind: "shared-categories",
+                categories: ["Q1", "Q2"],
+              },
+              series: [{ name: "S1", values: [12, 18] }],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const emitted = emit(resolveWith(doc), { embedFonts: "subset" });
+    assert.deepEqual((await validatePptx(emitted.pptx)).errors, []);
+
+    const imported = importPptx(new Uint8Array(emitted.pptx));
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const previewed = paint(resolveWith(imported.document));
+    const page = previewed.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.ok(page.png !== undefined);
+  });
+
+  it("treats explicit numeric and pt value-axis lineHeight as fixed length rather than a multiplier", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+    const buildWithLineHeight = (lineHeight: number | `${number}pt`) =>
+      previewDoc(
+        deck({ width: 320, height: 220 }).append(
+          slide({ id: "lh-slide", background: "#FFFFFF" }).append(
+            chart({
+              id: "lh-chart",
+              style: {
+                position: "absolute",
+                left: 16,
+                top: 16,
+                width: 150,
+                height: 180,
+                fontFamily: jostFont,
+                fontSize: 13,
+              },
+              axes: {
+                category: { kind: "category" },
+                value: {
+                  kind: "value",
+                  min: 0,
+                  max: 20,
+                  majorUnit: 10,
+                  numberFormat: "0.00000000",
+                  style: { fontSize: 13, lineHeight },
+                },
+              },
+              groups: [
+                {
+                  kind: "column",
+                  data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
+                  series: [{ name: "S1", values: [10, 20] }],
+                },
+              ],
+            }),
+          ),
+        ),
+      );
+
+    const pxResult = await buildWithLineHeight(20);
+    const ptResult = await buildWithLineHeight("15pt");
+
+    for (const result of [pxResult, ptResult]) {
+      const page = result.pages[0]!;
+      assert.deepEqual(page.errors, []);
+      assert.ok(page.png !== undefined);
+      assert.ok(page.svg !== undefined);
+
+      const clipHeights = [
+        ...page.svg.matchAll(
+          /<clipPath id="rp-chart-clip-\d+-\d+-(\d+)"[^>]*><rect[^>]*height="([^"]+)"\/>/gu,
+        ),
+      ]
+        .filter((m) => Number(m[1]) >= 3)
+        .map((m) => Number(m[2]));
+      assert.ok(clipHeights.length > 0);
+      for (const h of clipHeights) {
+        expect(h).toBeGreaterThanOrEqual(20);
+        expect(h).toBeLessThanOrEqual(24);
+      }
+    }
+    assert.deepEqual(pxResult.pages[0]?.png, ptResult.pages[0]?.png);
   });
 });

@@ -1033,6 +1033,289 @@ describe("Ticket 06 Part 2: codegen vanilla + react new author syntax, strict co
     ]);
   });
 
+  it("roundtrips a full-feature deck (master footer letterSpacing, multiple Chart kinds, merged Table, and Shape) with zero ImportDiagnostics and dual-target codegen rebuild", async () => {
+    const masterFooterPlaceholders = {
+      dateTime: {
+        text: "2026-11-27",
+        style: {
+          position: "absolute" as const,
+          left: 40,
+          top: 496,
+          width: 180,
+          height: 24,
+          fontFamily: jostFont,
+          fontSize: 10,
+          color: "#475569",
+          letterSpacing: 1.6,
+        },
+      },
+      footer: {
+        text: "Acme Full Feature",
+        style: {
+          position: "absolute" as const,
+          left: 240,
+          top: 496,
+          width: 320,
+          height: 24,
+          fontFamily: jostFont,
+          fontSize: 10,
+          color: "#334155",
+          letterSpacing: 2,
+          align: "center" as const,
+        },
+      },
+      slideNumber: {
+        style: {
+          position: "absolute" as const,
+          left: 780,
+          top: 496,
+          width: 140,
+          height: 24,
+          fontFamily: jostFont,
+          fontSize: 10,
+          color: "#0F172A",
+          letterSpacing: 0.8,
+          align: "right" as const,
+        },
+      },
+    };
+
+    const fullFeatureLayout = defineSlideLayout({
+      id: "full-feature-layout",
+      name: "Full Feature Layout",
+      type: "obj",
+      preserve: true,
+    });
+
+    const initial = await build(
+      <Deck
+        width={960}
+        height={540}
+        theme={{ fonts: { major: jostFont, minor: jostFont } }}
+      >
+        <SlideMaster
+          id="full-feature-master"
+          preserve={true}
+          footerPlaceholders={masterFooterPlaceholders}
+        >
+          <SlideLayout layout={fullFeatureLayout} />
+        </SlideMaster>
+        <Slide id="overview" layout={fullFeatureLayout}>
+          <Shape
+            id="kpi-banner"
+            geometry="roundRect"
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 28,
+              width: 880,
+              height: 52,
+              background: linearGradient(90, "#0F172A", "#1D4ED8"),
+              border: { color: "#1E40AF", width: 1, style: "solid" },
+              fontFamily: jostFont,
+              fontSize: 18,
+              color: "#FFFFFF",
+              letterSpacing: 1.2,
+            }}
+          >
+            Quarterly Business Review
+          </Shape>
+          <Chart
+            id="revenue-column-chart"
+            groups={[
+              {
+                kind: "column",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Q1", "Q2", "Q3"],
+                },
+                series: [
+                  { name: "Revenue", values: [120, 145, 178] },
+                  { name: "Target", values: [110, 140, 170] },
+                ],
+              },
+            ]}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 96,
+              width: 280,
+              height: 180,
+              fontFamily: jostFont,
+              fontSize: 10,
+            }}
+          />
+          <Chart
+            id="margin-line-chart"
+            groups={[
+              {
+                kind: "line",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Q1", "Q2", "Q3"],
+                },
+                series: [{ name: "Margin %", values: [22, 25, 28] }],
+              },
+            ]}
+            style={{
+              position: "absolute",
+              left: 340,
+              top: 96,
+              width: 280,
+              height: 180,
+              fontFamily: jostFont,
+              fontSize: 10,
+            }}
+          />
+          <Chart
+            id="mix-pie-chart"
+            groups={[
+              {
+                kind: "pie",
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Enterprise", "SMB"],
+                },
+                series: [{ name: "Mix", values: [68, 32] }],
+              },
+            ]}
+            style={{
+              position: "absolute",
+              left: 640,
+              top: 96,
+              width: 280,
+              height: 180,
+              fontFamily: jostFont,
+              fontSize: 10,
+            }}
+          />
+          <Table
+            id="merged-metrics-table"
+            columns={[180, 180, 180]}
+            style={{
+              position: "absolute",
+              left: 40,
+              top: 292,
+              width: 540,
+              fontFamily: jostFont,
+              fontSize: 11,
+            }}
+          >
+            <Row style={{ height: 34, background: "#1E293B" }}>
+              <Cell
+                colSpan={2}
+                style={{
+                  color: "#FFFFFF",
+                  border: { color: "#CBD5E1", width: 1, style: "solid" },
+                }}
+              >
+                Merged Region Header
+              </Cell>
+              <Cell
+                style={{
+                  color: "#FFFFFF",
+                  border: { color: "#CBD5E1", width: 1, style: "solid" },
+                }}
+              >
+                Status
+              </Cell>
+            </Row>
+            <Row style={{ height: 34 }}>
+              <Cell
+                rowSpan={2}
+                style={{
+                  background: "#EFF6FF",
+                  border: { color: "#CBD5E1", width: 1, style: "solid" },
+                }}
+              >
+                EMEA (2 rows)
+              </Cell>
+              <Cell
+                style={{
+                  border: { color: "#CBD5E1", width: 1, style: "solid" },
+                }}
+              >
+                Q2 Actual
+              </Cell>
+              <Cell
+                style={{
+                  border: { color: "#CBD5E1", width: 1, style: "solid" },
+                }}
+              >
+                On Track
+              </Cell>
+            </Row>
+            <Row style={{ height: 34 }}>
+              <Cell
+                style={{
+                  border: { color: "#CBD5E1", width: 1, style: "solid" },
+                }}
+              >
+                Q3 Forecast
+              </Cell>
+              <Cell
+                style={{
+                  border: { color: "#CBD5E1", width: 1, style: "solid" },
+                }}
+              >
+                Ahead
+              </Cell>
+            </Row>
+          </Table>
+        </Slide>
+      </Deck>,
+      { embedFonts: "full" },
+    );
+
+    const imported = importPptx(initial.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const importedSlide = imported.document.query.get("overview").node;
+    assert.equal(
+      (
+        importedSlide.props["dateTime"] as {
+          style?: Record<string, unknown>;
+        }
+      )?.style?.["letterSpacing"],
+      1.6,
+    );
+    assert.equal(
+      (importedSlide.props["footer"] as { style?: Record<string, unknown> })
+        ?.style?.["letterSpacing"],
+      2,
+    );
+    assert.equal(
+      (
+        importedSlide.props["slideNumber"] as {
+          style?: Record<string, unknown>;
+        }
+      )?.style?.["letterSpacing"],
+      0.8,
+    );
+
+    const vanillaOut = codegen(imported.document, { target: "vanilla" });
+    const reactOut = codegen(imported.document, { target: "react" });
+
+    assert.match(
+      vanillaOut.files["deck.ts"] as string,
+      /letterSpacing:\s*2\b/u,
+    );
+    assert.match(reactOut.files["deck.tsx"] as string, /letterSpacing:\s*2\b/u);
+
+    await verifyGeneratedSourcesTypecheck([
+      { label: "full-feature-vanilla", result: vanillaOut },
+      { label: "full-feature-react", result: reactOut },
+    ]);
+
+    for (const out of [vanillaOut, reactOut] as const) {
+      const rebuilt = await rebuildGeneratedSourceRelocated(out);
+      assert.deepEqual(rebuilt.file.errors, []);
+
+      const reimported = importPptx(rebuilt.built.pptx);
+      assert.deepEqual(reimported.report.diagnostics, []);
+    }
+  });
+
   it("rejects legacy top-level geometry and legacy visual style keys across canvas/media declarations", () => {
     const makeDocWith = (child: CommonNode): DeckContainer =>
       vanillaDeck({ width: 960, height: 540 }).append(

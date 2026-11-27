@@ -52,6 +52,7 @@ export type {
   LayoutLength,
   LayoutSpacing,
   LayoutStyle,
+  NonNegativeLayoutSpacing,
   PaddingStyle,
 } from "#/layout-schemas.ts";
 
@@ -593,6 +594,12 @@ export type CapabilityPresentationContribution = {
     /** Called once after core aggregates characters for this resource claim, returning final part bytes to write. */
     readonly resolveBytes?: (characters: string) => Uint8Array;
     readonly content: (relationshipId: string) => string;
+    /** Optional domain-specific diagnostic emitted instead of the generic presentation-item conflict error when this item conflicts with an existing item under the same record. */
+    readonly onConflict?: {
+      readonly code: string;
+      readonly message: string;
+      readonly details?: Readonly<Record<string, unknown>>;
+    };
   };
 };
 
@@ -620,6 +627,16 @@ export type NativeElementKind =
   | "graphicFrame"
   | "cxnSp";
 
+export type CapabilityLayoutAxes = {
+  readonly width: boolean;
+  readonly height: boolean;
+};
+
+export type CapabilityExplicitPixelSize = {
+  readonly width?: number;
+  readonly height?: number;
+};
+
 export type CapabilityLayoutContract = {
   readonly nativeKind: NativeElementKind;
   readonly layoutStyle: LayoutStyle;
@@ -629,6 +646,12 @@ export type CapabilityLayoutContract = {
     readonly bottom: number;
     readonly left: number;
   };
+  /** Finite numeric pixel width/height explicitly declared on `style` (percentages and `"auto"` remain `undefined`). */
+  readonly explicitPixelSize?: CapabilityExplicitPixelSize;
+  /** Axes constrained by explicit width/height (pixel or percentage) or opposing absolute offsets (`left+right`, `top+bottom`, `inset`). */
+  readonly fixedAxes?: CapabilityLayoutAxes;
+  /** True when `style.position` is `"relative"` or `"absolute"`. */
+  readonly positioned?: boolean;
   /** Prevents `display: "block"` `alignItems: "stretch"` from expanding auto-width replaced items to container width. */
   readonly preservesIntrinsicSize?: boolean;
   /** Enforces measured content/track dimensions as lower bounds and preserves explicit row sums over target dimensions (CSS table sizing). */
@@ -754,6 +777,8 @@ export type ObjectResolveContext = {
   readonly options: ResolveOptions;
   readonly slideNumber: number;
   readonly layoutBox?: Rect;
+  /** Axes whose final size is determined by layout constraints (explicit/percentage size, opposing offsets, flex sizing, or grid/flex stretch). */
+  readonly layoutSizedAxes?: CapabilityLayoutAxes;
   readonly placeholder?: PlaceholderResolutionContext;
   /** Convert an explicit continuity handle into an OOXML object name; objects without declared continuity omit this value. */
   readonly morphName?: string;
@@ -834,9 +859,11 @@ export type BoundObjectCapability = {
  */
 export type ObjectCapabilityModule<
   Bound extends BoundObjectCapability = BoundObjectCapability,
+  Mechanisms extends readonly NativeMechanismDefinition[] =
+    readonly NativeMechanismDefinition[],
 > = {
   readonly declaration: string;
-  readonly mechanisms?: readonly NativeMechanismDefinition[];
+  readonly mechanisms?: Mechanisms;
   readonly codegen?: unknown;
   bind(input: CapabilityInput, context: CapabilityParseContext): Bound;
 };
@@ -1031,6 +1058,8 @@ export type MastersEmitDriver = {
 /** Slide capability module that binds per-build slide declaration state into a closed handle. */
 export type SlideCapabilityModule<
   Bound extends BoundSlideCapability = BoundSlideCapability,
+  Mechanisms extends readonly NativeMechanismDefinition[] =
+    readonly NativeMechanismDefinition[],
 > = {
   /** Slide property name handled by this module when applicable to Slide declarations. */
   readonly slideProp?: string;
@@ -1046,7 +1075,7 @@ export type SlideCapabilityModule<
   readonly declaration: string;
   /** Handlers wired by this capability for internal transparent declaration hosts. */
   readonly transparentDeclarations?: readonly TransparentCapabilityModule[];
-  readonly mechanisms?: readonly NativeMechanismDefinition[];
+  readonly mechanisms?: Mechanisms;
   readonly codegen?: unknown;
   readonly mastersCanvas?: {
     paintBackdrop(input: {

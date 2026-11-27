@@ -1487,6 +1487,7 @@ function motionPlan(
     registerStep(target.stepKey, target.trigger, target.number, target.order);
   }
   for (const scope of scopes.values()) {
+    if (scope.declaration.implicit === true) continue;
     for (const key of scopeSteps(scope)) {
       const isExplicit = key.startsWith("explicit:");
       const number = isExplicit
@@ -1556,26 +1557,54 @@ function motionPlan(
     const queryScopes: MotionQueryScopeSource[] = [];
     const queryEffectSources = new Map<string, MotionQueryEffectSource>();
     // Query completes scopes along structural parent chain; each source still binds to local clock of current step.
+    const visibleParentScope = (scope: ScopeState): ScopeState | undefined => {
+      let current =
+        scope.declaration.parent === undefined
+          ? undefined
+          : scopes.get(scope.declaration.parent);
+      while (current !== undefined && current.declaration.implicit === true) {
+        current =
+          current.declaration.parent === undefined
+            ? undefined
+            : scopes.get(current.declaration.parent);
+      }
+      return current;
+    };
     const queryScopeIdentities = new Set<string>();
     for (const scope of scopes.values()) {
+      if (scope.declaration.implicit === true) continue;
       if (!scopeSteps(scope).includes(key)) continue;
       let identity: string | undefined = scope.declaration.identity;
       while (identity !== undefined && !queryScopeIdentities.has(identity)) {
-        queryScopeIdentities.add(identity);
+        const candidate = scopes.get(identity);
+        if (candidate?.declaration.implicit !== true) {
+          queryScopeIdentities.add(identity);
+        }
         identity = queryDeclarationIndex.get(identity)?.parent;
       }
     }
     // Scope edges come from declaration closure; object effects still filter by active members of this step.
+    const expandImplicitQueryMembers = (
+      members: readonly ScopeMember[],
+    ): readonly ScopeMember[] =>
+      members.flatMap((member) => {
+        if (member.kind === "scope") {
+          const child = scopes.get(member.id);
+          if (child?.declaration.implicit === true) {
+            return expandImplicitQueryMembers(
+              queryDeclarationIndex.get(member.id)?.members ?? [],
+            );
+          }
+          return queryScopeIdentities.has(member.id) ? [member] : [];
+        }
+        return memberIsActive(member, key) ? [member] : [];
+      });
     const queryDeclarationMembers = (
       scope: ScopeState,
     ): readonly ScopeMember[] =>
-      queryDeclarationIndex
-        .get(scope.declaration.identity)
-        ?.members.filter((member) =>
-          member.kind === "scope"
-            ? queryScopeIdentities.has(member.id)
-            : memberIsActive(member, key),
-        ) ?? [];
+      expandImplicitQueryMembers(
+        queryDeclarationIndex.get(scope.declaration.identity)?.members ?? [],
+      );
     const projectedNodeHosts = new Map<string, string>();
     const projectedEndHosts = new Map<string, string>();
     const preservedScopeStarts = new Set<string>();
@@ -2332,6 +2361,72 @@ function motionPlan(
       );
     };
 
+    const unwrapImplicitReportedDependencies = (
+      dependency: MotionStartDependency,
+      seen: ReadonlySet<string> = new Set(),
+    ): readonly MotionStartDependency[] => {
+      if (!("scopeId" in dependency)) return [dependency];
+      const source = scopeForPlanId(dependency.scopeId);
+      if (
+        source === undefined ||
+        source.declaration.implicit !== true ||
+        seen.has(source.declaration.identity)
+      ) {
+        return [dependency];
+      }
+      const nextSeen = new Set(seen);
+      nextSeen.add(source.declaration.identity);
+      if (dependency.point === "start") {
+        const original = scopeStartExpressions.get(source.declaration.identity);
+        if (
+          original === undefined ||
+          original.state === "no-natural-completion"
+        ) {
+          return [];
+        }
+        return original.candidates.flatMap((candidate) => {
+          let sourceDependency = candidate.dependency;
+          if (sourceDependency === undefined) {
+            const sourceStart = scopeForStartEvent(candidate.eventId);
+            if (sourceStart !== undefined) {
+              sourceDependency = {
+                scopeId: scopeId(sourceStart.declaration.identity, scopes),
+                point: "start",
+                offsetMs: 0,
+              };
+            }
+          }
+          if (sourceDependency === undefined) return [];
+          return unwrapImplicitReportedDependencies(
+            dependencyAtEvent(
+              sourceDependency,
+              candidate.offsetMs + dependency.offsetMs,
+            ),
+            nextSeen,
+          );
+        });
+      }
+      const memberEnds = scopeCompletionMembers.get(
+        source.declaration.identity,
+      );
+      if (memberEnds === undefined) return [];
+      return memberEnds.flatMap((memberEnd) => {
+        if (
+          memberEnd.state !== "unknown" ||
+          memberEnd.dependency === undefined
+        ) {
+          return [];
+        }
+        return unwrapImplicitReportedDependencies(
+          dependencyAtEvent(
+            memberEnd.dependency,
+            memberEnd.dependency.offsetMs + dependency.offsetMs,
+          ),
+          nextSeen,
+        );
+      });
+    };
+
     const reportedDependency = (
       nativeStart: MotionPlanStart,
       parentStart: TimePoint,
@@ -2346,7 +2441,10 @@ function motionPlan(
             );
       }
       if (nativeStart.kind === "end" || nativeStart.kind === "event") {
-        return nativeStart.dependency;
+        const unwrapped = unwrapImplicitReportedDependencies(
+          nativeStart.dependency,
+        );
+        return unwrapped.length === 1 ? unwrapped[0] : undefined;
       }
       if (nativeStart.kind !== "parent-start") return undefined;
       if (parentStart.state === "no-natural-completion") return undefined;
@@ -2456,7 +2554,10 @@ function motionPlan(
         return reportedDependencies(gate.start, parentStart) ?? [];
       };
       if (nativeStart.kind === "end" || nativeStart.kind === "event") {
-        return Object.freeze(expandStartDependency(nativeStart.dependency));
+        const expanded = expandStartDependency(nativeStart.dependency).flatMap(
+          (dependency) => unwrapImplicitReportedDependencies(dependency),
+        );
+        return Object.freeze(expanded);
       }
       if (nativeStart.kind === "condition-join") {
         const dependencies = nativeStart.gates.flatMap((gate) =>
@@ -2964,22 +3065,32 @@ function motionPlan(
         );
       }
       if (!scopeSteps(scope).includes(key)) continue;
+      if (scope.declaration.implicit === true) continue;
       const start = resolveScopeStart(scope);
       const end = resolveScopeEnd(scope);
-      const parent =
-        scope.declaration.parent === undefined
-          ? undefined
-          : scopes.get(scope.declaration.parent);
+      const parent = visibleParentScope(scope);
       const id = scopeId(scope.declaration.identity, scopes);
       const parentId =
         parent === undefined
           ? undefined
           : scopeId(parent.declaration.identity, scopes);
-      const observedMembers = directChildren(scope).map((member) =>
-        member.kind === "scope"
-          ? { kind: "scope" as const, id: scopeId(member.id, scopes) }
-          : { kind: "object" as const, id: member.id },
-      );
+      const observedMembersForScope = (
+        targetScope: ScopeState,
+      ): readonly (
+        | { readonly kind: "scope"; readonly id: string }
+        | { readonly kind: "object"; readonly id: number }
+      )[] =>
+        directChildren(targetScope).flatMap((member) => {
+          if (member.kind === "scope") {
+            const child = scopes.get(member.id);
+            if (child?.declaration.implicit === true) {
+              return observedMembersForScope(child);
+            }
+            return [{ kind: "scope" as const, id: scopeId(member.id, scopes) }];
+          }
+          return [{ kind: "object" as const, id: member.id }];
+        });
+      const observedMembers = observedMembersForScope(scope);
       scopeObservations.push({
         id,
         ...(parentId === undefined ? {} : { parentId }),
@@ -3003,9 +3114,9 @@ function motionPlan(
       queryScopes.push({
         identity: scope.declaration.identity,
         id,
-        ...(scope.declaration.parent === undefined
+        ...(parent === undefined
           ? {}
-          : { parentIdentity: scope.declaration.parent }),
+          : { parentIdentity: parent.declaration.identity }),
         mode: scope.declaration.mode,
         ...(scope.declaration.each === undefined
           ? {}
@@ -3189,9 +3300,9 @@ function motionPlan(
             ...(partIndex === undefined ? {} : { partIndex }),
             start: queryMomentSource(timing.start),
             end: queryMomentSource(timing.end),
-            scopeIdentities: target.value.scopes.map(
-              ({ identity }) => identity,
-            ),
+            scopeIdentities: target.value.scopes
+              .filter(({ implicit }) => implicit !== true)
+              .map(({ identity }) => identity),
           });
         }
       }
@@ -4074,12 +4185,13 @@ function motionPlan(
       }
       const start = resolveScopeStart(scope);
       const end = resolveScopeEnd(scope);
+      const parent = visibleParentScope(scope);
       queryScopesByIdentity.set(identity, {
         identity,
         id: scopeId(identity, scopes),
-        ...(scope.declaration.parent === undefined
+        ...(parent === undefined
           ? {}
-          : { parentIdentity: scope.declaration.parent }),
+          : { parentIdentity: parent.declaration.identity }),
         mode: scope.declaration.mode,
         ...(scope.declaration.each === undefined
           ? {}
@@ -4264,9 +4376,19 @@ function scopeId(
   identity: string,
   scopes: ReadonlyMap<string, ScopeState>,
 ): string {
-  const ordered = [...scopes.values()].sort(
-    (left, right) => left.order - right.order,
-  );
+  const target = scopes.get(identity);
+  if (target?.declaration.implicit === true) {
+    const orderedImplicit = [...scopes.values()]
+      .filter((scope) => scope.declaration.implicit === true)
+      .sort((left, right) => left.order - right.order);
+    const index = orderedImplicit.findIndex(
+      (scope) => scope.declaration.identity === identity,
+    );
+    return `implicit-scope-${index + 1}`;
+  }
+  const ordered = [...scopes.values()]
+    .filter((scope) => scope.declaration.implicit !== true)
+    .sort((left, right) => left.order - right.order);
   const index = ordered.findIndex(
     (scope) => scope.declaration.identity === identity,
   );

@@ -6,22 +6,31 @@ import { fileURLToPath } from "node:url";
 import {
   BuildError,
   CommonNode,
+  PreviewPageRangeError as RootPreviewPageRangeError,
   createMorphScope,
   emit,
   fade,
   font,
   formatBaseline,
   motionSchedule,
+  preview as rootPreview,
   resolve,
   targets,
   transitions,
+  type PreviewOptions,
+  type PreviewPageResult,
+  type PreviewResult,
 } from "@officedk/pptxdk";
 import {
   createResolver,
   emit as emitFromBuild,
   type CapabilityModule,
 } from "@officedk/pptxdk/build";
-import { paint, preview } from "@officedk/pptxdk/preview";
+import {
+  PreviewPageRangeError,
+  paint,
+  preview,
+} from "@officedk/pptxdk/preview";
 import {
   Deck,
   Shape,
@@ -334,6 +343,140 @@ process.stdout.write("ok");
     );
     assert.equal(child.status, 0, child.stderr);
     assert.equal(child.stdout, "ok");
+  });
+
+  it("exports preview and PreviewPageRangeError from root with ./preview parity and cold-load isolation during vanilla build", async () => {
+    assert.equal(RootPreviewPageRangeError, PreviewPageRangeError);
+    assert.equal(typeof rootPreview, "function");
+
+    const doc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "p1", background: "#FFFFFF" }).append(
+        shape({
+          id: "box",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 60,
+            height: 40,
+            background: "#2563EB",
+          },
+        }),
+      ),
+    );
+    const options: PreviewOptions = { pages: [1] };
+    const fromRoot: PreviewResult = await rootPreview(doc, options);
+    const fromSubpath = await preview(doc, options);
+    const rootPage: PreviewPageResult | undefined = fromRoot.pages[0];
+    assert.equal(fromRoot.pages.length, 1);
+    assert.equal(rootPage?.id, "p1");
+    assert.deepEqual(rootPage?.png, fromSubpath.pages[0]?.png);
+    assert.equal(rootPage?.svg, fromSubpath.pages[0]?.svg);
+
+    await assert.rejects(
+      () => rootPreview(doc, { pages: [2] }),
+      (error: unknown) =>
+        error instanceof RootPreviewPageRangeError &&
+        error instanceof PreviewPageRangeError,
+    );
+
+    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+    const coldScript = `
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "react" ||
+      specifier === "react-reconciler" ||
+      specifier.startsWith("react/") ||
+      specifier === "@pptxdk/react" ||
+      specifier.startsWith("@pptxdk/react/") ||
+      specifier.includes("@resvg/resvg-js") ||
+      specifier.includes("@pptxdk/preview") ||
+      specifier.endsWith("/preview.ts") ||
+      specifier.endsWith("/preview.js") ||
+      specifier === "./preview.ts" ||
+      specifier === "./preview.js" ||
+      specifier.includes("cli-contract")
+    ) {
+      throw new Error("root cold build loaded forbidden dependency: " + specifier);
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const rootEntry = await import("@officedk/pptxdk");
+const { deck, shape, slide } = await import("@officedk/pptxdk/vanilla");
+if (typeof rootEntry.preview !== "function" || typeof rootEntry.PreviewPageRangeError !== "function") {
+  throw new Error("root entrypoint must export preview and PreviewPageRangeError");
+}
+const doc = deck({ width: 320, height: 180 }).append(
+  slide({ id: "s1" }).append(
+    shape({
+      id: "box",
+      style: { position: "absolute", left: 10, top: 10, width: 40, height: 40 },
+    }),
+  ),
+);
+const built = await rootEntry.build(doc);
+if (built.pptx.byteLength === 0) {
+  throw new Error("expected PPTX bytes");
+}
+process.stdout.write("ok");
+`;
+    const child = spawnSync(
+      process.execPath,
+      ["--conditions=source", "--input-type=module", "--eval", coldScript],
+      { cwd: packageRoot, encoding: "utf8" },
+    );
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, "ok");
+  });
+
+  it("guides callers when root sync resolve() receives a JSX element or JSX-like object while preserving DeclarationContainer", () => {
+    const jsxElement = createElement(
+      Deck,
+      { width: 320, height: 180 },
+      createElement(Slide, { id: "s1" }),
+    );
+    const jsxLikeObject = {
+      type: Deck,
+      props: { width: 320, height: 180 },
+    };
+    const legacyReactElementLike = {
+      $$typeof: Symbol.for("react.element"),
+      type: Deck,
+      props: { children: [] },
+    };
+
+    for (const invalidInput of [
+      jsxElement,
+      jsxLikeObject,
+      legacyReactElementLike,
+    ]) {
+      assert.throws(
+        () => resolve(invalidInput as never),
+        (error: unknown) => {
+          if (!(error instanceof BuildError)) return false;
+          const diag = error.diagnostics[0];
+          return (
+            diag?.code === "invalid-structure" &&
+            diag.path === "deck" &&
+            diag.message.includes("CommonNode") &&
+            diag.message.includes("expandDocument") &&
+            diag.message.includes("resolveFromSource") &&
+            diag.message.includes("@officedk/pptxdk/build")
+          );
+        },
+      );
+    }
+
+    const doc = deck({ width: 320, height: 180 }).append(slide({ id: "s1" }));
+    const declarationContainerResolution = resolve({
+      children: [doc],
+    } as never);
+    assert.equal(declarationContainerResolution.slides.length, 1);
   });
 
   it("never loads react, react-reconciler, or @pptxdk/react from any @pptxdk/core subpath and keeps host operations off public core entries", () => {

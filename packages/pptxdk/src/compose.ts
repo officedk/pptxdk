@@ -1,5 +1,7 @@
 import {
+  BuildError,
   createResolver,
+  toBuildDiagnostic,
   type BuildOptions,
   type BuildResult,
   type CapabilityModule,
@@ -9,6 +11,32 @@ import {
 import { CommonNode } from "@pptxdk/core/document";
 import { emit, emittedBuildQuery, validateOptions } from "@pptxdk/emit";
 import type { ReactNode } from "react";
+
+function isJsxLikeInput(value: unknown): boolean {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    value instanceof CommonNode
+  ) {
+    return false;
+  }
+  if (
+    "$$typeof" in value &&
+    typeof (value as { readonly $$typeof?: unknown }).$$typeof === "symbol"
+  ) {
+    return true;
+  }
+  // Plain JSX-like object `{ type, props }` without a DeclarationContainer `children` array.
+  return (
+    "type" in value &&
+    "props" in value &&
+    !(
+      "children" in value &&
+      Array.isArray((value as { readonly children?: unknown }).children)
+    )
+  );
+}
 
 /**
  * Resolves either an editable CommonNode synchronously or a React JSX element via on-demand
@@ -58,6 +86,15 @@ export function createStagePipeline(modules: readonly CapabilityModule[]) {
     document: CommonNode,
     options: ResolveOptions = {},
   ): Resolution {
+    if (isJsxLikeInput(document)) {
+      throw new BuildError([
+        toBuildDiagnostic(
+          "deck",
+          "invalid-structure",
+          "Root resolve() synchronously accepts only an expanded CommonNode document, not a JSX/React element; await expandDocument(element) first, call resolveFromSource() from @officedk/pptxdk/node, or use async resolve() from @officedk/pptxdk/build",
+        ),
+      ]);
+    }
     return resolveDeclaration(document, options);
   }
 

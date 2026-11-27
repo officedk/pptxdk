@@ -7,21 +7,25 @@ const hook = registerHooks({
   resolve(specifier, context, nextResolve) {
     assert.doesNotMatch(
       specifier,
-      /^(?:@ykdz\/cli-contract|@resvg\/resvg-js|react|react-reconciler)(?:\/|$)/,
+      /^(?:@boringparts\/cli-contract|@resvg\/resvg-js|react|react-reconciler)(?:\/|$)/,
     );
     return nextResolve(specifier, context);
   },
 });
 const { default: document } = await import("./deck.ts");
-const { build } = await import("@officedk/pptxdk");
+const { PreviewPageRangeError, build, preview } =
+  await import("@officedk/pptxdk");
 const { selectCapabilities } = await import("@officedk/pptxdk/build");
 assert.equal(typeof selectCapabilities, "function");
+assert.equal(typeof PreviewPageRangeError, "function");
 const built = await build(document, { embedFonts: "subset" });
 await writeFile("sdk.pptx", built.pptx);
 hook.deregister();
 
-const { preview } = await import("@officedk/pptxdk/preview");
-const { importPptxFile } = await import("@officedk/pptxdk/node");
+const { importPptxFile, resolveFromSource } =
+  await import("@officedk/pptxdk/node");
+const resolved = await resolveFromSource("./deck.ts");
+assert.equal(resolved.slides.length, 1);
 const { document: loaded } = await importPptxFile("sdk.pptx");
 assert(loaded);
 const result = await preview(loaded);

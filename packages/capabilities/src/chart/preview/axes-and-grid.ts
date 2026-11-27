@@ -13,6 +13,7 @@ import {
   type ResolvedStroke,
 } from "./style.ts";
 import {
+  measureChartText,
   mergeChartTextStyle,
   renderChartTextSvg,
   resolveChartFontSizePixels,
@@ -182,6 +183,7 @@ export function renderAxesSvg(options: {
   readonly layout: ComputedChartLayout;
   readonly scales: ReadonlyMap<string, AxisScale>;
   readonly baseChartTextStyle: TextStyle | undefined;
+  readonly baseFontSizePx: number;
   readonly theme: ThemeContext;
   readonly slideNumber: number;
   readonly clipAllocator: ChartTextClipAllocator;
@@ -192,12 +194,32 @@ export function renderAxesSvg(options: {
     layout,
     scales,
     baseChartTextStyle,
+    baseFontSizePx,
     theme,
     slideNumber,
     clipAllocator,
   } = options;
   const { plotRect } = layout;
   const parts: string[] = [];
+
+  // Precompute inner edges of any left/right axis title boxes so vertical tick labels
+  // keep a clear gap from the title bands without triggering narrow clipPath truncation.
+  let leftTitleRightEdge: number | undefined;
+  let rightTitleLeftEdge: number | undefined;
+  for (const tb of layout.axisTitleBoxes.values()) {
+    if (tb.x < plotRect.x) {
+      const right = tb.x + tb.width;
+      leftTitleRightEdge =
+        leftTitleRightEdge === undefined
+          ? right
+          : Math.max(leftTitleRightEdge, right);
+    } else if (tb.x >= plotRect.x + plotRect.width) {
+      rightTitleLeftEdge =
+        rightTitleLeftEdge === undefined
+          ? tb.x
+          : Math.min(rightTitleLeftEdge, tb.x);
+    }
+  }
 
   for (const axis of parsed.axes) {
     if (axis.spec.visible === false) continue;
@@ -278,7 +300,10 @@ export function renderAxesSvg(options: {
       baseChartTextStyle,
       axis.spec.style,
     );
-    const axisFontPx = resolveChartFontSizePixels(axisTextStyle?.fontSize);
+    const axisFontPx =
+      axisTextStyle?.fontSize !== undefined
+        ? resolveChartFontSizePixels(axisTextStyle.fontSize)
+        : baseFontSizePx;
     const labelSide = resolveAxisLabelSide(axis, crossScale);
     const tickProtrusion =
       axis.spec.majorTickMark === "out" || axis.spec.majorTickMark === "cross"
@@ -364,14 +389,15 @@ export function renderAxesSvg(options: {
         }
       } else {
         // Vertical axis
-        const titleBox = layout.axisTitleBoxes.get(axis.name);
+        // Strictly <= AXIS_TITLE_GAP (6px) in layout.ts so labelBox keeps clearance without narrowing below maxW.
+        const titleInnerGap = 4;
         const leftBound =
-          titleBox !== undefined && titleBox.x < plotRect.x
-            ? titleBox.x + titleBox.width + 2
+          leftTitleRightEdge !== undefined
+            ? leftTitleRightEdge + titleInnerGap
             : chartBox.x + 2;
         const rightBound =
-          titleBox !== undefined && titleBox.x >= plotRect.x + plotRect.width
-            ? titleBox.x - 2
+          rightTitleLeftEdge !== undefined
+            ? rightTitleLeftEdge - titleInnerGap
             : chartBox.x + chartBox.width - 2;
 
         const zoneOffset = layout.labelZones.get(axis.name)?.offset ?? 0;
@@ -409,7 +435,14 @@ export function renderAxesSvg(options: {
         }
 
         if (scale.kind === "value") {
-          const labelH = Math.max(axisFontPx * 1.4, 12);
+          const measuredLineH = measureChartText({
+            text: "",
+            style: axisTextStyle,
+            theme,
+            slideNumber,
+            labelPath: `Chart.axes.${axis.name}.style`,
+          }).height;
+          const labelH = Math.max(Math.ceil(measuredLineH) + 2, 12);
           for (const val of scale.majorTicks) {
             const cy = scale.valueToScreen(val, plotRect);
             const text = formatChartNumber(val, scale.numberFormat);

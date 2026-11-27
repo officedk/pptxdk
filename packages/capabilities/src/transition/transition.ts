@@ -1,10 +1,12 @@
 import {
   CapabilityError,
+  type BoundSlideCapability,
   type CapabilityInput,
   type Extension,
-  type SlideResolution,
+  type SealedShowMechanism,
   type SlideCapabilityModule,
   type SlideEmitOutput,
+  type SlideResolution,
 } from "@pptxdk/core/capability";
 import { defineShowMechanism } from "@pptxdk/import";
 import type { z } from "zod";
@@ -465,7 +467,16 @@ function compileTransition(
  * Bound transition module: validates transition & advanceAfter once per slide, layout, or master
  * during bind, submits generic continuity matching collaboration for Morph, and leaves static preview untouched.
  */
-export const transitionCapability = {
+export const transitionCapability: SlideCapabilityModule<
+  BoundSlideCapability,
+  readonly [
+    SealedShowMechanism<"transition-fade">,
+    SealedShowMechanism<"transition-strips">,
+    SealedShowMechanism<"transition-push">,
+    SealedShowMechanism<"transition-flip">,
+    SealedShowMechanism<"transition-morph">,
+  ]
+> = {
   declaration: "transition",
   slideProp: "transition",
   slideProps: ["transition", "advanceAfter"],

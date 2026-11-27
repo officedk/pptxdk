@@ -2,13 +2,15 @@ import {
   defaultColorMap,
   defaultTheme,
   resolvePlaceholderBoxFromLayers,
-  visualStyleSchema,
+  visualStyleShape,
+  type BoundSlideCapability,
   type ColorMap,
   type ColorMapOverride,
   type LayoutPlaceholderSpec,
   type NativeColorSlot,
   type PaintOutput,
   type PlaceholderMap,
+  type SealedCanvasMechanism,
   type SlideCapabilityModule,
   type Theme,
   type ThemeContext,
@@ -46,7 +48,7 @@ import {
 import { mastersCodegen } from "./masters-codegen.ts";
 
 const supportedPlaceholderVisualStyleKeys = new Set(
-  Object.keys(visualStyleSchema.unwrap().shape),
+  Object.keys(visualStyleShape),
 );
 
 type ResolvedPlaceholderVisualEntry = {
@@ -415,16 +417,17 @@ const mastersEmitDriver: MastersEmitDriver = {
 };
 
 /** Capability declaration wiring native slide master, layout, theme, color-map, theme-override, and shared-canvas mechanisms into builds. */
-export const mastersCapability: SlideCapabilityModule & {
-  readonly mechanisms: readonly [
-    typeof slideMasterMechanism,
-    typeof slideLayoutMechanism,
-    typeof nativeThemeMechanism,
-    typeof colorMapMechanism,
-    typeof themeOverrideMechanism,
-    typeof masterSharedCanvasMechanism,
-  ];
-} = {
+export const mastersCapability: SlideCapabilityModule<
+  BoundSlideCapability,
+  readonly [
+    SealedCanvasMechanism<"slide-master">,
+    SealedCanvasMechanism<"slide-layout">,
+    SealedCanvasMechanism<"native-theme">,
+    SealedCanvasMechanism<"color-map">,
+    SealedCanvasMechanism<"theme-override">,
+    SealedCanvasMechanism<"master-shared-canvas">,
+  ]
+> = {
   declaration: "slide-masters",
   slideProps: [],
   slot: "background",

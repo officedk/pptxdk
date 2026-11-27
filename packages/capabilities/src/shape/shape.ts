@@ -18,8 +18,9 @@ import {
   type PaintOutput,
   type PreviewTransform,
   type ObjectResolution,
+  type SealedCanvasMechanism,
 } from "@pptxdk/core/capability";
-import { xmlEscape } from "@pptxdk/emit";
+import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
 
 import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
@@ -84,7 +85,7 @@ import {
   shapeCoordinateSchema,
   shapeDeclarationPropsKeys,
   shapeSizeSchema,
-  shapeStyleSchema,
+  shapeStyleKeyList,
 } from "./shape-declaration.ts";
 
 export {
@@ -97,7 +98,7 @@ export {
 
 const allowedParameters: readonly string[] = shapeDeclarationPropsKeys;
 
-export const shapeStyleKeys = Object.keys(shapeStyleSchema.unwrap().shape);
+export const shapeStyleKeys = shapeStyleKeyList;
 
 function record(input: unknown): Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input)
@@ -138,10 +139,25 @@ function validateSize(
   name: "width" | "height",
   path?: string,
 ): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 0 || pxToEmu(value) === 0) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${name} is 0px; ${name} must be greater than 0px`,
+        path,
+      );
+    }
+    if (value < 0 || pxToEmu(value) < 1) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${name} is ${value}px; ${name} must be greater than 0px`,
+        path,
+      );
+    }
+  } else {
     throw new CapabilityError(
       "invalid-coordinate",
-      `${name} must be a finite pixel number, width and height must be greater than 0, and coordinates must be between -1000000 and 1000000`,
+      `${name} must be a finite pixel number greater than 0px`,
       path,
     );
   }
@@ -301,7 +317,16 @@ export const customGeometryShapeMechanism = defineCanvasMechanism({
 });
 
 /** Shape module independently validates input, encapsulates bound state, and emits native PresentationML objects. */
-export const shapeCapability = {
+export const shapeCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"preset-shape">,
+    SealedCanvasMechanism<"custom-geometry-shape">,
+    SealedCanvasMechanism<"solid-fill">,
+    SealedCanvasMechanism<"gradient-fill">,
+    SealedCanvasMechanism<"image-fill">,
+  ]
+> = {
   declaration: "shape",
   codegen: shapeCodegen,
   mechanisms: [
@@ -409,19 +434,9 @@ export const shapeCapability = {
       ...(geometry !== undefined ? { geometry } : {}),
     });
 
-    const ls = contract.layoutStyle;
-    const declaredWidth = ls.width;
-    const declaredHeight = ls.height;
-    const hasBothVerticalOffsets =
-      ls.position === "absolute" &&
-      ((ls.inset !== undefined && ls.inset !== "auto") ||
-        (ls.top !== undefined &&
-          ls.top !== "auto" &&
-          ls.bottom !== undefined &&
-          ls.bottom !== "auto"));
-    const hasFixedHeight =
-      (declaredHeight !== undefined && declaredHeight !== "auto") ||
-      hasBothVerticalOffsets;
+    const declaredWidth = contract.explicitPixelSize?.width;
+    const declaredHeight = contract.explicitPixelSize?.height;
+    const hasFixedHeight = contract.fixedAxes?.height ?? false;
 
     const native: BoundObjectNativeCollaboration = {
       ...(morphKey === undefined ? {} : { morphKey }),

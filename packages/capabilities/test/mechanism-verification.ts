@@ -35,7 +35,7 @@ import {
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
-    ? M extends { readonly mechanisms: readonly (infer D)[] }
+    ? M extends { readonly mechanisms?: readonly (infer D)[] | undefined }
       ? Extract<D, NativeMechanismDefinition>
       : never
     : never;

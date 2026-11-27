@@ -22,6 +22,7 @@ import {
   type ResolvedTable,
   type ResolvedTableCell as ResolvedTableCellObservation,
   type ResolvedTableRow,
+  type SealedCanvasMechanism,
   type ThemeContext,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, xmlEscape } from "@pptxdk/emit";
@@ -1098,7 +1099,13 @@ export const tablePlaceholderMechanism = defineCanvasMechanism({
 });
 
 /** Table module independently validates row and column structure, resolving layout/cells once for emit and paint. */
-export const tableCapability = {
+export const tableCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"table">,
+    SealedCanvasMechanism<"table-placeholder">,
+  ]
+> = {
   declaration: "table",
   mechanisms: [tableMechanism, tablePlaceholderMechanism] as const,
   codegen: tableCodegen,
@@ -1176,9 +1183,10 @@ export const tableCapability = {
       contract,
       declaredX: placeholderGeometry?.x,
       declaredY: placeholderGeometry?.y,
-      declaredWidth: placeholderGeometry?.width ?? contract.layoutStyle.width,
+      declaredWidth:
+        placeholderGeometry?.width ?? contract.explicitPixelSize?.width,
       declaredHeight:
-        placeholderGeometry?.height ?? contract.layoutStyle.height,
+        placeholderGeometry?.height ?? contract.explicitPixelSize?.height,
     };
 
     const authorId =
@@ -1313,8 +1321,14 @@ export const tableCapability = {
           resolveContext.layoutBox?.y ?? parsed.declaredY,
           "y",
         );
-        const width = widths.reduce((sum, value) => sum + value, 0);
-        const height = heights.reduce((sum, value) => sum + value, 0);
+        const width = parseTablePositiveSize(
+          widths.reduce((sum, value) => sum + value, 0),
+          "Table.width",
+        );
+        const height = parseTablePositiveSize(
+          heights.reduce((sum, value) => sum + value, 0),
+          "Table.height",
+        );
         const box: Rect = { x, y, width, height };
         const columnOffsets: number[] = [];
         let offsetX = x;

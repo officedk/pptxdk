@@ -10,6 +10,7 @@ import {
   type PlaceholderSize,
   type ResolvedFooter,
   type ResolvedFooterSlot,
+  type SealedCanvasMechanism,
   type SlideCapabilityModule,
   type SlideCapabilityParseContext,
   type SlideEmitContext,
@@ -35,6 +36,7 @@ import {
   hexRgb6Schema,
   offsetEmuFragmentSchema,
   ooxmlBoolSchema,
+  ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
   P_NS,
@@ -543,6 +545,10 @@ const RunPrAttrSchema = z.object({
   kern: ooxmlNonNegativeIntSchema.optional(),
 });
 
+const spcAttrSchema = ooxmlIntSchema.refine(
+  (value) => value >= -400_000 && value <= 400_000,
+);
+
 const FieldAttrSchema = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
@@ -691,17 +697,17 @@ function readFooterRunStyle(
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
 ): TextStyle {
-  const parsed = RunPrAttrSchema.safeParse(
-    rPrCursor.attrsObject([
-      "lang",
-      "sz",
-      "b",
-      "i",
-      "dirty",
-      "smtClean",
-      "kern",
-    ]),
-  );
+  const raw = rPrCursor.attrsObject([
+    "lang",
+    "sz",
+    "b",
+    "i",
+    "dirty",
+    "smtClean",
+    "kern",
+    "spc",
+  ]);
+  const parsed = RunPrAttrSchema.safeParse(raw);
   const style: Record<string, unknown> = {};
   if (parsed.success) {
     if (parsed.data.sz !== undefined) {
@@ -715,6 +721,21 @@ function readFooterRunStyle(
     }
     if (parsed.data.lang !== undefined) {
       style["lang"] = parsed.data.lang;
+    }
+  }
+  if (raw["spc"] !== undefined) {
+    const parsedSpc = spcAttrSchema.safeParse(raw["spc"]);
+    if (parsedSpc.success) {
+      style["letterSpacing"] = parsedSpc.data === 0 ? 0 : parsedSpc.data / 75;
+    } else {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: `${rPrCursor.xpath}/@spc` },
+        attributeOrElement: "@spc",
+        rawValue: raw["spc"],
+      });
     }
   }
   const solidFill = rPrCursor.child(A_NS, "solidFill");
@@ -890,10 +911,19 @@ function readFooterPlaceholderImport(
             align: algnMap[parsedPPr.data.algn],
           });
         }
+        const defRPr = pPr.child(A_NS, "defRPr");
+        if (defRPr !== undefined) {
+          style = mergeFooterStyle(
+            style,
+            readFooterRunStyle(defRPr, location, diagnostics),
+          );
+        }
       }
       let paragraphText = "";
+      let hasRunOrField = false;
       for (const child of pCursor.remainingElementChildren()) {
         if (child.namespaceUri === A_NS && child.localName === "r") {
+          hasRunOrField = true;
           const rPr = child.child(A_NS, "rPr");
           if (rPr !== undefined) {
             style = mergeFooterStyle(
@@ -907,6 +937,7 @@ function readFooterPlaceholderImport(
             paragraphText += t.textContent;
           }
         } else if (child.namespaceUri === A_NS && child.localName === "fld") {
+          hasRunOrField = true;
           FieldAttrSchema.safeParse(child.attrsObject(["id", "type"]));
           const rPr = child.child(A_NS, "rPr");
           if (rPr !== undefined) {
@@ -925,7 +956,11 @@ function readFooterPlaceholderImport(
           child.namespaceUri === A_NS &&
           child.localName === "endParaRPr"
         ) {
-          readFooterRunStyle(child, location, diagnostics);
+          const endStyle = readFooterRunStyle(child, location, diagnostics);
+          // Empty paragraphs (such as master/layout footer slots without default text) store run defaults in endParaRPr.
+          if (!hasRunOrField) {
+            style = mergeFooterStyle(style, endStyle);
+          }
         }
       }
       textParts.push(paragraphText);
@@ -1029,7 +1064,10 @@ export const footerPlaceholderMechanism = defineCanvasMechanism({
 });
 
 /** Slide capability resolving, painting, emitting, and importing `dateTime`, `footer`, `slideNumber`, and master/layout `footerPlaceholders`. */
-export const footerPlaceholderCapability = {
+export const footerPlaceholderCapability: SlideCapabilityModule<
+  BoundSlideCapability,
+  readonly [SealedCanvasMechanism<"footer-placeholder">]
+> = {
   declaration: "footer-placeholder",
   slideProp: "footer",
   slideProps: ["footer", "dateTime", "slideNumber"],

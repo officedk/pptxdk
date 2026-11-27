@@ -431,6 +431,7 @@ type BlockFlexNode = {
   readonly isRoot: boolean;
   readonly isContainer: boolean;
   readonly propagatesBaseline: boolean;
+  readonly preservesIntrinsicSize?: boolean | undefined;
   readonly contentMinimumsEnforced?: boolean | undefined;
   readonly measure?: LayoutNodeMeasure | undefined;
   readonly customHandler?: CustomContainerSolver | undefined;
@@ -702,13 +703,20 @@ export function createBlockFlexLayoutSolver(options: {
     return content;
   };
 
+  const isPercentLength = (value: LayoutLength | undefined): boolean =>
+    typeof value === "string" && value.endsWith("%");
+
   const minContentContribution = (
     node: BlockFlexNode,
     axis: "width" | "height",
   ): number => {
     const content = minContent(node, axis) ?? 0;
     const rawDimension = node.style[axis];
-    let size = parseLayoutLength(rawDimension, axis, node.path) ?? content;
+    const percentSizedIntrinsic =
+      node.preservesIntrinsicSize === true && isPercentLength(rawDimension);
+    let size = percentSizedIntrinsic
+      ? 0
+      : (parseLayoutLength(rawDimension, axis, node.path) ?? content);
     if (node.contentMinimumsEnforced) {
       size = Math.max(size, content);
     }
@@ -737,13 +745,16 @@ export function createBlockFlexLayoutSolver(options: {
     node: BlockFlexNode,
     axis: "width" | "height",
   ): number | undefined => {
+    const rawDimension = node.style[axis];
+    if (node.preservesIntrinsicSize && isPercentLength(rawDimension)) {
+      return 0;
+    }
     const content = minContent(node, axis);
     if (content === undefined) return undefined;
     const maximum =
       axis === "width"
         ? styleLength(node.style.maxWidth)
         : styleLength(node.style.maxHeight);
-    const rawDimension = node.style[axis];
     const declared = parseLayoutLength(rawDimension, axis, node.path);
     return Math.min(
       content,
@@ -1343,12 +1354,14 @@ export function createBlockFlexLayoutSolver(options: {
         spec.preservesIntrinsicSize &&
         parentInternal.style.display !== "flex" &&
         parentInternal.customHandler === undefined &&
-        width === undefined &&
+        (width === undefined || width === "auto") &&
         spec.style.alignSelf === undefined &&
         !(
           spec.style.position === "absolute" &&
-          (spec.style.left !== undefined || spec.style.inset !== undefined) &&
-          (spec.style.right !== undefined || spec.style.inset !== undefined)
+          (spec.style.left ?? spec.style.inset) !== undefined &&
+          (spec.style.left ?? spec.style.inset) !== "auto" &&
+          (spec.style.right ?? spec.style.inset) !== undefined &&
+          (spec.style.right ?? spec.style.inset) !== "auto"
         )
       ) {
         yoga.setAlignSelf(Align.FlexStart);
@@ -1373,6 +1386,9 @@ export function createBlockFlexLayoutSolver(options: {
         isRoot: false,
         isContainer: spec.isContainer,
         propagatesBaseline: spec.propagatesBaseline ?? false,
+        ...(spec.preservesIntrinsicSize
+          ? { preservesIntrinsicSize: true }
+          : {}),
         ...(spec.contentMinimumsEnforced
           ? { contentMinimumsEnforced: true }
           : {}),

@@ -3,13 +3,21 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { BuildError, font } from "@officedk/pptxdk";
+import { BuildError, build, font } from "@officedk/pptxdk";
 import {
   PreviewPageRangeError,
   preview as previewDocument,
   preview as previewJsx,
 } from "@officedk/pptxdk/preview";
-import { Box, Deck, Group, Shape, Slide, Text } from "@officedk/pptxdk/react";
+import {
+  Box,
+  Chart,
+  Deck,
+  Group,
+  Shape,
+  Slide,
+  Text,
+} from "@officedk/pptxdk/react";
 import {
   box,
   cell,
@@ -22,6 +30,8 @@ import {
   table,
   text,
 } from "@officedk/pptxdk/vanilla";
+import { strFromU8, unzipSync } from "fflate";
+import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -831,5 +841,156 @@ if (!result.pages[0]?.png || result.pages[0].png.byteLength === 0) {
 process.stdout.write("ok");
 `);
     assert.equal(out, "ok");
+  });
+
+  it("renders dual-axis rotated-title combo and decimal-scale area charts without plotArea clipping across JSX and Vanilla preview", async () => {
+    const jostFont = font("Jost*", [
+      {
+        weight: 400,
+        data: readFileSync(
+          new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+        ),
+      },
+    ]);
+    const chartStyle = {
+      position: "absolute" as const,
+      left: 20,
+      top: 20,
+      width: 560,
+      height: 300,
+      fontFamily: jostFont,
+      fontSize: 13,
+    };
+    const comboAxes = {
+      quarter: { kind: "category" as const, title: "Quarter" },
+      primary: {
+        kind: "value" as const,
+        position: "left" as const,
+        title: "Revenue ($M)",
+        min: 0,
+        max: 1200,
+        majorUnit: 300,
+        numberFormat: "#,##0",
+      },
+      secondary: {
+        kind: "value" as const,
+        position: "right" as const,
+        title: "Margin (%)",
+        min: 0,
+        max: 1.2,
+        majorUnit: 0.3,
+        numberFormat: "0%",
+      },
+    };
+    const comboGroups = [
+      {
+        kind: "column" as const,
+        axes: { category: "quarter", value: "primary" },
+        data: { kind: "shared-categories" as const, categories: ["Q1", "Q2"] },
+        series: [{ name: "Revenue", values: [400, 1050] }],
+      },
+      {
+        kind: "line" as const,
+        axes: { category: "quarter", value: "secondary" },
+        data: { kind: "shared-categories" as const, categories: ["Q1", "Q2"] },
+        series: [{ name: "Margin", values: [0.35, 1.05] }],
+      },
+    ];
+    const decimalAxes = {
+      x: { kind: "category" as const, title: "Batch" },
+      y: {
+        kind: "value" as const,
+        position: "left" as const,
+        title: "Density (kg/L)",
+        min: 0,
+        max: 3.5,
+        majorUnit: 0.5,
+        numberFormat: "0.0",
+      },
+    };
+    const decimalGroups = [
+      {
+        kind: "area" as const,
+        axes: { category: "x", value: "y" },
+        data: {
+          kind: "shared-categories" as const,
+          categories: ["B1", "B2", "B3"],
+        },
+        series: [{ name: "Density", values: [0.5, 2.2, 3.4] }],
+      },
+    ];
+
+    const vanillaDeck = deck({ width: 640, height: 360 }).append(
+      slide({ id: "combo", background: "#FFFFFF" }).append(
+        chart({
+          id: "combo-chart",
+          style: chartStyle,
+          axes: comboAxes,
+          groups: comboGroups,
+        }),
+      ),
+      slide({ id: "area-decimal", background: "#FFFFFF" }).append(
+        chart({
+          id: "decimal-chart",
+          style: chartStyle,
+          axes: decimalAxes,
+          groups: decimalGroups,
+        }),
+      ),
+    );
+    const jsxNode = createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        Slide,
+        { id: "combo", background: "#FFFFFF" },
+        createElement(Chart, {
+          id: "combo-chart",
+          style: chartStyle,
+          axes: comboAxes,
+          groups: comboGroups,
+        }),
+      ),
+      createElement(
+        Slide,
+        { id: "area-decimal", background: "#FFFFFF" },
+        createElement(Chart, {
+          id: "decimal-chart",
+          style: chartStyle,
+          axes: decimalAxes,
+          groups: decimalGroups,
+        }),
+      ),
+    );
+
+    const [vanillaPreview, jsxPreview, built] = await Promise.all([
+      previewDocument(vanillaDeck),
+      previewJsx(jsxNode),
+      build(vanillaDeck),
+    ]);
+
+    const files = unzipSync(built.pptx);
+    expect(strFromU8(files["ppt/charts/chart1.xml"]!)).not.toContain(
+      "<c:manualLayout>",
+    );
+    expect(strFromU8(files["ppt/charts/chart2.xml"]!)).not.toContain(
+      "<c:manualLayout>",
+    );
+
+    for (const pageIndex of [0, 1] as const) {
+      const vPage = vanillaPreview.pages[pageIndex]!;
+      const jPage = jsxPreview.pages[pageIndex]!;
+      assert.deepEqual(vPage.errors, []);
+      assert.deepEqual(jPage.errors, []);
+      assert.ok(vPage.png !== undefined);
+      assert.ok(vPage.svg !== undefined);
+      assert.deepEqual(jPage.png, vPage.png);
+      expect(vPage.svg.match(/<clipPath\b/gu) ?? []).toHaveLength(2);
+      const png = PNG.sync.read(Buffer.from(vPage.png));
+      for (let y = 40; y < 280; y += 1) {
+        const leftIdx = (y * png.width + 20) * 4;
+        expect(png.data[leftIdx]).toBe(255);
+      }
+    }
   });
 });

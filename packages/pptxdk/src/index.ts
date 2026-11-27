@@ -36,6 +36,8 @@ import {
   type ImportReport,
   type ImportResult,
 } from "@pptxdk/import";
+import type { PreviewOptions, PreviewResult } from "@pptxdk/preview";
+import type { ReactNode } from "react";
 
 import { createStagePipeline } from "./compose.ts";
 
@@ -118,7 +120,25 @@ export { emit };
  */
 export const build = pipeline.build;
 
-export type { PreviewNode } from "@pptxdk/preview";
+/**
+ * Default static preview supporting both JSX elements and plain CommonNode documents.
+ *
+ * Defers loading the rasterizer and React reconciler until `preview()` is actually called.
+ */
+export async function preview(
+  input: ReactNode | DocumentCommonNode,
+  options: PreviewOptions = {},
+): Promise<PreviewResult> {
+  const { preview: runPreview } = await import("./preview.ts");
+  return runPreview(input, options);
+}
+
+export type {
+  PreviewNode,
+  PreviewOptions,
+  PreviewPageResult,
+  PreviewResult,
+} from "@pptxdk/preview";
 export { documentCapabilities, slideBackgroundCapability };
 
 export {
@@ -143,6 +163,7 @@ export {
   AuthorQueryError,
   BuildError,
   BuildQueryError,
+  PreviewPageRangeError,
   buildDiagnosticFontUnavailableReasonSchema,
   buildDiagnosticSchema,
   buildOptionsSchema,

@@ -29,13 +29,14 @@ import {
   parseMorphKey,
 } from "../shared/identity.ts";
 import {
+  assertVisualBoxExtent,
   emitVisualModel,
   hasVisibleBoxStyle,
   paintVisualModel,
   resolveVisualModel,
 } from "../shared/visual.ts";
 import { boxCodegen } from "./box-codegen.ts";
-import { boxDeclarationPropsKeys, boxStyleSchema } from "./box-declaration.ts";
+import { boxDeclarationPropsKeys, boxStyleKeys } from "./box-declaration.ts";
 
 export {
   boxDeclarationPropsSchema,
@@ -47,9 +48,7 @@ export {
 
 const boxAllowedParameters: readonly string[] = boxDeclarationPropsKeys;
 
-const boxAllowedStyleKeys = new Set<string>(
-  Object.keys(boxStyleSchema.unwrap().shape),
-);
+const boxAllowedStyleKeys = new Set<string>(boxStyleKeys);
 
 function styleRecord(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};
@@ -171,6 +170,9 @@ export const boxCapability: ObjectCapabilityModule = {
           box,
           layoutOnlyWhenInvisible: true,
         });
+        if (visual.hasVisibleStyle) {
+          assertVisualBoxExtent(box);
+        }
         const geometryName =
           visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
         const motionTarget = {
@@ -183,7 +185,7 @@ export const boxCapability: ObjectCapabilityModule = {
         const annotations = motionContainerAnnotations(
           motionProps,
           visual.hasVisibleStyle ? motionTarget : undefined,
-          { propagatesDefaultEnter: true },
+          { propagatesDefaultEnter: true, groupsAsParallelUnit: true },
         );
         const transform: PreviewTransform | undefined = visual.hasVisibleStyle
           ? {

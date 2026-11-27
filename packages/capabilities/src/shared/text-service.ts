@@ -197,7 +197,6 @@ type TextLayoutRequest = {
 type TextBodyDestination = "text-box" | "table-cell";
 
 type MeasureFace = {
-  readonly font: fontkit.Font;
   readonly identity: string;
 };
 
@@ -309,6 +308,15 @@ type LineBreakerConstructor = new (text: string) => {
 const LineBreaker = LineBreakerImplementation as LineBreakerConstructor;
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const measureFaces = new Map<string, fontkit.Font>();
+const measureFaceFonts = new WeakMap<MeasureFace, fontkit.Font>();
+
+function fontOfMeasureFace(face: MeasureFace): fontkit.Font {
+  const font = measureFaceFonts.get(face) ?? measureFaces.get(face.identity);
+  if (font === undefined) {
+    throw new Error(`Missing font face for ${face.identity}`);
+  }
+  return font;
+}
 type CachedHbFace = {
   readonly blob: hb.Blob;
   readonly face: hb.Face;
@@ -585,7 +593,7 @@ function outputBold(font: NormalizedFont): boolean {
   if (!font.hasResource || font.substitute) return fallback;
   try {
     // Numerical font weight cannot substitute for family bold style link declared by the font file.
-    return measureFace(font).font["OS/2"].fsSelection.bold;
+    return fontOfMeasureFace(measureFace(font))["OS/2"].fsSelection.bold;
   } catch {
     return fallback;
   }
@@ -1686,10 +1694,11 @@ function measureFace(source: NormalizedFont): MeasureFace {
     const font = new hb.Font(hbFace);
     hbFaces.set(source.identity, { blob, face: hbFace, font });
   }
-  return {
-    font: parsed,
+  const faceObj: MeasureFace = {
     identity: source.identity,
   };
+  measureFaceFonts.set(faceObj, parsed);
+  return faceObj;
 }
 
 function measureRunFace(style: RunStyle): MeasureFace {
@@ -1746,7 +1755,7 @@ function missingCharacters(
   face: MeasureFace | fontkit.Font,
   text: string,
 ): string[] {
-  const font = "font" in face ? face.font : face;
+  const font = "unitsPerEm" in face ? face : fontOfMeasureFace(face);
   const missing = new Set<string>();
   for (const character of text) {
     if (!requiresVisibleFontGlyph(character)) continue;
@@ -1791,8 +1800,8 @@ function rangeWidth(
     // Drawing and measurement must shape the same visible stream, including control filtering.
     const visible = Array.from(transformed).filter(requiresFontGlyph).join("");
     if (visible === "") continue;
-    const shaped = piece.face.font.layout(visible);
-    const face = piece.face.font;
+    const face = fontOfMeasureFace(piece.face);
+    const shaped = face.layout(visible);
     const points = fontSizePoints(piece.style.fontSize);
     const tenths = Math.ceil(centipoints(points) / 10) / 10;
     for (const position of shaped.positions) {
@@ -1984,7 +1993,7 @@ function paragraphLineHeight(paragraph: Paragraph): number {
       : [paragraph.endStyle];
   let maximum = 0;
   for (const style of styles) {
-    const face = measureRunFace(style).font;
+    const face = fontOfMeasureFace(measureRunFace(style));
     // DrawingML line spacing takes font ascent - descent + lineGap, then scales by output font size.
     const units = face.ascent - face.descent + face.lineGap;
     const lineHeight =
@@ -2019,7 +2028,7 @@ function paragraphBaseline(paragraph: Paragraph): number | undefined {
     return undefined;
   }
   const style = paragraph.runs[0]!.style;
-  const face = measureRunFace(style).font;
+  const face = fontOfMeasureFace(measureRunFace(style));
   const fontSize = fontSizePoints(style.fontSize) * (4 / 3);
   const naturalLineHeight =
     ((face.ascent - face.descent + face.lineGap) / face.unitsPerEm) * fontSize;
@@ -2606,7 +2615,7 @@ function shapeSegmentOutlines(
       }));
     });
   }
-  const fkRun = face.font.layout(
+  const fkRun = fontOfMeasureFace(face).layout(
     visible,
     undefined,
     undefined,
@@ -2694,7 +2703,7 @@ export function previewParagraphOutlines(
         ? paragraphMeasurement(paragraph, widthOrMeasured)
         : widthOrMeasured;
     for (const piece of resolvedMeasured.pieces) {
-      if (hasUnsupportedColorFontTable(piece.face.font)) {
+      if (hasUnsupportedColorFontTable(fontOfMeasureFace(piece.face))) {
         throw new CapabilityError(
           "preview-unsupported-font",
           "Preview requires monochrome outline fonts",
@@ -2749,7 +2758,7 @@ export function previewParagraphOutlines(
         piece.style.lang,
       );
       if (shaped.length === 0) return;
-      const face = piece.face.font;
+      const face = fontOfMeasureFace(piece.face);
       const fontPx = (fontSizePoints(piece.style.fontSize) * 4) / 3;
       const scale = fontPx / face.unitsPerEm;
       const trackingPx = piece.style.letterSpacing ?? 0;
@@ -2816,11 +2825,12 @@ export function previewParagraphOutlines(
     });
     if (glyphs.length === 0 && pieces.length > 0) {
       const fallbackPiece = pieces[0]!;
+      const fallbackFace = fontOfMeasureFace(fallbackPiece.face);
       const fallbackScale =
         (fontSizePoints(fallbackPiece.style.fontSize) * 4) /
-        (3 * fallbackPiece.face.font.unitsPerEm);
-      ascent = fallbackPiece.face.font.ascent * fallbackScale;
-      descent = -fallbackPiece.face.font.descent * fallbackScale;
+        (3 * fallbackFace.unitsPerEm);
+      ascent = fallbackFace.ascent * fallbackScale;
+      descent = -fallbackFace.descent * fallbackScale;
     }
     const endsWithMandatoryBreak =
       trimMandatoryBreakEnd(text, line.start, line.end) < line.end ||
@@ -2929,7 +2939,7 @@ function shapeListPrefix(
   const prefixStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
   const prefixFace = withPreviewFontBoundary(() => {
     const face = measureRunFace(prefixStyle);
-    if (hasUnsupportedColorFontTable(face.font)) {
+    if (hasUnsupportedColorFontTable(fontOfMeasureFace(face))) {
       throw new CapabilityError(
         "preview-unsupported-font",
         "Preview requires monochrome outline fonts",
@@ -2962,7 +2972,7 @@ function shapeListPrefix(
   );
   const scale =
     (fontSizePoints(prefixStyle.fontSize) * 4) /
-    (3 * prefixFace.font.unitsPerEm);
+    (3 * fontOfMeasureFace(prefixFace).unitsPerEm);
   let cursor = 0;
   const glyphs: PreviewGlyph[] = shaped.map((item) => {
     const glyph: PreviewGlyph = {

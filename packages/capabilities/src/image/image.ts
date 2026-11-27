@@ -12,10 +12,11 @@ import {
   type Rect,
   type NativePlaceholderRef,
   type ObjectCapabilityModule,
+  type ObjectResolution,
   type ObjectResolveContext,
   type PaintContext,
   type PaintOutput,
-  type ObjectResolution,
+  type SealedCanvasMechanism,
 } from "@pptxdk/core/capability";
 import { assertXml10Characters, pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -55,14 +56,14 @@ import {
 } from "./image-import.ts";
 import {
   externalImageSourceSchema,
+  imageAltSchema,
   imageCoordinateValueSchema,
   imageCropInputSchema,
   imageExtentValueSchema,
   imageFitSchema,
   imageSourceSchema,
   imageAllowedParameters,
-  imageDeclarationPropsSchema,
-  imageStyleSchema,
+  imageStyleKeys,
 } from "./image-schemas.ts";
 import { imageXml } from "./image-xml.ts";
 
@@ -479,6 +480,20 @@ function dimension(
 ): number {
   const actual = value === undefined ? fallback : value;
   const isExtent = name === "width" || name === "height";
+  if (isExtent && typeof actual === "number" && Number.isFinite(actual)) {
+    if (actual === 0 || pxToEmu(actual) === 0) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${name} is 0px; ${name} must be greater than 0px`,
+      );
+    }
+    if (actual < 0 || pxToEmu(actual) < 1) {
+      throw new CapabilityError(
+        "invalid-coordinate",
+        `Computed ${name} is ${actual}px; ${name} must be greater than 0px`,
+      );
+    }
+  }
   const parsed = isExtent
     ? imageExtentValueSchema.safeParse(actual)
     : imageCoordinateValueSchema.safeParse(actual);
@@ -498,14 +513,6 @@ function dimension(
     }
   }
   return parsed.data;
-}
-
-function requestedDimension(
-  style: Readonly<Record<string, unknown>>,
-  name: "width" | "height",
-): unknown {
-  const styled = style[name];
-  return typeof styled === "number" ? styled : undefined;
 }
 
 function parseCropValues(
@@ -578,7 +585,13 @@ export const picturePlaceholderMechanism = defineCanvasMechanism({
 });
 
 /** Image module reads and validates formal resources, encapsulates bound state, and emits native picture objects. */
-export const imageCapability = {
+export const imageCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [
+    SealedCanvasMechanism<"image">,
+    SealedCanvasMechanism<"picture-placeholder">,
+  ]
+> = {
   declaration: "image",
   codegen: imageCodegen,
   mechanisms: [imageMechanism, picturePlaceholderMechanism] as const,
@@ -622,17 +635,13 @@ export const imageCapability = {
     const morphKey = parseMorphKey(input.props["morphKey"]);
     const link = parseLinkTarget(input.props["link"]);
 
-    const altParsed = imageDeclarationPropsSchema
-      .unwrap()
-      .shape.alt.safeParse(input.props["alt"]);
+    const altParsed = imageAltSchema.safeParse(input.props["alt"]);
     if (!altParsed.success) {
       throw new CapabilityError("invalid-parameter", "alt must be a string");
     }
     const altValue = altParsed.data;
 
-    const allowedStyleKeys = new Set<string>(
-      Object.keys(imageStyleSchema.unwrap().shape),
-    );
+    const allowedStyleKeys = new Set<string>(imageStyleKeys);
 
     const contract = parseCapabilityLayoutContract({
       nativeKind: "pic",
@@ -691,11 +700,17 @@ export const imageCapability = {
     const declaredX = placeholderGeometry?.x;
     const declaredY = placeholderGeometry?.y;
     const requestedWidth =
-      placeholderGeometry?.width ??
-      requestedDimension(rawSlideStyle ?? {}, "width");
+      placeholderGeometry?.width ?? contract.explicitPixelSize?.width;
     const requestedHeight =
-      placeholderGeometry?.height ??
-      requestedDimension(rawSlideStyle ?? {}, "height");
+      placeholderGeometry?.height ?? contract.explicitPixelSize?.height;
+    const hasFixedWidth =
+      (placeholderGeometry?.width !== undefined &&
+        placeholderGeometry.width !== "auto") ||
+      (contract.fixedAxes?.width ?? false);
+    const hasFixedHeight =
+      (placeholderGeometry?.height !== undefined &&
+        placeholderGeometry.height !== "auto") ||
+      (contract.fixedAxes?.height ?? false);
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
     const motionProps: Readonly<Record<string, unknown>> = {
@@ -736,8 +751,8 @@ export const imageCapability = {
             return {
               width: declaredWidth,
               height: declaredHeight,
-              minContentWidth: declaredWidth,
-              minContentHeight: declaredHeight,
+              minContentWidth: hasFixedWidth ? 0 : declaredWidth,
+              minContentHeight: hasFixedHeight ? 0 : declaredHeight,
             };
           }
           return undefined;
@@ -746,13 +761,24 @@ export const imageCapability = {
           declaredWidth ??
           (declaredHeight !== undefined
             ? (declaredHeight * image.width) / image.height
-            : Math.min(image.width, request.availableWidth ?? image.width));
+            : request.widthMode === "exactly" &&
+                request.availableWidth !== undefined
+              ? request.availableWidth
+              : Math.min(image.width, request.availableWidth ?? image.width));
         const height = declaredHeight ?? (width * image.height) / image.width;
+        const intrinsicMinWidth =
+          declaredHeight !== undefined
+            ? (declaredHeight * image.width) / image.height
+            : image.width;
+        const intrinsicMinHeight =
+          declaredWidth !== undefined
+            ? (declaredWidth * image.height) / image.width
+            : image.height;
         return {
           width,
           height,
-          minContentWidth: image.width,
-          minContentHeight: image.height,
+          minContentWidth: hasFixedWidth ? 0 : intrinsicMinWidth,
+          minContentHeight: hasFixedHeight ? 0 : intrinsicMinHeight,
         };
       },
 

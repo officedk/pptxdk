@@ -17,6 +17,7 @@ import {
   type ObjectResolution,
   type Rect,
   type ResolvedObject,
+  type SealedCanvasMechanism,
   type ThemeScope,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
@@ -35,7 +36,8 @@ import {
 import { groupCodegen } from "./group-codegen.ts";
 import {
   groupDeclarationPropsKeys,
-  groupStyleSchema,
+  groupStyleKeys,
+  groupTransformShape,
 } from "./group-declaration.ts";
 import { groupImportHandler } from "./group-import.ts";
 import { groupXml } from "./group-xml.ts";
@@ -124,12 +126,19 @@ function bounds(members: readonly ResolvedObject[]): {
   const bottom = Math.max(...memberBoxes.map((box) => box.bottom));
   const width = right - x;
   const height = bottom - y;
-  if (
-    width < 1 ||
-    height < 1 ||
-    width > maximumGroupExtentEmu ||
-    height > maximumGroupExtentEmu
-  ) {
+  if (width < 1) {
+    throw new CapabilityError(
+      "invalid-group-geometry",
+      "Computed Group width is 0px; width must be greater than 0px",
+    );
+  }
+  if (height < 1) {
+    throw new CapabilityError(
+      "invalid-group-geometry",
+      "Computed Group height is 0px; height must be greater than 0px",
+    );
+  }
+  if (width > maximumGroupExtentEmu || height > maximumGroupExtentEmu) {
     throw new CapabilityError(
       "invalid-group-geometry",
       "Group member bounds exceed writable PresentationML dimensions",
@@ -147,9 +156,7 @@ function bounds(members: readonly ResolvedObject[]): {
   };
 }
 
-const groupAllowedStyleKeys = new Set<string>(
-  Object.keys(groupStyleSchema.unwrap().shape),
-);
+const groupAllowedStyleKeys = new Set<string>(groupStyleKeys);
 
 /** Closed resolved group model produced in resolve() and consumed by emitGroupModel and paintGroupModel. */
 type ResolvedGroupModel = {
@@ -218,7 +225,10 @@ export const groupMechanism = defineCanvasMechanism({
 });
 
 /** Preserves members as native objects and writes group bounds according to final member geometry; layout participation uses generic container collaboration. */
-export const groupCapability = {
+export const groupCapability: ObjectCapabilityModule<
+  BoundObjectCapability,
+  readonly [SealedCanvasMechanism<"group">]
+> = {
   declaration: "group",
   codegen: groupCodegen,
   mechanisms: [groupMechanism] as const,
@@ -261,7 +271,7 @@ export const groupCapability = {
     const rawRotation = styleRecord["rotate"];
     if (
       rawRotation !== undefined &&
-      !groupStyleSchema.unwrap().shape.rotate.safeParse(rawRotation).success
+      !groupTransformShape.rotate.safeParse(rawRotation).success
     ) {
       throw new CapabilityError(
         "invalid-visual-style",
@@ -270,14 +280,20 @@ export const groupCapability = {
     }
     const rotation = rawRotation as number | undefined;
     const rawFlipH = styleRecord["flipH"];
-    if (rawFlipH !== undefined && typeof rawFlipH !== "boolean") {
+    if (
+      rawFlipH !== undefined &&
+      !groupTransformShape.flipH.safeParse(rawFlipH).success
+    ) {
       throw new CapabilityError(
         "invalid-visual-style",
         "flipH must be a boolean",
       );
     }
     const rawFlipV = styleRecord["flipV"];
-    if (rawFlipV !== undefined && typeof rawFlipV !== "boolean") {
+    if (
+      rawFlipV !== undefined &&
+      !groupTransformShape.flipV.safeParse(rawFlipV).success
+    ) {
       throw new CapabilityError(
         "invalid-visual-style",
         "flipV must be a boolean",
@@ -333,49 +349,39 @@ export const groupCapability = {
         const resolvedChildren = resolveContext.resolveChildren(input.children);
         const geometry = bounds(resolvedChildren.objects);
         const layoutBox = resolveContext.layoutBox;
-        const position = contract.layoutStyle.position;
-        const isPositioned = position === "relative" || position === "absolute";
-        const hasExplicitWidth =
-          contract.layoutStyle.width !== undefined ||
-          ((contract.layoutStyle.left !== undefined ||
-            contract.layoutStyle.inset !== undefined) &&
-            (contract.layoutStyle.right !== undefined ||
-              contract.layoutStyle.inset !== undefined));
-        const hasExplicitHeight =
-          contract.layoutStyle.height !== undefined ||
-          ((contract.layoutStyle.top !== undefined ||
-            contract.layoutStyle.inset !== undefined) &&
-            (contract.layoutStyle.bottom !== undefined ||
-              contract.layoutStyle.inset !== undefined));
-        const hasLayoutWidth =
-          hasExplicitWidth ||
-          contract.layoutStyle.flex !== undefined ||
-          contract.layoutStyle.flexGrow !== undefined ||
-          contract.layoutStyle.flexBasis !== undefined;
-        const hasLayoutHeight = hasExplicitHeight;
+        const isPositioned = contract.positioned === true;
+        const fixedAxes = contract.fixedAxes ?? {
+          width: false,
+          height: false,
+        };
+        const sizedAxes = resolveContext.layoutSizedAxes ?? fixedAxes;
+        const hasLayoutWidth = sizedAxes.width;
+        const hasLayoutHeight = sizedAxes.height;
 
         let outputGeometry: Rect;
         if (isPositioned) {
           const memberBounds = geometry.pixels;
           if (layoutBox !== undefined) {
             const resolvedWidth =
-              hasExplicitWidth || layoutBox.width > 0
+              fixedAxes.width || (hasLayoutWidth && layoutBox.width > 0)
                 ? layoutBox.width
                 : memberBounds.width > 0
                   ? Math.max(
+                      layoutBox.width,
                       memberBounds.width,
                       memberBounds.x + memberBounds.width - layoutBox.x,
                     )
-                  : 0;
+                  : layoutBox.width;
             const resolvedHeight =
-              hasExplicitHeight || layoutBox.height > 0
+              fixedAxes.height || (hasLayoutHeight && layoutBox.height > 0)
                 ? layoutBox.height
                 : memberBounds.height > 0
                   ? Math.max(
+                      layoutBox.height,
                       memberBounds.height,
                       memberBounds.y + memberBounds.height - layoutBox.y,
                     )
-                  : 0;
+                  : layoutBox.height;
             outputGeometry = {
               x: layoutBox.x,
               y: layoutBox.y,
@@ -387,30 +393,32 @@ export const groupCapability = {
           }
         } else {
           const memberBounds = geometry.pixels;
-          if (
-            layoutBox !== undefined &&
-            hasLayoutWidth &&
-            hasLayoutHeight &&
-            layoutBox.width > 0 &&
-            layoutBox.height > 0
-          ) {
+          const useLayoutWidth =
+            fixedAxes.width ||
+            (hasLayoutWidth && layoutBox !== undefined && layoutBox.width > 0);
+          const useLayoutHeight =
+            fixedAxes.height ||
+            (hasLayoutHeight &&
+              layoutBox !== undefined &&
+              layoutBox.height > 0);
+          if (layoutBox !== undefined && useLayoutWidth && useLayoutHeight) {
             outputGeometry = layoutBox;
           } else if (
             layoutBox !== undefined &&
             layoutBox.width > 0 &&
             layoutBox.height > 0
           ) {
-            const x = hasLayoutWidth
+            const x = useLayoutWidth
               ? layoutBox.x
               : memberBounds.width > 0
                 ? Math.min(layoutBox.x, memberBounds.x)
                 : layoutBox.x;
-            const y = hasLayoutHeight
+            const y = useLayoutHeight
               ? layoutBox.y
               : memberBounds.height > 0
                 ? Math.min(layoutBox.y, memberBounds.y)
                 : layoutBox.y;
-            const right = hasLayoutWidth
+            const right = useLayoutWidth
               ? layoutBox.x + layoutBox.width
               : memberBounds.width > 0
                 ? Math.max(
@@ -418,7 +426,7 @@ export const groupCapability = {
                     memberBounds.x + memberBounds.width,
                   )
                 : layoutBox.x + layoutBox.width;
-            const bottom = hasLayoutHeight
+            const bottom = useLayoutHeight
               ? layoutBox.y + layoutBox.height
               : memberBounds.height > 0
                 ? Math.max(
@@ -434,28 +442,43 @@ export const groupCapability = {
             };
           } else if (
             layoutBox !== undefined &&
-            (hasLayoutWidth || hasLayoutHeight)
+            (useLayoutWidth || useLayoutHeight)
           ) {
             outputGeometry = {
-              x: hasLayoutWidth ? layoutBox.x : memberBounds.x,
-              y: hasLayoutHeight ? layoutBox.y : memberBounds.y,
-              width:
-                hasLayoutWidth && layoutBox.width > 0
-                  ? layoutBox.width
-                  : memberBounds.width,
-              height:
-                hasLayoutHeight && layoutBox.height > 0
-                  ? layoutBox.height
-                  : memberBounds.height,
+              x: useLayoutWidth ? layoutBox.x : memberBounds.x,
+              y: useLayoutHeight ? layoutBox.y : memberBounds.y,
+              width: useLayoutWidth ? layoutBox.width : memberBounds.width,
+              height: useLayoutHeight ? layoutBox.height : memberBounds.height,
             };
           } else {
             outputGeometry = memberBounds;
           }
         }
-        if (outputGeometry.width <= 0 || outputGeometry.height <= 0) {
+        if (outputGeometry.width === 0 || pxToEmu(outputGeometry.width) === 0) {
           throw new CapabilityError(
             "invalid-group-geometry",
-            "Group layout width and height must be greater than 0",
+            "Computed Group width is 0px; width must be greater than 0px",
+          );
+        }
+        if (outputGeometry.width < 0 || pxToEmu(outputGeometry.width) < 1) {
+          throw new CapabilityError(
+            "invalid-group-geometry",
+            `Computed Group width is ${outputGeometry.width}px; width must be greater than 0px`,
+          );
+        }
+        if (
+          outputGeometry.height === 0 ||
+          pxToEmu(outputGeometry.height) === 0
+        ) {
+          throw new CapabilityError(
+            "invalid-group-geometry",
+            "Computed Group height is 0px; height must be greater than 0px",
+          );
+        }
+        if (outputGeometry.height < 0 || pxToEmu(outputGeometry.height) < 1) {
+          throw new CapabilityError(
+            "invalid-group-geometry",
+            `Computed Group height is ${outputGeometry.height}px; height must be greater than 0px`,
           );
         }
         const outputEmu = {
@@ -464,6 +487,15 @@ export const groupCapability = {
           width: pxToEmu(outputGeometry.width),
           height: pxToEmu(outputGeometry.height),
         };
+        if (
+          outputEmu.width > maximumGroupExtentEmu ||
+          outputEmu.height > maximumGroupExtentEmu
+        ) {
+          throw new CapabilityError(
+            "invalid-group-geometry",
+            "Group bounds exceed writable PresentationML dimensions",
+          );
+        }
         const name =
           resolveContext.morphName ??
           requestedName ??

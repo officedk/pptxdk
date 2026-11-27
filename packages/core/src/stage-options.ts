@@ -1,14 +1,35 @@
 import { z } from "zod";
 
+type AssertExact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : never;
+
 export const formatBaseline = "ECMA-376 5th edition Transitional" as const;
 
-export const formatBaselineSchema = z.literal(formatBaseline);
+export const formatBaselineSchema: z.ZodType<typeof formatBaseline> =
+  z.literal(formatBaseline);
 
-export const extensionSchema = z.enum(["p14", "p159", "c15"]);
-export type Extension = z.infer<typeof extensionSchema>;
+export type Extension = "p14" | "p159" | "c15";
+const rawExtensionSchema = z.enum(["p14", "p159", "c15"]);
+export const extensionSchema: z.ZodType<Extension> =
+  rawExtensionSchema satisfies z.ZodType<
+    AssertExact<Extension, z.infer<typeof rawExtensionSchema>> extends true
+      ? Extension
+      : never
+  >;
 
-export const fontEmbeddingModeSchema = z.enum(["full", "subset"]);
-export type FontEmbeddingMode = z.infer<typeof fontEmbeddingModeSchema>;
+export type FontEmbeddingMode = "full" | "subset";
+const rawFontEmbeddingModeSchema = z.enum(["full", "subset"]);
+export const fontEmbeddingModeSchema: z.ZodType<FontEmbeddingMode> =
+  rawFontEmbeddingModeSchema satisfies z.ZodType<
+    AssertExact<
+      FontEmbeddingMode,
+      z.infer<typeof rawFontEmbeddingModeSchema>
+    > extends true
+      ? FontEmbeddingMode
+      : never
+  >;
 
 export const targets = Object.freeze({
   transitional: Object.freeze({
@@ -23,22 +44,34 @@ export const targets = Object.freeze({
   }),
 });
 
+export type TargetName = "transitional" | "baseline-only";
 const targetNames = [
   targets.transitional.name,
   targets.baselineOnly.name,
 ] as const;
 
-export const targetNameSchema = z.enum(targetNames);
-export type TargetName = z.infer<typeof targetNameSchema>;
+const rawTargetNameSchema = z.enum(targetNames);
+export const targetNameSchema: z.ZodType<TargetName> =
+  rawTargetNameSchema satisfies z.ZodType<
+    AssertExact<TargetName, z.infer<typeof rawTargetNameSchema>> extends true
+      ? TargetName
+      : never
+  >;
 
-export const targetSchema = z
+export type Target = {
+  readonly name: string;
+  readonly format: typeof formatBaseline;
+  readonly extensions: readonly Extension[];
+};
+
+const rawTargetSchema = z
   .strictObject({
     name: z.string().refine((value) => value.trim().length > 0, {
       message: "Target requires a non-empty name",
     }),
-    format: formatBaselineSchema,
+    format: z.literal(formatBaseline),
     extensions: z
-      .array(extensionSchema)
+      .array(rawExtensionSchema)
       .superRefine((values, ctx) => {
         const seen = new Set<Extension>();
         for (const [index, extension] of values.entries()) {
@@ -56,35 +89,84 @@ export const targetSchema = z
       .readonly(),
   })
   .readonly();
-export type Target = z.infer<typeof targetSchema>;
+export const targetSchema: z.ZodType<Target> =
+  rawTargetSchema satisfies z.ZodType<
+    AssertExact<Target, z.infer<typeof rawTargetSchema>> extends true
+      ? Target
+      : never
+  >;
 
-export const resolveOptionsSchema = z
-  .strictObject({
-    signal: z.instanceof(AbortSignal).optional(),
-  })
-  .readonly();
-export type ResolveOptions = z.infer<typeof resolveOptionsSchema>;
+export type ResolveOptions = {
+  readonly signal?: AbortSignal | undefined;
+};
 
-export const buildOptionsSchema = z
-  .strictObject({
-    /** Explicitly request embedding full files or character subsets of fonts actually used by the deck; no embedding by default. */
-    embedFonts: fontEmbeddingModeSchema.optional(),
-    target: targetSchema.optional(),
-    /**
-     * Cooperative cancellation signal for a single build; no default timeout when unspecified.
-     * Completion, unhandled errors, and cancellation follow the first established terminal state; cancelling after completion does not alter the result.
-     */
-    signal: z.instanceof(AbortSignal).optional(),
-  })
-  .readonly();
-export type BuildOptions = z.infer<typeof buildOptionsSchema>;
+const resolveOptionsObjectSchema = z.strictObject({
+  signal: z.instanceof(AbortSignal).optional(),
+});
+export const resolveOptionsShape = resolveOptionsObjectSchema.shape;
+const rawResolveOptionsSchema = resolveOptionsObjectSchema.readonly();
+export const resolveOptionsSchema: z.ZodType<ResolveOptions> =
+  rawResolveOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      ResolveOptions,
+      z.infer<typeof rawResolveOptionsSchema>
+    > extends true
+      ? ResolveOptions
+      : never
+  >;
 
-export const emitOptionsSchema = buildOptionsSchema;
-export type EmitOptions = z.infer<typeof emitOptionsSchema>;
+export type BuildOptions = {
+  /** Explicitly request embedding full files or character subsets of fonts actually used by the deck; no embedding by default. */
+  readonly embedFonts?: FontEmbeddingMode | undefined;
+  readonly target?: Target | undefined;
+  /**
+   * Cooperative cancellation signal for a single build; no default timeout when unspecified.
+   * Completion, unhandled errors, and cancellation follow the first established terminal state; cancelling after completion does not alter the result.
+   */
+  readonly signal?: AbortSignal | undefined;
+};
+export type EmitOptions = BuildOptions;
+
+const buildOptionsObjectSchema = z.strictObject({
+  /** Explicitly request embedding full files or character subsets of fonts actually used by the deck; no embedding by default. */
+  embedFonts: rawFontEmbeddingModeSchema.optional(),
+  target: rawTargetSchema.optional(),
+  /**
+   * Cooperative cancellation signal for a single build; no default timeout when unspecified.
+   * Completion, unhandled errors, and cancellation follow the first established terminal state; cancelling after completion does not alter the result.
+   */
+  signal: z.instanceof(AbortSignal).optional(),
+});
+export const buildOptionsShape = buildOptionsObjectSchema.shape;
+const rawBuildOptionsSchema = buildOptionsObjectSchema.readonly();
+export const buildOptionsSchema: z.ZodType<BuildOptions> =
+  rawBuildOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      BuildOptions,
+      z.infer<typeof rawBuildOptionsSchema>
+    > extends true
+      ? BuildOptions
+      : never
+  >;
+
+export const emitOptionsSchema: z.ZodType<EmitOptions> = buildOptionsSchema;
 
 const diagnosticFontStyleSchema = z.enum(["normal", "italic"]);
 
-export const buildDiagnosticFontUnavailableReasonSchema = z.enum([
+export type BuildDiagnosticFontUnavailableReason =
+  | "missing-resource"
+  | "missing-face"
+  | "family-mismatch"
+  | "style-mismatch"
+  | "substitute-required"
+  | "unsupported-format"
+  | "invalid-metrics"
+  | "not-embeddable"
+  | "license-restricted"
+  | "subsetting-forbidden"
+  | "subsetting-failed";
+
+const rawBuildDiagnosticFontUnavailableReasonSchema = z.enum([
   "missing-resource",
   "missing-face",
   "family-mismatch",
@@ -97,12 +179,151 @@ export const buildDiagnosticFontUnavailableReasonSchema = z.enum([
   "subsetting-forbidden",
   "subsetting-failed",
 ]);
-export type BuildDiagnosticFontUnavailableReason = z.infer<
-  typeof buildDiagnosticFontUnavailableReasonSchema
->;
+export const buildDiagnosticFontUnavailableReasonSchema: z.ZodType<BuildDiagnosticFontUnavailableReason> =
+  rawBuildDiagnosticFontUnavailableReasonSchema satisfies z.ZodType<
+    AssertExact<
+      BuildDiagnosticFontUnavailableReason,
+      z.infer<typeof rawBuildDiagnosticFontUnavailableReasonSchema>
+    > extends true
+      ? BuildDiagnosticFontUnavailableReason
+      : never
+  >;
 
-/** Typed resolve/emit/expand failure diagnostic discriminated by `code`. */
-export const buildDiagnosticSchema = z.discriminatedUnion("code", [
+export type BuildDiagnostic =
+  | {
+      code: "invalid-options";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      expected?: string | undefined;
+    }
+  | {
+      code: "unknown-prop";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      prop: string;
+      scope?: "props" | "style" | "options" | undefined;
+    }
+  | {
+      code: "invalid-prop";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      expected?: string | undefined;
+    }
+  | {
+      code: "invalid-style";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      expected?: string | undefined;
+    }
+  | {
+      code: "invalid-structure";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      expected?: string | undefined;
+      conflictPath?: string | undefined;
+    }
+  | {
+      code: "duplicate-id";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      identifier?: string | undefined;
+      conflictPath?: string | undefined;
+    }
+  | {
+      code: "broken-reference";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      reference?: string | undefined;
+      targetKind?:
+        | "slide"
+        | "layout"
+        | "placeholder"
+        | "object"
+        | "cue"
+        | "scope"
+        | "part"
+        | "resource"
+        | "axis"
+        | undefined;
+    }
+  | {
+      code: "invalid-continuity";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      reason?:
+        | "inside-group"
+        | "on-master"
+        | "needs-object"
+        | "unsupported-object"
+        | "kind-mismatch"
+        | "name-conflict"
+        | undefined;
+      conflictPath?: string | undefined;
+    }
+  | {
+      code: "missing-capability";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      capability: string;
+    }
+  | {
+      code: "font-unavailable";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      font: {
+        family: string;
+        weight?: number | undefined;
+        style?: "normal" | "italic" | undefined;
+      };
+      reason: BuildDiagnosticFontUnavailableReason;
+    }
+  | {
+      code: "font-missing-glyph";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      font: {
+        family: string;
+        weight: number;
+        style: "normal" | "italic";
+      };
+      characters: readonly string[];
+    }
+  | {
+      code: "invalid-resource";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      resourceKind: "image" | "part" | "capability";
+    }
+  | {
+      code: "target-violation";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      target: string;
+      extension?: string | undefined;
+      mechanism?: string | undefined;
+    }
+  | {
+      code: "render-failed";
+      path: string;
+      message: string;
+      field?: string | undefined;
+      phase: "expand" | "append";
+    };
+
+const rawBuildDiagnosticSchema = z.discriminatedUnion("code", [
   z.strictObject({
     code: z.literal("invalid-options"),
     path: z.string(),
@@ -202,7 +423,7 @@ export const buildDiagnosticSchema = z.discriminatedUnion("code", [
       weight: z.number().optional(),
       style: diagnosticFontStyleSchema.optional(),
     }),
-    reason: buildDiagnosticFontUnavailableReasonSchema,
+    reason: rawBuildDiagnosticFontUnavailableReasonSchema,
   }),
   z.strictObject({
     code: z.literal("font-missing-glyph"),
@@ -240,12 +461,71 @@ export const buildDiagnosticSchema = z.discriminatedUnion("code", [
     phase: z.enum(["expand", "append"]),
   }),
 ]);
-export type BuildDiagnostic = z.infer<typeof buildDiagnosticSchema>;
+/** Typed resolve/emit/expand failure diagnostic discriminated by `code`. */
+export const buildDiagnosticSchema: z.ZodType<BuildDiagnostic> =
+  rawBuildDiagnosticSchema satisfies z.ZodType<
+    AssertExact<
+      BuildDiagnostic,
+      z.infer<typeof rawBuildDiagnosticSchema>
+    > extends true
+      ? BuildDiagnostic
+      : never
+  >;
 
 const previewFontStyleSchema = diagnosticFontStyleSchema;
 
-/** Typed per-page static preview failure discriminated by `code`. */
-export const previewErrorSchema = z.discriminatedUnion("code", [
+export type PreviewError =
+  | {
+      code: "preview-missing-font";
+      path: string;
+      field?: string | undefined;
+      message: string;
+      font: {
+        family: string;
+        weight: number;
+        style: "normal" | "italic";
+      };
+    }
+  | {
+      code: "preview-unsupported-font";
+      path: string;
+      field?: string | undefined;
+      message: string;
+      font: {
+        family: string;
+        weight?: number | undefined;
+        style?: "normal" | "italic" | undefined;
+      };
+      reason?: string | undefined;
+    }
+  | {
+      code: "preview-missing-glyph";
+      path: string;
+      field?: string | undefined;
+      message: string;
+      font: {
+        family: string;
+        weight: number;
+        style: "normal" | "italic";
+      };
+      characters: readonly string[];
+    }
+  | {
+      code: "preview-corrupt-image";
+      path: string;
+      field?: string | undefined;
+      message: string;
+      format?: "png" | "jpeg" | "gif" | undefined;
+    }
+  | {
+      code: "preview-unsupported-capability";
+      path: string;
+      field?: string | undefined;
+      message: string;
+      capability: string;
+    };
+
+export const previewErrorOptionSchemas = [
   z.strictObject({
     code: z.literal("preview-missing-font"),
     path: z.string(),
@@ -295,13 +575,54 @@ export const previewErrorSchema = z.discriminatedUnion("code", [
     message: z.string(),
     capability: z.string(),
   }),
-]);
-export type PreviewError = z.infer<typeof previewErrorSchema>;
+] as const;
 
-/** Offline external image placeholder rendered deterministically during static preview. */
-export const previewPlaceholderSchema = z.strictObject({
+const rawPreviewErrorSchema = z.discriminatedUnion(
+  "code",
+  previewErrorOptionSchemas,
+);
+/** Typed per-page static preview failure discriminated by `code`. */
+export const previewErrorSchema: z.ZodType<PreviewError> =
+  rawPreviewErrorSchema satisfies z.ZodType<
+    AssertExact<
+      PreviewError,
+      z.infer<typeof rawPreviewErrorSchema>
+    > extends true
+      ? PreviewError
+      : never
+  >;
+
+export type PreviewPlaceholder = {
+  id?: string | undefined;
+  path: string;
+  url: string;
+};
+
+const rawPreviewPlaceholderSchema = z.strictObject({
   id: z.string().optional(),
   path: z.string(),
   url: z.string(),
 });
-export type PreviewPlaceholder = z.infer<typeof previewPlaceholderSchema>;
+/** Offline external image placeholder rendered deterministically during static preview. */
+export const previewPlaceholderSchema: z.ZodType<PreviewPlaceholder> =
+  rawPreviewPlaceholderSchema satisfies z.ZodType<
+    AssertExact<
+      PreviewPlaceholder,
+      z.infer<typeof rawPreviewPlaceholderSchema>
+    > extends true
+      ? PreviewPlaceholder
+      : never
+  >;
+
+/** Error thrown when requested preview page numbers exceed the resolved deck slide count. */
+export class PreviewPageRangeError extends RangeError {
+  readonly requestedPages: readonly number[];
+  readonly totalSlides: number;
+
+  constructor(requestedPages: readonly number[], totalSlides: number) {
+    super("Preview page number is outside the document");
+    this.name = "PreviewPageRangeError";
+    this.requestedPages = Object.freeze([...requestedPages]);
+    this.totalSlides = totalSlides;
+  }
+}

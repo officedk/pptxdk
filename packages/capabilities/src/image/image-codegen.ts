@@ -15,7 +15,7 @@ import { serializeGeometryProp } from "../shape/shape-codegen.ts";
 import { readImage } from "./image-decode.ts";
 import {
   externalImageSourceSchema,
-  imageDeclarationPropsSchema,
+  imageAllowedParameters,
   imageStyleSchema,
 } from "./image-schemas.ts";
 
@@ -28,9 +28,7 @@ const imageDescriptorAllowedKeys = new Set([
   "opacity",
 ]);
 
-const imageAllowedPropKeys = new Set(
-  Object.keys(imageDeclarationPropsSchema.unwrap().shape),
-);
+const imageAllowedPropKeys = new Set(imageAllowedParameters);
 
 const dummyImageBytes = new Uint8Array([0]);
 

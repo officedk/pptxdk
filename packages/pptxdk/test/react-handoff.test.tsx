@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   build,
@@ -7,9 +8,14 @@ import {
   CommonContainer,
   CommonNode,
   createMotionScopeHandle,
+  emit,
+  floatUp,
+  font,
   resolve as resolveDocument,
   RichTextContainer,
+  wipe,
 } from "@officedk/pptxdk";
+import { paint } from "@officedk/pptxdk/preview";
 import {
   Box,
   Cell,
@@ -746,5 +752,451 @@ describe("public React handoff", () => {
         error instanceof BuildError &&
         error.diagnostics[0]?.path === "deck/slide[diag]/shape[invalid-shape]",
     );
+  });
+
+  it("produces byte-equivalent resolve, emit, paint, and validatePptx results after replacing a queried slide with moveTo and remove", async () => {
+    const jostBookBytes = new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url),
+      ),
+    );
+    const jostBoldBytes = new Uint8Array(
+      readFileSync(
+        new URL("./assets/fonts/Jost-700-Bold.ttf", import.meta.url),
+      ),
+    );
+    const jostFont = font("Jost*", [
+      { weight: 400, data: jostBookBytes },
+      { weight: 700, data: jostBoldBytes },
+    ]);
+
+    function assertValidPng960x540(png: Uint8Array, label: string): void {
+      const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+      assert.ok(png.byteLength > 24, `${label}: PNG too small`);
+      assert.deepEqual(
+        [...png.subarray(0, 8)],
+        pngSignature,
+        `${label}: invalid PNG signature`,
+      );
+      const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+      assert.equal(view.getUint32(16, false), 960, `${label}: PNG width`);
+      assert.equal(view.getUint32(20, false), 540, `${label}: PNG height`);
+    }
+
+    function createImperativeComparisonSlide() {
+      const cardScope = createMotionScopeHandle();
+      const card = box({
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          padding: 24,
+          gap: 12,
+          background: "#F8FAFC",
+          border: { color: "#CBD5E1", width: 1 },
+          borderRadius: 6,
+        },
+      }).append(
+        motionScope(cardScope, { mode: "sequence" }).append(
+          text("Metric A", {
+            style: {
+              height: "auto",
+              fontSize: 22,
+              fontWeight: 700,
+              color: "#0F172A",
+            },
+            enter: wipe({ from: "left", duration: 300 }),
+          }),
+          text("Baseline comparison summary.", {
+            style: {
+              height: "auto",
+              fontSize: 16,
+              lineHeight: 22,
+              color: "#475569",
+            },
+            enter: floatUp({ duration: 300 }),
+          }),
+        ),
+      );
+
+      return slide({ id: "comparison", background: "#FFFFFF" }).append(
+        shape({
+          style: {
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: 420,
+            height: 540,
+            background: "#0F766E",
+          },
+        }),
+        text("Comparison", {
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 48,
+            width: 320,
+            height: 44,
+            fontSize: 28,
+            fontWeight: 700,
+            color: "#FFFFFF",
+          },
+        }),
+        box({
+          style: { position: "absolute", left: 48, top: 132, width: 320 },
+        }).append(step({ n: 1 }).append(card)),
+        step({ n: 2 }).append(
+          group({ enter: wipe({ from: "left", duration: 400 }) }).append(
+            text("A", {
+              style: {
+                position: "absolute",
+                left: 480,
+                top: 160,
+                width: 40,
+                height: 32,
+                fontSize: 20,
+                fontWeight: 700,
+              },
+            }),
+            shape({
+              style: {
+                position: "absolute",
+                left: 536,
+                top: 164,
+                width: 260,
+                height: 20,
+                background: "#0F766E",
+              },
+            }),
+            text("B", {
+              style: {
+                position: "absolute",
+                left: 480,
+                top: 224,
+                width: 40,
+                height: 32,
+                fontSize: 20,
+                fontWeight: 700,
+              },
+            }),
+            shape({
+              style: {
+                position: "absolute",
+                left: 536,
+                top: 228,
+                width: 170,
+                height: 20,
+                background: "#334155",
+              },
+            }),
+          ),
+        ),
+      );
+    }
+
+    function DirectComparisonSlide() {
+      const cardScope = createMotionScopeHandle();
+      return (
+        <Slide id="comparison" background="#FFFFFF">
+          <Shape
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 420,
+              height: 540,
+              background: "#0F766E",
+            }}
+          />
+          <Text
+            style={{
+              position: "absolute",
+              left: 48,
+              top: 48,
+              width: 320,
+              height: 44,
+              fontSize: 28,
+              fontWeight: 700,
+              color: "#FFFFFF",
+            }}
+          >
+            Comparison
+          </Text>
+          <Box style={{ position: "absolute", left: 48, top: 132, width: 320 }}>
+            <Step n={1}>
+              <Box
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  padding: 24,
+                  gap: 12,
+                  background: "#F8FAFC",
+                  border: { color: "#CBD5E1", width: 1 },
+                  borderRadius: 6,
+                }}
+              >
+                <MotionScope scope={cardScope} mode="sequence">
+                  <Text
+                    style={{
+                      height: "auto",
+                      fontSize: 22,
+                      fontWeight: 700,
+                      color: "#0F172A",
+                    }}
+                    enter={wipe({ from: "left", duration: 300 })}
+                  >
+                    Metric A
+                  </Text>
+                  <Text
+                    style={{
+                      height: "auto",
+                      fontSize: 16,
+                      lineHeight: 22,
+                      color: "#475569",
+                    }}
+                    enter={floatUp({ duration: 300 })}
+                  >
+                    Baseline comparison summary.
+                  </Text>
+                </MotionScope>
+              </Box>
+            </Step>
+          </Box>
+          <Step n={2}>
+            <Group enter={wipe({ from: "left", duration: 400 })}>
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 480,
+                  top: 160,
+                  width: 40,
+                  height: 32,
+                  fontSize: 20,
+                  fontWeight: 700,
+                }}
+              >
+                A
+              </Text>
+              <Shape
+                style={{
+                  position: "absolute",
+                  left: 536,
+                  top: 164,
+                  width: 260,
+                  height: 20,
+                  background: "#0F766E",
+                }}
+              />
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 480,
+                  top: 224,
+                  width: 40,
+                  height: 32,
+                  fontSize: 20,
+                  fontWeight: 700,
+                }}
+              >
+                B
+              </Text>
+              <Shape
+                style={{
+                  position: "absolute",
+                  left: 536,
+                  top: 228,
+                  width: 170,
+                  height: 20,
+                  background: "#334155",
+                }}
+              />
+            </Group>
+          </Step>
+        </Slide>
+      );
+    }
+
+    function MultiSlideDeck({ direct }: { readonly direct: boolean }) {
+      return (
+        <Deck
+          width={960}
+          height={540}
+          style={{ fontFamily: jostFont, fontSize: 18, color: "#0F172A" }}
+        >
+          <Slide id="opening" background="#F8FAFC">
+            <Shape
+              style={{
+                position: "absolute",
+                left: 48,
+                top: 48,
+                width: 64,
+                height: 6,
+                background: "#0F766E",
+              }}
+            />
+            <Text
+              style={{
+                position: "absolute",
+                left: 48,
+                top: 72,
+                width: 480,
+                height: 48,
+                fontSize: 32,
+                fontWeight: 700,
+              }}
+            >
+              Opening
+            </Text>
+          </Slide>
+          {direct ? (
+            <DirectComparisonSlide />
+          ) : (
+            <Slide id="comparison" background="#F8FAFC">
+              <Text
+                style={{
+                  position: "absolute",
+                  left: 48,
+                  top: 72,
+                  width: 320,
+                  height: 40,
+                }}
+              >
+                Draft comparison
+              </Text>
+            </Slide>
+          )}
+          <Slide id="closing" background="#F8FAFC">
+            <Text
+              style={{
+                position: "absolute",
+                left: 48,
+                top: 72,
+                width: 480,
+                height: 48,
+                fontSize: 28,
+                fontWeight: 700,
+              }}
+            >
+              Closing
+            </Text>
+          </Slide>
+        </Deck>
+      );
+    }
+
+    const editedDocument = await expandDocument(
+      <MultiSlideDeck direct={false} />,
+    );
+    const original = editedDocument.query.get("comparison").node;
+    const replacement = createImperativeComparisonSlide();
+    replacement.moveTo(editedDocument, original);
+    original.remove();
+
+    const directDocument = await expandDocument(
+      <MultiSlideDeck direct={true} />,
+    );
+
+    const directResolution = resolveDocument(directDocument);
+    const editedResolution = resolveDocument(editedDocument);
+    assert.deepEqual(editedResolution.report, directResolution.report);
+    assert.deepEqual(
+      directResolution.slides.map(({ id }) => id),
+      ["opening", "comparison", "closing"],
+    );
+    assert.deepEqual(
+      editedResolution.slides.map(({ id }) => id),
+      ["opening", "comparison", "closing"],
+    );
+
+    for (const resolvedSlide of editedResolution.slides) {
+      assert.deepEqual(resolvedSlide.dimensions, { width: 960, height: 540 });
+      for (const locator of resolvedSlide.descendants()) {
+        if (locator.bounds !== undefined) {
+          assert.ok(locator.bounds.x >= 0);
+          assert.ok(locator.bounds.y >= 0);
+          assert.ok(locator.bounds.x + locator.bounds.width <= 960);
+          assert.ok(locator.bounds.y + locator.bounds.height <= 540);
+        }
+        if (locator.textMetrics !== undefined) {
+          assert.equal(locator.textMetrics.status, "measured");
+          assert.equal(locator.textMetrics.fits, true);
+        }
+      }
+    }
+
+    const directEmitted = emit(directResolution, { embedFonts: "full" });
+    const editedEmitted = emit(editedResolution, { embedFonts: "full" });
+    assert.deepEqual(editedEmitted.report, directEmitted.report);
+
+    const directPreview = paint(directResolution);
+    const editedPreview = paint(editedResolution);
+    assert.equal(directPreview.pages.length, 3);
+    assert.equal(editedPreview.pages.length, 3);
+    for (let i = 0; i < 3; i += 1) {
+      const directPage = directPreview.pages[i]!;
+      const editedPage = editedPreview.pages[i]!;
+      assert.deepEqual(directPage.errors, []);
+      assert.deepEqual(editedPage.errors, []);
+      assert.deepEqual(directPage.placeholders, []);
+      assert.deepEqual(editedPage.placeholders, []);
+      assert.ok(directPage.png !== undefined);
+      assert.ok(editedPage.png !== undefined);
+      assertValidPng960x540(directPage.png, `direct page ${i + 1}`);
+      assertValidPng960x540(editedPage.png, `edited page ${i + 1}`);
+      assert.equal(Buffer.compare(editedPage.png, directPage.png), 0);
+    }
+
+    const directFile = await validatePptx(directEmitted.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    const editedFile = await validatePptx(editedEmitted.pptx, {
+      allowedExtensions: ["p14", "p159"],
+    });
+    assert.deepEqual(directFile.errors, []);
+    assert.deepEqual(editedFile.errors, []);
+    assert.deepEqual(editedFile.slides, directFile.slides);
+    assert.deepEqual(
+      editedFile.slides.map(({ id }) => id),
+      ["opening", "comparison", "closing"],
+    );
+
+    const comparison = editedFile.slides.find(({ id }) => id === "comparison")!;
+    const groupObject = comparison.objects.find(({ kind }) => kind === "group");
+    assert.ok(groupObject);
+    assert.equal(groupObject.members?.length, 4);
+    assert.deepEqual(
+      comparison.animations?.map(({ trigger }) => trigger),
+      ["click", "click"],
+    );
+    assert.deepEqual(
+      comparison.animations?.[0]?.effects.map(
+        ({ targetId }) =>
+          comparison.objects.find(({ id }) => id === targetId)?.text?.text,
+      ),
+      ["Metric A", "Baseline comparison summary."],
+    );
+    const groupEffect = comparison.animations?.[1]?.effects.find(
+      ({ targetId }) => targetId === groupObject.id,
+    );
+    assert.deepEqual(
+      [
+        groupEffect?.kind,
+        groupEffect?.preset,
+        groupEffect?.durationMs,
+        groupEffect?.from,
+      ],
+      ["entrance", "wipe", 400, "left"],
+    );
+
+    const directParts = unzipSync(directEmitted.pptx);
+    const editedParts = unzipSync(editedEmitted.pptx);
+    const partNames = Object.keys(directParts).sort();
+    assert.deepEqual(Object.keys(editedParts).sort(), partNames);
+    for (const partName of partNames) {
+      assert.deepEqual(
+        editedParts[partName],
+        directParts[partName],
+        `PPTX part differs: ${partName}`,
+      );
+    }
   });
 });

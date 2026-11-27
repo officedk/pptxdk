@@ -10,11 +10,13 @@ import {
   defineTheme,
   font,
   group,
+  isThemeFontSlot,
   lighter,
   row,
   shape,
   slide,
   table,
+  themeFontSlots,
   type ColorMapOverride,
   type FontReference,
   type HexColor,
@@ -38,8 +40,10 @@ const schemeText: SchemeColorName = "tx1";
 const schemeBg: ThemeColor = "bg1";
 const accentShadeLight: ThemeColor = lighter("accent2", 0.85);
 const accentShadeDark: ThemeColor = darker("accent1", 0.25);
-const majorFontSlot: ThemeFontSlot = "major";
-const minorFontRef: FontReference = "minor";
+const majorFontSlot: ThemeFontSlot = themeFontSlots[0];
+const minorFontRef: FontReference = isThemeFontSlot("minor")
+  ? "minor"
+  : "major";
 
 const consumerThemeInput: ThemeInput = {
   name: "Consumer",

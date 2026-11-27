@@ -18,10 +18,12 @@ export {
   isSchemeColorSlot,
   isSlideLayoutDefinition,
   isTheme,
+  isThemeFontSlot,
   lighter,
   nativeColorSlots,
   schemeColorNames,
   schemeColorSlots,
+  themeFontSlots,
 } from "@pptxdk/core";
 export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
 export type {

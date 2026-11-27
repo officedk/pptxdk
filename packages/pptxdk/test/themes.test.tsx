@@ -12,8 +12,10 @@ import {
   defineTheme,
   font,
   importPptx,
+  isThemeFontSlot,
   lighter,
   schemeColorNames,
+  themeFontSlots,
   type FontReference,
   type HexColor,
   type ThemeColor,
@@ -40,6 +42,7 @@ import {
   linearGradient,
   useMotionScope,
 } from "@officedk/pptxdk/react";
+import * as pptxdkVanilla from "@officedk/pptxdk/vanilla";
 import { validatePptx } from "@pptxdk/validation";
 import { strFromU8, unzipSync } from "fflate";
 import type { ReactNode } from "react";
@@ -1633,5 +1636,24 @@ describe("public theme entry", () => {
 
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
+  });
+
+  it("exports themeFontSlots and isThemeFontSlot identically across ., ./react, and ./vanilla", async () => {
+    const reactEntry = await import("@officedk/pptxdk/react");
+    assert.equal("themeFontSlots" in pptxdkVanilla, true);
+    assert.equal("isThemeFontSlot" in pptxdkVanilla, true);
+    assert.deepEqual(
+      (pptxdkVanilla as Record<string, unknown>)["themeFontSlots"],
+      themeFontSlots,
+    );
+    assert.deepEqual(reactEntry.themeFontSlots, themeFontSlots);
+    const vanillaIsThemeFontSlot = (pptxdkVanilla as Record<string, unknown>)[
+      "isThemeFontSlot"
+    ] as (value: unknown) => boolean;
+    assert.equal(vanillaIsThemeFontSlot("major"), true);
+    assert.equal(vanillaIsThemeFontSlot("minor"), true);
+    assert.equal(vanillaIsThemeFontSlot("body"), false);
+    assert.equal(isThemeFontSlot("major"), true);
+    assert.equal(reactEntry.isThemeFontSlot("minor"), true);
   });
 });

@@ -479,7 +479,7 @@ const rawColorValueSchema = z.union([
     })
     .readonly(),
 ]);
-/** Color entry can directly provide color, theme slot, or theme token, optionally with alpha. */
+/** Color entry can directly provide a scheme color, hex color, or theme shade, optionally with alpha. */
 export const colorValueSchema: z.ZodType<ColorValue> =
   rawColorValueSchema satisfies z.ZodType<
     AssertExact<ColorValue, z.infer<typeof rawColorValueSchema>> extends true
@@ -1428,13 +1428,7 @@ const officeColors: Record<NativeColorSlot, HexColor> = {
   folHlink: "#800080",
 };
 
-const contextRecords = new WeakMap<
-  ThemeContext,
-  {
-    readonly parent?: ThemeContext;
-    readonly themeOverride?: ThemeOverride;
-  }
->();
+const contextRecords = new WeakMap<ThemeContext, ThemeOverride>();
 
 export const textStyleKeys = new Set(Object.keys(textStyleObjectSchema.shape));
 
@@ -1797,7 +1791,7 @@ function parseThemeInputData(input: ThemeInput = {}): ThemeData {
     );
   }
   const validInput = parsed.data;
-  // Theme values are content inputs: isolate nested shades, font declarations, and font bytes.
+  // Theme values are content inputs: isolate theme palette colors, font declarations, and font bytes.
   const colors = snapshotValue({
     ...officeColors,
     ...validInput.colors,
@@ -1977,62 +1971,62 @@ function effectiveThemeColor(
   context: ThemeContext,
   slot: NativeColorSlot,
 ): string {
-  const overrideColor =
-    contextRecords.get(context)?.themeOverride?.colors?.[slot];
-  return overrideColor ?? context.theme.colors[slot];
+  return (
+    contextRecords.get(context)?.colors?.[slot] ?? context.theme.colors[slot]
+  );
 }
 
-function resolveColorName(
-  raw: string,
-  context: ThemeContext,
-  depth: number,
-): ResolvedColor {
-  if (depth > 16) {
-    throw new CapabilityError(
-      "invalid-color",
-      `Circular color token reference: ${raw}`,
-    );
+function parseThemeHexValue(raw: string): ResolvedColor {
+  const digits = raw.trim().slice(1);
+  const expanded =
+    digits.length === 3 || digits.length === 4
+      ? digits
+          .split("")
+          .map((digit) => digit + digit)
+          .join("")
+      : digits;
+  if (!/^[0-9a-f]{6}([0-9a-f]{2})?$/iu.test(expanded)) {
+    throw new CapabilityError("invalid-color", `Invalid color value: ${raw}`);
   }
+  const alpha =
+    expanded.length === 8
+      ? Number.parseInt(expanded.slice(6), 16) / 255
+      : undefined;
+  return {
+    hex: expanded.slice(0, 6).toUpperCase(),
+    ...(alpha === undefined || alpha === 1 ? {} : { alpha }),
+  };
+}
+
+function resolveColorName(raw: string, context: ThemeContext): ResolvedColor {
   const value = raw.trim();
   if (value.startsWith("#")) {
-    const digits = value.slice(1);
-    const expanded =
-      digits.length === 3 || digits.length === 4
-        ? digits
-            .split("")
-            .map((digit) => digit + digit)
-            .join("")
-        : digits;
-    if (!/^[0-9a-f]{6}([0-9a-f]{2})?$/iu.test(expanded)) {
-      throw new CapabilityError("invalid-color", `Invalid color value: ${raw}`);
-    }
-    const alpha =
-      expanded.length === 8
-        ? Number.parseInt(expanded.slice(6), 16) / 255
-        : undefined;
-    return {
-      hex: expanded.slice(0, 6).toUpperCase(),
-      ...(alpha === undefined || alpha === 1 ? {} : { alpha }),
-    };
+    return parseThemeHexValue(value);
   }
   if (schemeSlot(value)) {
     const mappedSlot = context.colorMap[value];
     const configured = effectiveThemeColor(context, mappedSlot);
-    const resolved = resolveColorName(
-      configured,
-      rootContext(context),
-      depth + 1,
-    );
-    return { ...resolved, slot: mappedSlot, scheme: value };
+    if (!configured.trim().startsWith("#")) {
+      throw new CapabilityError(
+        "invalid-color",
+        `Invalid color value: ${configured}`,
+      );
+    }
+    return {
+      ...parseThemeHexValue(configured),
+      slot: mappedSlot,
+      scheme: value,
+    };
   }
   if (nativeSlot(value)) {
     const configured = effectiveThemeColor(context, value);
-    const resolved = resolveColorName(
-      configured,
-      rootContext(context),
-      depth + 1,
-    );
-    return { ...resolved, slot: value, scheme: value };
+    if (!configured.trim().startsWith("#")) {
+      throw new CapabilityError(
+        "invalid-color",
+        `Invalid color value: ${configured}`,
+      );
+    }
+    return { ...parseThemeHexValue(configured), slot: value, scheme: value };
   }
   throw new CapabilityError(
     "invalid-color",
@@ -2040,20 +2034,11 @@ function resolveColorName(
   );
 }
 
-function rootContext(context: ThemeContext): ThemeContext {
-  let current = context;
-  while (contextRecords.get(current)?.parent !== undefined) {
-    current = contextRecords.get(current)!.parent!;
-  }
-  return current;
-}
-
 function resolveColorValue(
   value: ThemeColor,
   context: ThemeContext,
-  depth: number,
 ): ResolvedColor {
-  if (typeof value === "string") return resolveColorName(value, context, depth);
+  if (typeof value === "string") return resolveColorName(value, context);
   if (
     !record(value) ||
     !schemeColorName(String(value["slot"])) ||
@@ -2068,7 +2053,7 @@ function resolveColorValue(
       ? undefined
       : checkedFraction(value["lumOff"], "lumOff");
   const scheme = value["slot"];
-  const base = resolveColorName(scheme, context, depth + 1);
+  const base = resolveColorName(scheme, context);
   return {
     hex: shadeHex(base.hex, lumMod, lumOff ?? 0),
     ...(base.slot === undefined ? {} : { slot: base.slot }),
@@ -2102,7 +2087,6 @@ function mergeThemeOverrides(
 
 function createContext(
   theme: Theme,
-  parent: ThemeContext | undefined,
   textStyle: TextStyle,
   colorMap: ColorMap = defaultColorMap,
   themeOverride?: ThemeOverride,
@@ -2118,12 +2102,11 @@ function createContext(
       const validated =
         style === undefined ? {} : textStyleFrom(style, context);
       const nextStyle = { ...context.textStyle, ...validated };
-      return createContext(theme, context, nextStyle, colorMap, themeOverride);
+      return createContext(theme, nextStyle, colorMap, themeOverride);
     },
     withTextStyle(style) {
       return createContext(
         theme,
-        context,
         textStyleFrom(style, context),
         colorMap,
         themeOverride,
@@ -2140,7 +2123,6 @@ function createContext(
           : nextColorMapOverride;
       return createContext(
         theme,
-        context,
         context.textStyle,
         nextColorMap,
         mergedOverride,
@@ -2165,8 +2147,8 @@ function createContext(
       }
       const resolved =
         typeof raw === "string"
-          ? resolveColorName(raw, context, 0)
-          : resolveColorValue(raw, context, 0);
+          ? resolveColorName(raw, context)
+          : resolveColorValue(raw, context);
       if (alpha === undefined) return resolved;
       return {
         ...resolved,
@@ -2200,10 +2182,9 @@ function createContext(
       };
     },
   });
-  contextRecords.set(context, {
-    ...(parent === undefined ? {} : { parent }),
-    ...(themeOverride === undefined ? {} : { themeOverride }),
-  });
+  if (themeOverride !== undefined) {
+    contextRecords.set(context, themeOverride);
+  }
   return context;
 }
 
@@ -2232,14 +2213,12 @@ export function createThemeContext(
   const colorMap = options.colorMap ?? defaultColorMap;
   const initialContext = createContext(
     theme,
-    undefined,
     {},
     colorMap,
     options.themeOverride,
   );
   return createContext(
     theme,
-    undefined,
     textStyleFrom(style, initialContext),
     colorMap,
     options.themeOverride,

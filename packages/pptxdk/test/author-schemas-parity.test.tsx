@@ -14,6 +14,7 @@ import {
   deckPropsSchema,
   defineTheme,
   font,
+  isTheme,
   layoutLengthSchema,
   layoutSpacingSchema,
   layoutStyleSchema,
@@ -250,6 +251,15 @@ describe("core author Zod schemas & dual-entry parity", () => {
         ?.accent1,
       "#AABBCC",
     );
+    const brandTheme = defineTheme({ name: "Brand Parity" });
+    const parsedDeckWithTheme = deckPropsSchema.parse({ theme: brandTheme });
+    assert.equal(parsedDeckWithTheme.theme, brandTheme);
+    assert.equal(isTheme(parsedDeckWithTheme.theme), true);
+    const parsedDeckWithInlineTheme = deckPropsSchema.parse({
+      theme: { colors: { accent1: " #1a2b3c " as `#${string}` } },
+    });
+    assert.equal(isTheme(parsedDeckWithInlineTheme.theme), false);
+    assert.equal(parsedDeckWithInlineTheme.theme?.colors?.accent1, "#1A2B3C");
   });
 
   it("produces identical valid documents and PPTX outputs from @officedk/pptxdk/react and @officedk/pptxdk/vanilla", async () => {

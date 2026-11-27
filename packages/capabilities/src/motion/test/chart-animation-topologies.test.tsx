@@ -664,8 +664,8 @@ describe("chart animation topology integration", () => {
         kind: "column" as const,
         data: { kind: "shared-categories" as const, categories: [] },
         series: [
-          { name: "Empty North", values: [], color: "#1D4ED8" },
-          { name: "Empty South", values: [], color: "#C2410C" },
+          { name: "Empty North", values: [], color: "#1D4ED8" as const },
+          { name: "Empty South", values: [], color: "#C2410C" as const },
         ],
       },
     ];

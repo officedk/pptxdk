@@ -8,7 +8,11 @@ import {
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart } from "../chart-model.ts";
 import type { ChartTrendline } from "../chart-types.ts";
-import { resolveChartLineStroke, strokeAttrs } from "./style.ts";
+import {
+  chartAccentSlot,
+  resolveChartLineStroke,
+  strokeAttrs,
+} from "./style.ts";
 import {
   measureChartText,
   mergeChartTextStyle,
@@ -650,7 +654,7 @@ export function renderTrendlinesSvg(options: {
         if (model === undefined) continue;
 
         const stroke = resolveChartLineStroke(trendline.line, theme, {
-          color: target.seriesColor ?? `accent${(target.seriesIndex % 6) + 1}`,
+          color: target.seriesColor ?? chartAccentSlot(target.seriesIndex),
           width: 1.5,
         });
         if (stroke === undefined) continue;

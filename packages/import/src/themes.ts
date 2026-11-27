@@ -12,6 +12,7 @@ import {
   type FormatFillStyle,
   type FormatLineStyle,
   type FormatScheme,
+  type HexColor,
   type NativeColorSlot,
   type Shadow,
   type Theme,
@@ -76,7 +77,7 @@ const outerShdwAttrSchema = z.object({
   rotWithShape: ooxmlBoolSchema.optional(),
 });
 
-const officeFallbackColors: Record<NativeColorSlot, string> = {
+const officeFallbackColors: Record<NativeColorSlot, HexColor> = {
   dk1: "#000000",
   lt1: "#FFFFFF",
   dk2: "#1F497D",
@@ -162,8 +163,8 @@ function resolveSimpleThemeHex(
   partPath: string,
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
-): string | undefined {
-  let result: string | undefined;
+): HexColor | undefined {
+  let result: HexColor | undefined;
   for (const child of slotCursor.remainingElementChildren()) {
     if (child.namespaceUri !== A_NS) {
       diagnostics.push({
@@ -255,7 +256,7 @@ function readClrScheme(
   partPath: string,
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
-): Record<NativeColorSlot, string> {
+): Record<NativeColorSlot, HexColor> {
   clrSchemeCursor.consumeAttr("name");
   const colors = { ...officeFallbackColors };
   for (const child of clrSchemeCursor.remainingElementChildren()) {
@@ -822,7 +823,7 @@ export function readThemePart(
     rawName !== undefined && rawName.trim() !== "" ? rawName : "Office Theme";
 
   const themeElements = themeCursor.child(A_NS, "themeElements");
-  let colors: Record<NativeColorSlot, string> = { ...officeFallbackColors };
+  let colors: Record<NativeColorSlot, HexColor> = { ...officeFallbackColors };
   let fonts: { readonly major?: string; readonly minor?: string } = {};
   let formatScheme: FormatScheme | undefined;
 

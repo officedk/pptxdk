@@ -388,6 +388,9 @@ export function resolveShadow(
     if (key === "angle") {
       finite(value[key], `${label}.angle`);
     }
+    if (key === "color") {
+      invalid("invalid-color", issue?.message ?? `${label}.color is invalid`);
+    }
     invalid("invalid-shadow", issue?.message ?? `${label} is invalid`);
   }
   const blur = parsed.data.blur ?? 4;
@@ -437,6 +440,20 @@ export function resolveGradientSpec(
           finite(stop["position"], `backgroundImage.stops[${idx}].position`);
         }
       }
+    }
+    if (
+      parsed.error.issues.some(
+        (entry) =>
+          (entry.path[0] === "stops" && entry.path[2] === "color") ||
+          (entry.code === "invalid_union" &&
+            entry.errors.some((branch) =>
+              branch.some(
+                (sub) => sub.path[0] === "stops" && sub.path[2] === "color",
+              ),
+            )),
+      )
+    ) {
+      invalid("invalid-color", "Gradient stop color is invalid");
     }
     invalid(
       "invalid-gradient",
@@ -704,6 +721,15 @@ function resolveVisualBorder(
         "invalid-visual-style",
         `border contains unsupported property ${issue.keys[0]}`,
       );
+    }
+    if (
+      issue?.path[0] === "color" ||
+      (issue?.code === "invalid_union" &&
+        issue.errors.some((branch) =>
+          branch.some((sub) => sub.path[0] === "color"),
+        ))
+    ) {
+      invalid("invalid-color", issue?.message ?? "Invalid border color");
     }
     invalid(
       "invalid-visual-style",

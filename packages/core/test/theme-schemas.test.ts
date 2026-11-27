@@ -19,10 +19,10 @@ import {
   fontReferenceSchema,
   fontSchema,
   fontSizeSchema,
-  fontTokenSchema,
   formatSchemeSchema,
   gradientStopSchema,
   isTheme,
+  isThemeFontSlot,
   linearGradientSchema,
   nativeColorSlotSchema,
   radialGradientSchema,
@@ -32,10 +32,10 @@ import {
   textAlignmentSchema,
   textStyleSchema,
   themeColorSchema,
+  themeFontSlotSchema,
   themeInputSchema,
   themeOverrideSchema,
   themeSchema,
-  themeScopeSchema,
   themeShadeSchema,
   validateTextStyle,
   visualStyleSchema,
@@ -52,6 +52,7 @@ import {
   type FontReference,
   type FontSize,
   type FormatScheme,
+  type HexColor,
   type LinearGradient,
   type NativeColorSlot,
   type RadialGradient,
@@ -60,9 +61,9 @@ import {
   type TextStyle,
   type Theme,
   type ThemeColor,
+  type ThemeFontSlot,
   type ThemeInput,
   type ThemeOverride,
-  type ThemeScope,
   type ThemeShade,
   type VisualStyle,
 } from "@pptxdk/core/theme";
@@ -95,10 +96,14 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       substitute: true,
     });
     const fontRef: FontReference = fontReferenceSchema.parse(fontValue);
-    const fontToken: FontReference = fontTokenSchema.parse("minor");
+    const fontSlot: ThemeFontSlot = themeFontSlotSchema.parse("minor");
     assert.deepEqual(fontRef, fontValue);
     assert.equal(fontRef.faces?.[0]?.data, face.data);
-    assert.equal(fontToken, "minor");
+    assert.equal(fontSlot, "minor");
+    assert.equal(isThemeFontSlot("major"), true);
+    assert.equal(isThemeFontSlot("body"), false);
+    const hexColor: HexColor = "#112233";
+    assert.equal(themeColorSchema.parse(hexColor), "#112233");
 
     const sizes: readonly FontSize[] = ["32pt", 32, "32px"];
     for (const size of sizes) {
@@ -248,6 +253,9 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       [{ fontWeight: 400.5 }, "invalid-font-weight"],
       [{ fontStyle: "oblique" }, "invalid-font-style"],
       [{ color: 123 }, "invalid-color"],
+      [{ color: "ink" }, "invalid-color"],
+      [{ color: "red" }, "invalid-color"],
+      [{ textShadow: { color: "tileAccent" } }, "invalid-color"],
       [{ lineHeight: 0 }, "invalid-text-length"],
       [{ verticalAlign: "baseline" }, "invalid-vertical-align"],
       [{ align: "start" }, "invalid-text-alignment"],
@@ -276,68 +284,123 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
     }
   });
 
-  it("validates ThemeInput, Theme, and ThemeScope and preserves invalid-theme-scope errors", () => {
+  it("validates closed ThemeInput, Theme, ThemeOverride, and ThemeContext color/font narrowing", () => {
     const input: ThemeInput = themeInputSchema.parse({
       name: "Brand",
-      colors: { accent1: "#112233", ink: "accent1" },
-      fonts: { major: "Aptos Display", body: "Aptos" },
+      colors: { accent1: " #abc ", accent2: "#1a2b3c" },
+      fonts: { major: "Aptos Display", minor: "Aptos" },
     });
+    assert.equal(input.colors?.accent1, "#AABBCC");
+    assert.equal(input.colors?.accent2, "#1A2B3C");
     const theme: Theme = themeSchema.parse(defineTheme(input));
     assert.equal(theme.name, "Brand");
     assert.equal(theme.colors.dk1, "#000000");
+    assert.equal(theme.colors.accent1, "#AABBCC");
+    assert.equal(theme.colors.accent2, "#1A2B3C");
 
-    const scope: ThemeScope = themeScopeSchema.parse({
-      colors: { ink: "#445566" },
-      fonts: { body: "Jost" },
+    const ctx = createThemeContext(input, {
+      fontSize: "14pt",
+      color: "accent1",
     });
-    const ctx = createThemeContext(input, { fontSize: "14pt", color: "ink" });
-    const scoped = ctx.with(scope, { fontWeight: "bold" });
-    assert.equal(scoped.resolveColor("ink").hex, "445566");
-    assert.equal(scoped.resolveFont("body").family, "Jost");
+    const derived = ctx.with({ fontWeight: "bold" });
+    assert.equal(derived.resolveColor("accent1").hex, "AABBCC");
+    assert.equal(derived.resolveColor("#1234").hex, "112233");
+    assert.equal(derived.resolveColor({ color: "bg1", alpha: 0.5 }).alpha, 0.5);
+    assert.equal(derived.resolveFont("major").family, "Aptos Display");
+    assert.equal(derived.resolveFont("major").themeFont, "major");
+    assert.equal(derived.resolveFont("Georgia").family, "Georgia");
+    assert.equal(derived.resolveFont("Georgia").themeFont, undefined);
 
-    for (const badScope of [
-      "not-an-object",
-      { extra: {} },
-      { colors: { dk1: "#111111" } },
-      { colors: { missing: "#111111" } },
-      { fonts: { missing: "Arial" } },
-      { fonts: { body: "" } },
-    ]) {
+    for (const invalidColor of [
+      "ink",
+      "red",
+      "tileAccent",
+      "#12345",
+    ] as const) {
+      assert.equal(colorValueSchema.safeParse(invalidColor).success, false);
       assert.throws(
-        () => ctx.with(badScope as ThemeScope),
+        () => derived.resolveColor(invalidColor as never),
         (error: unknown) => {
           assert(error instanceof CapabilityError);
-          assert.equal(error.code, "invalid-theme-scope");
+          assert.equal(error.code, "invalid-color");
           return true;
         },
       );
     }
+
+    for (const badThemeInput of [
+      { colors: { followHlink: "#112233" } },
+      { colors: { tileAccent: "#112233" } },
+      { colors: { accent1: "#11223380" } },
+      { colors: { accent1: "#1234" } },
+      { colors: { dk1: "accent1" } },
+      { colors: { accent1: { slot: "accent1", lumMod: 0.5 } } },
+      { fonts: { minro: "Aptos" } },
+      { fonts: { mono: "Consolas" } },
+      { fonts: { major: "major" } },
+      { fonts: { minor: "MINOR" } },
+      { fonts: { major: "+mj-lt" } },
+      { fonts: { minor: "+mn-ea" } },
+      { fonts: { major: { family: "major" } } },
+      { fonts: { minor: { family: "+mn-lt" } } },
+    ]) {
+      assert.equal(themeInputSchema.safeParse(badThemeInput).success, false);
+      assert.throws(
+        () => defineTheme(badThemeInput as never),
+        (error: unknown) => {
+          assert(error instanceof CapabilityError);
+          assert.equal(error.code, "invalid-theme");
+          return true;
+        },
+      );
+    }
+
+    for (const badOverride of [
+      { colors: { followHlink: "#112233" } },
+      { colors: { accent1: "#11223380" } },
+      { colors: { dk1: "accent2" } },
+      { fonts: { mono: "Consolas" } },
+      { fonts: { major: "major" } },
+      { fonts: { minor: "+mn-lt" } },
+    ]) {
+      assert.equal(themeOverrideSchema.safeParse(badOverride).success, false);
+    }
   });
 
-  it("preserves Theme instance identity, supports .set() mutation, and guards defaultTheme", () => {
+  it("preserves Theme instance identity, supports .set() normalization, and guards defaultTheme", () => {
     const brand = defineTheme({
       name: "Brand A",
-      colors: { accent1: "#112233", ink: "accent1" },
+      colors: { accent1: "#112233", accent2: "#abc" },
       fonts: { major: "Aptos Display" },
     });
     assert.equal(isTheme(brand), true);
     assert.equal(isTheme(defaultTheme), true);
     assert.equal(isTheme({ name: "Plain", colors: {}, fonts: {} }), false);
+    assert.equal(brand.colors.accent2, "#AABBCC");
 
     // snapshotValue preserves Theme reference identity (used by CommonNode props).
     assert.equal(snapshotValue(brand), brand);
 
     const same = brand.set({
       name: "Brand A v2",
-      colors: { accent1: "#AA0000" },
+      colors: { accent1: " #aa0000 " as HexColor },
       fonts: { minor: "Jost*" },
     });
     assert.equal(same, brand);
     assert.equal(brand.name, "Brand A v2");
     assert.equal(brand.colors.accent1, "#AA0000");
-    assert.equal(brand.colors["ink"], "accent1");
+    assert.equal(brand.colors.accent2, "#AABBCC");
     assert.equal(brand.fonts.major, "Aptos Display");
     assert.equal(brand.fonts.minor, "Jost*");
+
+    assert.throws(
+      () => brand.set({ colors: { custom: "#112233" } } as never),
+      (error: unknown) => {
+        assert(error instanceof CapabilityError);
+        assert.equal(error.code, "invalid-theme");
+        return true;
+      },
+    );
 
     assert.throws(() => defaultTheme.set({ name: "Mutated" }), TypeError);
   });
@@ -375,10 +438,11 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       ],
     });
     const override: ThemeOverride = themeOverrideSchema.parse({
-      colors: { accent1: "#FF6600" },
+      colors: { accent1: "#f60" },
       fonts: { major: "Georgia" },
       formatScheme: fmt,
     });
+    assert.equal(override.colors?.accent1, "#FF6600");
 
     const theme = defineTheme({
       colors: {

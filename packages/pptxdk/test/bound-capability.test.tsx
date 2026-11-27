@@ -1127,7 +1127,6 @@ describe("bound object capability contract", () => {
         });
         const emitsObject = input.props["filled"] === true;
         const derivedTheme = context.theme.with(
-          undefined,
           textStyleFrom(input.props["style"]),
         );
         const container: BoundContainerCollaboration = {
@@ -1692,7 +1691,6 @@ describe("bound object capability contract", () => {
           path: context.path,
         });
         const derivedTheme = context.theme.with(
-          undefined,
           textStyleFrom(input.props["style"]),
         );
         const morphKey = input.props["morphKey"] as MorphKey | undefined;

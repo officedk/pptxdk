@@ -63,7 +63,11 @@ describe("Object capability parse phase, container TextStyle validation, and Tex
     it("directly rejects invalid color on Deck and points error path to deck", async () => {
       await assert.rejects(
         build(
-          <Deck width={960} height={540} style={{ color: "invalid-color" }}>
+          <Deck
+            width={960}
+            height={540}
+            style={{ color: "invalid-color" as never }}
+          >
             <Slide id="slide-1">
               <Box id="empty-box" />
             </Slide>

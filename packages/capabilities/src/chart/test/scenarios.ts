@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import type { ChartProps } from "@pptxdk/capabilities/chart";
+import type { ChartPoint, ChartProps } from "@pptxdk/capabilities/chart";
 import { Chart } from "@pptxdk/capabilities/chart-elements";
 import { chart, deck, font, slide } from "@pptxdk/capabilities/document";
 import { Deck, Slide } from "@pptxdk/react";
@@ -29,9 +29,9 @@ const jostFont = font("Jost*", [
 
 const chartTheme = {
   colors: {
-    accent1: "#2563EB",
-    accent2: "#F59E0B",
-    dk1: "#0F172A",
+    accent1: "#2563EB" as const,
+    accent2: "#F59E0B" as const,
+    dk1: "#0F172A" as const,
   },
 };
 
@@ -1372,25 +1372,26 @@ const allMarkerSymbols = [
   "dash",
 ] as const;
 
-const lineMarkersPoints = Object.fromEntries(
-  allMarkerSymbols.map((symbol, idx) => [
-    idx,
-    {
-      marker: {
-        symbol,
-        size: 7,
-        fill: idx % 2 === 0 ? "#2563EB" : "#EC4899",
-        line: { color: "#0F172A", width: 1 },
+const lineMarkersPoints: Readonly<Record<number, ChartPoint>> =
+  Object.fromEntries(
+    allMarkerSymbols.map((symbol, idx): readonly [number, ChartPoint] => [
+      idx,
+      {
+        marker: {
+          symbol,
+          size: 7,
+          fill: idx % 2 === 0 ? "#2563EB" : "#EC4899",
+          line: { color: "#0F172A", width: 1 },
+        },
+        ...(idx === 5
+          ? {
+              color: "#EF4444",
+              line: { color: "#EF4444", width: 3, dash: "dot" as const },
+            }
+          : {}),
       },
-      ...(idx === 5
-        ? {
-            color: "#EF4444",
-            line: { color: "#EF4444", width: 3, dash: "dot" as const },
-          }
-        : {}),
-    },
-  ]),
-);
+    ]),
+  );
 
 const lineAreaPage1Charts = [
   {
@@ -2132,7 +2133,9 @@ const comboPage1Chart = {
         kind: "shared-categories" as const,
         categories: ["Q1", "Q2", "Q3", "Q4"],
       },
-      series: [{ name: "Floor", color: "#93C5FD", values: [20, 25, 30, 28] }],
+      series: [
+        { name: "Floor", color: "#93C5FD" as const, values: [20, 25, 30, 28] },
+      ],
     },
     {
       kind: "column" as const,
@@ -2141,7 +2144,13 @@ const comboPage1Chart = {
         kind: "shared-categories" as const,
         categories: ["Q1", "Q2", "Q3", "Q4"],
       },
-      series: [{ name: "Revenue", color: "#2563EB", values: [45, 68, 74, 88] }],
+      series: [
+        {
+          name: "Revenue",
+          color: "#2563EB" as const,
+          values: [45, 68, 74, 88],
+        },
+      ],
       dataLabels: { value: true, position: "insideEnd" as const },
     },
     {
@@ -2154,9 +2163,13 @@ const comboPage1Chart = {
       series: [
         {
           name: "Margin",
-          color: "#F59E0B",
+          color: "#F59E0B" as const,
           smooth: true,
-          marker: { symbol: "diamond" as const, size: 7, fill: "#F59E0B" },
+          marker: {
+            symbol: "diamond" as const,
+            size: 7,
+            fill: "#F59E0B" as const,
+          },
           values: [0.22, 0.48, 0.62, 0.78],
         },
       ],
@@ -2202,7 +2215,9 @@ const comboPage2Chart = {
         kind: "shared-categories" as const,
         categories: ["North", "South", "West"],
       },
-      series: [{ name: "Volume", color: "#10B981", values: [18, 36, 28] }],
+      series: [
+        { name: "Volume", color: "#10B981" as const, values: [18, 36, 28] },
+      ],
     },
     {
       kind: "scatter" as const,
@@ -2213,7 +2228,7 @@ const comboPage2Chart = {
       series: [
         {
           name: "Target",
-          color: "#EF4444",
+          color: "#EF4444" as const,
           marker: { symbol: "circle" as const, size: 7 },
           x: [12, 26, 42],
           y: [3, 7, 9],

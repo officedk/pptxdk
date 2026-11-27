@@ -48,13 +48,13 @@ const heroImage = new Uint8Array(
 const mixedTheme = {
   name: "Mixed layout",
   colors: {
-    dk1: "#131A2A",
-    lt1: "#FFFFFF",
-    dk2: "#42506B",
-    lt2: "#EFF3F8",
-    accent1: "#2F7D7A",
-    accent2: "#E3B448",
-    accent3: "#C85C5C",
+    dk1: "#131A2A" as const,
+    lt1: "#FFFFFF" as const,
+    dk2: "#42506B" as const,
+    lt2: "#EFF3F8" as const,
+    accent1: "#2F7D7A" as const,
+    accent2: "#E3B448" as const,
+    accent3: "#C85C5C" as const,
   },
   fonts: { major: jost, minor: jost },
 };

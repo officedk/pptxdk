@@ -3,7 +3,11 @@ import type { Rect, ThemeContext } from "@pptxdk/core/capability";
 import type { TextStyle } from "../../shared/text-service.ts";
 import type { ParsedChart } from "../chart-model.ts";
 import { renderMarkerSvg, resolveEffectiveMarker } from "./markers.ts";
-import { resolveChartLineStroke, resolveSeriesColor } from "./style.ts";
+import {
+  chartAccentSlot,
+  resolveChartLineStroke,
+  resolveSeriesColor,
+} from "./style.ts";
 import {
   measureChartText,
   renderChartTextSvg,
@@ -122,7 +126,7 @@ export function collectLegendEntries(
           const fallbackColor =
             series.line?.color ??
             series.color ??
-            `accent${(series.seriesIndex % 6) + 1}`;
+            chartAccentSlot(series.seriesIndex);
           const stroke = resolveChartLineStroke(series.line, theme, {
             color: fallbackColor,
             width: 2,
@@ -158,7 +162,7 @@ export function collectLegendEntries(
           const fallbackColor =
             series.line?.color ??
             series.color ??
-            `accent${(series.seriesIndex % 6) + 1}`;
+            chartAccentSlot(series.seriesIndex);
           const stroke = hasLine
             ? resolveChartLineStroke(series.line, theme, {
                 color: fallbackColor,

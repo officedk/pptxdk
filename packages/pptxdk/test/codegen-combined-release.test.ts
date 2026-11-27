@@ -350,7 +350,7 @@ function buildCombinedReleaseDecks() {
     placeholder: "chart" as const,
     title: {
       text: "Revenue & Target",
-      style: { fontFamily: vFont, fontSize: 13, color: "#0F172A" },
+      style: { fontFamily: vFont, fontSize: 13, color: "#0F172A" as const },
     },
     displayBlanksAs: "gap" as const,
     legend: "bottom" as const,

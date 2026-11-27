@@ -37,7 +37,7 @@ function observedShape(
   testId: string,
   text: string,
   y: number,
-  fill: string,
+  fill: `#${string}`,
   duration: number,
   delay = 0,
 ) {

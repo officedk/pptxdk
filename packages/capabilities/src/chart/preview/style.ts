@@ -1,11 +1,26 @@
 import type {
   ColorValue,
   ResolvedColor,
+  SchemeColorName,
   ThemeContext,
 } from "@pptxdk/core/capability";
 
 import type { ChartLine, ChartLineDash } from "../chart-types.ts";
 import { assertNever } from "./types.ts";
+
+const chartAccentCycle = [
+  "accent1",
+  "accent2",
+  "accent3",
+  "accent4",
+  "accent5",
+  "accent6",
+] as const;
+
+/** Returns the cycling DrawingML `accent1..accent6` scheme slot for a zero-based series index. */
+export function chartAccentSlot(seriesIndex: number): SchemeColorName {
+  return chartAccentCycle[seriesIndex % chartAccentCycle.length]!;
+}
 
 /** Resolves a series or point fill color, falling back to the theme accent cycle. */
 export function resolveSeriesColor(
@@ -13,7 +28,7 @@ export function resolveSeriesColor(
   seriesIndex: number,
   theme: ThemeContext,
 ): ResolvedColor {
-  return theme.resolveColor(color ?? `accent${(seriesIndex % 6) + 1}`);
+  return theme.resolveColor(color ?? chartAccentSlot(seriesIndex));
 }
 
 /** Maps an OOXML preset chart line dash pattern to an SVG stroke-dasharray string. */

@@ -28,8 +28,8 @@ import {
   slidePropsSchema,
   textStyleSchema,
   themeInputSchema,
+  themeOverrideSchema,
   themeSchema,
-  themeScopeSchema,
 } from "@officedk/pptxdk";
 import * as pptxdkBuild from "@officedk/pptxdk/build";
 import {
@@ -130,7 +130,6 @@ describe("core author Zod schemas & dual-entry parity", () => {
       "textStyleSchema",
       "themeInputSchema",
       "themeSchema",
-      "themeScopeSchema",
       "linkTargetSchema",
     ] as const) {
       assert.ok(key in coreMain, `@pptxdk/core must export ${key}`);
@@ -143,11 +142,23 @@ describe("core author Zod schemas & dual-entry parity", () => {
         `@pptxdk/core/document must export ${key}`,
       );
     }
+    assert.ok(
+      "themeOverrideSchema" in coreMain,
+      "@pptxdk/core must export themeOverrideSchema",
+    );
+    assert.ok(
+      "themeOverrideSchema" in coreCapability,
+      "@pptxdk/core/capability must export themeOverrideSchema",
+    );
+    assert.ok(
+      "themeOverrideSchema" in pptxdkMain,
+      "@officedk/pptxdk must export themeOverrideSchema",
+    );
     for (const key of [
       "textStyleSchema",
       "themeInputSchema",
+      "themeOverrideSchema",
       "themeSchema",
-      "themeScopeSchema",
       "colorValueSchema",
       "fontSchema",
     ] as const) {
@@ -235,8 +246,9 @@ describe("core author Zod schemas & dual-entry parity", () => {
     );
     assert.equal(themeSchema.parse(defineTheme()).name, "Office Theme");
     assert.equal(
-      themeScopeSchema.parse({ colors: { ink: "#112233" } }).colors?.["ink"],
-      "#112233",
+      themeOverrideSchema.parse({ colors: { accent1: "#abc" } }).colors
+        ?.accent1,
+      "#AABBCC",
     );
   });
 
@@ -499,21 +511,65 @@ describe("core author Zod schemas & dual-entry parity", () => {
           ),
       },
       {
-        label: "invalid local theme scope",
-        expectedCode: "invalid-prop",
+        label: "unknown Box theme prop",
+        expectedCode: "unknown-prop",
         expectedPath: "deck/slide[s1]/box[b1]",
         jsx: () => (
           <Deck>
             <Slide id="s1">
-              <Box id="b1" theme={{ colors: { dk1: "#112233" } }} />
+              <Box
+                id="b1"
+                {...({
+                  theme: { colors: { dk1: "#112233" } },
+                } as Record<string, unknown>)}
+              />
             </Slide>
           </Deck>
         ),
         vanilla: () =>
           deck().append(
             slide({ id: "s1" }).append(
-              box({ id: "b1", theme: { colors: { dk1: "#112233" } } }),
+              box({ id: "b1", theme: { colors: { dk1: "#112233" } } } as never),
             ),
+          ),
+      },
+      {
+        label: "unknown Slide theme prop",
+        expectedCode: "unknown-prop",
+        expectedPath: "deck/slide[s1]",
+        jsx: () => (
+          <Deck>
+            <Slide
+              id="s1"
+              {...({
+                theme: { colors: { dk1: "#112233" } },
+              } as Record<string, unknown>)}
+            />
+          </Deck>
+        ),
+        vanilla: () =>
+          deck().append(
+            slide({ id: "s1", theme: { colors: { dk1: "#112233" } } } as never),
+          ),
+      },
+      {
+        label: "invalid Slide themeOverride",
+        expectedCode: "invalid-prop",
+        expectedPath: "deck/slide[s1]",
+        jsx: () => (
+          <Deck>
+            <Slide
+              id="s1"
+              themeOverride={{ colors: { custom: "#112233" } } as never}
+            />
+          </Deck>
+        ),
+        vanilla: () =>
+          deck().append(
+            slide({
+              id: "s1",
+              themeOverride: { colors: { custom: "#112233" } } as never,
+            }),
           ),
       },
       {
@@ -595,7 +651,10 @@ describe("core author Zod schemas & dual-entry parity", () => {
     const heroKey = morphScope.handle("hero");
     const motionHandle = createMotionScopeHandle();
     const bgUrl = new URL("https://example.test/bg.png");
-    const mutableStyle = { fontSize: "32pt" as const, color: "#112233" };
+    const mutableStyle: { fontSize: "32pt"; color: `#${string}` } = {
+      fontSize: "32pt",
+      color: "#112233",
+    };
 
     const vanillaDoc = deck({}).append(
       slide({ id: "s1", background: { image: bgUrl } }).append(

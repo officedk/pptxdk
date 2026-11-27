@@ -3,6 +3,7 @@ import {
   matchLayoutPlaceholderKey,
   schemeColorNameSchema,
   type ColorValue,
+  type HexColor,
   type NativePlaceholderRef,
   type SchemeColorName,
   type Shadow,
@@ -278,7 +279,7 @@ function readSolidFillColor(
     return undefined;
   }
 
-  let baseString: string | undefined;
+  let baseString: HexColor | undefined;
   let schemeSlot: SchemeColorName | undefined;
   if (srgb !== undefined) {
     const raw = srgb.attrsObject(["val"]);

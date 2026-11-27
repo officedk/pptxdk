@@ -279,7 +279,7 @@ describe("@pptxdk/codegen core contract", () => {
     const scopeB = createMorphScope();
     const sharedTheme = defineTheme({
       name: "Brand",
-      colors: { brandAccent: lighter("accent2", 0.25) },
+      colors: { accent2: "#2563EB" },
     });
 
     const dummyObjectCap = {
@@ -408,7 +408,10 @@ describe("@pptxdk/codegen core contract", () => {
           layout: titleDef,
           transition: { duration: "fast" },
         }).append(t1, img1),
-        createSlideNode({ id: "s2" }).append(t2, img2),
+        createSlideNode({
+          id: "s2",
+          style: { color: lighter("accent2", 0.25) },
+        }).append(t2, img2),
       ),
     );
 

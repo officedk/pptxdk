@@ -83,10 +83,12 @@ export {
   isSchemeColorSlot,
   isSlideLayoutDefinition,
   isTheme,
+  isThemeFontSlot,
   lighter,
   nativeColorSlots,
   schemeColorNames,
   schemeColorSlots,
+  themeFontSlots,
 } from "@pptxdk/core";
 export { createMorphScope, isMorphKey } from "@pptxdk/core/capability";
 export type {
@@ -114,6 +116,7 @@ export type {
   FormatScheme,
   GradientStop,
   HeaderFooter,
+  HexColor,
   LayoutLength,
   LayoutPlaceholderSpec,
   LayoutSpacing,
@@ -164,9 +167,9 @@ export type {
   Theme,
   ThemeColor,
   ThemeData,
+  ThemeFontSlot,
   ThemeInput,
   ThemeOverride,
-  ThemeScope,
   ThemeShade,
   UnmeasuredFontIssue,
   VisualStyle,

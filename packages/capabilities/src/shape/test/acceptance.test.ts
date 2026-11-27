@@ -115,7 +115,7 @@ describe("Shape capability acceptance & bound extension contracts", () => {
         const x = Number(input.props["x"]);
         const y = Number(input.props["y"]);
         const size = Number(input.props["size"]);
-        const color = String(input.props["color"]);
+        const color = String(input.props["color"]) as `#${string}`;
         const contract = parseCapabilityLayoutContract({
           nativeKind: "sp",
           props: {

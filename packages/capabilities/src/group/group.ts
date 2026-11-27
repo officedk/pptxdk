@@ -18,7 +18,6 @@ import {
   type Rect,
   type ResolvedObject,
   type SealedCanvasMechanism,
-  type ThemeScope,
 } from "@pptxdk/core/capability";
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
@@ -302,10 +301,7 @@ export const groupCapability: ObjectCapabilityModule<
     const flipH = Boolean(rawFlipH);
     const flipV = Boolean(rawFlipV);
 
-    const theme = context.theme.with(
-      input.props["theme"] as ThemeScope | undefined,
-      textStyleFrom(styleRecord),
-    );
+    const theme = context.theme.with(textStyleFrom(styleRecord));
 
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;

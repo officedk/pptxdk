@@ -8,6 +8,7 @@ import {
   type ResolvedMarker,
 } from "./markers.ts";
 import {
+  chartAccentSlot,
   resolveChartLineStroke,
   resolveSeriesColor,
   strokeAttrs,
@@ -174,7 +175,7 @@ export function resolvePointSegmentStroke(options: {
       pointColor ??
       seriesLine?.color ??
       seriesColor ??
-      `accent${(seriesIndex % 6) + 1}`,
+      chartAccentSlot(seriesIndex),
     width: baseStroke.width,
     alpha: baseStroke.alpha,
   })!;
@@ -239,7 +240,7 @@ function renderLineGroup(options: {
   for (let s = 0; s < seriesCount; s += 1) {
     const series = group.series[s]!;
     const baseStroke = resolveChartLineStroke(series.line, theme, {
-      color: series.color ?? `accent${(series.seriesIndex % 6) + 1}`,
+      color: series.color ?? chartAccentSlot(series.seriesIndex),
       width: 2,
     })!;
 

@@ -487,7 +487,7 @@ const presentationComboProps = {
     style: {
       fontSize: 16,
       fontWeight: "bold" as const,
-      color: "#1D4ED8",
+      color: "#1D4ED8" as const,
       textDecoration: "underline" as const,
     },
   },
@@ -501,7 +501,7 @@ const presentationComboProps = {
     height: 328,
     fontFamily: jostFont,
     fontSize: 11,
-    color: "#0F172A",
+    color: "#0F172A" as const,
   },
   axes: {
     cat: {
@@ -510,8 +510,8 @@ const presentationComboProps = {
       reversed: true,
       majorTickMark: "out" as const,
       tickLabelPosition: "high" as const,
-      title: { text: "Period", style: { color: "#334155" } },
-      line: { color: "#475569", width: 1.5, dash: "dashDot" as const },
+      title: { text: "Period", style: { color: "#334155" as const } },
+      line: { color: "#475569" as const, width: 1.5, dash: "dashDot" as const },
     },
     val: {
       kind: "value" as const,
@@ -523,9 +523,9 @@ const presentationComboProps = {
       minorUnit: 5,
       numberFormat: "$#,##0",
       crosses: "min" as const,
-      gridlines: { color: "#CBD5E1", width: 1, dash: "dash" as const },
+      gridlines: { color: "#CBD5E1" as const, width: 1, dash: "dash" as const },
       minorGridlines: true,
-      style: { fontSize: 10, color: "#334155" },
+      style: { fontSize: 10, color: "#334155" as const },
       title: "Amount",
     },
     cat2: { kind: "category" as const, visible: false },
@@ -552,17 +552,20 @@ const presentationComboProps = {
         value: true,
         position: "outsideEnd" as const,
         numberFormat: "#,##0",
-        style: { color: "#0F172A", textDecoration: "underline" as const },
+        style: {
+          color: "#0F172A" as const,
+          textDecoration: "underline" as const,
+        },
       },
       series: [
         {
           name: "Primary",
-          color: "#2563EB",
+          color: "#2563EB" as const,
           values: [20, 45, 65, 80],
           points: {
             1: {
-              color: "#DC2626",
-              labelColor: "#FFFFFF",
+              color: "#DC2626" as const,
+              labelColor: "#FFFFFF" as const,
               dataLabels: { position: "insideEnd" as const },
             },
             3: { dataLabels: false as const },
@@ -576,12 +579,16 @@ const presentationComboProps = {
               backward: 0.5,
               displayEquation: true,
               displayRSquared: true,
-              line: { color: "#EF4444", width: 2, dash: "dash" as const },
+              line: {
+                color: "#EF4444" as const,
+                width: 2,
+                dash: "dash" as const,
+              },
             },
             {
               type: "linear" as const,
               forward: 0.5,
-              line: { color: "#9333EA", width: 1.5 },
+              line: { color: "#9333EA" as const, width: 1.5 },
             },
           ],
           errorBars: {
@@ -589,12 +596,12 @@ const presentationComboProps = {
             value: 4,
             include: "plus" as const,
             endCap: false,
-            line: { color: "#111827", width: 1.5 },
+            line: { color: "#111827" as const, width: 1.5 },
           },
         },
         {
           name: "Muted",
-          color: "#94A3B8",
+          color: "#94A3B8" as const,
           values: [15, 30, 40, 50],
           dataLabels: false as const,
         },
@@ -610,14 +617,14 @@ const presentationComboProps = {
       series: [
         {
           name: "Signal",
-          color: "#10B981",
+          color: "#10B981" as const,
           line: { width: 2, dash: "longDash" as const },
           smooth: true,
           marker: {
             symbol: "diamond" as const,
             size: 7,
-            fill: "#10B981",
-            line: { color: "#064E3B", width: 1 },
+            fill: "#10B981" as const,
+            line: { color: "#064E3B" as const, width: 1 },
           },
           values: [10, 20, 30, 40],
           points: {
@@ -625,7 +632,7 @@ const presentationComboProps = {
               marker: {
                 symbol: "triangle" as const,
                 size: 10,
-                fill: "#F59E0B",
+                fill: "#F59E0B" as const,
               },
             },
           },
@@ -633,7 +640,7 @@ const presentationComboProps = {
             type: "percentage" as const,
             value: 10,
             include: "both" as const,
-            line: { color: "#065F46", width: 1 },
+            line: { color: "#065F46" as const, width: 1 },
           },
         },
       ],
@@ -672,11 +679,14 @@ const presentationScatterProps = {
       series: [
         {
           name: "XY",
-          color: "#6366F1",
+          color: "#6366F1" as const,
           x: [1, 2, 4, 8],
           y: [2, 4, 6, 9],
           trendlines: [
-            { type: "exponential" as const, line: { color: "#EC4899" } },
+            {
+              type: "exponential" as const,
+              line: { color: "#EC4899" as const },
+            },
             { type: "logarithmic" as const },
             { type: "power" as const },
             { type: "movingAverage" as const, period: 2 },
@@ -693,7 +703,7 @@ const presentationScatterProps = {
         },
         {
           name: "Deviation",
-          color: "#0EA5E9",
+          color: "#0EA5E9" as const,
           x: [2, 4, 6],
           y: [3, 5, 7],
           errorBars: {
@@ -733,7 +743,11 @@ const presentationPieProps = {
         percent: true,
         separator: " | ",
         position: "outsideEnd" as const,
-        leaderLines: { color: "#1E293B", width: 1.5, dash: "dot" as const },
+        leaderLines: {
+          color: "#1E293B" as const,
+          width: 1.5,
+          dash: "dot" as const,
+        },
       },
       series: [
         {
@@ -741,9 +755,9 @@ const presentationPieProps = {
           values: [50, 30, 20],
           points: {
             0: {
-              color: "#2563EB",
+              color: "#2563EB" as const,
               explosion: 18,
-              labelColor: "#1E3A8A",
+              labelColor: "#1E3A8A" as const,
             },
           },
         },

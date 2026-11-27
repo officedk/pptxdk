@@ -1847,8 +1847,8 @@ describe("object motion", () => {
           categories: ["Q1", "Q1", "Q3"],
         },
         series: [
-          { name: "North", values: [1, 2, 3], color: "#1D4ED8" },
-          { name: "South", values: [4, 5, 6], color: "#B45309" },
+          { name: "North", values: [1, 2, 3], color: "#1D4ED8" as const },
+          { name: "South", values: [4, 5, 6], color: "#B45309" as const },
         ],
       },
     ];
@@ -1997,16 +1997,16 @@ describe("object motion", () => {
         kind: "column" as const,
         data: { kind: "shared-categories" as const, categories },
         series: [
-          { name: "Group 1A", values: [1, 2, 3], color: "#1D4ED8" },
-          { name: "Group 1B", values: [4, 5, 6], color: "#C2410C" },
+          { name: "Group 1A", values: [1, 2, 3], color: "#1D4ED8" as const },
+          { name: "Group 1B", values: [4, 5, 6], color: "#C2410C" as const },
         ],
       },
       {
         kind: "column" as const,
         data: { kind: "shared-categories" as const, categories },
         series: [
-          { name: "Group 2A", values: [7, 8, 9], color: "#0F766E" },
-          { name: "Group 2B", values: [10, 11, 12], color: "#7C3AED" },
+          { name: "Group 2A", values: [7, 8, 9], color: "#0F766E" as const },
+          { name: "Group 2B", values: [10, 11, 12], color: "#7C3AED" as const },
         ],
       },
     ];

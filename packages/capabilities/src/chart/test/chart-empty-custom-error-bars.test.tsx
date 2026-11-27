@@ -36,7 +36,7 @@ const customBoth = {
   plus: [],
   minus: [],
   endCap: false,
-  line: { color: "#336699", width: 1 },
+  line: { color: "#336699" as const, width: 1 },
 };
 
 function lineZeroGroups(errorBars: ChartErrorBars): readonly ChartGroup[] {

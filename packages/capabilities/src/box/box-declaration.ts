@@ -3,13 +3,11 @@ import {
   layoutStyleShape,
   linkTargetSchema,
   textStyleShape,
-  themeScopeSchema,
   visualStyleShape,
   type AuthorId,
   type LayoutStyle,
   type LinkTarget,
   type TextStyle,
-  type ThemeScope,
   type VisualStyle,
 } from "@pptxdk/core/capability";
 import { CommonContainer } from "@pptxdk/core/document";
@@ -50,7 +48,6 @@ export type BoxDeclarationProps = {
   readonly morphKey?: MorphKey | undefined;
   readonly link?: LinkTarget | undefined;
   readonly style?: BoxStyle | undefined;
-  readonly theme?: ThemeScope | undefined;
   readonly enter?:
     | EntranceEffectDeclaration
     | readonly EntranceEffectDeclaration[]
@@ -63,7 +60,6 @@ const boxDeclarationPropsObjectSchema = z.strictObject({
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   style: rawBoxStyleSchema.optional(),
-  theme: themeScopeSchema.optional(),
   enter: motionPropsShape.enter,
   motion: motionPropsShape.motion,
 });

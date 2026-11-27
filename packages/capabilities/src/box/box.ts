@@ -187,7 +187,7 @@ export const boxCapability: ObjectCapabilityModule = {
         const annotations = motionContainerAnnotations(
           motionProps,
           visual.hasVisibleStyle ? motionTarget : undefined,
-          { propagatesDefaultEnter: true },
+          { propagatesDefaultEnter: true, groupsAsParallelUnit: true },
         );
         const transform: PreviewTransform | undefined = visual.hasVisibleStyle
           ? {

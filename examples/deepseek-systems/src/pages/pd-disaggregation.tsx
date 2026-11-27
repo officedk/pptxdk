@@ -10,7 +10,7 @@ import {
 
 import { PanelCard, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const pdTableRows = [
   {
@@ -82,7 +82,7 @@ export function PdDisaggregationPage({
             left: 66,
             top: 168,
             width: 1148,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10.5,
             color: colors.ink,
           }}
@@ -227,7 +227,7 @@ export function PdDisaggregationPage({
             top: 504,
             width: 250,
             height: 20,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 12,
             fontWeight: 700,
             color: colors.steel,

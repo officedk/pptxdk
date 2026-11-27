@@ -21,7 +21,9 @@ import {
   resolve,
   transitions,
   type ChartGroup,
+  type FontReference,
   type MotionSchedule,
+  type ThemeColor,
 } from "@officedk/pptxdk";
 import { paint } from "@officedk/pptxdk/preview";
 import {
@@ -82,9 +84,9 @@ const panelPng = new Uint8Array(
 const theme = defineTheme({
   name: "Integrated acceptance",
   colors: {
-    brand: "#123456",
-    ink: "#162033",
-    accent: "#1D4ED8",
+    dk1: "#162033",
+    dk2: "#123456",
+    accent1: "#1D4ED8",
     accent2: "#C2410C",
   },
   fonts: { major: jost, minor: jost },
@@ -165,7 +167,7 @@ describe("integrated acceptance", () => {
   it("edits, appends and moves React-authored nodes while earlier builds stay fixed", async () => {
     const heroKey = createMorphScope().handle("hero");
     const stageScope = createMotionScopeHandle();
-    const heroStyle = { color: "brand", fontSize: 18, fontFamily: "minor" };
+    const heroStyle = { fontSize: 18, fontFamily: "minor" as const };
     const panelBytes = new Uint8Array(panelPng);
     const CaptionContext = createContext("default");
 
@@ -173,9 +175,9 @@ describe("integrated acceptance", () => {
       style,
     }: {
       readonly style: {
-        readonly color: string;
+        readonly color?: ThemeColor;
         readonly fontSize: number;
-        readonly fontFamily: string;
+        readonly fontFamily: FontReference;
       };
     }) {
       return createElement(
@@ -194,7 +196,6 @@ describe("integrated acceptance", () => {
           <Step n={1}>
             <Box
               id="source-panel"
-              theme={{ colors: { brand: "#123456" } }}
               style={{
                 position: "absolute",
                 left: 40,
@@ -204,6 +205,7 @@ describe("integrated acceptance", () => {
                 padding: 10,
                 display: "flex",
                 flexDirection: "column",
+                color: "#123456",
               }}
             >
               <Shape
@@ -225,7 +227,6 @@ describe("integrated acceptance", () => {
             <MotionScope scope={stageScope}>
               <Box
                 id="stage"
-                theme={{ colors: { brand: "#ABCDEF" } }}
                 style={{
                   position: "absolute",
                   left: 360,
@@ -236,6 +237,7 @@ describe("integrated acceptance", () => {
                   display: "flex",
                   flexDirection: "column",
                   gap: 12,
+                  color: "#ABCDEF",
                 }}
               >
                 <Text
@@ -243,7 +245,6 @@ describe("integrated acceptance", () => {
                   style={{
                     width: 380,
                     height: 32,
-                    color: "brand",
                     fontSize: 22,
                     fontFamily: "major",
                   }}
@@ -261,7 +262,7 @@ describe("integrated acceptance", () => {
               top: 480,
               width: 400,
               height: 24,
-              color: "ink",
+              color: "dk1",
               fontSize: 12,
               fontFamily: "minor",
             }}
@@ -342,7 +343,11 @@ describe("integrated acceptance", () => {
     const stageTitle = page.get("stage").getAs("stage-title", isText);
     stageTitle.content("Stage updated");
 
-    const draftStyle = { color: "brand", fontSize: 18, fontFamily: "minor" };
+    const draftStyle: {
+      color?: ThemeColor;
+      fontSize: number;
+      fontFamily: FontReference;
+    } = { fontSize: 18, fontFamily: "minor" };
     const appended = await appendJSX(
       container(stage.node),
       createElement(
@@ -546,7 +551,7 @@ describe("integrated acceptance", () => {
         height: 240,
         fontFamily: "minor",
         fontSize: "10pt",
-        color: "ink",
+        color: "dk1",
       },
       axes: {
         period: { kind: "category", title: "Region" },
@@ -580,7 +585,7 @@ describe("integrated acceptance", () => {
       <Deck width={960} height={540} theme={theme}>
         <Slide
           id="combo-page"
-          theme={{ colors: { accent: "#C2410C" } }}
+          themeOverride={{ colors: { accent1: "#C2410C" } }}
           style={{ fontSize: 40, lineHeight: "60pt" }}
         >
           <Text
@@ -589,7 +594,7 @@ describe("integrated acceptance", () => {
               fontFamily: "major",
               fontSize: 28,
               fontWeight: 700,
-              color: "ink",
+              color: "dk1",
             }}
           >
             Integrated delivery
@@ -600,7 +605,7 @@ describe("integrated acceptance", () => {
               fontFamily: "minor",
               fontSize: 16,
               lineHeight: "22pt",
-              color: "ink",
+              color: "dk1",
               height: "auto",
               width: 552,
             }}
@@ -642,7 +647,7 @@ describe("integrated acceptance", () => {
               height: 40,
             }}
           />
-          <Notes id="speech" style={{ fontSize: "14pt", color: "accent" }}>
+          <Notes id="speech" style={{ fontSize: "14pt", color: "accent2" }}>
             <P id="opening">
               Opening <Span style={{ fontWeight: 700 }}>emphasis</Span>
             </P>
@@ -669,7 +674,7 @@ describe("integrated acceptance", () => {
               height: 360,
               fontFamily: "minor",
               fontSize: "10pt",
-              color: "ink",
+              color: "dk1",
             }}
             groups={[
               {
@@ -1201,7 +1206,7 @@ describe("integrated acceptance", () => {
                 top: 0,
                 width: 800,
                 height: 36,
-                color: "ink",
+                color: "dk1",
                 fontFamily: "major",
                 fontSize: 24,
                 fontWeight: 700,
@@ -1222,7 +1227,7 @@ describe("integrated acceptance", () => {
                   height: 300,
                   fontFamily: "minor",
                   fontSize: "10pt",
-                  color: "ink",
+                  color: "dk1",
                 }}
                 groups={[
                   {
@@ -1248,7 +1253,7 @@ describe("integrated acceptance", () => {
                   height: 300,
                   fontFamily: "minor",
                   fontSize: "10pt",
-                  color: "ink",
+                  color: "dk1",
                 }}
                 groups={[
                   {
@@ -1419,7 +1424,7 @@ describe("integrated acceptance", () => {
           top: 480,
           width: 400,
           height: 24,
-          color: "ink",
+          color: "dk1",
           fontFamily: "minor",
           fontSize: 14,
         },
@@ -1726,10 +1731,11 @@ describe("integrated acceptance", () => {
     const integrationTheme = defineTheme({
       name: "Full Canvas Parity Integration",
       colors: {
-        brand: "#1E3A8A",
-        ink: "#0F172A",
-        accent: "#2563EB",
+        dk1: "#0F172A",
+        dk2: "#1E3A8A",
+        accent1: "#2563EB",
         accent2: "#059669",
+        accent3: "#0F766E",
       },
       fonts: { major: jost, minor: jost },
     });
@@ -1768,7 +1774,6 @@ describe("integrated acceptance", () => {
               Box,
               {
                 id: "styled-box",
-                theme: { colors: { accent: "#0F766E" } },
                 style: {
                   position: "absolute",
                   left: 24,
@@ -1777,7 +1782,7 @@ describe("integrated acceptance", () => {
                   height: 110,
                   padding: 12,
                   background: radialGradient("#DBEAFE", "#93C5FD"),
-                  border: { color: "brand", width: 2, style: "dashed" },
+                  border: { color: "dk2", width: 2, style: "dashed" },
                   borderRadius: 14,
                   boxShadow: {
                     color: "#0F172A",
@@ -1792,7 +1797,7 @@ describe("integrated acceptance", () => {
                 Text,
                 {
                   id: "box-caption",
-                  style: { fontFamily: jost, fontSize: 15, color: "accent" },
+                  style: { fontFamily: jost, fontSize: 15, color: "accent3" },
                 },
                 "Radial Box + Theme Override",
               ),
@@ -1814,7 +1819,7 @@ describe("integrated acceptance", () => {
                     top: 144,
                     width: 240,
                     height: 60,
-                    background: "accent",
+                    background: "accent1",
                     fontFamily: jost,
                     fontSize: 14,
                     color: "#FFFFFF",
@@ -1909,7 +1914,7 @@ describe("integrated acceptance", () => {
                   height: 220,
                   fontFamily: jost,
                   fontSize: 13,
-                  color: "ink",
+                  color: "dk1",
                   padding: 10,
                   background: "#FFFFFF",
                   border: { color: "#94A3B8", width: 1 },
@@ -1969,7 +1974,7 @@ describe("integrated acceptance", () => {
                   width: 912,
                   fontFamily: jost,
                   fontSize: 13,
-                  color: "ink",
+                  color: "dk1",
                 },
               },
               createElement(
@@ -2106,7 +2111,7 @@ describe("integrated acceptance", () => {
                 text: "Combo Dual Axis + Trend",
                 style: {
                   fontSize: 15,
-                  color: "brand",
+                  color: "dk2",
                   textDecoration: "underline",
                   textShadow: {
                     color: "#0F172A",

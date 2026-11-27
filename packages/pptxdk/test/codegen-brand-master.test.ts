@@ -8,7 +8,6 @@ import {
   codegen,
   defineTheme,
   importPptx,
-  lighter,
   type CodegenResult,
 } from "@officedk/pptxdk";
 import {
@@ -71,7 +70,6 @@ function buildDirectBrandMasterFixtures() {
       name: "Apex Brand",
       colors: {
         accent1: "#1D4ED8",
-        brandTint: lighter("accent1", 0.35),
       },
       fonts: { major: fontValue, minor: fontValue },
     });

@@ -4,16 +4,21 @@ import {
   SlideNumber,
   Text,
   transitions,
+  type ThemeColor,
   type Transition,
 } from "@officedk/pptxdk/react";
 import type { ReactNode } from "react";
 
 import { Rule, type SemanticTone } from "../components/primitives.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const badgePalette: Record<
   SemanticTone,
-  { readonly bg: string; readonly border: string; readonly text: string }
+  {
+    readonly bg: ThemeColor;
+    readonly border: ThemeColor;
+    readonly text: ThemeColor;
+  }
 > = {
   compute: {
     bg: colors.computeSoft,
@@ -199,7 +204,7 @@ export function SlideFrame({
           top: 684,
           width: 112,
           padding: 0,
-          fontFamily: "metric",
+          fontFamily: fonts.metric,
           fontSize: 11,
           fontWeight: 700,
           color: mutedInk,

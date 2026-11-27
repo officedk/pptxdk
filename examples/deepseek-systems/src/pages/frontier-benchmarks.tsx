@@ -2,7 +2,7 @@ import { Chart, Shape, Text } from "@officedk/pptxdk/react";
 
 import { MetricCard, PanelCard, Rule } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const benchmarkCategories = [
   "MMLU-Pro",
@@ -68,7 +68,11 @@ export function FrontierBenchmarksPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 10.5, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10.5,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -78,7 +82,11 @@ export function FrontierBenchmarksPage() {
               numberFormat: '0"%"',
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -119,7 +127,7 @@ export function FrontierBenchmarksPage() {
             top: 170,
             width: 752,
             height: 416,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10.5,
             color: colors.ink,
           }}

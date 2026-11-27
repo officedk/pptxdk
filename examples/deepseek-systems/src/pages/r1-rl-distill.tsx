@@ -10,7 +10,7 @@ import {
 
 import { PanelCard, SemanticTag } from "../components/primitives.tsx";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 const r1PipelineStages = [
   {
@@ -108,7 +108,7 @@ export function R1RlDistillPage() {
             top: 202,
             width: 320,
             height: 24,
-            fontFamily: "metric",
+            fontFamily: fonts.metric,
             fontSize: 14,
             fontWeight: 700,
             color: colors.ink,
@@ -289,7 +289,11 @@ export function R1RlDistillPage() {
             category: {
               kind: "category",
               line: { color: colors.steel, width: 1 },
-              style: { fontFamily: "body", fontSize: 10, color: colors.ink },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.ink,
+              },
             },
             value: {
               kind: "value",
@@ -299,7 +303,11 @@ export function R1RlDistillPage() {
               numberFormat: '0"%"',
               gridlines: { color: colors.line, width: 1 },
               line: false,
-              style: { fontFamily: "body", fontSize: 10, color: colors.muted },
+              style: {
+                fontFamily: fonts.body,
+                fontSize: 10,
+                color: colors.muted,
+              },
             },
           }}
           groups={[
@@ -325,7 +333,11 @@ export function R1RlDistillPage() {
                 value: true,
                 position: "outsideEnd",
                 numberFormat: "0.0",
-                style: { fontFamily: "body", fontSize: 9.5, color: colors.ink },
+                style: {
+                  fontFamily: fonts.body,
+                  fontSize: 9.5,
+                  color: colors.ink,
+                },
               },
             },
           ]}
@@ -335,7 +347,7 @@ export function R1RlDistillPage() {
             top: 426,
             width: 836,
             height: 220,
-            fontFamily: "body",
+            fontFamily: fonts.body,
             fontSize: 10,
             color: colors.ink,
           }}

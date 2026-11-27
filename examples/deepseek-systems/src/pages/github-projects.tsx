@@ -3,7 +3,7 @@ import { use } from "react";
 
 import type { fetchGitHubProjects } from "../github-projects.ts";
 import { SlideFrame } from "../templates/slide-frame.tsx";
-import { colors } from "../theme.ts";
+import { colors, fonts } from "../theme.ts";
 
 export function GitHubProjectsPage({
   snapshot,
@@ -61,7 +61,7 @@ export function GitHubProjectsPage({
           top: 166,
           width: 1184,
           height: 410,
-          fontFamily: "body",
+          fontFamily: fonts.body,
           fontSize: 14,
           color: colors.ink,
         }}

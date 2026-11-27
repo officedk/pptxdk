@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
-
 import {
+  bytesSha256,
   CapabilityError,
+  peekFontFaceResource,
   type FontEmbeddingMode,
   type FontFaceStyle,
 } from "@pptxdk/core/capability";
@@ -18,7 +18,7 @@ export function fontFamilyKey(value: string): string {
 
 /** Computes the SHA-256 hex digest used to key parsed font caches and resource identities. */
 export function fontBytesIdentity(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
+  return bytesSha256(bytes);
 }
 
 type FontBinaryFormat = "TTF" | "CFF" | "WOFF" | "WOFF2";
@@ -679,13 +679,16 @@ function failFont(
  * Returns `undefined` for corrupt bytes, font collections, or variable (`fvar`) fonts
  * so `resolve`/`emit` can report a node-path-attributed `BuildError`.
  */
-export function tryInferStaticFontFaceMetadata(bytes: Uint8Array):
+export function tryInferStaticFontFaceMetadata(
+  bytes: Uint8Array,
+  knownIdentity?: string,
+):
   | {
       readonly weight: number;
       readonly style: FontFaceStyle;
     }
   | undefined {
-  const parsed = tryGetOrParseFontBinary(bytes);
+  const parsed = tryGetOrParseFontBinary(bytes, knownIdentity);
   if (
     parsed === undefined ||
     parsed.hasFvar ||
@@ -720,14 +723,15 @@ export function resolveDeclaredFaceSlot(face: {
       matchAnyWeightOnFvarOrCorrupt: false,
     };
   }
-  if (face.data === undefined) {
+  const resource = peekFontFaceResource(face);
+  if (resource === undefined) {
     return {
       weight: face.weight ?? 400,
       style: face.style ?? "normal",
       matchAnyWeightOnFvarOrCorrupt: false,
     };
   }
-  const parsed = tryGetOrParseFontBinary(face.data);
+  const parsed = tryGetOrParseFontBinary(resource.bytes, resource.sha256);
   if (parsed === undefined || parsed.hasFvar) {
     return {
       weight: face.weight ?? parsed?.weightClass ?? 400,
@@ -950,9 +954,10 @@ export function isTrueTypeFontEmbeddable(
   family: string,
   substitute: boolean,
   declaredEmbeddable: boolean,
+  knownIdentity?: string,
 ): boolean {
   if (substitute || !declaredEmbeddable) return false;
-  const parsed = tryGetOrParseFontBinary(bytes);
+  const parsed = tryGetOrParseFontBinary(bytes, knownIdentity);
   if (
     parsed === undefined ||
     !parsed.hasGlyf ||

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import {
   BuildError,
   CapabilityError,
@@ -13,25 +11,26 @@ import {
   type BuildReport,
   type ResolvedResource,
 } from "@pptxdk/core/build";
-import type {
-  CapabilityPackagePart,
-  CapabilityPartRelationship,
-  CapabilityPresentationContribution,
-  CapabilityResource,
-  CapabilityResourceClaim,
-  CapabilitySharedPackagePart,
-  CapabilitySlidePackagePart,
-  EmitContext,
-  EmitOptions,
-  EmitOutput,
-  EmitResult,
-  Extension,
-  NativeLink,
-  Resolution,
-  ResolvedLink,
-  SlideCapabilitySlot,
-  SlideEmitContext,
-  Target,
+import {
+  bytesSha256,
+  type CapabilityPackagePart,
+  type CapabilityPartRelationship,
+  type CapabilityPresentationContribution,
+  type CapabilityResource,
+  type CapabilityResourceClaim,
+  type CapabilitySharedPackagePart,
+  type CapabilitySlidePackagePart,
+  type EmitContext,
+  type EmitOptions,
+  type EmitOutput,
+  type EmitResult,
+  type Extension,
+  type NativeLink,
+  type Resolution,
+  type ResolvedLink,
+  type SlideCapabilitySlot,
+  type SlideEmitContext,
+  type Target,
 } from "@pptxdk/core/capability";
 import { createBuildQuery, type SlideLocatorIndex } from "@pptxdk/core/query";
 import {
@@ -361,7 +360,7 @@ function addResource(
     );
   }
 
-  const digest = createHash("sha256").update(resource.bytes).digest("hex");
+  const digest = bytesSha256(resource.bytes);
   const assetKey = `${extension}\u0000${resource.contentType}\u0000${digest}`;
   let asset = context.document.resources.get(assetKey);
   if (asset === undefined) {

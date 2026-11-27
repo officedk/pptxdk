@@ -4,6 +4,7 @@ import {
   type CodegenContext,
   type CodegenExpr,
 } from "@pptxdk/codegen";
+import { readInternalDeclarationProps } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import {
@@ -139,7 +140,8 @@ function collectStepProps(
   node: CommonNode,
   ctx: CodegenContext,
 ): readonly (readonly [string, unknown])[] {
-  for (const [key, value] of Object.entries(node.props)) {
+  const props = readInternalDeclarationProps(node);
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!stepAllowedPropKeys.has(key)) {
       ctx.fail(
@@ -149,7 +151,7 @@ function collectStepProps(
       );
     }
   }
-  const rawN = node.props["n"];
+  const rawN = props["n"];
   if (rawN === undefined) {
     return [];
   }
@@ -174,7 +176,8 @@ function collectScopeProps(
   readonly scopeVar: string;
   readonly optionEntries: readonly (readonly [string, unknown])[];
 } {
-  for (const [key, value] of Object.entries(node.props)) {
+  const props = readInternalDeclarationProps(node);
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!scopeAllowedPropKeys.has(key)) {
       ctx.fail(
@@ -185,7 +188,7 @@ function collectScopeProps(
     }
   }
 
-  const parsedScope = motionScopeHandleSchema.safeParse(node.props["scope"]);
+  const parsedScope = motionScopeHandleSchema.safeParse(props["scope"]);
   if (!parsedScope.success) {
     ctx.fail(
       "unexpressible-value",
@@ -196,7 +199,7 @@ function collectScopeProps(
   const scopeVar = ctx.allocateMotionScope(parsedScope.data.identity);
 
   const optionEntries: [string, unknown][] = [];
-  const rawMode = node.props["mode"];
+  const rawMode = props["mode"];
   if (rawMode !== undefined) {
     const parsedMode = motionScopeModeSchema.safeParse(rawMode);
     if (!parsedMode.success) {
@@ -209,7 +212,7 @@ function collectScopeProps(
     optionEntries.push(["mode", parsedMode.data]);
   }
 
-  const rawEach = node.props["each"];
+  const rawEach = props["each"];
   if (rawEach !== undefined) {
     if (typeof rawEach === "number" && !Number.isFinite(rawEach)) {
       ctx.fail(
@@ -232,7 +235,7 @@ function collectScopeProps(
     optionEntries.push(["each", rawEach]);
   }
 
-  const rawDelay = node.props["delay"];
+  const rawDelay = props["delay"];
   if (rawDelay !== undefined) {
     if (typeof rawDelay === "number" && !Number.isFinite(rawDelay)) {
       ctx.fail(
@@ -252,7 +255,7 @@ function collectScopeProps(
     optionEntries.push(["delay", parsedDelay.data]);
   }
 
-  const rawStartAt = node.props["startAt"];
+  const rawStartAt = props["startAt"];
   if (rawStartAt !== undefined) {
     optionEntries.push([
       "startAt",
@@ -260,7 +263,7 @@ function collectScopeProps(
     ]);
   }
 
-  const rawPublishStart = node.props["publishStart"];
+  const rawPublishStart = props["publishStart"];
   if (rawPublishStart !== undefined) {
     optionEntries.push([
       "publishStart",
@@ -268,7 +271,7 @@ function collectScopeProps(
     ]);
   }
 
-  const rawPublishEnd = node.props["publishEnd"];
+  const rawPublishEnd = props["publishEnd"];
   if (rawPublishEnd !== undefined) {
     optionEntries.push([
       "publishEnd",
@@ -276,7 +279,7 @@ function collectScopeProps(
     ]);
   }
 
-  const rawMotion = node.props["motion"];
+  const rawMotion = props["motion"];
   if (rawMotion !== undefined) {
     if (typeof rawMotion !== "boolean") {
       ctx.fail(

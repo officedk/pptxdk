@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { bytesSha256 } from "@pptxdk/core/capability";
 
 import {
   IdentifierAllocator,
@@ -58,7 +58,7 @@ export class AssetRegistry {
 
   registerImage(bytes: Uint8Array, ext: string): string {
     const normalizedExt = normalizeImageExtension(ext);
-    const fullHash = createHash("sha256").update(bytes).digest("hex");
+    const fullHash = bytesSha256(bytes);
     const dedupKey = `image:${normalizedExt}:${fullHash}`;
     const existing = this.#byKey.get(dedupKey);
     if (existing !== undefined) {
@@ -80,9 +80,14 @@ export class AssetRegistry {
     return varName;
   }
 
-  registerFont(bytes: Uint8Array, family: string, ext?: "ttf" | "otf"): string {
+  registerFont(
+    bytes: Uint8Array,
+    family: string,
+    ext?: "ttf" | "otf",
+    knownSha256?: string,
+  ): string {
     const resolvedExt = detectFontExtension(bytes, ext);
-    const fullHash = createHash("sha256").update(bytes).digest("hex");
+    const fullHash = knownSha256 ?? bytesSha256(bytes);
     const dedupKey = `font:${resolvedExt}:${fullHash}`;
     const existing = this.#byKey.get(dedupKey);
     if (existing !== undefined) {

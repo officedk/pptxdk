@@ -13,6 +13,8 @@ import {
   isFont,
   isMorphKey,
   isTheme,
+  peekFontFaceResource,
+  readInternalDeclarationProps,
   type Font,
   type MorphKey,
   type RegisteredCapabilityModule,
@@ -375,7 +377,12 @@ function collectMorphKeysFromTree(root: CommonNode): readonly MorphKey[] {
   const seen = new Set<MorphKey>();
   const visitedObjects = new Set<object>();
   const visit = (node: CommonNode): void => {
-    collectMorphKeysFromValue(node.props, out, seen, visitedObjects);
+    collectMorphKeysFromValue(
+      readInternalDeclarationProps(node),
+      out,
+      seen,
+      visitedObjects,
+    );
     for (const child of node.children) {
       if (child instanceof CommonNode) {
         visit(child);
@@ -390,7 +397,7 @@ function fontDedupKey(fontValue: Font): string {
   const faces = (fontValue.faces ?? []).map((face) => ({
     weight: face.weight ?? null,
     style: face.style ?? null,
-    dataLen: face.data?.byteLength ?? null,
+    dataLen: peekFontFaceResource(face)?.bytes.byteLength ?? null,
     // Actual asset dedup uses SHA-256 inside AssetRegistry; include first/last bytes + length as fast key,
     // or hash inside registerFont. We compute a structural key once asset varName is resolved.
   }));
@@ -562,7 +569,7 @@ export function createCodegen(
     for (const child of document.children) {
       if (!(child instanceof SlideMasterContainer)) continue;
       for (const layout of child.layouts) {
-        const def = layout.props["layout"];
+        const def = readInternalDeclarationProps(layout)["layout"];
         if (isSlideLayoutDefinition(def)) {
           layoutDefinitionCounts.set(
             def,
@@ -582,10 +589,11 @@ export function createCodegen(
       hooks: ValueHooks,
     ): string => {
       const resolvedFaces = (fontValue.faces ?? []).map((face) => {
+        const resource = peekFontFaceResource(face);
         const assetVar =
-          face.data === undefined
+          resource === undefined
             ? undefined
-            : ctx.registerFontAsset(face.data, fontValue.family);
+            : ctx.registerFontAsset(resource.bytes, fontValue.family);
         return {
           ...(face.weight === undefined ? {} : { weight: face.weight }),
           ...(face.style === undefined ? {} : { style: face.style }),
@@ -878,7 +886,9 @@ export function createCodegen(
 
     // Validate and normalize Deck props
     const deckPropsEntries: [string, unknown][] = [];
-    for (const [key, value] of Object.entries(document.props)) {
+    for (const [key, value] of Object.entries(
+      readInternalDeclarationProps(document),
+    )) {
       if (!isDefined(value)) continue;
       if (!coreDeckPropKeys.has(key)) {
         failAt(
@@ -922,8 +932,9 @@ export function createCodegen(
 
     for (const [masterIndex, masterNode] of masterNodes.entries()) {
       const masterPath = `deck/${childPathLabel(masterNode, masterIndex)}`;
+      const masterProps = readInternalDeclarationProps(masterNode);
       const masterRawName =
-        masterNode.id ?? (masterNode.props["name"] as string | undefined);
+        masterNode.id ?? (masterProps["name"] as string | undefined);
       const masterVar =
         target === "vanilla"
           ? allocator.allocate(
@@ -938,7 +949,7 @@ export function createCodegen(
           : `${masterVar.charAt(0).toLowerCase()}${masterVar.slice(1)}`;
 
       const masterPropsEntries: [string, unknown][] = [];
-      for (const [key, value] of Object.entries(masterNode.props)) {
+      for (const [key, value] of Object.entries(masterProps)) {
         if (!isDefined(value)) continue;
         if (key === "theme") {
           masterPropsEntries.push([
@@ -979,7 +990,8 @@ export function createCodegen(
       const layoutExprsForMaster: string[] = [];
       for (const [layoutIndex, layoutNode] of masterLayouts.entries()) {
         const rawLayoutPath = `${masterPath}/${childPathLabel(layoutNode, layoutIndex)}`;
-        const rawDef = layoutNode.props["layout"];
+        const layoutProps = readInternalDeclarationProps(layoutNode);
+        const rawDef = layoutProps["layout"];
         if (rawDef !== undefined && !isSlideLayoutDefinition(rawDef)) {
           failAt(
             `${rawLayoutPath}@layout`,
@@ -991,7 +1003,7 @@ export function createCodegen(
         const effectiveLayoutProps: Record<string, unknown> = {
           ...def?.props,
         };
-        for (const [key, value] of Object.entries(layoutNode.props)) {
+        for (const [key, value] of Object.entries(layoutProps)) {
           if (key === "layout" || !isDefined(value)) continue;
           effectiveLayoutProps[key] = value;
         }
@@ -1135,8 +1147,9 @@ export function createCodegen(
     ): string => {
       const slideLabel = slideNode.id ?? String(slideIndex + 1);
       const slidePath = `deck/slide[${slideLabel}]`;
+      const slideProps = readInternalDeclarationProps(slideNode);
       const slidePropsEntries: [string, unknown][] = [];
-      for (const [key, value] of Object.entries(slideNode.props)) {
+      for (const [key, value] of Object.entries(slideProps)) {
         if (!isDefined(value)) continue;
         if (key === "layout") {
           if (isSlideLayoutDefinition(value)) {
@@ -1186,15 +1199,19 @@ export function createCodegen(
       const slideMotionVars = new Map<string, string>();
       currentMotionScopeVars = slideMotionVars;
       currentScopeAllocator = target === "react" ? allocator.fork() : allocator;
-      const rawSlideLayout = slideNode.props["layout"];
+      const rawSlideLayout = slideProps["layout"];
+      const rawSlideLayoutProps =
+        rawSlideLayout instanceof SlideLayoutContainer
+          ? readInternalDeclarationProps(rawSlideLayout)
+          : undefined;
       currentSlideLayoutPlaceholders = isSlideLayoutDefinition(rawSlideLayout)
         ? rawSlideLayout.placeholders
-        : rawSlideLayout instanceof SlideLayoutContainer
-          ? ((rawSlideLayout.props["placeholders"] as
+        : rawSlideLayoutProps !== undefined
+          ? ((rawSlideLayoutProps["placeholders"] as
               | PlaceholderMap
               | undefined) ??
-            (isSlideLayoutDefinition(rawSlideLayout.props["layout"])
-              ? rawSlideLayout.props["layout"].placeholders
+            (isSlideLayoutDefinition(rawSlideLayoutProps["layout"])
+              ? rawSlideLayoutProps["layout"].placeholders
               : undefined))
           : undefined;
 
@@ -1275,12 +1292,13 @@ export function createCodegen(
 
     if (usesSections) {
       for (const [secIndex, sectionNode] of bodyNodes.entries()) {
-        const rawSectionName = sectionNode.props["name"];
+        const sectionProps = readInternalDeclarationProps(sectionNode);
+        const rawSectionName = sectionProps["name"];
         const sectionPath =
           typeof rawSectionName === "string" && rawSectionName.trim() !== ""
             ? `deck/section[${rawSectionName}]`
             : `deck/section[${secIndex + 1}]`;
-        for (const [key, value] of Object.entries(sectionNode.props)) {
+        for (const [key, value] of Object.entries(sectionProps)) {
           if (!isDefined(value)) continue;
           if (key !== "name") {
             failAt(

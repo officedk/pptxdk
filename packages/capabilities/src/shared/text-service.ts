@@ -1,6 +1,8 @@
 import {
   CapabilityError,
+  hasFontFaceBytes,
   paddingStyleKeys,
+  peekFontFaceResource,
   textStyleKeys,
   validateTextStyle,
   type CapabilityFontUsageClaim,
@@ -33,7 +35,6 @@ import {
 } from "../font/font-embedding.ts";
 import {
   findMissingFontGlyphs,
-  fontBytesIdentity,
   isTrueTypeFontEmbeddable,
   openMeasureFontFace,
   resolveDeclaredFaceSlot,
@@ -477,8 +478,8 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
     }
     return slot.weight === weight && slot.style === faceStyle;
   });
-  const providedFaces = matchingFaces.filter(
-    (candidate) => candidate.data !== undefined,
+  const providedFaces = matchingFaces.filter((candidate) =>
+    hasFontFaceBytes(candidate),
   );
   if (providedFaces.length === 0) {
     return [
@@ -493,16 +494,24 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
       },
     ];
   }
-  return providedFaces.map((face) => ({
-    family: family.family,
-    weight,
-    style: faceStyle,
-    substitute: family.substitute ?? false,
-    embeddable: family.embeddable ?? true,
-    hasResource: true,
-    identity: fontBytesIdentity(face.data!),
-    data: face.data!,
-  }));
+  return providedFaces.flatMap((face) => {
+    const faceResource = peekFontFaceResource(face);
+    if (faceResource === undefined) {
+      return [];
+    }
+    return [
+      {
+        family: family.family,
+        weight,
+        style: faceStyle,
+        substitute: family.substitute ?? false,
+        embeddable: family.embeddable ?? true,
+        hasResource: true,
+        identity: faceResource.sha256,
+        data: faceResource.bytes,
+      },
+    ];
+  });
 }
 
 function validateRunStyle(style: RunStyle): RunStyle {
@@ -1178,6 +1187,7 @@ function textResourceClaims(runs: readonly Run[]): {
           font.family,
           font.substitute,
           font.embeddable,
+          font.identity,
         );
         fontUsages.push({
           family: font.family,

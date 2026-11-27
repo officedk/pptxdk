@@ -1,8 +1,12 @@
 import {
+  bytesSha256,
+  createSealedFontFace,
   fontFaceSchema,
   fontFaceStyleSchema,
   fontOptionsSchema,
   fontSchema,
+  markSealedFont,
+  unsealedFontSchema,
   type Font,
   type FontFace,
   type FontOptions,
@@ -35,31 +39,37 @@ export function font(
     ...(validOptions.substitute === true ? { substitute: true } : {}),
     ...(validOptions.embeddable === false ? { embeddable: false } : {}),
   };
-  const parsedFont = fontSchema.safeParse(candidate);
+  const parsedFont = unsealedFontSchema.safeParse(candidate);
   if (!parsedFont.success) {
     throw new TypeError(
       parsedFont.error.issues[0]?.message ?? "Invalid Font declaration",
     );
   }
-  return Object.freeze({
-    ...parsedFont.data,
-    faces: Object.freeze(
-      (parsedFont.data.faces ?? []).map((face) => {
-        const copiedData =
-          face.data === undefined ? undefined : new Uint8Array(face.data);
-        const inferred =
-          copiedData !== undefined &&
-          (face.weight === undefined || face.style === undefined)
-            ? tryInferStaticFontFaceMetadata(copiedData)
-            : undefined;
-        const resolvedWeight = face.weight ?? inferred?.weight;
-        const resolvedStyle = face.style ?? inferred?.style;
-        return Object.freeze({
-          ...(resolvedWeight === undefined ? {} : { weight: resolvedWeight }),
-          ...(resolvedStyle === undefined ? {} : { style: resolvedStyle }),
-          ...(copiedData === undefined ? {} : { data: copiedData }),
+  const sealedFaces = Object.freeze(
+    (parsedFont.data.faces ?? []).map((face) => {
+      if (face.data === undefined) {
+        return createSealedFontFace({
+          weight: face.weight,
+          style: face.style,
         });
-      }),
-    ),
+      }
+      // Perform the single isolating copy of caller bytes and compute its SHA-256 once.
+      const copiedData = new Uint8Array(face.data);
+      const sha256 = bytesSha256(copiedData);
+      const inferred =
+        face.weight === undefined || face.style === undefined
+          ? tryInferStaticFontFaceMetadata(copiedData, sha256)
+          : undefined;
+      return createSealedFontFace({
+        weight: face.weight ?? inferred?.weight,
+        style: face.style ?? inferred?.style,
+        bytes: copiedData,
+        sha256,
+      });
+    }),
+  );
+  return markSealedFont({
+    ...parsedFont.data,
+    faces: sealedFaces,
   });
 }

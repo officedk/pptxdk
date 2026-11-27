@@ -3,7 +3,10 @@ import {
   type CodegenContext,
   type CodegenExpr,
 } from "@pptxdk/codegen";
-import { CapabilityError } from "@pptxdk/core/capability";
+import {
+  CapabilityError,
+  readInternalDeclarationProps,
+} from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 import type { z } from "zod";
 
@@ -109,12 +112,12 @@ function collectChartProps(
     ctx.fail("invalid-document", "Chart declaration cannot have children");
   }
 
-  const extra: Readonly<Record<string, CodegenExpr>> = ctx.emitObjectExtraProps(
-    node.props,
-  );
+  const props = readInternalDeclarationProps(node);
+  const extra: Readonly<Record<string, CodegenExpr>> =
+    ctx.emitObjectExtraProps(props);
   const entries: [string, unknown][] = [];
 
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!chartAllowedPropKeySet.has(key)) {
       ctx.fail(
@@ -145,7 +148,7 @@ function emitChartVanilla(node: CommonNode, ctx: CodegenContext): string {
   const callee = ctx.useImport("chart");
   const propsEntries = collectChartProps(node, ctx);
   const formattedProps = ctx.formatProps(propsEntries);
-  validateChartStructure(node.props, ctx);
+  validateChartStructure(readInternalDeclarationProps(node), ctx);
   return ctx.formatVanillaCall(callee, [formattedProps]);
 }
 
@@ -153,7 +156,7 @@ function emitChartReact(node: CommonNode, ctx: CodegenContext): string {
   const tag = ctx.useImport("Chart");
   const propsEntries = collectChartProps(node, ctx);
   const jsx = ctx.formatJsxElement(tag, propsEntries, []);
-  validateChartStructure(node.props, ctx);
+  validateChartStructure(readInternalDeclarationProps(node), ctx);
   return jsx;
 }
 

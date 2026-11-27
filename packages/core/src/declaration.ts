@@ -1,3 +1,5 @@
+import { readInternalDeclarationProps } from "#/document-internals.ts";
+
 /**
  * Plain authoring declaration tree consumed by the formal build.
  *
@@ -49,7 +51,7 @@ export function declarationIdentity(
 
 /** Diagnostic label for a child declaration, matching the existing build path vocabulary. */
 export function componentLabel(node: DeclarationNode, index: number): string {
-  const identity = declarationIdentity(node.props);
+  const identity = declarationIdentity(readInternalDeclarationProps(node));
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity

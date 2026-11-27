@@ -8,6 +8,8 @@ import {
   type FontOptions,
 } from "@pptxdk/core/capability";
 
+import { tryInferStaticFontFaceMetadata } from "./font-engine.ts";
+
 export { fontFaceSchema, fontFaceStyleSchema, fontOptionsSchema, fontSchema };
 export type {
   Font,
@@ -42,14 +44,22 @@ export function font(
   return Object.freeze({
     ...parsedFont.data,
     faces: Object.freeze(
-      (parsedFont.data.faces ?? []).map((face) =>
-        Object.freeze({
-          ...face,
-          ...(face.data === undefined
-            ? {}
-            : { data: new Uint8Array(face.data) }),
-        }),
-      ),
+      (parsedFont.data.faces ?? []).map((face) => {
+        const copiedData =
+          face.data === undefined ? undefined : new Uint8Array(face.data);
+        const inferred =
+          copiedData !== undefined &&
+          (face.weight === undefined || face.style === undefined)
+            ? tryInferStaticFontFaceMetadata(copiedData)
+            : undefined;
+        const resolvedWeight = face.weight ?? inferred?.weight;
+        const resolvedStyle = face.style ?? inferred?.style;
+        return Object.freeze({
+          ...(resolvedWeight === undefined ? {} : { weight: resolvedWeight }),
+          ...(resolvedStyle === undefined ? {} : { style: resolvedStyle }),
+          ...(copiedData === undefined ? {} : { data: copiedData }),
+        });
+      }),
     ),
   });
 }

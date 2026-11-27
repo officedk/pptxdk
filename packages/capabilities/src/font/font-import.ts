@@ -21,9 +21,8 @@ import {
   type EmbeddedFontSlot,
   type ImportDiagnostic,
 } from "@pptxdk/import";
-import * as fontkit from "fontkit";
 
-import { fontFamilyKey, matchesFontFamily } from "./font-family.ts";
+import { fontFamilyKey, inspectImportedEmbeddedFont } from "./font-engine.ts";
 import { font } from "./font.ts";
 
 function fallbackWeightForSlot(slot: EmbeddedFontSlot): number {
@@ -287,16 +286,11 @@ export function readEmbeddedFontsIntoDeck(
         continue;
       }
 
-      let opened: fontkit.Font | fontkit.FontCollection;
-      try {
-        opened = fontkit.create(
-          Buffer.from(
-            unpacked.ttfBytes.buffer,
-            unpacked.ttfBytes.byteOffset,
-            unpacked.ttfBytes.byteLength,
-          ),
-        );
-      } catch {
+      const inspected = inspectImportedEmbeddedFont(
+        unpacked.ttfBytes,
+        record.typeface,
+      );
+      if (inspected === undefined) {
         diagnostics.push({
           code: "corrupt-part",
           category: "corrupt-input",
@@ -306,38 +300,13 @@ export function readEmbeddedFontsIntoDeck(
         continue;
       }
 
-      if (opened.type !== "TTF") {
-        diagnostics.push({
-          code: "corrupt-part",
-          category: "corrupt-input",
-          disposition: "omitted",
-          location: { part: slot.partPath, xpath: slot.xpath },
-        });
-        continue;
-      }
-
-      if (!matchesFontFamily(opened, record.typeface)) {
+      if (!inspected.familyMatches) {
         requiresSubstitute = true;
       }
 
-      const rawWeight = opened["OS/2"]?.usWeightClass;
-      const weight =
-        typeof rawWeight === "number" &&
-        rawWeight >= 100 &&
-        rawWeight <= 900 &&
-        rawWeight % 100 === 0
-          ? rawWeight
-          : fallbackWeightForSlot(slot.slot);
-      const isItalic =
-        Boolean(opened["OS/2"]?.fsSelection?.italic) ||
-        Boolean(opened["OS/2"]?.fsSelection?.oblique) ||
-        opened.italicAngle !== 0;
+      const weight = inspected.weight ?? fallbackWeightForSlot(slot.slot);
       const style: "normal" | "italic" =
-        opened["OS/2"] !== undefined
-          ? isItalic
-            ? "italic"
-            : "normal"
-          : fallbackStyleForSlot(slot.slot);
+        inspected.style ?? fallbackStyleForSlot(slot.slot);
 
       faces.push({
         weight,

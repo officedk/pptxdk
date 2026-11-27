@@ -29,6 +29,8 @@ import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
+import { stripVariableFontTables } from "../../../test/sfnt-test-helpers.ts";
+
 function runDocPreview(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (document: CommonNode) => {
@@ -67,10 +69,12 @@ describe("Table static preview positive and negative behaviors", () => {
   const arabicFont = font("Noto Naskh Arabic", [
     {
       weight: 400,
-      data: readFileSync(
-        new URL(
-          "../../../test/assets/fonts/NotoNaskhArabic.ttf",
-          import.meta.url,
+      data: stripVariableFontTables(
+        readFileSync(
+          new URL(
+            "../../../test/assets/fonts/NotoNaskhArabic.ttf",
+            import.meta.url,
+          ),
         ),
       ),
     },

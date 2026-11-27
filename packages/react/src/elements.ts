@@ -25,6 +25,7 @@ export type ElementProps = {
   readonly children?: ReactNode;
 };
 
+/** Props for the root `<Deck>` component; canvas `width` and `height` are in CSS pixels (`1280 × 720` default). */
 export type DeckProps = CoreDeckProps & ElementProps;
 export type SlideMasterProps = CoreSlideMasterProps & ElementProps;
 export type SlideLayoutProps = CoreSlideLayoutProps & ElementProps;
@@ -32,6 +33,7 @@ export type SlideProps = CoreSlideProps &
   ElementProps & {
     readonly placeholders?: Readonly<Record<string, unknown>> | undefined;
   };
+/** Props for `<Section>`, grouping contiguous child `<Slide>` elements into a native `p14:sectionLst` section. */
 export type SectionProps = CoreSectionProps & ElementProps;
 
 const inlineTextMarker = Symbol.for("@pptxdk/text-inline-element");

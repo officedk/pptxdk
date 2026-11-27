@@ -108,11 +108,17 @@ export const slideBackgroundSchema: z.ZodType<SlideBackground> =
       : never
   >;
 
+/** Root deck properties defining slide canvas dimensions in pixels (`1280 × 720` default), theme, default text style, and presentation title. */
 export type DeckProps = {
+  /** Slide canvas width in CSS pixels (`px`); defaults to `1280` (16:9 widescreen) when omitted. */
   readonly width?: number | undefined;
+  /** Slide canvas height in CSS pixels (`px`); defaults to `720` (16:9 widescreen) when omitted. */
   readonly height?: number | undefined;
+  /** Deck-level theme definition or inline theme input inherited by slides unless overridden. */
   readonly theme?: ThemeInput | undefined;
+  /** Inherited root text style applied across slides unless overridden. */
   readonly style?: TextStyle | undefined;
+  /** Presentation metadata title written to core document properties. */
   readonly title?: string | undefined;
 };
 
@@ -304,8 +310,14 @@ export const slidePropsSchema: z.ZodType<SlideProps> =
       : never
   >;
 
-/** Organizes slides into collapsible flat sections in PowerPoint. */
+/**
+ * Organizes contiguous child slides into a named native PowerPoint section.
+ *
+ * Emitted via the Office 2010 `p14:sectionLst` presentation extension
+ * (subject to target extension policy under Strict OOXML).
+ */
 export type SectionProps = {
+  /** Non-empty section title shown in PowerPoint's slide sorter and outline. */
   readonly name: string;
 };
 

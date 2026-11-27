@@ -19,6 +19,7 @@ import { PNG } from "pngjs";
 import { createElement } from "react";
 
 import type { CapabilityScenario } from "../../../test/acceptance-runner.ts";
+import { stripVariableFontTables } from "../../../test/sfnt-test-helpers.ts";
 
 const jostRegularBytes = readFileSync(
   new URL("../../../test/assets/fonts/Jost-400-Book.ttf", import.meta.url),
@@ -52,10 +53,12 @@ const notoFont = font("Noto Sans CJK SC", [
 const notoArabicFont = font("Noto Naskh Arabic", [
   {
     weight: 400,
-    data: readFileSync(
-      new URL(
-        "../../../test/assets/fonts/NotoNaskhArabic.ttf",
-        import.meta.url,
+    data: stripVariableFontTables(
+      readFileSync(
+        new URL(
+          "../../../test/assets/fonts/NotoNaskhArabic.ttf",
+          import.meta.url,
+        ),
       ),
     ),
   },
@@ -64,8 +67,13 @@ const notoArabicFont = font("Noto Naskh Arabic", [
 const notoHebrewFont = font("Noto Sans Hebrew Thin", [
   {
     weight: 100,
-    data: readFileSync(
-      new URL("../../../test/assets/fonts/NotoSansHebrew.ttf", import.meta.url),
+    data: stripVariableFontTables(
+      readFileSync(
+        new URL(
+          "../../../test/assets/fonts/NotoSansHebrew.ttf",
+          import.meta.url,
+        ),
+      ),
     ),
   },
 ]);

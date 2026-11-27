@@ -16,6 +16,7 @@ export type {
   ExpandedDocument,
   MountProps,
   SectionProps,
+  VanillaFactoryProps,
   VanillaSlotResult,
 } from "@pptxdk/react";
 export {

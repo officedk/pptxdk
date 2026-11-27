@@ -70,8 +70,8 @@ function readFirstEmbeddedEotItalicFlag(pptx: Uint8Array): number {
   );
   assert.ok(fontPart !== undefined, "expected embedded .fntdata part");
   const eot = parts[fontPart]!;
-  // EOT header offset 53 is the 1-byte Italic flag (4+4+4+4+10+1+4+2+2+16+4 = 55? Check:
-  // ulEOTSize(4)+ulFontDataSize(4)+ulVersion(4)+ulFlags(4)+FontPANOSE(10)+Charset(1)=27, Italic at 27).
+  // EOT header offset 27 holds the 1-byte Italic flag
+  // (ulEOTSize(4) + ulFontDataSize(4) + ulVersion(4) + ulFlags(4) + FontPANOSE(10) + Charset(1)).
   return eot[27]!;
 }
 
@@ -894,6 +894,11 @@ describe("Unified font module standards & validation", () => {
     );
 
     const resolution = resolveDocument(typographicDoc);
+    assert.equal(
+      resolution.report.fonts.find((entry) => entry.family === "Aether Sans")
+        ?.embeddable,
+      false,
+    );
     assert.deepEqual(paint(resolution).pages[0]?.errors, []);
     const unembedded = emit(resolution);
     assert.deepEqual((await validatePptx(unembedded.pptx)).errors, []);
@@ -949,6 +954,12 @@ describe("Unified font module standards & validation", () => {
       ),
     );
     const nativeRes = resolveDocument(nativeDoc);
+    assert.equal(
+      nativeRes.report.fonts.find(
+        (entry) => entry.family === "Aether Sans Medium",
+      )?.embeddable,
+      true,
+    );
     const fullEmitted = emit(nativeRes, { embedFonts: "full" });
     assert.deepEqual((await validatePptx(fullEmitted.pptx)).errors, []);
     const parts = unzipSync(fullEmitted.pptx);

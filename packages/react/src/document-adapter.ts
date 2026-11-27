@@ -11,7 +11,7 @@ import {
   type DocumentNodeCreator,
 } from "@pptxdk/core/host";
 
-import { hostMountMarker } from "#/mount.ts";
+import { hostMountMarker, hostMountPlaceholder } from "#/mount.ts";
 
 export type AdapterChild = DeclarationChild | MountHostRecord;
 export type HostInstance = CommonNode | MountHostRecord;
@@ -25,6 +25,12 @@ export type HostContainer = {
   locked: boolean;
 };
 
+type AppliedPlaceholder = {
+  readonly node: CommonNode;
+  readonly hasPrevious: boolean;
+  readonly previousValue: unknown;
+};
+
 /**
  * In-memory adapter record for a `<Mount>` element; never enters the editable `CommonNode` tree.
  */
@@ -33,6 +39,8 @@ export type MountHostRecord = {
   readonly container: HostContainer;
   adoptedNodes: CommonNode[];
   slot: CommonContainer | undefined;
+  placeholder: string | undefined;
+  appliedPlaceholder: AppliedPlaceholder | undefined;
   hostParent: HostParent | undefined;
   committed: boolean;
   slotChildren: AdapterChild[];
@@ -88,12 +96,16 @@ function isDescendantOf(candidate: CommonNode, ancestor: CommonNode): boolean {
   return false;
 }
 
-function parseMountDeclaration(props: Readonly<Record<string, unknown>>): {
+function parseMountDeclaration(props: Readonly<Record<PropertyKey, unknown>>): {
   readonly nodes: CommonNode[];
   readonly slot: CommonContainer | undefined;
+  readonly placeholder: string | undefined;
 } {
   const rawNode = props["node"];
   const rawSlot = props["slot"];
+  const rawPlaceholder = props[hostMountPlaceholder];
+  const placeholder =
+    typeof rawPlaceholder === "string" ? rawPlaceholder : undefined;
 
   if (rawSlot !== undefined) {
     if (!(rawNode instanceof CommonNode)) {
@@ -109,14 +121,14 @@ function parseMountDeclaration(props: Readonly<Record<string, unknown>>): {
         "Mount slot must be the adopted node itself or one of its descendant containers",
       );
     }
-    return { nodes: [rawNode], slot: rawSlot };
+    return { nodes: [rawNode], slot: rawSlot, placeholder };
   }
 
   if (rawNode === null || rawNode === undefined) {
-    return { nodes: [], slot: undefined };
+    return { nodes: [], slot: undefined, placeholder };
   }
   if (rawNode instanceof CommonNode) {
-    return { nodes: [rawNode], slot: undefined };
+    return { nodes: [rawNode], slot: undefined, placeholder };
   }
   if (Array.isArray(rawNode)) {
     const nodes: CommonNode[] = [];
@@ -135,7 +147,7 @@ function parseMountDeclaration(props: Readonly<Record<string, unknown>>): {
       seen.add(item);
       nodes.push(item);
     }
-    return { nodes, slot: undefined };
+    return { nodes, slot: undefined, placeholder };
   }
 
   throw mountError(
@@ -333,6 +345,71 @@ function detachAdoptedFromParent(
   }
 }
 
+function applyPlaceholderBinding(record: MountHostRecord): void {
+  if (record.placeholder === undefined || record.adoptedNodes.length !== 1) {
+    return;
+  }
+  const node = record.adoptedNodes[0]!;
+  if (
+    record.appliedPlaceholder !== undefined &&
+    record.appliedPlaceholder.node === node
+  ) {
+    node.set({ placeholder: record.placeholder });
+    return;
+  }
+  const currentProps = node.props;
+  const hasPrevious = Object.prototype.hasOwnProperty.call(
+    currentProps,
+    "placeholder",
+  );
+  record.appliedPlaceholder = {
+    node,
+    hasPrevious,
+    previousValue: currentProps["placeholder"],
+  };
+  node.set({ placeholder: record.placeholder });
+}
+
+function restorePlaceholderBinding(record: MountHostRecord): void {
+  const applied = record.appliedPlaceholder;
+  if (applied === undefined) return;
+  record.appliedPlaceholder = undefined;
+  applied.node.set({
+    placeholder: applied.hasPrevious ? applied.previousValue : undefined,
+  });
+}
+
+function commitMountIntoParent(
+  parent: HostParent,
+  record: MountHostRecord,
+  anchor: DeclarationChild | undefined,
+): void {
+  const isReposition = record.committed && record.hostParent === parent;
+  if (!isReposition) {
+    assertCanAdopt(record.adoptedNodes, record);
+  }
+  record.hostParent = parent;
+  insertAdoptedIntoParent(parent, record.adoptedNodes, anchor, record);
+  try {
+    if (!isReposition) {
+      applyPlaceholderBinding(record);
+    }
+    record.committed = true;
+    record.container.mountedRecords.add(record);
+    if (!isReposition && record.slot !== undefined) {
+      attachSlotChildren(record);
+    }
+  } catch (error) {
+    if (!isReposition) {
+      restorePlaceholderBinding(record);
+      detachAdoptedFromParent(parent, record.adoptedNodes, record, false);
+      record.committed = false;
+      record.container.mountedRecords.delete(record);
+    }
+    throw error;
+  }
+}
+
 function attachSlotChildren(record: MountHostRecord): void {
   const slot = record.slot;
   if (slot === undefined) return;
@@ -385,6 +462,7 @@ function releaseMountSubtree(entry: AdapterChild, locked: boolean): void {
     }
     entry.container.mountedRecords.delete(entry);
     if (!locked) {
+      restorePlaceholderBinding(entry);
       entry.committed = false;
       entry.hostParent = undefined;
     }
@@ -404,16 +482,18 @@ function releaseMountSubtree(entry: AdapterChild, locked: boolean): void {
 
 export function createHostInstance(
   type: string,
-  props: Readonly<Record<string, unknown>>,
+  props: Readonly<Record<PropertyKey, unknown>>,
   container: HostContainer,
 ): HostInstance {
   if (props[hostMountMarker] === true) {
-    const { nodes, slot } = parseMountDeclaration(props);
+    const { nodes, slot, placeholder } = parseMountDeclaration(props);
     return {
       kind: "mount",
       container,
       adoptedNodes: nodes,
       slot,
+      placeholder,
+      appliedPlaceholder: undefined,
       hostParent: undefined,
       committed: false,
       slotChildren: [],
@@ -445,13 +525,18 @@ export function updateHostText(text: HostTextNode, next: string): void {
 
 function updateMountInstance(
   record: MountHostRecord,
-  nextProps: Readonly<Record<string, unknown>>,
+  nextProps: Readonly<Record<PropertyKey, unknown>>,
 ): void {
   if (isLocked(record)) return;
-  const { nodes: nextNodes, slot: nextSlot } = parseMountDeclaration(nextProps);
+  const {
+    nodes: nextNodes,
+    slot: nextSlot,
+    placeholder: nextPlaceholder,
+  } = parseMountDeclaration(nextProps);
   const nodesUnchanged = sameNodeList(record.adoptedNodes, nextNodes);
   const slotUnchanged = record.slot === nextSlot;
-  if (nodesUnchanged && slotUnchanged) return;
+  const placeholderUnchanged = record.placeholder === nextPlaceholder;
+  if (nodesUnchanged && slotUnchanged && placeholderUnchanged) return;
 
   assertCanAdopt(nextNodes, record);
 
@@ -473,11 +558,13 @@ function updateMountInstance(
             recordIndex + 1,
             realChildrenOf(record.hostParent),
           );
+    restorePlaceholderBinding(record);
     detachAdoptedFromParent(record.hostParent, prevNodes, record, false);
     try {
       insertAdoptedIntoParent(record.hostParent, nextNodes, anchor, record);
     } catch (error) {
       insertAdoptedIntoParent(record.hostParent, prevNodes, anchor, record);
+      applyPlaceholderBinding(record);
       if (!slotUnchanged && prevSlot !== undefined) {
         attachSlotChildren(record);
       }
@@ -487,6 +574,15 @@ function updateMountInstance(
 
   record.adoptedNodes = nextNodes;
   record.slot = nextSlot;
+  record.placeholder = nextPlaceholder;
+
+  if (record.committed) {
+    if (nextPlaceholder === undefined) {
+      restorePlaceholderBinding(record);
+    } else {
+      applyPlaceholderBinding(record);
+    }
+  }
 
   if (!slotUnchanged && nextSlot !== undefined && record.committed) {
     attachSlotChildren(record);
@@ -542,7 +638,6 @@ export function commitMountHostInstance(instance: HostInstance): void {
   const parent = instance.hostParent;
   if (parent === undefined) return;
 
-  assertCanAdopt(instance.adoptedNodes, instance);
   const order = orderListOf(parent);
   const index = order.indexOf(instance);
   const anchor =
@@ -550,60 +645,38 @@ export function commitMountHostInstance(instance: HostInstance): void {
       ? undefined
       : resolveAnchorAfter(order, index + 1, realChildrenOf(parent));
 
-  insertAdoptedIntoParent(parent, instance.adoptedNodes, anchor, instance);
-  instance.committed = true;
-  instance.container.mountedRecords.add(instance);
-
-  if (instance.slot !== undefined) {
-    try {
-      attachSlotChildren(instance);
-    } catch (error) {
-      detachAdoptedFromParent(parent, instance.adoptedNodes, instance, false);
-      instance.committed = false;
-      instance.container.mountedRecords.delete(instance);
-      throw error;
-    }
-  }
+  commitMountIntoParent(parent, instance, anchor);
 }
 
-export function attachHostChild(
-  parent: HostInstance,
+export function insertHostChild(
+  parent: HostParent,
   child: AdapterChild,
   before?: AdapterChild,
 ): void {
   if (isLocked(parent) || isLocked(child)) return;
-  const targetNode = realParentNode(parent);
   const order = orderListOf(parent);
+  const liveChildren = realChildrenOf(parent);
   recordOrderInsert(order, child, before);
 
   const index = order.indexOf(child);
   const anchor =
     before === undefined || index === -1
       ? undefined
-      : resolveAnchorAfter(order, index + 1, targetNode.children);
+      : resolveAnchorAfter(order, index + 1, liveChildren);
 
   if (isMountHostRecord(child)) {
-    const isReposition = child.committed && child.hostParent === parent;
-    if (!isReposition) {
-      assertCanAdopt(child.adoptedNodes, child);
-    }
-    child.hostParent = parent;
-    insertAdoptedIntoParent(parent, child.adoptedNodes, anchor, child);
-    child.committed = true;
-    child.container.mountedRecords.add(child);
-    if (!isReposition && child.slot !== undefined) {
-      attachSlotChildren(child);
-    }
+    commitMountIntoParent(parent, child, anchor);
     return;
   }
 
-  insertDeclarationChild(targetNode, child, anchor);
+  if (isHostContainer(parent)) {
+    spliceRootChildren(parent, [child], anchor);
+  } else {
+    insertDeclarationChild(realParentNode(parent), child, anchor);
+  }
 }
 
-export function detachHostChild(
-  parent: HostInstance,
-  child: AdapterChild,
-): void {
+export function removeHostChild(parent: HostParent, child: AdapterChild): void {
   const locked = isLocked(parent) || isLocked(child);
   const order = orderListOf(parent);
   const index = order.indexOf(child);
@@ -613,52 +686,11 @@ export function detachHostChild(
 
   if (locked) return;
   if (!isMountHostRecord(child)) {
-    removeDeclarationChild(realParentNode(parent), child);
-  }
-}
-
-export function insertRootChild(
-  container: HostContainer,
-  child: AdapterChild,
-  before?: AdapterChild,
-): void {
-  if (container.locked) return;
-  recordOrderInsert(container.hostOrder, child, before);
-  const index = container.hostOrder.indexOf(child);
-  const anchor =
-    before === undefined || index === -1
-      ? undefined
-      : resolveAnchorAfter(container.hostOrder, index + 1, container.children);
-
-  if (isMountHostRecord(child)) {
-    const isReposition = child.committed && child.hostParent === container;
-    if (!isReposition) {
-      assertCanAdopt(child.adoptedNodes, child);
+    if (isHostContainer(parent)) {
+      removeFromRootChildren(parent, [child]);
+    } else {
+      removeDeclarationChild(realParentNode(parent), child);
     }
-    child.hostParent = container;
-    insertAdoptedIntoParent(container, child.adoptedNodes, anchor, child);
-    child.committed = true;
-    container.mountedRecords.add(child);
-    if (!isReposition && child.slot !== undefined) {
-      attachSlotChildren(child);
-    }
-    return;
-  }
-
-  spliceRootChildren(container, [child], anchor);
-}
-
-export function removeRootChild(
-  container: HostContainer,
-  child: AdapterChild,
-): void {
-  const index = container.hostOrder.indexOf(child);
-  if (index !== -1) container.hostOrder.splice(index, 1);
-
-  releaseMountSubtree(child, container.locked);
-
-  if (!isMountHostRecord(child)) {
-    removeFromRootChildren(container, [child]);
   }
 }
 

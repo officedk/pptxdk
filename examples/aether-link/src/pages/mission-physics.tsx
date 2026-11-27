@@ -843,7 +843,7 @@ export function ExecSummarySlide() {
   );
 }
 
-/** Slide 3: Beam divergence physics with slotted TelemetryPanel, direct Mount adoption, error bars, and stretch motion. */
+/** Slide 3: Beam divergence physics with slotted TelemetryPanel, direct Mount adoption, clustered column chart, and stretch motion. */
 export function LinkBudgetSlide() {
   const beamDiagram = useMemo(
     () =>
@@ -947,7 +947,7 @@ export function LinkBudgetSlide() {
           </Box>
         </TelemetryPanel>
 
-        {/* Right: Slotted Vanilla TelemetryPanel wrapping Clustered Column Chart with Error Bars */}
+        {/* Right: Slotted Vanilla TelemetryPanel wrapping Clustered Column Chart */}
         <TelemetryPanel
           id="link-rate-panel"
           title="Sustained Downlink Rate vs. Heliocentric Range (Mbps)"

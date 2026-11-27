@@ -2,6 +2,7 @@ import type { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import { createElement, type ReactNode } from "react";
 
 export const hostMountMarker = "__pptxdkMount";
+export const hostMountPlaceholder = "__pptxdkMountPlaceholder";
 export const mountHostType = "__pptxdk-mount";
 
 /**
@@ -48,4 +49,21 @@ export function Mount(props: MountProps): ReactNode {
     },
     props.children,
   );
+}
+
+/**
+ * Internal helper used by `<Slide placeholders={{ ... }} />` so object-node placeholder bindings
+ * are carried into the commit phase instead of mutating external nodes during React render.
+ */
+export function createPlaceholderMount(
+  placeholder: string,
+  node: CommonNode,
+): ReactNode {
+  return createElement(mountHostType, {
+    key: `__ph_${placeholder}`,
+    [hostMountMarker]: true,
+    [hostMountPlaceholder]: placeholder,
+    node,
+    slot: undefined,
+  });
 }

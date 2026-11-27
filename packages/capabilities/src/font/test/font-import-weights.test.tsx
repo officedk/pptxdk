@@ -918,4 +918,176 @@ describe("Imported embedded font weight preservation & backfill", () => {
       assert.match(source, /weight:\s*800\b/u);
     }
   });
+
+  it("backfills inherited non-default slot weights on empty text, paragraph, cell, and notes nodes during importPptx", async () => {
+    const jost350 = namedFontBytes(
+      patchSfntOs2AndPost(jostBook, { weightClass: 350 }),
+      "Jost*",
+      "Regular",
+    );
+    const jostMedium500 = namedFontBytes(
+      patchSfntOs2AndPost(jostBook, { weightClass: 500, bold: false }),
+      "Jost Medium",
+      "Regular",
+    );
+    const major350 = font("Jost*", [{ data: jost350 }]);
+    const minor500 = font("Jost Medium", [{ data: jostMedium500 }]);
+
+    const emptyLayout = defineSlideLayout({
+      id: "empty-leaf-layout",
+      name: "Empty Leaf Layout",
+      type: "obj",
+      placeholders: {
+        body: {
+          type: "body",
+          idx: 1,
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 24,
+            width: 240,
+            height: 36,
+            fontFamily: "minor",
+            fontWeight: 500,
+          },
+        },
+      },
+    });
+
+    const sourceDeck = deck({
+      width: 640,
+      height: 360,
+      theme: defineTheme({
+        name: "Empty Leaf Weights",
+        fonts: { major: major350, minor: minor500 },
+      }),
+    }).append(
+      slideMaster({ id: "empty-master", name: "Empty Master" }).append(
+        slideLayout(emptyLayout),
+      ),
+      slide({
+        id: "empty-leaf-slide",
+        layout: emptyLayout,
+        placeholders: {
+          body: text("", { id: "empty-placeholder-text" }),
+        },
+      }).append(
+        text("", {
+          id: "empty-text",
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 240,
+            width: 200,
+            height: 32,
+            fontWeight: 500,
+          },
+        }),
+        text(
+          [
+            paragraph("First", {
+              style: { fontFamily: major350, fontWeight: 350 },
+            }),
+            paragraph(""),
+          ],
+          {
+            id: "multi-para-text",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 72,
+              width: 240,
+              height: 60,
+              fontWeight: 500,
+            },
+          },
+        ),
+        table({
+          id: "empty-cell-table",
+          columns: [140, 140],
+          style: {
+            position: "absolute",
+            left: 24,
+            top: 120,
+            width: 280,
+            fontWeight: 500,
+          },
+        }).append(
+          row({ style: { height: 28 } }).append(cell(""), cell("Filled cell")),
+        ),
+        notes("", { style: { fontWeight: 500 } }),
+      ),
+    );
+
+    const emitted = emit(resolveDocument(sourceDeck), { embedFonts: "full" });
+    const imported = importDocument(emitted.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const importedSlide = imported.document.children.find(
+      (child): child is CommonNode =>
+        child instanceof CommonNode && child.type === "slide",
+    );
+    assert.ok(importedSlide !== undefined);
+    const texts = collectNodesByType(importedSlide, "text");
+    const freeEmptyText = texts.find(
+      (t) => t.props["placeholder"] === undefined && t.children.length === 0,
+    );
+    assert.ok(freeEmptyText !== undefined);
+    assert.equal(
+      (
+        freeEmptyText.props["style"] as
+          | { readonly fontWeight?: unknown }
+          | undefined
+      )?.fontWeight,
+      500,
+    );
+    const paraText = texts.find((t) =>
+      t.children.some((c) => c instanceof CommonNode && c.type === "paragraph"),
+    );
+    assert.ok(paraText !== undefined);
+    const emptyPara = collectNodesByType(paraText, "paragraph")[1];
+    assert.ok(emptyPara !== undefined);
+    assert.equal(emptyPara.children.length, 0);
+    assert.equal(
+      (
+        emptyPara.props["style"] as
+          | { readonly fontWeight?: unknown }
+          | undefined
+      )?.fontWeight,
+      500,
+    );
+    const cells = collectNodesByType(importedSlide, "cell");
+    assert.equal(
+      (
+        cells[0]!.props["style"] as
+          | { readonly fontWeight?: unknown }
+          | undefined
+      )?.fontWeight,
+      500,
+    );
+    const importedNotes = collectNodesByType(importedSlide, "notes")[0];
+    assert.ok(importedNotes !== undefined);
+    const notesWeightTarget =
+      collectNodesByType(importedNotes, "paragraph")[0] ?? importedNotes;
+    assert.equal(
+      (
+        notesWeightTarget.props["style"] as
+          | { readonly fontWeight?: unknown }
+          | undefined
+      )?.fontWeight,
+      500,
+    );
+
+    const reEmitted = emit(resolveDocument(imported.document), {
+      embedFonts: "full",
+    });
+    assert.deepEqual((await validatePptx(reEmitted.pptx)).errors, []);
+
+    for (const target of ["vanilla", "react"] as const) {
+      const generated = generateCode(imported.document, { target });
+      const source = generated.files[generated.entry] as string;
+      assert.match(source, /fontWeight:\s*500\b/u);
+      assert.match(source, /fontWeight:\s*350\b/u);
+    }
+  });
 });

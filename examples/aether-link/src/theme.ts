@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 
 import {
   createMorphScope,
-  darker,
   defaultColorMap,
   defineSlideLayout,
   defineTheme,
@@ -114,9 +113,6 @@ export const aetherTheme = defineTheme({
     ],
   },
 });
-
-export const accent1Muted = lighter("accent1", 0.85);
-export const accent2Dark = darker("accent2", 0.2);
 
 // Shared Morph continuity scope connecting Slide 2 and Slide 3.
 export const telemetryMorph = createMorphScope();

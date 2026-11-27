@@ -12,12 +12,15 @@ import {
   importPptx,
 } from "@officedk/pptxdk";
 import {
+  Cell,
   Deck,
   P,
+  Row,
   Slide,
   SlideLayout,
   SlideMaster,
   Span,
+  Table,
   Text,
 } from "@officedk/pptxdk/react";
 import { unpackEotFontData } from "@pptxdk/import";
@@ -390,63 +393,97 @@ describe("End-to-end imported embedded font weight roundtrip", () => {
             },
             createElement(SlideLayout, { layout: heroLayout }),
           ),
-          createElement(Slide, {
-            id: "overview",
-            layout: heroLayout,
-            footer: { text: "Footer 600", style: { fontWeight: 600 } },
-            slideNumber: { style: { fontWeight: 500 } },
-            placeholders: {
-              title: createElement(
-                Text,
-                { placeholder: "title" },
-                createElement(
-                  P,
-                  null,
-                  "Demi 350 ",
+          createElement(
+            Slide,
+            {
+              id: "overview",
+              layout: heroLayout,
+              footer: { text: "Footer 600", style: { fontWeight: 600 } },
+              slideNumber: { style: { fontWeight: 500 } },
+              placeholders: {
+                title: createElement(
+                  Text,
+                  { placeholder: "title" },
                   createElement(
-                    Span,
-                    { style: { fontWeight: 800 } },
-                    "ExtraBold 800 ",
-                  ),
-                  createElement(
-                    Span,
-                    { style: { fontWeight: 800, fontStyle: "italic" } },
-                    "BoldItal 800",
-                  ),
-                ),
-              ),
-              body: createElement(
-                Text,
-                { placeholder: "body" },
-                createElement(
-                  P,
-                  null,
-                  "Medium 500 ",
-                  createElement(
-                    Span,
-                    {
-                      style: {
-                        fontFamily: semiBold600Font,
-                        fontWeight: 600,
-                      },
-                    },
-                    "DarkerSemiBold 600 ",
-                  ),
-                  createElement(
-                    Span,
-                    {
-                      style: {
-                        fontFamily: primaryFont,
-                        fontWeight: 350,
-                        fontStyle: "italic",
-                      },
-                    },
-                    "Oblique 350",
+                    P,
+                    null,
+                    "Demi 350 ",
+                    createElement(
+                      Span,
+                      { style: { fontWeight: 800 } },
+                      "ExtraBold 800 ",
+                    ),
+                    createElement(
+                      Span,
+                      { style: { fontWeight: 800, fontStyle: "italic" } },
+                      "BoldItal 800",
+                    ),
                   ),
                 ),
-              ),
+                body: createElement(
+                  Text,
+                  { placeholder: "body" },
+                  createElement(
+                    P,
+                    null,
+                    "Medium 500 ",
+                    createElement(
+                      Span,
+                      {
+                        style: {
+                          fontFamily: semiBold600Font,
+                          fontWeight: 600,
+                        },
+                      },
+                      "DarkerSemiBold 600 ",
+                    ),
+                    createElement(
+                      Span,
+                      {
+                        style: {
+                          fontFamily: primaryFont,
+                          fontWeight: 350,
+                          fontStyle: "italic",
+                        },
+                      },
+                      "Oblique 350",
+                    ),
+                  ),
+                ),
+              },
             },
-          }),
+            createElement(Text, {
+              id: "empty-text",
+              style: {
+                position: "absolute",
+                left: 48,
+                top: 344,
+                width: 200,
+                height: 28,
+                fontWeight: 500,
+              },
+            }),
+            createElement(
+              Table,
+              {
+                id: "empty-cell-table",
+                columns: [140, 140],
+                style: {
+                  position: "absolute",
+                  left: 48,
+                  top: 384,
+                  width: 280,
+                  fontWeight: 500,
+                },
+              },
+              createElement(
+                Row,
+                { style: { height: 28 } },
+                createElement(Cell, null),
+                createElement(Cell, null, "Non-empty cell"),
+              ),
+            ),
+          ),
         ),
         { embedFonts },
       );

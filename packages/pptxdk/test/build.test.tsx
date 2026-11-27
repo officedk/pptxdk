@@ -3424,29 +3424,27 @@ describe("public build entry", () => {
     });
   });
 
-  it("accepts non-RIBBI weights via typographic family and preserves native weight mapping", async () => {
-    const result = await build(
-      deck(
-        createElement(Text, {
-          id: "preferred-family-face",
-          style: {
-            position: "absolute",
-            left: 24,
-            top: 18,
-            width: 240,
-            height: "auto",
-            fontFamily: font("Darker Grotesque", [
-              { weight: 600, data: darkerGrotesqueSemiBold },
-            ]),
-            fontSize: 20,
-            fontWeight: 600,
-          },
-          children: "SemiBold preferred family",
-        }),
-      ),
-      { embedFonts: "full" },
+  it("accepts non-RIBBI weights via typographic Name ID 16 when unembedded and rejects embedFonts with family-mismatch naming native Name ID 1", async () => {
+    const typographicDeck = deck(
+      createElement(Text, {
+        id: "preferred-family-face",
+        style: {
+          position: "absolute",
+          left: 24,
+          top: 18,
+          width: 240,
+          height: "auto",
+          fontFamily: font("Darker Grotesque", [
+            { weight: 600, data: darkerGrotesqueSemiBold },
+          ]),
+          fontSize: 20,
+          fontWeight: 600,
+        },
+        children: "SemiBold preferred family",
+      }),
     );
 
+    const result = await build(typographicDeck);
     const file = await validatePptx(result.pptx);
     assert.deepEqual(file.errors, []);
     assert.equal(
@@ -3457,6 +3455,23 @@ describe("public build entry", () => {
       file.slides[0]?.objects[0]?.text?.paragraphs[0]?.runs[0]?.bold,
       false,
     );
+
+    for (const embedFonts of ["full", "subset"] as const) {
+      await assert.rejects(
+        build(typographicDeck, { embedFonts }),
+        (error: unknown) => {
+          assert.ok(error instanceof BuildError);
+          const diag = error.diagnostics[0];
+          assert.equal(diag?.code, "font-unavailable");
+          if (diag?.code === "font-unavailable") {
+            assert.equal(diag.reason, "family-mismatch");
+          }
+          assert.match(diag?.message ?? "", /Darker Grotesque SemiBold/u);
+          assert.match(diag?.message ?? "", /Name ID 1/u);
+          return true;
+        },
+      );
+    }
   });
 
   it("reports overflow via textMetrics when measured text exceeds fixed bounding box, preserving box, content, and native default line spacing", async () => {
@@ -3747,9 +3762,11 @@ describe("public build entry", () => {
               Span,
               {
                 style: {
-                  fontFamily: font("Example Sans", [
-                    { weight: 700, data: new Uint8Array([1, 2, 3]) },
-                  ]),
+                  fontFamily: font(
+                    "Example Sans",
+                    [{ weight: 700, data: jostBold }],
+                    { substitute: true },
+                  ),
                   fontSize: "12pt",
                   fontWeight: "bold",
                   color: "#334455",
@@ -3897,9 +3914,9 @@ describe("public build entry", () => {
             Span,
             {
               style: {
-                fontFamily: font("Collision Sans", [
-                  { data: new Uint8Array([1, 2]) },
-                ]),
+                fontFamily: font("Collision Sans", [{ data: jostBook }], {
+                  substitute: true,
+                }),
               },
             },
             "first",
@@ -3908,9 +3925,9 @@ describe("public build entry", () => {
             Span,
             {
               style: {
-                fontFamily: font("Collision Sans", [
-                  { data: new Uint8Array([3, 4]) },
-                ]),
+                fontFamily: font("Collision Sans", [{ data: zcoolXiaoWei }], {
+                  substitute: true,
+                }),
               },
             },
             "second",
@@ -3928,10 +3945,14 @@ describe("public build entry", () => {
   });
 
   it("fails when conflicting resources are referenced for actually used duplicate weight and style within same font value", async () => {
-    const sharedValue = font("Duplicate Face", [
-      { data: new Uint8Array([1, 2]) },
-      { weight: 400, style: "normal", data: new Uint8Array([3, 4]) },
-    ]);
+    const sharedValue = font(
+      "Duplicate Face",
+      [
+        { data: jostBook },
+        { weight: 400, style: "normal", data: zcoolXiaoWei },
+      ],
+      { substitute: true },
+    );
 
     await assert.rejects(
       build(
@@ -3995,10 +4016,11 @@ describe("public build entry", () => {
               Span,
               {
                 style: {
-                  fontFamily: font("Shared", [
-                    { data: new Uint8Array([1, 2]) },
-                    { weight: 700, data: new Uint8Array([3, 4]) },
-                  ]),
+                  fontFamily: font(
+                    "Shared",
+                    [{ data: jostBook }, { weight: 700, data: jostBold }],
+                    { substitute: true },
+                  ),
                 },
               },
               "资源引用",

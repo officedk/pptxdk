@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import {
   CapabilityError,
   paddingStyleKeys,
@@ -23,21 +21,28 @@ import {
   type UnmeasuredFontIssue,
 } from "@pptxdk/core/capability";
 import { pxToEmu, resolvedColorXml, xmlEscape } from "@pptxdk/emit";
-import * as fontkit from "fontkit";
-import * as hb from "harfbuzzjs";
 // @ts-expect-error -- linebreak does not provide types; declare the breakpoint interface used below.
 import LineBreakerImplementation from "linebreak";
 
 import {
   fontPresentationContributions,
-  isFontEmbeddable,
   requiresFontGlyph,
   requiresVisibleFontGlyph,
   type FontEmbeddingMode,
   type FontEmbeddingUse,
 } from "../font/font-embedding.ts";
-import { matchesFontFamily } from "../font/font-family.ts";
-import type {} from "./emscripten.d.ts";
+import {
+  findMissingFontGlyphs,
+  fontBytesIdentity,
+  isTrueTypeFontEmbeddable,
+  openMeasureFontFace,
+  resolveDeclaredFaceSlot,
+  shapeFontAdvances,
+  shapeFontOutlines,
+  validateFontFaceResource,
+  type FontMeasureFace,
+  type ShapedOutlineGlyph,
+} from "../font/font-engine.ts";
 import {
   hasLocalDeclaration,
   localDeclaredKeySet,
@@ -196,9 +201,7 @@ type TextLayoutRequest = {
 
 type TextBodyDestination = "text-box" | "table-cell";
 
-type MeasureFace = {
-  readonly identity: string;
-};
+type MeasureFace = FontMeasureFace;
 
 type MeasurePiece = {
   readonly text: string;
@@ -307,43 +310,6 @@ type LineBreakerConstructor = new (text: string) => {
 
 const LineBreaker = LineBreakerImplementation as LineBreakerConstructor;
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-const measureFaces = new Map<string, fontkit.Font>();
-const measureFaceFonts = new WeakMap<MeasureFace, fontkit.Font>();
-
-function fontOfMeasureFace(face: MeasureFace): fontkit.Font {
-  const font = measureFaceFonts.get(face) ?? measureFaces.get(face.identity);
-  if (font === undefined) {
-    throw new Error(`Missing font face for ${face.identity}`);
-  }
-  return font;
-}
-type CachedHbFace = {
-  readonly blob: hb.Blob;
-  readonly face: hb.Face;
-  readonly font: hb.Font;
-};
-const hbFaces = new Map<string, CachedHbFace>();
-let sharedHbBuffer: hb.Buffer | undefined;
-let sharedHbBufferBusy = false;
-
-function withHbBuffer<T>(fn: (buffer: hb.Buffer) => T): T {
-  if (!sharedHbBufferBusy) {
-    sharedHbBufferBusy = true;
-    sharedHbBuffer ??= new hb.Buffer();
-    try {
-      return fn(sharedHbBuffer);
-    } finally {
-      sharedHbBuffer.reset();
-      sharedHbBufferBusy = false;
-    }
-  }
-  const buffer = new hb.Buffer();
-  try {
-    return fn(buffer);
-  } finally {
-    buffer.reset();
-  }
-}
 
 const defaultTextStyle: TextStyle = Object.freeze({
   fontFamily: "minor",
@@ -504,11 +470,13 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
   const weight = weightValue(style.fontWeight);
   const faceStyle = style.fontStyle ?? "normal";
   const faces = family.faces ?? [];
-  const matchingFaces = faces.filter(
-    (candidate) =>
-      (candidate.weight ?? 400) === weight &&
-      (candidate.style ?? "normal") === faceStyle,
-  );
+  const matchingFaces = faces.filter((candidate) => {
+    const slot = resolveDeclaredFaceSlot(candidate);
+    if (slot.matchAnyWeightOnFvarOrCorrupt) {
+      return candidate.style === undefined || slot.style === faceStyle;
+    }
+    return slot.weight === weight && slot.style === faceStyle;
+  });
   const providedFaces = matchingFaces.filter(
     (candidate) => candidate.data !== undefined,
   );
@@ -532,7 +500,7 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
     substitute: family.substitute ?? false,
     embeddable: family.embeddable ?? true,
     hasResource: true,
-    identity: createHash("sha256").update(face.data!).digest("hex"),
+    identity: fontBytesIdentity(face.data!),
     data: face.data!,
   }));
 }
@@ -590,10 +558,19 @@ function isResolvedColor(value: unknown): value is ResolvedColor {
 
 function outputBold(font: NormalizedFont): boolean {
   const fallback = font.weight >= 600;
-  if (!font.hasResource || font.substitute) return fallback;
+  if (!font.hasResource || font.substitute || font.data === undefined) {
+    return fallback;
+  }
   try {
     // Numerical font weight cannot substitute for family bold style link declared by the font file.
-    return fontOfMeasureFace(measureFace(font))["OS/2"].fsSelection.bold;
+    return validateFontFaceResource({
+      family: font.family,
+      weight: font.weight,
+      style: font.style,
+      substitute: font.substitute,
+      data: font.data,
+      identity: font.identity,
+    }).os2Bold;
   } catch {
     return fallback;
   }
@@ -1177,19 +1154,28 @@ function textResourceClaims(runs: readonly Run[]): {
           });
         }
       } else {
+        const validatedFace = validateFontFaceResource({
+          family: font.family,
+          weight: font.weight,
+          style: font.style,
+          substitute: font.substitute,
+          data: font.data!,
+          identity: font.identity,
+        });
         resourceClaims.push({
           kind: "font-face",
           key,
           identity: font.identity,
           characters: entry.text.join(""),
         });
-        const face = fontkitFace(font);
-        const missing =
-          face !== undefined
-            ? missingCharacters(face, entry.text.join(""))
-            : [];
-        const embeddable = isFontEmbeddable(
+        const missing = findMissingFontGlyphs(
+          validatedFace,
+          entry.text.join(""),
+          requiresVisibleFontGlyph,
+        );
+        const embeddable = isTrueTypeFontEmbeddable(
           font.data!,
+          font.family,
           font.substitute,
           font.embeddable,
         );
@@ -1609,96 +1595,14 @@ function measureFace(source: NormalizedFont): MeasureFace {
       fontDetailsFromSource(source),
     );
   }
-
-  let parsed = measureFaces.get(source.identity);
-  if (parsed === undefined) {
-    try {
-      const data = source.data;
-      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-      const opened = fontkit.create(bytes);
-      if (!("unitsPerEm" in opened)) {
-        throw new Error("Font collection is not a single font file");
-      }
-      parsed = opened;
-      measureFaces.set(source.identity, parsed);
-    } catch (error) {
-      throw new CapabilityError(
-        "font-format-unsupported",
-        `Cannot parse font metrics file for ${source.family}: ${error instanceof Error ? error.message : String(error)}`,
-        undefined,
-        {
-          ...fontDetailsFromSource(source),
-          reason: "font-format-unsupported",
-        },
-      );
-    }
-  }
-
-  if (!source.substitute && !matchesFontFamily(parsed, source.family)) {
-    throw new CapabilityError(
-      "font-substitution-required",
-      `Metrics file declares ${parsed.familyName}; retaining output font name ${source.family} requires setting Font.substitute explicitly`,
-      undefined,
-      {
-        ...fontDetailsFromSource(source),
-        reason: "font-substitution-required",
-      },
-    );
-  }
-  if (parsed["OS/2"].usWeightClass !== source.weight) {
-    throw new CapabilityError(
-      "font-face-mismatch",
-      `Font value for ${source.family} ${source.weight} ${source.style} does not match file actual weight ${parsed["OS/2"].usWeightClass}`,
-      undefined,
-      {
-        ...fontDetailsFromSource(source),
-        reason: "font-face-mismatch",
-      },
-    );
-  }
-  const fileItalic =
-    parsed["OS/2"].fsSelection.italic ||
-    parsed["OS/2"].fsSelection.oblique ||
-    parsed.italicAngle !== 0;
-  if (fileItalic !== (source.style === "italic")) {
-    throw new CapabilityError(
-      "font-face-mismatch",
-      `Font value for ${source.family} ${source.weight} ${source.style} does not match file actual glyph style`,
-      undefined,
-      {
-        ...fontDetailsFromSource(source),
-        reason: "font-face-mismatch",
-      },
-    );
-  }
-  if (
-    !Number.isFinite(parsed.unitsPerEm) ||
-    parsed.unitsPerEm <= 0 ||
-    !Number.isFinite(parsed.ascent) ||
-    !Number.isFinite(parsed.descent) ||
-    !Number.isFinite(parsed.lineGap)
-  ) {
-    throw new CapabilityError(
-      "font-metrics-invalid",
-      `Font line metrics for ${source.family} are invalid`,
-      undefined,
-      {
-        ...fontDetailsFromSource(source),
-        reason: "font-metrics-invalid",
-      },
-    );
-  }
-  if (parsed.type === "TTF" && !hbFaces.has(source.identity)) {
-    const blob = new hb.Blob(source.data);
-    const hbFace = new hb.Face(blob, 0);
-    const font = new hb.Font(hbFace);
-    hbFaces.set(source.identity, { blob, face: hbFace, font });
-  }
-  const faceObj: MeasureFace = {
+  return openMeasureFontFace({
+    family: source.family,
+    weight: source.weight,
+    style: source.style,
+    substitute: source.substitute,
+    data: source.data,
     identity: source.identity,
-  };
-  measureFaceFonts.set(faceObj, parsed);
-  return faceObj;
+  });
 }
 
 function measureRunFace(style: RunStyle): MeasureFace {
@@ -1728,47 +1632,8 @@ function measureRunFace(style: RunStyle): MeasureFace {
   return measureFace(unique[0]!);
 }
 
-function fontkitFace(source: NormalizedFont): fontkit.Font | undefined {
-  if (!source.hasResource || source.data === undefined) return undefined;
-  let parsed = measureFaces.get(source.identity);
-  if (parsed === undefined) {
-    try {
-      const data = source.data;
-      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-      const opened = fontkit.create(bytes);
-      if (
-        !("unitsPerEm" in opened) ||
-        typeof opened.hasGlyphForCodePoint !== "function"
-      ) {
-        return undefined;
-      }
-      parsed = opened;
-      measureFaces.set(source.identity, parsed);
-    } catch {
-      return undefined;
-    }
-  }
-  return parsed;
-}
-
-function missingCharacters(
-  face: MeasureFace | fontkit.Font,
-  text: string,
-): string[] {
-  const font = "unitsPerEm" in face ? face : fontOfMeasureFace(face);
-  const missing = new Set<string>();
-  for (const character of text) {
-    if (!requiresVisibleFontGlyph(character)) continue;
-    const codePoint = character.codePointAt(0);
-    if (
-      codePoint !== undefined &&
-      (!font.hasGlyphForCodePoint(codePoint) ||
-        font.glyphForCodePoint(codePoint).id === 0)
-    ) {
-      missing.add(character);
-    }
-  }
-  return [...missing];
+function missingCharacters(face: MeasureFace, text: string): string[] {
+  return findMissingFontGlyphs(face, text, requiresVisibleFontGlyph);
 }
 
 function rangeWidth(
@@ -1800,16 +1665,16 @@ function rangeWidth(
     // Drawing and measurement must shape the same visible stream, including control filtering.
     const visible = Array.from(transformed).filter(requiresFontGlyph).join("");
     if (visible === "") continue;
-    const face = fontOfMeasureFace(piece.face);
-    const shaped = face.layout(visible);
+    const face = piece.face;
+    const advances = shapeFontAdvances(face, visible);
     const points = fontSizePoints(piece.style.fontSize);
     const tenths = Math.ceil(centipoints(points) / 10) / 10;
-    for (const position of shaped.positions) {
-      const advance = (position.xAdvance / face.unitsPerEm) * points;
+    for (const xAdvance of advances) {
+      const advance = (xAdvance / face.unitsPerEm) * points;
       natural += advance;
       eighthPoint +=
         Math.round(advance * nativeEighthPointGrid) / nativeEighthPointGrid;
-      const tenthAdvance = (position.xAdvance / face.unitsPerEm) * tenths;
+      const tenthAdvance = (xAdvance / face.unitsPerEm) * tenths;
       twips += Math.round(tenthAdvance * twipsPerPoint) / twipsPerPoint;
     }
     const pieceTracking = piece.style.letterSpacing ?? 0;
@@ -1993,7 +1858,7 @@ function paragraphLineHeight(paragraph: Paragraph): number {
       : [paragraph.endStyle];
   let maximum = 0;
   for (const style of styles) {
-    const face = fontOfMeasureFace(measureRunFace(style));
+    const face = measureRunFace(style);
     // DrawingML line spacing takes font ascent - descent + lineGap, then scales by output font size.
     const units = face.ascent - face.descent + face.lineGap;
     const lineHeight =
@@ -2028,7 +1893,7 @@ function paragraphBaseline(paragraph: Paragraph): number | undefined {
     return undefined;
   }
   const style = paragraph.runs[0]!.style;
-  const face = fontOfMeasureFace(measureRunFace(style));
+  const face = measureRunFace(style);
   const fontSize = fontSizePoints(style.fontSize) * (4 / 3);
   const naturalLineHeight =
     ((face.ascent - face.descent + face.lineGap) / face.unitsPerEm) * fontSize;
@@ -2218,27 +2083,6 @@ function measureParagraphs(
   };
 }
 
-const unsupportedColorFontTables = [
-  "COLR",
-  "CPAL",
-  "sbix",
-  "CBDT",
-  "CBLC",
-  "SVG ",
-] as const;
-
-function hasUnsupportedColorFontTable(font: fontkit.Font): boolean {
-  const directory = (
-    font as {
-      readonly directory?: { readonly tables?: Record<string, unknown> };
-    }
-  ).directory;
-  const tables = directory?.tables;
-  return unsupportedColorFontTables.some(
-    (table) => table in font || (tables !== undefined && table in tables),
-  );
-}
-
 function roundSvgNumber(value: number): string {
   const rounded = Math.round(value * 1_000_000) / 1_000_000;
   return Object.is(rounded, -0) ? "0" : String(rounded);
@@ -2246,7 +2090,7 @@ function roundSvgNumber(value: number): string {
 
 function decorationForSegment(
   decoration: ResolvedTextDecoration,
-  face: fontkit.Font,
+  face: MeasureFace,
   fontPx: number,
   startX: number,
   endX: number,
@@ -2278,15 +2122,14 @@ function decorationForSegment(
       };
     }
     case "line-through": {
-      const os2 = face["OS/2"];
       const thickness = Math.max(
         1,
-        os2?.yStrikeoutSize
-          ? (os2.yStrikeoutSize / unitsPerEm) * fontPx
+        face.yStrikeoutSize
+          ? (face.yStrikeoutSize / unitsPerEm) * fontPx
           : fontPx * 0.07,
       );
-      const yCenter = -(os2?.yStrikeoutPosition
-        ? (os2.yStrikeoutPosition / unitsPerEm) * fontPx
+      const yCenter = -(face.yStrikeoutPosition
+        ? (face.yStrikeoutPosition / unitsPerEm) * fontPx
         : fontPx * 0.3);
       return {
         x: startX,
@@ -2578,64 +2421,15 @@ function buildVisualLineSegments(
   return segments;
 }
 
-type ShapedOutlineGlyph = {
-  readonly path: string;
-  readonly xAdvance: number;
-  readonly xOffset: number;
-  readonly yOffset: number;
-  readonly cluster: number;
-  readonly isSpace: boolean;
-};
-
 function shapeSegmentOutlines(
   face: MeasureFace,
   text: string,
   isRtl: boolean,
   lang: string | undefined,
-): ShapedOutlineGlyph[] {
+): readonly ShapedOutlineGlyph[] {
   const visible = Array.from(text).filter(requiresFontGlyph).join("");
   if (visible === "") return [];
-  const hbFont = hbFaces.get(face.identity)?.font;
-  if (hbFont !== undefined) {
-    return withHbBuffer((buffer) => {
-      buffer.addText(visible);
-      buffer.guessSegmentProperties();
-      buffer.setDirection(isRtl ? hb.Direction.RTL : hb.Direction.LTR);
-      if (lang !== undefined) {
-        buffer.setLanguage(lang);
-      }
-      hb.shape(hbFont, buffer);
-      return buffer.getGlyphInfosAndPositions().map((item) => ({
-        path: hbFont.glyphToPath(item.codepoint),
-        xAdvance: item.xAdvance ?? 0,
-        xOffset: item.xOffset ?? 0,
-        yOffset: item.yOffset ?? 0,
-        cluster: item.cluster,
-        isSpace: /\p{White_Space}/u.test(visible[item.cluster] ?? ""),
-      }));
-    });
-  }
-  const fkRun = fontOfMeasureFace(face).layout(
-    visible,
-    undefined,
-    undefined,
-    undefined,
-    isRtl ? "rtl" : "ltr",
-  );
-  return fkRun.glyphs.map((glyph, index) => {
-    const pos = fkRun.positions[index]!;
-    const isSpace = glyph.codePoints.some((cp) =>
-      /\p{White_Space}/u.test(String.fromCodePoint(cp)),
-    );
-    return {
-      path: glyph.path.toSVG(),
-      xAdvance: pos.xAdvance,
-      xOffset: pos.xOffset,
-      yOffset: pos.yOffset,
-      cluster: index,
-      isSpace,
-    };
-  });
+  return shapeFontOutlines(face, visible, isRtl, lang);
 }
 
 /**
@@ -2672,8 +2466,11 @@ export function withPreviewFontBoundary<T>(fn: () => T): T {
       }
       if (
         error.code === "font-format-unsupported" ||
+        error.code === "unsupported-font-format" ||
         error.code === "font-substitution-required" ||
         error.code === "font-face-mismatch" ||
+        error.code === "font-weight-mismatch" ||
+        error.code === "font-style-mismatch" ||
         error.code === "font-metrics-invalid" ||
         error.code === "conflicting-resource"
       ) {
@@ -2703,7 +2500,7 @@ export function previewParagraphOutlines(
         ? paragraphMeasurement(paragraph, widthOrMeasured)
         : widthOrMeasured;
     for (const piece of resolvedMeasured.pieces) {
-      if (hasUnsupportedColorFontTable(fontOfMeasureFace(piece.face))) {
+      if (piece.face.hasColorOrBitmapTable) {
         throw new CapabilityError(
           "preview-unsupported-font",
           "Preview requires monochrome outline fonts",
@@ -2758,7 +2555,7 @@ export function previewParagraphOutlines(
         piece.style.lang,
       );
       if (shaped.length === 0) return;
-      const face = fontOfMeasureFace(piece.face);
+      const face = piece.face;
       const fontPx = (fontSizePoints(piece.style.fontSize) * 4) / 3;
       const scale = fontPx / face.unitsPerEm;
       const trackingPx = piece.style.letterSpacing ?? 0;
@@ -2825,7 +2622,7 @@ export function previewParagraphOutlines(
     });
     if (glyphs.length === 0 && pieces.length > 0) {
       const fallbackPiece = pieces[0]!;
-      const fallbackFace = fontOfMeasureFace(fallbackPiece.face);
+      const fallbackFace = fallbackPiece.face;
       const fallbackScale =
         (fontSizePoints(fallbackPiece.style.fontSize) * 4) /
         (3 * fallbackFace.unitsPerEm);
@@ -2939,7 +2736,7 @@ function shapeListPrefix(
   const prefixStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
   const prefixFace = withPreviewFontBoundary(() => {
     const face = measureRunFace(prefixStyle);
-    if (hasUnsupportedColorFontTable(fontOfMeasureFace(face))) {
+    if (face.hasColorOrBitmapTable) {
       throw new CapabilityError(
         "preview-unsupported-font",
         "Preview requires monochrome outline fonts",
@@ -2971,8 +2768,7 @@ function shapeListPrefix(
     prefixStyle.lang,
   );
   const scale =
-    (fontSizePoints(prefixStyle.fontSize) * 4) /
-    (3 * fontOfMeasureFace(prefixFace).unitsPerEm);
+    (fontSizePoints(prefixStyle.fontSize) * 4) / (3 * prefixFace.unitsPerEm);
   let cursor = 0;
   const glyphs: PreviewGlyph[] = shaped.map((item) => {
     const glyph: PreviewGlyph = {

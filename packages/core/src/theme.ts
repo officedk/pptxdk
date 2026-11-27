@@ -21,12 +21,12 @@ export const fontFaceStyleSchema: z.ZodType<FontFaceStyle> =
   >;
 
 const fontWeightNumberSchema = z
-  .int()
-  .min(100)
-  .max(900)
-  .refine(
-    (value) => value % 100 === 0,
-    "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
+  .number()
+  .int("fontWeight must be normal, bold, or an integer between 1 and 1000")
+  .min(1, "fontWeight must be normal, bold, or an integer between 1 and 1000")
+  .max(
+    1000,
+    "fontWeight must be normal, bold, or an integer between 1 and 1000",
   );
 
 const fontWeightSchema = z.union([
@@ -39,10 +39,22 @@ export const uint8ArraySchema = z.instanceof(
   Uint8Array,
 ) as unknown as z.ZodType<Uint8Array>;
 
-/** Font files provided by the caller can be used for measurement or embedded according to build options. */
+/**
+ * Single font face resource declaration paired with a {@link Font}.
+ *
+ * When `data` is a static single-font binary and `weight` or `style` is omitted,
+ * the SDK infers the effective value from `OS/2.usWeightClass` and italic metadata
+ * (`OS/2.fsSelection.italic`, `OS/2.fsSelection.oblique`, or non-zero `post.italicAngle`).
+ * Explicit values that disagree with file metadata fail validation during build.
+ * When `embedFonts` is enabled, the owning `Font.family` must match the file's
+ * native Unicode legacy family name (`Name ID 1`).
+ */
 export type FontFace = {
+  /** OpenType numeric weight (`1..1000`); defaults to `400` when `data` is omitted. */
   readonly weight?: number | undefined;
+  /** Glyph style (`"normal"` or `"italic"`); defaults to `"normal"` when `data` is omitted. */
   readonly style?: FontFaceStyle | undefined;
+  /** Static single-font bytes (`TTF`, `OTF`, `WOFF`, or `WOFF2`); variable fonts (`fvar`) are rejected. */
   readonly data?: Uint8Array | undefined;
 };
 
@@ -1394,7 +1406,13 @@ function textStyleErrorForIssue(
 ): CapabilityError {
   const field = issue?.path[0];
   if (field === "fontFamily") {
-    if (issue?.path[1] === "faces") {
+    const hasFacesIssue =
+      issue?.path[1] === "faces" ||
+      (issue?.code === "invalid_union" &&
+        issue.errors.some((branch) =>
+          branch.some((sub) => sub.path[0] === "faces"),
+        ));
+    if (hasFacesIssue) {
       return new CapabilityError(
         "invalid-font-face",
         "Font.faces contains invalid weight, style, or resource",
@@ -1421,7 +1439,7 @@ function textStyleErrorForIssue(
   if (field === "fontWeight") {
     return new CapabilityError(
       "invalid-font-weight",
-      "fontWeight must be normal, bold, or a hundreds integer between 100 and 900",
+      "fontWeight must be normal, bold, or an integer between 1 and 1000",
     );
   }
   if (field === "fontStyle") {

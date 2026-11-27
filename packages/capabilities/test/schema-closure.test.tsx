@@ -521,8 +521,20 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
 
   it("enforces Table.style schema constraints, Text.width type constraints, and Font constructor validation across public entries", async () => {
     assert.throws(() => font("   "), TypeError);
+    assert.equal(
+      font("Jost*", [{ weight: 450, data: png1x1 }]).faces?.[0]?.weight,
+      450,
+    );
     assert.throws(
-      () => font("Jost*", [{ weight: 450, data: png1x1 }]),
+      () => font("Jost*", [{ weight: 0, data: png1x1 }]),
+      TypeError,
+    );
+    assert.throws(
+      () => font("Jost*", [{ weight: 1001, data: png1x1 }]),
+      TypeError,
+    );
+    assert.throws(
+      () => font("Jost*", [{ weight: 400.5, data: png1x1 }]),
       TypeError,
     );
     assert.throws(

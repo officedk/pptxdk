@@ -175,6 +175,29 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
     assert.equal(visualClear.border, "none");
     assert.equal(visualClear.boxShadow, "none");
 
+    for (const fontWeight of [
+      1,
+      150,
+      250,
+      350,
+      450,
+      650,
+      1000,
+      "normal",
+      "bold",
+    ] as const) {
+      const validated = validateTextStyle({
+        fontFamily: {
+          family: "Custom",
+          faces: [
+            { weight: typeof fontWeight === "number" ? fontWeight : 400 },
+          ],
+        },
+        fontWeight,
+      });
+      assert.equal(validated.fontWeight, fontWeight);
+    }
+
     // Preserve native units ("32pt" vs 32 vs "32px") through schema & validateTextStyle
     for (const fontSize of ["32pt", 32, "32px"] as const) {
       const style: TextStyle = textStyleSchema.parse({
@@ -204,14 +227,25 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       [{ fontFamily: "" }, "invalid-font-family"],
       [{ fontFamily: { family: "  " } }, "invalid-font-family"],
       [
-        { fontFamily: { family: "Bad", faces: [{ weight: 150 }] } },
+        { fontFamily: { family: "Bad", faces: [{ weight: 0 }] } },
+        "invalid-font-face",
+      ],
+      [
+        { fontFamily: { family: "Bad", faces: [{ weight: 1001 }] } },
+        "invalid-font-face",
+      ],
+      [
+        { fontFamily: { family: "Bad", faces: [{ weight: 400.5 }] } },
         "invalid-font-face",
       ],
       [{ fontSize: "20em" }, "invalid-text-length"],
       [{ fontSize: 0 }, "invalid-font-size"],
       [{ fontSize: -4 }, "invalid-font-size"],
       [{ fontSize: "6000pt" }, "invalid-font-size"],
-      [{ fontWeight: 250 }, "invalid-font-weight"],
+      [{ fontWeight: 0 }, "invalid-font-weight"],
+      [{ fontWeight: 1001 }, "invalid-font-weight"],
+      [{ fontWeight: -100 }, "invalid-font-weight"],
+      [{ fontWeight: 400.5 }, "invalid-font-weight"],
       [{ fontStyle: "oblique" }, "invalid-font-style"],
       [{ color: 123 }, "invalid-color"],
       [{ lineHeight: 0 }, "invalid-text-length"],

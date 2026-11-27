@@ -1,6 +1,7 @@
 import {
   Cell,
   fade,
+  fromVanilla,
   MotionScope,
   P,
   Row,
@@ -12,6 +13,7 @@ import {
   wipe,
 } from "@officedk/pptxdk/react";
 
+import { createDualPipeSchedule } from "../components/dualpipe-schedule.ts";
 import {
   EnteredShapeText,
   MetricCard,
@@ -21,23 +23,7 @@ import {
 import { SlideFrame } from "../templates/slide-frame.tsx";
 import { colors } from "../theme.ts";
 
-const fwdLaneBlocks = [
-  { label: "F0", tone: "compute", w: 50 },
-  { label: "F1", tone: "compute", w: 50 },
-  { label: "F&B (双向重叠)", tone: "copper", w: 124 },
-  { label: "F&B (双向重叠)", tone: "copper", w: 124 },
-  { label: "B1", tone: "comm", w: 52 },
-  { label: "W1", tone: "steel", w: 48 },
-] as const;
-
-const revLaneBlocks = [
-  { label: "F'0", tone: "compute", w: 50 },
-  { label: "F&B (双向重叠)", tone: "copper", w: 124 },
-  { label: "F&B (双向重叠)", tone: "copper", w: 124 },
-  { label: "B'0", tone: "comm", w: 52 },
-  { label: "B'1", tone: "comm", w: 52 },
-  { label: "W'0", tone: "steel", w: 46 },
-] as const;
+const DualPipeSchedule = fromVanilla(createDualPipeSchedule);
 
 const overlapSubStages = [
   {
@@ -62,9 +48,6 @@ const overlapSubStages = [
 export function DualPipePage() {
   const overlapScope = useMotionScope();
 
-  let fwdCursor = 196;
-  let revCursor = 196;
-
   return (
     <SlideFrame
       id="dualpipe"
@@ -85,101 +68,7 @@ export function DualPipePage() {
         rightBadge="双向对称交错"
         tone="compute"
       >
-        {/* Forward stream row */}
-        <Text
-          style={{
-            position: "absolute",
-            left: 68,
-            top: 180,
-            width: 124,
-            padding: 0,
-            fontSize: 11,
-            color: colors.steel,
-            textWrap: "nowrap",
-          }}
-        >
-          正向数据流 (Rank 0→P)
-        </Text>
-        {fwdLaneBlocks.map((b, idx) => {
-          const x = fwdCursor;
-          fwdCursor += b.w + 6;
-          const fill =
-            b.tone === "copper"
-              ? colors.copper
-              : b.tone === "comm"
-                ? colors.comm
-                : b.tone === "steel"
-                  ? colors.steel
-                  : colors.compute;
-          return (
-            <Shape
-              key={idx}
-              style={{
-                position: "absolute",
-                left: x,
-                top: 172,
-                width: b.w,
-                height: 34,
-                background: fill,
-                padding: [0, 2],
-                fontSize: 10.5,
-                color: colors.surface,
-                align: "center",
-                verticalAlign: "middle",
-              }}
-            >
-              {b.label}
-            </Shape>
-          );
-        })}
-
-        {/* Reverse stream row */}
-        <Text
-          style={{
-            position: "absolute",
-            left: 68,
-            top: 226,
-            width: 124,
-            padding: 0,
-            fontSize: 11,
-            color: colors.steel,
-            textWrap: "nowrap",
-          }}
-        >
-          镜像数据流 (Rank P→0)
-        </Text>
-        {revLaneBlocks.map((b, idx) => {
-          const x = revCursor;
-          revCursor += b.w + 6;
-          const fill =
-            b.tone === "copper"
-              ? colors.copper
-              : b.tone === "comm"
-                ? colors.comm
-                : b.tone === "steel"
-                  ? colors.steel
-                  : colors.compute;
-          return (
-            <Shape
-              key={idx}
-              style={{
-                position: "absolute",
-                left: x,
-                top: 218,
-                width: b.w,
-                height: 34,
-                background: fill,
-                padding: [0, 2],
-                fontSize: 10.5,
-                color: colors.surface,
-                align: "center",
-                verticalAlign: "middle",
-              }}
-            >
-              {b.label}
-            </Shape>
-          );
-        })}
+        <DualPipeSchedule x={48} y={108} />
 
         {/* Explanation of zero-bubble B = E + W split */}
         <Shape

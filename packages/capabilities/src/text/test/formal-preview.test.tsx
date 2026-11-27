@@ -28,6 +28,8 @@ import { strFromU8, unzipSync } from "fflate";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
+import { stripVariableFontTables } from "../../../test/sfnt-test-helpers.ts";
+
 function runDocPreview(modules: readonly CapabilityModule[]) {
   const resolveWith = createResolver(modules);
   return async (document: CommonNode) => {
@@ -75,10 +77,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
   const notoArabicFont = font("Noto Naskh Arabic", [
     {
       weight: 400,
-      data: readFileSync(
-        new URL(
-          "../../../test/assets/fonts/NotoNaskhArabic.ttf",
-          import.meta.url,
+      data: stripVariableFontTables(
+        readFileSync(
+          new URL(
+            "../../../test/assets/fonts/NotoNaskhArabic.ttf",
+            import.meta.url,
+          ),
         ),
       ),
     },
@@ -86,10 +90,12 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
   const notoHebrewFont = font("Noto Sans Hebrew Thin", [
     {
       weight: 100,
-      data: readFileSync(
-        new URL(
-          "../../../test/assets/fonts/NotoSansHebrew.ttf",
-          import.meta.url,
+      data: stripVariableFontTables(
+        readFileSync(
+          new URL(
+            "../../../test/assets/fonts/NotoSansHebrew.ttf",
+            import.meta.url,
+          ),
         ),
       ),
     },

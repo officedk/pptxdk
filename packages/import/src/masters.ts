@@ -678,7 +678,14 @@ function readPlaceholderSpList(
           fld.consumeAttr("id");
           fld.consumeAttr("type");
           const rPr = fld.child(A_NS, "rPr");
-          if (rPr !== undefined) readDefRPr(rPr, clrMap);
+          const rStyle =
+            rPr === undefined ? undefined : readDefRPr(rPr, clrMap);
+          if (
+            promptLvl1Fallback === undefined &&
+            (pStyle !== undefined || rStyle !== undefined)
+          ) {
+            promptLvl1Fallback = { ...pStyle, ...rStyle };
+          }
           fld.ignoreEmptyChild(A_NS, "pPr");
           const t = fld.child(A_NS, "t");
           if (t !== undefined) {
@@ -687,7 +694,15 @@ function readPlaceholderSpList(
           }
         }
         const endPara = p.child(A_NS, "endParaRPr");
-        if (endPara !== undefined) readDefRPr(endPara, clrMap);
+        if (endPara !== undefined) {
+          const endStyle = readDefRPr(endPara, clrMap);
+          if (
+            promptLvl1Fallback === undefined &&
+            (pStyle !== undefined || Object.keys(endStyle).length > 0)
+          ) {
+            promptLvl1Fallback = { ...pStyle, ...endStyle };
+          }
+        }
         if (runTexts.length > 0) promptParagraphs.push(runTexts.join(""));
       }
       if (promptParagraphs.length > 0) {

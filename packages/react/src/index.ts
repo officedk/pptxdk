@@ -21,7 +21,7 @@ function reactFailure(error: unknown, path = "deck"): BuildError {
   return new BuildError([
     diagnostic(
       path,
-      path === "fragment" ? "append" : "react-render",
+      "react-render",
       error instanceof Error ? error.message : String(error),
     ),
   ]);
@@ -35,8 +35,11 @@ export type ExpandDocumentOptions = {
   readonly signal?: AbortSignal | undefined;
 };
 
+/** Options for one standalone JSX fragment expansion; cancellation covers expansion and cleanup only. */
+export type ExpandFragmentOptions = ExpandDocumentOptions;
+
 /** Options for one JSX fragment append; cancellation covers expansion and cleanup only. */
-export type AppendJSXOptions = ExpandDocumentOptions;
+export type AppendJSXOptions = ExpandFragmentOptions;
 
 /** Completed editable document handed off by React expansion. */
 export type ExpandedDocument = CommonContainer<"deck">;
@@ -74,6 +77,28 @@ function appendFailure(error: unknown): BuildError {
 }
 
 /**
+ * Public React fragment handoff entry: runs a standalone JSX fragment to completion, waits for
+ * declared async content and root cleanup, and returns frozen ownerless top-level editable nodes.
+ *
+ * The returned nodes no longer synchronize with the finished root and have `parent === undefined`.
+ * Top-level non-whitespace text, unhandled render errors, cleanup failures, and cancellation reject
+ * without returning partial results.
+ */
+export async function expandFragment(
+  element: ReactNode,
+  options: ExpandFragmentOptions = {},
+): Promise<readonly CommonNode[]> {
+  const signal = options.signal;
+  try {
+    return await expandReactFragment(element, signal);
+  } catch (error) {
+    if (signal?.aborted && error === signal.reason) throw error;
+    if (error instanceof BuildError) throw error;
+    throw reactFailure(error, "fragment");
+  }
+}
+
+/**
  * Public React append entry: expands one standalone JSX fragment, waits for final content and
  * cleanup, then appends its top-level editable nodes to `target` as one batch.
  *
@@ -91,11 +116,23 @@ export async function appendJSX(
   const signal = options.signal;
   let nodes: readonly CommonNode[];
   try {
-    nodes = await expandReactFragment(element, signal);
+    nodes = await expandFragment(element, options);
   } catch (error) {
     if (signal?.aborted && error === signal.reason) throw error;
-    if (error instanceof BuildError) throw error;
-    throw reactFailure(error, "fragment");
+    if (error instanceof BuildError) {
+      const hasExpandFailure = error.diagnostics.some(
+        (item) => item.code === "render-failed" && item.phase === "expand",
+      );
+      if (!hasExpandFailure) throw error;
+      throw new BuildError(
+        error.diagnostics.map((item) =>
+          item.code === "render-failed" && item.phase === "expand"
+            ? { ...item, phase: "append" }
+            : item,
+        ),
+      );
+    }
+    throw appendFailure(error);
   }
   try {
     assertAppendableAuthorIds(target, nodes);
@@ -116,3 +153,7 @@ export type {
   SlideMasterProps,
   SlideProps,
 } from "#/elements.ts";
+export { Mount } from "#/mount.ts";
+export type { MountProps } from "#/mount.ts";
+export { fromVanilla } from "#/from-vanilla.ts";
+export type { VanillaFactoryProps, VanillaSlotResult } from "#/from-vanilla.ts";

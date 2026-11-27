@@ -1,15 +1,15 @@
-import { createHash } from "node:crypto";
-
 import {
   CapabilityError,
   type CapabilityPresentationContribution,
   type FontEmbeddingMode,
 } from "@pptxdk/core/capability";
 import { xmlEscape } from "@pptxdk/emit";
-import * as fontkit from "fontkit";
 
-import { fontFamilyKey, matchesFontFamily } from "./font-family.ts";
-import { subsetFont } from "./font-subset.ts";
+import {
+  buildEmbeddedEotPayload,
+  fontFamilyKey,
+  validateEmbeddableTrueTypeFont,
+} from "./font-engine.ts";
 import type { FontFaceStyle } from "./font.ts";
 
 /** Retains control characters and default ignorable code points in text stream without requiring standalone cmap glyphs. */
@@ -44,17 +44,10 @@ export type FontEmbeddingUse = {
   readonly path?: string;
 };
 
-type FontTable = { readonly offset: number; readonly length: number };
-type FontTables = ReadonlyMap<string, FontTable>;
-type FontkitExtras = {
-  readonly post?: { readonly isFixedPitch: number };
-};
-
 function fail(
   use: FontEmbeddingUse,
   code: string,
   message: string,
-  characters?: readonly string[],
   extraDetails?: Readonly<Record<string, unknown>>,
 ): never {
   throw new CapabilityError(code, message, use.path, {
@@ -63,541 +56,8 @@ function fail(
       weight: use.weight,
       style: use.style,
     },
-    ...(characters === undefined ? {} : { characters }),
     ...extraDetails,
   });
-}
-
-/** Checks whether raw font bytes and author policy allow full TrueType font embedding. */
-export function isFontEmbeddable(
-  bytes: Uint8Array,
-  substitute: boolean,
-  declaredEmbeddable: boolean,
-): boolean {
-  if (substitute || !declaredEmbeddable || bytes.byteLength < 12) {
-    return false;
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const signature = String.fromCharCode(...bytes.subarray(0, 4));
-  if (signature !== "\0\x01\0\0" && signature !== "true") {
-    return false;
-  }
-  const count = view.getUint16(4);
-  if (12 + count * 16 > bytes.byteLength) {
-    return false;
-  }
-  let os2Offset: number | undefined;
-  let os2Length = 0;
-  let hasGlyf = false;
-  let hasFvar = false;
-  let hasHead = false;
-  let hasName = false;
-  for (let index = 0; index < count; index += 1) {
-    const record = 12 + index * 16;
-    const name = String.fromCharCode(...bytes.subarray(record, record + 4));
-    const offset = view.getUint32(record + 8);
-    const length = view.getUint32(record + 12);
-    if (offset > bytes.byteLength || length > bytes.byteLength - offset) {
-      return false;
-    }
-    if (name === "OS/2") {
-      os2Offset = offset;
-      os2Length = length;
-    } else if (name === "glyf") {
-      hasGlyf = true;
-    } else if (name === "fvar") {
-      hasFvar = true;
-    } else if (name === "head") {
-      hasHead = true;
-    } else if (name === "name") {
-      hasName = true;
-    }
-  }
-  if (
-    os2Offset === undefined ||
-    os2Length < 64 ||
-    !hasGlyf ||
-    hasFvar ||
-    !hasHead ||
-    !hasName
-  ) {
-    return false;
-  }
-  const fsType = view.getUint16(os2Offset + 8);
-  const usagePermission = fsType & 0x000f;
-  if (![0, 2, 4, 8].includes(usagePermission) || (fsType & ~0x030f) !== 0) {
-    return false;
-  }
-  if (
-    usagePermission === 2 ||
-    usagePermission === 4 ||
-    (fsType & 0x0200) !== 0
-  ) {
-    return false;
-  }
-  return true;
-}
-
-function tablesOf(bytes: Uint8Array, use: FontEmbeddingUse): FontTables {
-  if (bytes.byteLength < 12) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      "Font data is not a valid TrueType file",
-    );
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const signature = String.fromCharCode(...bytes.subarray(0, 4));
-  if (signature !== "\0\x01\0\0" && signature !== "true") {
-    return fail(
-      use,
-      "unsupported-font-format",
-      "Font embedding currently only supports static TrueType outlines; WOFF, WOFF2, font collections, and CFF are not supported",
-    );
-  }
-  const count = view.getUint16(4);
-  if (12 + count * 16 > bytes.byteLength) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      "Font SFNT table directory is incomplete",
-    );
-  }
-  const tables = new Map<string, FontTable>();
-  for (let index = 0; index < count; index += 1) {
-    const record = 12 + index * 16;
-    const name = String.fromCharCode(...bytes.subarray(record, record + 4));
-    const offset = view.getUint32(record + 8);
-    const length = view.getUint32(record + 12);
-    if (offset > bytes.byteLength || length > bytes.byteLength - offset) {
-      return fail(
-        use,
-        "unsupported-font-format",
-        `Font table ${name} exceeds file boundaries`,
-      );
-    }
-    tables.set(name, { offset, length });
-  }
-  if (
-    !tables.has("glyf") ||
-    tables.has("fvar") ||
-    !tables.has("OS/2") ||
-    !tables.has("head") ||
-    !tables.has("name")
-  ) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      "Font embedding requires a static TrueType font containing OS/2, head, name, and glyf tables",
-    );
-  }
-  const os2 = tables.get("OS/2")!;
-  if (os2.length < 64) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      "Font OS/2 table is missing weight, fsType, or style selection fields",
-    );
-  }
-  return tables;
-}
-
-function checkedFont(
-  use: FontEmbeddingUse,
-  mode: FontEmbeddingMode,
-): {
-  readonly font: fontkit.Font;
-  readonly tables: FontTables;
-  readonly fsType: number;
-  readonly weightClass: number;
-} {
-  if (!use.embeddable) {
-    return fail(
-      use,
-      "font-not-embeddable",
-      `${use.family} explicitly declares embeddable: false and cannot satisfy font embedding request`,
-    );
-  }
-  if (use.substitute) {
-    return fail(
-      use,
-      "font-substitute-not-embeddable",
-      `${use.family} uses substitute font metrics and cannot satisfy embedding request for the declared family`,
-    );
-  }
-  if (use.bytes === undefined || use.identity === "missing") {
-    return fail(
-      use,
-      "font-embedding-resource-missing",
-      `${use.family} ${use.weight} ${use.style} is missing embeddable font resource`,
-    );
-  }
-
-  const identity = createHash("sha256").update(use.bytes).digest("hex");
-  if (identity !== use.identity) {
-    return fail(
-      use,
-      "invalid-font-face",
-      `Font resource identity for ${use.family} does not match actual bytes`,
-    );
-  }
-  const tables = tablesOf(use.bytes, use);
-  const os2 = tables.get("OS/2")!;
-  const view = new DataView(
-    use.bytes.buffer,
-    use.bytes.byteOffset,
-    use.bytes.byteLength,
-  );
-  const fsType = view.getUint16(os2.offset + 8);
-  const weightClass = view.getUint16(os2.offset + 4);
-  const usagePermission = fsType & 0x000f;
-  if (![0, 2, 4, 8].includes(usagePermission) || (fsType & ~0x030f) !== 0) {
-    return fail(
-      use,
-      "invalid-font-permissions",
-      `OS/2 fsType of ${use.family} contains invalid or reserved permission flags`,
-    );
-  }
-  if (usagePermission === 2) {
-    return fail(
-      use,
-      "font-embedding-restricted",
-      `OS/2 fsType of ${use.family} restricts embedding`,
-    );
-  }
-  if (usagePermission === 4) {
-    return fail(
-      use,
-      "font-embedding-preview-print",
-      `OS/2 fsType of ${use.family} permits only preview and print, which cannot satisfy font embedding for editable presentations`,
-    );
-  }
-  if (mode === "subset" && (fsType & 0x0100) !== 0) {
-    return fail(
-      use,
-      "font-subsetting-forbidden",
-      `OS/2 fsType of ${use.family} forbids subsetting; switch to full embedding or omit embedding request`,
-    );
-  }
-  if ((fsType & 0x0200) !== 0) {
-    return fail(
-      use,
-      "font-embedding-bitmap-only",
-      `OS/2 fsType of ${use.family} allows bitmap embedding only and cannot embed TrueType outlines`,
-    );
-  }
-
-  let opened: fontkit.Font | fontkit.FontCollection;
-  try {
-    opened = fontkit.create(
-      Buffer.from(use.bytes.buffer, use.bytes.byteOffset, use.bytes.byteLength),
-    );
-  } catch {
-    return fail(
-      use,
-      "unsupported-font-format",
-      `Failed to parse TrueType font tables for ${use.family}`,
-    );
-  }
-  if (opened.type !== "TTF") {
-    return fail(
-      use,
-      "unsupported-font-format",
-      `Font data for ${use.family} is not a supported static TrueType font`,
-    );
-  }
-  const font = opened;
-  if (!matchesFontFamily(font, use.family)) {
-    return fail(
-      use,
-      "font-family-mismatch",
-      `Font family ${font.familyName} declared in font file does not match output family ${use.family}; declare substitute explicitly if intended for measurement`,
-    );
-  }
-  if (font.variationAxes && Object.keys(font.variationAxes).length > 0) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      `${use.family} is a variable font and cannot be embedded currently`,
-    );
-  }
-  if (weightClass !== use.weight) {
-    return fail(
-      use,
-      "font-style-mismatch",
-      `${use.family} requested ${use.weight} weight, but OS/2 usWeightClass is ${weightClass}`,
-    );
-  }
-  if (
-    font["OS/2"].fsSelection.bold !== use.bold ||
-    font["OS/2"].fsSelection.italic !== use.italic ||
-    font["OS/2"].fsSelection.italic !== (use.style === "italic")
-  ) {
-    return fail(
-      use,
-      "font-style-mismatch",
-      `OS/2 fsSelection of ${use.family} does not match bold or italic styles emitted for text`,
-    );
-  }
-  return { font, tables, fsType, weightClass };
-}
-
-function subsetBytes(
-  use: FontEmbeddingUse,
-  checked: ReturnType<typeof checkedFont>,
-  characters: string,
-): Uint8Array {
-  const requiredCharacters = [...new Set(characters)];
-  const missingCharacters = requiredCharacters.filter((character) => {
-    const codePoint = character.codePointAt(0);
-    return (
-      codePoint !== undefined &&
-      requiresVisibleFontGlyph(character) &&
-      (!checked.font.hasGlyphForCodePoint(codePoint) ||
-        checked.font.glyphForCodePoint(codePoint).id === 0)
-    );
-  });
-  if (missingCharacters.length > 0) {
-    return fail(
-      use,
-      "font-missing-glyph",
-      `${use.family} ${use.weight} ${use.style} font is missing glyph for emitted character ${missingCharacters[0]!}`,
-      missingCharacters,
-    );
-  }
-
-  let bytes: Uint8Array;
-  try {
-    // Coverage check ignores non-glyph codepoints, but the original character stream is passed to HarfBuzz to retain layout closure.
-    bytes = subsetFont(use.bytes!, characters);
-  } catch (error) {
-    return fail(
-      use,
-      "font-subsetting-failed",
-      `Failed to generate character subset for ${use.family}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  let font: fontkit.Font;
-  try {
-    const opened = fontkit.create(
-      Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-    );
-    if (opened.type !== "TTF")
-      throw new Error("Subset is not a static TrueType font");
-    font = opened;
-    tablesOf(bytes, use);
-  } catch (error) {
-    return fail(
-      use,
-      "font-subsetting-failed",
-      `Failed to parse character subset for ${use.family} independently: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  if (
-    font["OS/2"].usWeightClass !== checked.weightClass ||
-    font["OS/2"].fsType.editable !== checked.font["OS/2"].fsType.editable ||
-    font["OS/2"].fsType.noSubsetting !==
-      checked.font["OS/2"].fsType.noSubsetting ||
-    font["OS/2"].fsSelection.bold !== checked.font["OS/2"].fsSelection.bold ||
-    font["OS/2"].fsSelection.italic !== checked.font["OS/2"].fsSelection.italic
-  ) {
-    return fail(
-      use,
-      "font-subsetting-failed",
-      `Character subset for ${use.family} did not retain embedding permissions and styles of the original font`,
-    );
-  }
-  for (const character of requiredCharacters) {
-    const codePoint = character.codePointAt(0);
-    if (
-      codePoint !== undefined &&
-      requiresVisibleFontGlyph(character) &&
-      !font.hasGlyphForCodePoint(codePoint)
-    ) {
-      return fail(
-        use,
-        "font-subsetting-failed",
-        `Character subset for ${use.family} did not retain emitted character ${character}`,
-      );
-    }
-  }
-  return bytes;
-}
-
-function nameString(
-  bytes: Uint8Array,
-  table: FontTable,
-  id: number,
-  use: FontEmbeddingUse,
-): Uint8Array {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (table.length < 6) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      "Font name table is incomplete",
-    );
-  }
-  const count = view.getUint16(table.offset + 2);
-  const stringsOffset = view.getUint16(table.offset + 4);
-  if (6 + count * 12 > table.length || stringsOffset > table.length) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      "Font name table record out of bounds",
-    );
-  }
-  let fallback: Uint8Array | undefined;
-  for (let index = 0; index < count; index += 1) {
-    const record = table.offset + 6 + index * 12;
-    if (view.getUint16(record + 6) !== id) continue;
-    const platform = view.getUint16(record);
-    const language = view.getUint16(record + 4);
-    const length = view.getUint16(record + 8);
-    const offset = stringsOffset + view.getUint16(record + 10);
-    if (offset > table.length || length > table.length - offset) {
-      return fail(
-        use,
-        "unsupported-font-format",
-        "Font name string out of bounds",
-      );
-    }
-    if (platform !== 0 && platform !== 3) continue;
-    const raw = bytes.subarray(
-      table.offset + offset,
-      table.offset + offset + length,
-    );
-    if (raw.byteLength % 2 !== 0) {
-      return fail(
-        use,
-        "unsupported-font-format",
-        "Font name string is not UTF-16 encoded",
-      );
-    }
-    const littleEndian = new Uint8Array(raw.byteLength);
-    for (let at = 0; at < raw.byteLength; at += 2) {
-      littleEndian[at] = raw[at + 1]!;
-      littleEndian[at + 1] = raw[at]!;
-    }
-    if (platform === 3 && language === 0x0409) return littleEndian;
-    fallback ??= littleEndian;
-  }
-  if (fallback === undefined) {
-    return fail(
-      use,
-      "unsupported-font-format",
-      `Font name table is missing Unicode name field ${id} required for EOT`,
-    );
-  }
-  return fallback;
-}
-
-function eot(
-  sourceBytes: Uint8Array,
-  use: FontEmbeddingUse,
-  checked: ReturnType<typeof checkedFont>,
-  payloadBytes: Uint8Array = sourceBytes,
-): Uint8Array {
-  const { tables, fsType, weightClass, font } = checked;
-  const os2 = tables.get("OS/2")!;
-  const names = tables.get("name")!;
-  const view = new DataView(
-    sourceBytes.buffer,
-    sourceBytes.byteOffset,
-    sourceBytes.byteLength,
-  );
-  const payloadTables = tablesOf(payloadBytes, use);
-  const payloadView = new DataView(
-    payloadBytes.buffer,
-    payloadBytes.byteOffset,
-    payloadBytes.byteLength,
-  );
-  const os2Version = view.getUint16(os2.offset);
-  const field32 = (offset: number) =>
-    offset + 4 <= os2.length ? view.getUint32(os2.offset + offset) : 0;
-  const panose = sourceBytes.slice(os2.offset + 32, os2.offset + 42);
-  const chunks: Uint8Array[] = [];
-  const u8 = (value: number) => chunks.push(Uint8Array.of(value));
-  const u16 = (value: number) => {
-    const chunk = new Uint8Array(2);
-    new DataView(chunk.buffer).setUint16(0, value, true);
-    chunks.push(chunk);
-  };
-  const u32 = (value: number) => {
-    const chunk = new Uint8Array(4);
-    new DataView(chunk.buffer).setUint32(0, value >>> 0, true);
-    chunks.push(chunk);
-  };
-  u32(0);
-  u32(payloadBytes.byteLength);
-  u32(0x00020002);
-  u32(0);
-  chunks.push(panose);
-  u8(1);
-  u8(font["OS/2"].fsSelection.italic ? 1 : 0);
-  u32(weightClass);
-  u16(fsType);
-  u16(0x504c);
-  for (const offset of [42, 46, 50, 54]) u32(field32(offset));
-  for (const offset of [78, 82]) {
-    u32(os2Version >= 1 && os2.length >= offset + 4 ? field32(offset) : 0);
-  }
-  const payloadHead = payloadTables.get("head")!;
-  u32(payloadView.getUint32(payloadHead.offset + 8));
-  for (let index = 0; index < 4; index += 1) u32(0);
-  for (const id of [1, 2, 5, 4]) {
-    const name = nameString(sourceBytes, names, id, use);
-    u16(0);
-    u16(name.byteLength);
-    chunks.push(name);
-  }
-  u16(0);
-  u16(0);
-  u32(0x50475342);
-  u32(0);
-  u16(0);
-  u16(0);
-  u32(0);
-  u32(0);
-  chunks.push(payloadBytes);
-  const size = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const output = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  new DataView(output.buffer).setUint32(0, size, true);
-  return output;
-}
-
-function fontCategory(font: fontkit.Font): {
-  readonly pitchFamily: number;
-  readonly charset: number;
-} {
-  const panose = font["OS/2"].panose;
-  const serifStyle = panose[1] ?? 0;
-  const proportion = panose[3] ?? 0;
-  const fixedPitch =
-    ((font as unknown as FontkitExtras).post?.isFixedPitch ?? 0) !== 0 ||
-    proportion === 9;
-  const sansSerifStyles = new Set([11, 12, 13, 14, 15]);
-  const family = fixedPitch
-    ? 0x30
-    : panose[0] === 2
-      ? sansSerifStyles.has(serifStyle)
-        ? 0x20
-        : serifStyle >= 2
-          ? 0x10
-          : 0
-      : panose[0] === 3
-        ? 0x40
-        : panose[0] === 4 || panose[0] === 5
-          ? 0x50
-          : 0;
-  return { pitchFamily: family | (fixedPitch ? 1 : 2), charset: 0 };
 }
 
 type FontSlot = "regular" | "bold" | "italic" | "boldItalic";
@@ -614,8 +74,19 @@ function slotOrder(value: FontSlot): number {
 function formatEmbeddedFontSlotConflictMessage(
   family: string,
   styleSlot: FontSlot,
+  nativeLegacyFamily: string | undefined,
 ): string {
-  return `Font family "${family}" maps multiple font files to the "${styleSlot}" embedding slot. OOXML (<p:embeddedFont>) supports only four slots per font family (regular, bold, italic, boldItalic); register additional weights (such as 500 Medium or 600 SemiBold) under a separate font family name (for example "${family} Medium").`;
+  if (
+    nativeLegacyFamily !== undefined &&
+    fontFamilyKey(nativeLegacyFamily) !== fontFamilyKey(family)
+  ) {
+    return `Font family "${family}" maps multiple font files to the "${styleSlot}" embedding slot (conflicting file native Name ID 1: "${nativeLegacyFamily}"). OOXML (<p:embeddedFont>) supports only four slots per font family (regular, bold, italic, boldItalic); register "${nativeLegacyFamily}" as a separate font family.`;
+  }
+  const nativePart =
+    nativeLegacyFamily === undefined
+      ? ""
+      : ` (file native Name ID 1: "${nativeLegacyFamily}")`;
+  return `Font family "${family}" maps multiple font files to the "${styleSlot}" embedding slot${nativePart}. OOXML (<p:embeddedFont>) supports only four slots per font family (regular, bold, italic, boldItalic); register additional weights (such as 500 Medium or 600 SemiBold) under a separate font family name (for example "${family} Medium").`;
 }
 
 function embeddedFontSlotConflictDetails(
@@ -638,40 +109,70 @@ export function fontPresentationContributions(
 ): CapabilityPresentationContribution[] {
   if (requested === undefined) return [];
   const contributions: CapabilityPresentationContribution[] = [];
-  const slots = new Map<string, string>();
+  const slots = new Map<
+    string,
+    {
+      readonly identity: string;
+      readonly primaryLegacyFamily: string | undefined;
+    }
+  >();
   const recordContents = new Map<string, string>();
   for (const use of uses) {
-    const checked = checkedFont(use, requested);
-    const styleSlot = slot(use.bold, use.italic);
+    const checked = validateEmbeddableTrueTypeFont(use, requested);
+    const styleSlot = slot(checked.os2Bold, checked.isItalic);
     const family = xmlEscape(use.family);
-    const category = fontCategory(checked.font);
     const recordKey = fontFamilyKey(use.family);
     // Keep one <p:font> header per case-insensitive family so PANOSE or casing differences across weights do not fail record registration.
     let recordContent = recordContents.get(recordKey);
     if (recordContent === undefined) {
-      recordContent = `<p:font typeface="${family}" pitchFamily="${category.pitchFamily}" charset="${category.charset}"/>`;
+      recordContent = `<p:font typeface="${family}" pitchFamily="${checked.pitchFamily}" charset="${checked.charset}"/>`;
       recordContents.set(recordKey, recordContent);
     }
     const recordIdentity = recordKey;
     const itemKey = `${recordKey}\u0000${styleSlot}`;
     const existing = slots.get(itemKey);
+    const conflictDetails = embeddedFontSlotConflictDetails(use);
+    if (existing !== undefined && existing.identity !== use.identity) {
+      const conflictNative =
+        checked.primaryLegacyFamily !== undefined &&
+        fontFamilyKey(checked.primaryLegacyFamily) !== fontFamilyKey(use.family)
+          ? checked.primaryLegacyFamily
+          : (existing.primaryLegacyFamily ?? checked.primaryLegacyFamily);
+      return fail(
+        use,
+        "font-unavailable",
+        formatEmbeddedFontSlotConflictMessage(
+          use.family,
+          styleSlot,
+          conflictNative,
+        ),
+        {
+          reason: "not-embeddable",
+        },
+      );
+    }
+    if (existing !== undefined) continue;
+    slots.set(itemKey, {
+      identity: use.identity,
+      primaryLegacyFamily: checked.primaryLegacyFamily,
+    });
     const conflictMessage = formatEmbeddedFontSlotConflictMessage(
       use.family,
       styleSlot,
+      checked.primaryLegacyFamily,
     );
-    const conflictDetails = embeddedFontSlotConflictDetails(use);
-    if (existing !== undefined && existing !== use.identity) {
-      return fail(use, "font-unavailable", conflictMessage, undefined, {
-        reason: "not-embeddable",
-      });
-    }
-    if (existing !== undefined) continue;
-    slots.set(itemKey, use.identity);
     const resourceClaim = { kind: "font-face", key: use.claimKey };
     const resolveBytes =
       requested === "subset"
         ? (characters: string) =>
-            eot(use.bytes!, use, checked, subsetBytes(use, checked, characters))
+            buildEmbeddedEotPayload(
+              use.bytes!,
+              checked,
+              "subset",
+              characters,
+              use,
+              requiresVisibleFontGlyph,
+            )
         : undefined;
     contributions.push({
       collection: "p:embeddedFontLst",
@@ -690,7 +191,16 @@ export function fontPresentationContributions(
         pathTemplate: "ppt/fonts/font{n}.fntdata",
         contentType: fontContentType,
         ...(resolveBytes === undefined
-          ? { bytes: eot(use.bytes!, use, checked) }
+          ? {
+              bytes: buildEmbeddedEotPayload(
+                use.bytes!,
+                checked,
+                "full",
+                undefined,
+                use,
+                requiresVisibleFontGlyph,
+              ),
+            }
           : { resourceClaim, resolveBytes }),
         content: (relationshipId) =>
           `<p:${styleSlot} r:id="${xmlEscape(relationshipId)}"/>`,

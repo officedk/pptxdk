@@ -6,6 +6,7 @@ export {
   toBuildDiagnostic,
 } from "#/diagnostics.ts";
 export {
+  PreviewPageRangeError,
   buildDiagnosticFontUnavailableReasonSchema,
   buildDiagnosticSchema,
   buildOptionsSchema,

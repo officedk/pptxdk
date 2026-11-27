@@ -174,6 +174,7 @@ export {
   parseCapabilityLayoutContract,
 } from "#/layout.ts";
 export {
+  PreviewPageRangeError,
   buildDiagnosticFontUnavailableReasonSchema,
   buildDiagnosticSchema,
   buildOptionsSchema,

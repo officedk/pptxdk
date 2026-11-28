@@ -25,6 +25,7 @@ import {
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
   P_NS,
+  readRunFontSlots,
   transformAttributesFragmentSchema,
   XML_NS,
   emuToPx,
@@ -132,13 +133,6 @@ const OuterShadowXmlSchema = z.object({
   dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: ooxmlBoolSchema.optional(),
-});
-
-const TypefaceFragmentSchema = z.object({
-  typeface: z.string().min(1),
-  pitchFamily: z.string().optional(),
-  charset: z.string().optional(),
-  panose: z.string().optional(),
 });
 
 const PercentModifierSchema = z.object({
@@ -336,18 +330,6 @@ function readOuterShadow(
   };
 }
 
-function resolveTypefaceToken(
-  typeface: string,
-): NonNullable<TextStyle["fontFamily"]> {
-  if (typeface === "+mn-lt" || typeface === "+mn-ea" || typeface === "+mn-cs") {
-    return "minor";
-  }
-  if (typeface === "+mj-lt" || typeface === "+mj-ea" || typeface === "+mj-cs") {
-    return "major";
-  }
-  return typeface;
-}
-
 export type ParsedRunStyle = NonNullable<SpanDeclarationProps["style"]>;
 
 function readRunProperties(
@@ -445,32 +427,12 @@ function readRunProperties(
     allowShadowNone,
   );
 
-  let fontFamily: NonNullable<TextStyle["fontFamily"]> | undefined;
-  const latin = rPrCursor.child(A_NS, "latin");
-  const ea = rPrCursor.child(A_NS, "ea");
-  const cs = rPrCursor.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  if (fontCursor !== undefined) {
-    const rawFont = fontCursor.attrsObject([
-      "typeface",
-      "pitchFamily",
-      "charset",
-      "panose",
-    ]);
-    const parsedFont = TypefaceFragmentSchema.safeParse(rawFont);
-    if (parsedFont.success) {
-      fontFamily = resolveTypefaceToken(parsedFont.data.typeface);
-    }
-  }
-  for (const extraSlot of [ea, cs]) {
-    if (extraSlot !== undefined && extraSlot !== fontCursor) {
-      extraSlot.attrsObject(["typeface", "pitchFamily", "charset", "panose"]);
-    }
-  }
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
 
   return {
     style: {
       ...(fontFamily === undefined ? {} : { fontFamily }),
+      ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
       ...(fontSize === undefined ? {} : { fontSize }),
       ...(fontWeight === undefined ? {} : { fontWeight }),
       ...(fontStyle === undefined ? {} : { fontStyle }),

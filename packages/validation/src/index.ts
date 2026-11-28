@@ -1848,8 +1848,14 @@ function readFontSchemeMap(
       fontSet === undefined
         ? undefined
         : first(fontSet, drawingNamespace, "latin");
+    const ea =
+      fontSet === undefined
+        ? undefined
+        : first(fontSet, drawingNamespace, "ea");
     const family = latin === undefined ? "" : attribute(latin, "typeface");
     if (family !== "") fonts.set(token, family);
+    const eaFamily = ea === undefined ? "" : attribute(ea, "typeface");
+    if (eaFamily !== "") fonts.set(`${token}EastAsian`, eaFamily);
   }
   return fonts;
 }
@@ -2020,14 +2026,13 @@ function validateFontSchemeSlots(
       latinTypeface === "" ||
       eaTypeface === "" ||
       csTypeface === "" ||
-      latinTypeface !== eaTypeface ||
       latinTypeface !== csTypeface
     ) {
       issue(
         errors,
         part,
         "invalid-theme-font-slots",
-        `Theme ${name} must define matching non-empty latin, ea, and cs font slots`,
+        `Theme ${name} must define non-empty latin, ea, and cs font slots with matching latin and cs`,
       );
     }
   }
@@ -2219,29 +2224,23 @@ function readTextRun(
   const fill = first(properties, drawingNamespace, "solidFill");
   const rawFontFamily = latin === undefined ? "" : attribute(latin, "typeface");
   if (latin !== undefined) {
-    if (ea === undefined || cs === undefined) {
+    if (ea !== undefined && attribute(ea, "typeface") === "") {
       issue(
         errors,
         part,
-        "missing-font-slot",
-        "Text run is missing East Asian or Complex Script font slot",
+        "mismatched-font-slots",
+        "Text run East Asian font slot cannot be empty",
       );
-    } else {
-      const eaTypeface = attribute(ea, "typeface");
+    }
+    if (cs !== undefined) {
       const csTypeface = attribute(cs, "typeface");
-      const expectedEa =
-        rawFontFamily === "+mj-lt"
-          ? "+mj-ea"
-          : rawFontFamily === "+mn-lt"
-            ? "+mn-ea"
-            : rawFontFamily;
       const expectedCs =
         rawFontFamily === "+mj-lt"
           ? "+mj-cs"
           : rawFontFamily === "+mn-lt"
             ? "+mn-cs"
             : rawFontFamily;
-      if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+      if (csTypeface !== expectedCs) {
         issue(
           errors,
           part,
@@ -5727,29 +5726,23 @@ function validateChart(
     const cs = first(defRPr, drawingNamespace, "cs");
     if (latin !== undefined) {
       const rawFamily = attribute(latin, "typeface");
-      if (ea === undefined || cs === undefined) {
+      if (ea !== undefined && attribute(ea, "typeface") === "") {
         issue(
           errors,
           chartPart,
-          "missing-font-slot",
-          "Chart defRPr is missing East Asian or Complex Script font slot",
+          "mismatched-font-slots",
+          "Chart defRPr East Asian font slot cannot be empty",
         );
-      } else {
-        const eaTypeface = attribute(ea, "typeface");
+      }
+      if (cs !== undefined) {
         const csTypeface = attribute(cs, "typeface");
-        const expectedEa =
-          rawFamily === "+mj-lt"
-            ? "+mj-ea"
-            : rawFamily === "+mn-lt"
-              ? "+mn-ea"
-              : rawFamily;
         const expectedCs =
           rawFamily === "+mj-lt"
             ? "+mj-cs"
             : rawFamily === "+mn-lt"
               ? "+mn-cs"
               : rawFamily;
-        if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+        if (csTypeface !== expectedCs) {
           issue(
             errors,
             chartPart,

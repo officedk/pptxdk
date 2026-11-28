@@ -45,6 +45,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export type RunTextStyle = Pick<
   TextStyle,
   | "fontFamily"
+  | "eastAsianFontFamily"
   | "fontSize"
   | "fontWeight"
   | "fontStyle"
@@ -58,6 +59,7 @@ export type RunTextStyle = Pick<
 
 const runStyleObjectSchema = z.strictObject({
   fontFamily: textStyleShape.fontFamily,
+  eastAsianFontFamily: textStyleShape.eastAsianFontFamily,
   fontSize: textStyleShape.fontSize,
   fontWeight: textStyleShape.fontWeight,
   fontStyle: textStyleShape.fontStyle,

@@ -11,6 +11,7 @@ import {
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
   P_NS,
+  readRunFontSlots,
   XML_NS,
   emuToPx,
   type ImportDiagnostic,
@@ -79,10 +80,6 @@ const RunPrAttrSchema = z.object({
   spc: ooxmlIntSchema.optional(),
   dirty: ooxmlBoolSchema.optional(),
   smtClean: ooxmlBoolSchema.optional(),
-});
-
-const TypefaceAttrSchema = z.object({
-  typeface: z.string().min(1),
 });
 
 const BulletCharAttrSchema = z.object({
@@ -317,27 +314,11 @@ function readShapeRunProperties(
       ? {}
       : readEffectList(effectLst, location, diagnostics);
 
-  let fontFamily: NonNullable<TextStyle["fontFamily"]> | undefined;
-  const latin = rPrCursor.child(A_NS, "latin");
-  const ea = rPrCursor.child(A_NS, "ea");
-  const cs = rPrCursor.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  if (fontCursor !== undefined) {
-    const parsedFont = TypefaceAttrSchema.safeParse(
-      fontCursor.attrsObject(["typeface"]),
-    );
-    if (parsedFont.success) {
-      const tf = parsedFont.data.typeface;
-      if (tf.startsWith("+mj-")) fontFamily = "major";
-      else if (tf.startsWith("+mn-")) fontFamily = "minor";
-      else fontFamily = tf;
-    }
-  }
-  if (ea !== undefined && ea !== fontCursor) ea.consumeAttr("typeface");
-  if (cs !== undefined && cs !== fontCursor) cs.consumeAttr("typeface");
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
 
   return {
     ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
     ...(fontSize === undefined ? {} : { fontSize }),
     ...(fontWeight === undefined ? {} : { fontWeight }),
     ...(fontStyle === undefined ? {} : { fontStyle }),

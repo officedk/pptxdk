@@ -19,6 +19,7 @@ import {
   ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
   P_NS,
+  readRunFontSlots,
   REL_CHART,
   R_NS,
   transformAttributesFragmentSchema,
@@ -425,18 +426,6 @@ function readSeriesSpPr(
   };
 }
 
-function resolveChartTypefaceToken(
-  typeface: string,
-): NonNullable<ChartTextStyle["fontFamily"]> {
-  if (typeface === "+mn-lt" || typeface === "+mn-ea" || typeface === "+mn-cs") {
-    return "minor";
-  }
-  if (typeface === "+mj-lt" || typeface === "+mj-ea" || typeface === "+mj-cs") {
-    return "major";
-  }
-  return typeface;
-}
-
 function readChartOuterShadow(rPrCursor: XmlElementCursor): Shadow | undefined {
   const effectLst = rPrCursor.child(A_NS, "effectLst");
   if (effectLst === undefined) return undefined;
@@ -532,24 +521,12 @@ function readChartRunProperties(rPrCursor: XmlElementCursor): ChartTextStyle {
   if (solidFill !== undefined) consumeSubtree(solidFill);
   const textShadow = readChartOuterShadow(rPrCursor);
 
-  const latin = rPrCursor.child(A_NS, "latin");
-  const ea = rPrCursor.child(A_NS, "ea");
-  const cs = rPrCursor.child(A_NS, "cs");
-  const latinTypeface = latin?.attr("typeface");
-  const eaTypeface = ea?.attr("typeface");
-  const csTypeface = cs?.attr("typeface");
-  if (latin !== undefined) consumeSubtree(latin);
-  if (ea !== undefined) consumeSubtree(ea);
-  if (cs !== undefined) consumeSubtree(cs);
-  const typeface = latinTypeface ?? eaTypeface ?? csTypeface;
-  let fontFamily: ChartTextStyle["fontFamily"];
-  if (typeface !== undefined && typeface.trim() !== "") {
-    fontFamily = resolveChartTypefaceToken(typeface);
-  }
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
   consumeSubtree(rPrCursor);
 
   return {
     ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
     ...(fontSize === undefined ? {} : { fontSize }),
     ...(fontWeight === undefined ? {} : { fontWeight }),
     ...(fontStyle === undefined ? {} : { fontStyle }),

@@ -125,7 +125,9 @@ export function fontPresentationContributions(
     // Keep one <p:font> header per case-insensitive family so PANOSE or casing differences across weights do not fail record registration.
     let recordContent = recordContents.get(recordKey);
     if (recordContent === undefined) {
-      recordContent = `<p:font typeface="${family}" pitchFamily="${checked.pitchFamily}" charset="${checked.charset}"/>`;
+      const panoseAttr =
+        checked.panose === undefined ? "" : ` panose="${checked.panose}"`;
+      recordContent = `<p:font typeface="${family}"${panoseAttr} pitchFamily="${checked.pitchFamily}" charset="${checked.charset}"/>`;
       recordContents.set(recordKey, recordContent);
     }
     const recordIdentity = recordKey;

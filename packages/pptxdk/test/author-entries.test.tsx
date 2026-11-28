@@ -12,6 +12,7 @@ import {
   CommonContainer,
   defineTheme,
   font,
+  fromFontCollection,
   RichTextContainer,
   transitions,
   type Transition,
@@ -19,6 +20,7 @@ import {
 import {
   Deck,
   expandDocument,
+  fromFontCollection as reactFromFontCollection,
   Shape,
   Slide,
   Text,
@@ -26,6 +28,7 @@ import {
 } from "@officedk/pptxdk/react";
 import {
   deck,
+  fromFontCollection as vanillaFromFontCollection,
   shape,
   slide,
   text,
@@ -188,6 +191,9 @@ describe("public author entrypoints", () => {
     const jsxFile = await validatePptx(directJsx.pptx);
     assert.deepEqual(jsxFile.errors, []);
     assert.equal(jsxFile.slides[0]?.objects[0]?.text?.text, "Pure JSX");
+
+    assert.equal(fromFontCollection, reactFromFontCollection);
+    assert.equal(fromFontCollection, vanillaFromFontCollection);
   });
 
   it("validates Slide id and numeric width at authoring time via tsc, and locates invalid slide nesting in resolve", async () => {

@@ -445,4 +445,56 @@ describe("SlideMaster and SlideLayout import", () => {
       {},
     );
   });
+
+  it("reads orthogonal eastAsianFontFamily and differential <a:ea>-only slots in master defRPr without polluting equal single-script styles", () => {
+    const pptx = zipSync({
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld name="M1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr><a:latin typeface="+mj-lt"/><a:ea typeface="+mj-ea"/></a:defRPr></a:lvl1pPr></p:titleStyle><p:bodyStyle><a:lvl1pPr><a:defRPr><a:latin typeface="Jost"/><a:ea typeface="Noto Sans CJK SC"/></a:defRPr></a:lvl1pPr><a:lvl2pPr><a:defRPr><a:ea typeface="Only EA Face"/></a:defRPr></a:lvl2pPr></p:bodyStyle><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="blank"><p:cSld name="L1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+    });
+
+    const importer = createImporter([testMastersCap]);
+    const result = importer(pptx);
+    assert.ok(result.document instanceof DeckContainer);
+    const textStyles = result.document.masters[0]?.props["textStyles"] as {
+      titleStyle?: Record<
+        number,
+        { fontFamily?: string; eastAsianFontFamily?: string }
+      >;
+      bodyStyle?: Record<
+        number,
+        { fontFamily?: string; eastAsianFontFamily?: string }
+      >;
+    };
+    assert.equal(textStyles.titleStyle?.[1]?.fontFamily, "major");
+    assert.equal(textStyles.titleStyle?.[1]?.eastAsianFontFamily, undefined);
+    assert.equal(textStyles.bodyStyle?.[1]?.fontFamily, "Jost");
+    assert.equal(
+      textStyles.bodyStyle?.[1]?.eastAsianFontFamily,
+      "Noto Sans CJK SC",
+    );
+    assert.equal(textStyles.bodyStyle?.[2]?.fontFamily, undefined);
+    assert.equal(
+      textStyles.bodyStyle?.[2]?.eastAsianFontFamily,
+      "Only EA Face",
+    );
+  });
 });

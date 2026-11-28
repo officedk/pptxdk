@@ -668,4 +668,197 @@ describe("importPptx postcondition L2 end-to-end invariant", () => {
     assert.equal(preview.pages.length, 1);
     assert.deepEqual(preview.pages[0]!.errors, []);
   });
+
+  it("recovers <p:pic><a:custGeom> bounds, theme outerShdw/@dir bounds, table sum overflows, and exact upper boundaries end-to-end through codegen, tsc, resolve, emit, and validatePptx", async () => {
+    const themeXml = `<a:theme xmlns:a="${A_NS}" name="FmtDirTheme">
+  <a:themeElements>
+    <a:clrScheme name="C"><a:dk1><a:srgbClr val="111111"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="222222"/></a:dk2><a:lt2><a:srgbClr val="EEEEEE"/></a:lt2><a:accent1><a:srgbClr val="2563EB"/></a:accent1><a:accent2><a:srgbClr val="10B981"/></a:accent2><a:accent3><a:srgbClr val="F59E0B"/></a:accent3><a:accent4><a:srgbClr val="EF4444"/></a:accent4><a:accent5><a:srgbClr val="8B5CF6"/></a:accent5><a:accent6><a:srgbClr val="06B6D4"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme>
+    <a:fontScheme name="F"><a:majorFont><a:latin typeface="Jost*"/><a:ea typeface="Jost*"/></a:majorFont><a:minorFont><a:latin typeface="Jost*"/><a:ea typeface="Jost*"/></a:minorFont></a:fontScheme>
+    <a:fmtScheme name="BoundsFmt">
+      <a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>
+      <a:lnStyleLst><a:ln w="20116800"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>
+      <a:effectStyleLst>
+        <a:effectStyle><a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="-5400000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></a:effectStyle>
+        <a:effectStyle><a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="21600000"><a:srgbClr val="1E293B"/></a:outerShdw></a:effectLst></a:effectStyle>
+      </a:effectStyleLst>
+      <a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst>
+    </a:fmtScheme>
+  </a:themeElements>
+</a:theme>`;
+
+    const masterXml = `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}">
+  <p:cSld name="M1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+  <p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst>
+  <p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>
+</p:sldMaster>`;
+
+    const layoutXml = `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="blank">
+  <p:cSld name="L1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sldLayout>`;
+
+    const slideXml = `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}">
+  <p:cSld name="s1">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="2" name="PicBadCustPtE2E"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="457200"/><a:ext cx="914400" cy="914400"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/>
+            <a:pathLst><a:path w="100000" h="100000"><a:moveTo><a:pt x="-2147483648" y="0"/></a:moveTo><a:lnTo><a:pt x="100000" y="0"/></a:lnTo><a:lnTo><a:pt x="100000" y="100000"/></a:lnTo><a:close/></a:path></a:pathLst>
+          </a:custGeom>
+        </p:spPr>
+      </p:pic>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="3" name="PicOmittedPathExtentE2E"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+        <p:spPr>
+          <a:xfrm><a:off x="1600000" y="457200"/><a:ext cx="1" cy="952500"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/>
+            <a:pathLst><a:path><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="1" y="0"/></a:lnTo><a:lnTo><a:pt x="1" y="952500"/></a:lnTo><a:close/></a:path></a:pathLst>
+          </a:custGeom>
+        </p:spPr>
+      </p:pic>
+      <p:graphicFrame>
+        <p:nvGraphicFramePr><p:cNvPr id="4" name="OversizedColsTableE2E"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+        <p:xfrm><a:off x="457200" y="1600000"/><a:ext cx="3657600" cy="700000"/></p:xfrm>
+        <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+          <a:tbl>
+            <a:tblPr/>
+            <a:tblGrid><a:gridCol w="1500000000"/><a:gridCol w="1500000000"/></a:tblGrid>
+            <a:tr h="350000">
+              <a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="1200"><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/></a:rPr><a:t>A</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>
+              <a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="1200"><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/></a:rPr><a:t>B</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>
+            </a:tr>
+          </a:tbl>
+        </a:graphicData></a:graphic>
+      </p:graphicFrame>
+      <p:graphicFrame>
+        <p:nvGraphicFramePr><p:cNvPr id="5" name="OversizedRowsTableE2E"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+        <p:xfrm><a:off x="457200" y="2500000"/><a:ext cx="3657600" cy="700000"/></p:xfrm>
+        <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+          <a:tbl>
+            <a:tblPr/>
+            <a:tblGrid><a:gridCol w="1828800"/></a:tblGrid>
+            <a:tr h="1500000000"><a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="1200"><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/></a:rPr><a:t>R1</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc></a:tr>
+            <a:tr h="1500000000"><a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="1200"><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/></a:rPr><a:t>R2</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc></a:tr>
+          </a:tbl>
+        </a:graphicData></a:graphic>
+      </p:graphicFrame>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="6" name="MaxBoundShapeE2E"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="3400000"/><a:ext cx="2147483647" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill>
+          <a:ln w="20116800"><a:solidFill><a:srgbClr val="1D4ED8"/></a:solidFill></a:ln>
+          <a:effectLst><a:softEdge rad="2147483647"/></a:effectLst>
+        </p:spPr>
+        <p:txBody><a:bodyPr lIns="2147483647"/><a:lstStyle/><a:p><a:r><a:rPr sz="1200"><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/></a:rPr><a:t>MaxBound</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`;
+
+    const pptx = zipSync({
+      "_rels/.rels": strToU8(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE}" Target="slides/slide1.xml"/></Relationships>`,
+      ),
+      "ppt/theme/theme1.xml": strToU8(themeXml),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(masterXml),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(layoutXml),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slides/slide1.xml": strToU8(slideXml),
+      "ppt/slides/_rels/slide1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_IMAGE}" Target="../media/image1.png"/></Relationships>`,
+      ),
+      "ppt/media/image1.png": png1x1Bytes,
+    });
+
+    const imported = importAll(pptx);
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "invalid-xml-value" &&
+          d.attributeOrElement === "a:outerShdw/@dir",
+      ),
+    );
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "invalid-xml-value" && d.attributeOrElement === "a:pt",
+      ),
+    );
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "invalid-xml-value" &&
+          d.attributeOrElement === "a:tblGrid",
+      ),
+    );
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "invalid-xml-value" && d.attributeOrElement === "a:tbl",
+      ),
+    );
+
+    const deck = imported.document as DeckContainer;
+    const vanilla = codegenAll(deck, { target: "vanilla" });
+    const react = codegenAll(deck, { target: "react" });
+    const batch = await verifyBatchGeneratedSourcesAndRelocatedRebuilds(
+      [
+        {
+          scenarioId: "import-image-custgeom-theme-dir-e2e",
+          originLabel: "roundtrip-imported",
+          result: vanilla,
+        },
+        {
+          scenarioId: "import-image-custgeom-theme-dir-e2e",
+          originLabel: "roundtrip-imported",
+          result: react,
+        },
+      ],
+      [],
+    );
+    assert.equal(batch.typecheckedCaseCount, 2);
+
+    for (const master of deck.masters) {
+      if (isTheme(master.theme)) {
+        master.theme.set({
+          fonts: {
+            major: jostFont,
+            minor: jostFont,
+            majorEastAsian: jostFont,
+            minorEastAsian: jostFont,
+          },
+        });
+      }
+    }
+    const resolution = resolveAll(deck);
+    const emitted = emit(resolution);
+    const validation = await validatePptx(emitted.pptx);
+    assert.deepEqual(validation.errors, []);
+
+    const preview = paint(resolution);
+    assert.equal(preview.pages.length, 1);
+    assert.deepEqual(preview.pages[0]!.errors, []);
+  });
 });

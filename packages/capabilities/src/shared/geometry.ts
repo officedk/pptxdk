@@ -732,6 +732,49 @@ function finiteGeometryNumber(value: unknown, label: string): number {
   return value;
 }
 
+/** Checks whether a path coordinate in point units (`value * 1000`) stays within DrawingML signed 32-bit bounds excluding `-2^31`. */
+export function isValidPathUnit(value: number): boolean {
+  const units = Math.round(value * 1000);
+  return Number.isSafeInteger(units) && Math.abs(units) <= 2_147_483_647;
+}
+
+/** Checks whether a custom path viewBox dimension (`value * 1000`) stays strictly positive and within DrawingML bounds. */
+export function isValidPositivePathExtent(value: number): boolean {
+  const units = Math.round(value * 1000);
+  return Number.isSafeInteger(units) && units >= 1 && units <= 2_147_483_647;
+}
+
+/** Checks whether every coordinate in a custom path stays within DrawingML path coordinate bounds. */
+export function arePathCommandsBounded(
+  commands: readonly PathCommand[],
+): boolean {
+  return commands.every((cmd) => {
+    switch (cmd.op) {
+      case "Z":
+        return true;
+      case "M":
+      case "L":
+        return isValidPathUnit(cmd.x) && isValidPathUnit(cmd.y);
+      case "Q":
+        return (
+          isValidPathUnit(cmd.x1) &&
+          isValidPathUnit(cmd.y1) &&
+          isValidPathUnit(cmd.x) &&
+          isValidPathUnit(cmd.y)
+        );
+      case "C":
+        return (
+          isValidPathUnit(cmd.x1) &&
+          isValidPathUnit(cmd.y1) &&
+          isValidPathUnit(cmd.x2) &&
+          isValidPathUnit(cmd.y2) &&
+          isValidPathUnit(cmd.x) &&
+          isValidPathUnit(cmd.y)
+        );
+    }
+  });
+}
+
 function pointUnit(value: number, label: string): string {
   const coordinate = Math.round(finiteGeometryNumber(value, label) * 1000);
   if (
@@ -2017,36 +2060,7 @@ export function readCustomGeometryXml(
     }
 
     if (pathFailed || commands.length === 0) continue;
-    const withinPathUnitBounds = (n: number): boolean => {
-      const units = Math.round(n * 1000);
-      return Number.isSafeInteger(units) && Math.abs(units) <= 2_147_483_647;
-    };
-    const commandsBounded = commands.every((cmd) => {
-      switch (cmd.op) {
-        case "Z":
-          return true;
-        case "M":
-        case "L":
-          return withinPathUnitBounds(cmd.x) && withinPathUnitBounds(cmd.y);
-        case "Q":
-          return (
-            withinPathUnitBounds(cmd.x1) &&
-            withinPathUnitBounds(cmd.y1) &&
-            withinPathUnitBounds(cmd.x) &&
-            withinPathUnitBounds(cmd.y)
-          );
-        case "C":
-          return (
-            withinPathUnitBounds(cmd.x1) &&
-            withinPathUnitBounds(cmd.y1) &&
-            withinPathUnitBounds(cmd.x2) &&
-            withinPathUnitBounds(cmd.y2) &&
-            withinPathUnitBounds(cmd.x) &&
-            withinPathUnitBounds(cmd.y)
-          );
-      }
-    });
-    if (!commandsBounded) {
+    if (!arePathCommandsBounded(commands)) {
       diagnostics.push({
         code: "invalid-xml-value",
         category: "corrupt-input",

@@ -65,6 +65,11 @@ export const ooxmlListLevelSchema = ooxmlIntSchema.refine(
   (value) => value >= 0 && value <= 8,
 );
 
+/** DrawingML `ST_PositiveFixedAngle` domain (`0 <= value < 21_600_000`, 60,000ths of a degree). */
+export const ooxmlPositiveFixedAngleSchema = ooxmlIntSchema.refine(
+  (value) => value >= 0 && value < 21_600_000,
+);
+
 export type OoxmlRunAttrStyleResult = {
   readonly fontSize?: NonNullable<TextStyle["fontSize"]>;
   readonly sizePt?: number;

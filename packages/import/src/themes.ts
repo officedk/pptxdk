@@ -29,6 +29,7 @@ import {
   ooxmlIntSchema,
   ooxmlLineWidthEmuSchema,
   ooxmlNonNegativeIntSchema,
+  ooxmlPositiveFixedAngleSchema,
   ooxmlWritableExtentEmuSchema,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
@@ -74,7 +75,6 @@ const fillToRectAttrSchema = z.object({
 const outerShdwAttrSchema = z.object({
   blurRad: ooxmlWritableExtentEmuSchema.optional(),
   dist: ooxmlWritableExtentEmuSchema.optional(),
-  dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: ooxmlBoolSchema.optional(),
 });
@@ -787,6 +787,28 @@ function readFormatEffectStyle(
           outerShdw.suppressUnconsumed();
           continue;
         }
+        let dir: number | undefined;
+        if (rawShdw["dir"] !== undefined) {
+          const parsedDir = ooxmlPositiveFixedAngleSchema.safeParse(
+            rawShdw["dir"],
+          );
+          if (parsedDir.success) {
+            dir = parsedDir.data;
+          } else {
+            diagnostics.push({
+              code: "invalid-xml-value",
+              category: "corrupt-input",
+              disposition: "recovered",
+              location: {
+                part: partPath,
+                xpath: `${outerShdw.xpath}/@dir`,
+                ...(slideIndex === undefined ? {} : { slideIndex }),
+              },
+              attributeOrElement: "a:outerShdw/@dir",
+              rawValue: rawShdw["dir"],
+            });
+          }
+        }
         const colorHex = resolveSimpleThemeHex(
           outerShdw,
           partPath,
@@ -801,9 +823,7 @@ function readFormatEffectStyle(
           ...(parsed.data.dist !== undefined
             ? { distance: parsed.data.dist / 12_700 }
             : {}),
-          ...(parsed.data.dir !== undefined
-            ? { angle: parsed.data.dir / 60_000 }
-            : {}),
+          ...(dir !== undefined ? { angle: dir / 60_000 } : {}),
         };
       }
     } else {

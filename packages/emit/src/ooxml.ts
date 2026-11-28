@@ -419,13 +419,17 @@ function formatLineStyleXml(line: FormatLineStyle): string {
   return `<a:ln${attrs}>${fill}${dash}</a:ln>`;
 }
 
+function positiveFixedAngleUnits(angleDegrees: number): number {
+  return Math.round((((angleDegrees % 360) + 360) % 360) * 60_000) % 21_600_000;
+}
+
 function formatEffectStyleXml(effect: FormatEffectStyle): string {
   if (effect.shadow === undefined) {
     return "<a:effectStyle><a:effectLst/></a:effectStyle>";
   }
   const blur = Math.round((effect.shadow.blur ?? 0) * 12_700);
   const dist = Math.round((effect.shadow.distance ?? 0) * 12_700);
-  const dir = Math.round((effect.shadow.angle ?? 0) * 60_000);
+  const dir = positiveFixedAngleUnits(effect.shadow.angle ?? 0);
   const color =
     typeof effect.shadow.color === "string" &&
     effect.shadow.color.startsWith("#")
@@ -575,9 +579,7 @@ function levelDefRPrXml(
   } else if (style.textShadow !== undefined) {
     const blur = pxToEmu(style.textShadow.blur ?? 4);
     const dist = pxToEmu(style.textShadow.distance ?? 0);
-    const dir = Math.round(
-      ((((style.textShadow.angle ?? 90) % 360) + 360) % 360) * 60_000,
-    );
+    const dir = positiveFixedAngleUnits(style.textShadow.angle ?? 90);
     const shadowColor = themeContext.resolveColor(
       style.textShadow.color ?? { color: "#000000", alpha: 0.35 },
     );

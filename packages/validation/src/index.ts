@@ -61,16 +61,25 @@ export type ValidationIssue = {
   readonly xpath?: string;
 };
 
+export type FileConnectorEndpoint = {
+  readonly id: number;
+  readonly idx: number;
+};
+
 export type FileObject = {
   readonly id: number;
   readonly name: string;
-  readonly kind: "shape" | "image" | "chart" | "group" | "table";
+  readonly kind: "shape" | "line" | "image" | "chart" | "group" | "table";
   readonly placeholder?: {
     readonly type: string;
     readonly idx?: number;
   };
   readonly hasLocalTransform?: boolean;
   readonly geometry?: string;
+  readonly connection?: {
+    readonly start?: FileConnectorEndpoint;
+    readonly end?: FileConnectorEndpoint;
+  };
   readonly boxEmu: {
     readonly x: number;
     readonly y: number;
@@ -3693,6 +3702,128 @@ function validateShape(
     boxEmu: { x, y, width, height },
     ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(text === undefined ? {} : { text }),
+  };
+}
+
+function readConnectorEndpoint(
+  container: XmlElement | undefined,
+  tagName: "stCxn" | "endCxn",
+  connectorName: string,
+  part: string,
+  errors: ValidationIssue[],
+): FileConnectorEndpoint | undefined {
+  if (container === undefined) return undefined;
+  const endpoint = first(container, drawingNamespace, tagName);
+  if (endpoint === undefined) return undefined;
+  const targetId = integerAttribute(endpoint, "id");
+  const idx = integerAttribute(endpoint, "idx");
+  if (targetId === undefined || targetId < 1 || idx === undefined || idx < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-connector-endpoint",
+      `Connector ${connectorName} has invalid ${tagName} attributes`,
+    );
+    return undefined;
+  }
+  return { id: targetId, idx };
+}
+
+function validateConnector(
+  connector: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): FileObject | undefined {
+  const identity = objectIdentity(
+    connector,
+    "nvCxnSpPr",
+    part,
+    "connector",
+    errors,
+  );
+  if (identity === undefined) return undefined;
+  const nvCxnSpPr = first(connector, presentationNamespace, "nvCxnSpPr");
+  const cNvCxnSpPr =
+    nvCxnSpPr === undefined
+      ? undefined
+      : first(nvCxnSpPr, presentationNamespace, "cNvCxnSpPr");
+  const start = readConnectorEndpoint(
+    cNvCxnSpPr,
+    "stCxn",
+    identity.name,
+    part,
+    errors,
+  );
+  const end = readConnectorEndpoint(
+    cNvCxnSpPr,
+    "endCxn",
+    identity.name,
+    part,
+    errors,
+  );
+  const properties = first(connector, presentationNamespace, "spPr");
+  const geometryName = readGeometryName(properties);
+  if (geometryName === "") {
+    issue(
+      errors,
+      part,
+      "missing-connector-geometry",
+      `Connector ${identity.name} missing preset geometry`,
+    );
+    return undefined;
+  }
+  const transform =
+    properties === undefined
+      ? undefined
+      : first(properties, drawingNamespace, "xfrm");
+  const rotation = readRotationDegrees(transform);
+  const offset =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "off");
+  const extent =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "ext");
+  const x = integerAttribute(offset, "x");
+  const y = integerAttribute(offset, "y");
+  const width = integerAttribute(extent, "cx");
+  const height = integerAttribute(extent, "cy");
+  if (
+    x === undefined ||
+    y === undefined ||
+    width === undefined ||
+    height === undefined ||
+    width < 0 ||
+    width > maximumShapeExtentEmu ||
+    height < 0 ||
+    height > maximumShapeExtentEmu ||
+    (width === 0 && height === 0)
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-connector-transform",
+      `Connector ${identity.name} coordinates or dimensions are invalid`,
+    );
+    return undefined;
+  }
+  validateLineProperties(properties, part, errors);
+  const connection =
+    start === undefined && end === undefined
+      ? undefined
+      : {
+          ...(start === undefined ? {} : { start }),
+          ...(end === undefined ? {} : { end }),
+        };
+  return {
+    id: identity.id,
+    name: identity.name,
+    kind: "line",
+    geometry: geometryName,
+    boxEmu: { x, y, width, height },
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
+    ...(connection === undefined ? {} : { connection }),
   };
 }
 
@@ -7699,6 +7830,9 @@ function readObjects(
         object = validateShape(spEl, part, errors, theme, placeholderLookup);
         break;
       }
+      case "cxnSp":
+        object = validateConnector(child as XmlElement, part, errors);
+        break;
       case "pic":
         object = validatePicture(
           child as XmlElement,
@@ -7758,6 +7892,21 @@ function readObjects(
         errors,
       );
       objects.push({ ...object, ...(link === undefined ? {} : { link }) });
+    }
+  }
+  const siblingIds = new Set(objects.map((entry) => entry.id));
+  for (const obj of objects) {
+    if (obj.connection === undefined) continue;
+    for (const endpoint of [obj.connection.start, obj.connection.end]) {
+      if (endpoint === undefined) continue;
+      if (endpoint.id === obj.id || !siblingIds.has(endpoint.id)) {
+        issue(
+          errors,
+          part,
+          "invalid-connector-target",
+          `Connector ${obj.name} references missing or invalid target object ${endpoint.id}`,
+        );
+      }
     }
   }
   return objects;

@@ -20,6 +20,7 @@ import { resolvePartPath, type PptxPackage } from "#/opc.ts";
 import {
   extentEmuFragmentSchema,
   hexRgb6Schema,
+  nonNegativeExtentEmuFragmentSchema,
   offsetEmuFragmentSchema,
   ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
@@ -263,6 +264,7 @@ export function readTransformXml(
   xfrmCursor: XmlElementCursor,
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
+  options?: { readonly allowSingleZeroExtent?: boolean },
 ): ImportedTransform | undefined {
   const rawXfrm = xfrmCursor.attrsObject(["rot", "flipH", "flipV"]);
   const parsedXfrm = transformAttributesFragmentSchema.safeParse(rawXfrm);
@@ -280,10 +282,16 @@ export function readTransformXml(
   const parsedOff = offsetEmuFragmentSchema.safeParse(
     off.attrsObject(["x", "y"]),
   );
-  const parsedExt = extentEmuFragmentSchema.safeParse(
-    ext.attrsObject(["cx", "cy"]),
-  );
-  if (!parsedOff.success || !parsedExt.success) {
+  const extentSchema =
+    options?.allowSingleZeroExtent === true
+      ? nonNegativeExtentEmuFragmentSchema
+      : extentEmuFragmentSchema;
+  const parsedExt = extentSchema.safeParse(ext.attrsObject(["cx", "cy"]));
+  if (
+    !parsedOff.success ||
+    !parsedExt.success ||
+    (parsedExt.data.cx === 0 && parsedExt.data.cy === 0)
+  ) {
     diagnostics.push({
       code: "invalid-xml-value",
       category: "corrupt-input",

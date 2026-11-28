@@ -328,18 +328,7 @@ export function readContentPlaceholderSp(
 
   const { border: rawBorder, ...restVisualStyle } = appearance.style;
   const border: NonNullable<PlaceholderDeclarationProps["style"]>["border"] =
-    rawBorder === "none"
-      ? "none"
-      : rawBorder === undefined
-        ? undefined
-        : (() => {
-            const {
-              startArrow: _startArrow,
-              endArrow: _endArrow,
-              ...plainBorder
-            } = rawBorder;
-            return plainBorder;
-          })();
+    rawBorder;
   const boxSize = localBox ?? inheritedBox;
   let borderRadius: number | undefined;
   if (appearance.geometry === "roundRect") {

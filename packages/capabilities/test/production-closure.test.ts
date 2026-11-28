@@ -32,12 +32,12 @@ function runIsolatedNode(
 }
 
 describe("@pptxdk/capabilities production runtime closure", () => {
-  it("imports all 29 public export subpaths without resolving preview, react adapter, validation, resvg, react-reconciler, or eager image decoders", () => {
+  it("imports all 31 public export subpaths without resolving preview, react adapter, validation, resvg, react-reconciler, or eager image decoders", () => {
     const pkg = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { readonly exports: Record<string, unknown> };
     const subpaths = Object.keys(pkg.exports);
-    assert.equal(subpaths.length, 29);
+    assert.equal(subpaths.length, 31);
 
     const specifiers = subpaths.map((key) =>
       key === "."
@@ -154,6 +154,7 @@ const {
   deck,
   group,
   image,
+  line,
   notes,
   row,
   shape,
@@ -173,6 +174,7 @@ const doc = deck({ width: 960, height: 540 }).append(
     box({ id: "b1", style: { width: 200, height: 100, background: "#FFFFFF" } }).append(
       shape({ id: "sh1", style: { position: "absolute", left: 10, top: 10, width: 80, height: 40, background: "#2563EB" } }),
     ),
+    line({ id: "ln1", from: { id: "b1", port: "right" }, to: { x: 240, y: 50 }, stroke: { color: "#0F172A", width: 2, endArrow: "triangle" } }),
     image({ id: "img1", src: pngBytes, style: { position: "absolute", left: 220, top: 20, width: 40, height: 40 } }),
     image({ id: "img2", src: jpegBytes, style: { position: "absolute", left: 270, top: 20, width: 40, height: 40 } }),
     group({ id: "g1" }).append(
@@ -246,6 +248,7 @@ process.stdout.write("ok");
       "chart",
       "group",
       "image",
+      "line",
       "motion-scope",
       "motion-step",
       "notes",

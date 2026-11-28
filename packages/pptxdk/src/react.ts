@@ -31,6 +31,7 @@ export { Box, type BoxProps } from "@pptxdk/capabilities/box-elements";
 export { Chart, type ChartProps } from "@pptxdk/capabilities/chart-elements";
 export { Group, type GroupProps } from "@pptxdk/capabilities/group-elements";
 export { Image, type ImageProps } from "@pptxdk/capabilities/image-elements";
+export { Line, type LineProps } from "@pptxdk/capabilities/line-elements";
 export {
   MotionScope,
   Step,
@@ -256,8 +257,16 @@ export type {
   IndependentCategorySeries,
   InferPlaceholderMap,
   JsxPlaceholders,
-  LineEndStyle,
+  LineAdjust,
+  LineEndpoint,
+  LineLayoutStyle,
   LineOrAreaChartGroup,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
   LinkTarget,
   MorphProps,
   MorphTransition,
@@ -314,7 +323,6 @@ export type {
   ScatterErrorBars,
   ScatterLine,
   ShapeTextStyle,
-  ShapeVisualStyle,
   SharedCategoryData,
   SlideLayoutSource,
   SpinOptions,

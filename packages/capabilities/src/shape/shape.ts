@@ -52,11 +52,6 @@ import {
 } from "./shape-import.ts";
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "../shared/visual.ts";
-export type {
-  ArrowType,
-  LineEndStyle,
-  ShapeVisualStyle,
-} from "../shared/visual.ts";
 export type { PaddingStyle, VisualStyle } from "@pptxdk/core/capability";
 import { motionAnnotations } from "../motion/motion-api.ts";
 import {
@@ -430,7 +425,6 @@ export const shapeCapability: ObjectCapabilityModule<
       theme: context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
-      allowBorderArrows: true,
       ...(geometry !== undefined ? { geometry } : {}),
     });
 
@@ -515,7 +509,6 @@ export const shapeCapability: ObjectCapabilityModule<
           theme: resolveContext.theme,
           style: visualStyle,
           box,
-          allowBorderArrows: true,
           ...(geometry === undefined ? {} : { geometry }),
         });
         const geometryName =

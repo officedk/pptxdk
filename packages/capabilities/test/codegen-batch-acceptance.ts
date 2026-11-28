@@ -70,6 +70,7 @@ export {
   fromFontCollection,
   group,
   image,
+  line,
   linearGradient,
   motionScope,
   motionSchedule,
@@ -116,6 +117,17 @@ export type {
   ImageNode,
   ImperativePlaceholders,
   InferPlaceholderMap,
+  LineAdjust,
+  LineAuthorProps,
+  LineEndpoint,
+  LineLayoutStyle,
+  LineNode,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
   MotionProps,
   MotionScopeAuthorProps,
   MotionScopeNode,
@@ -136,7 +148,6 @@ export type {
   ShapeAuthorProps,
   ShapeNode,
   ShapeTextStyle,
-  ShapeVisualStyle,
   SlideAuthorProps,
   SlideLayoutAuthorProps,
   SlideLayoutNode,
@@ -270,7 +281,6 @@ export type {
   GeometryPath,
   ImageSource,
   ImageVisualStyle,
-  LineEndStyle,
   MorphProps,
   MorphTransition,
   NotesDeclarationProps,
@@ -302,6 +312,7 @@ export { Box } from "@pptxdk/capabilities/box-elements";
 export { Chart } from "@pptxdk/capabilities/chart-elements";
 export { Group } from "@pptxdk/capabilities/group-elements";
 export { Image } from "@pptxdk/capabilities/image-elements";
+export { Line } from "@pptxdk/capabilities/line-elements";
 export {
   MotionScope,
   Step,
@@ -353,6 +364,7 @@ export {
   fly,
   font,
   fromFontCollection,
+  line,
   linearGradient,
   motionSchedule,
   path,
@@ -438,6 +450,7 @@ export { Box, type BoxProps } from "@pptxdk/capabilities/box-elements";
 export { Chart, type ChartProps } from "@pptxdk/capabilities/chart-elements";
 export { Group, type GroupProps } from "@pptxdk/capabilities/group-elements";
 export { Image, type ImageProps } from "@pptxdk/capabilities/image-elements";
+export { Line, type LineProps } from "@pptxdk/capabilities/line-elements";
 export {
   MotionScope,
   Step,
@@ -512,6 +525,7 @@ export {
   fly,
   font,
   fromFontCollection,
+  line,
   linearGradient,
   motionSchedule,
   path,
@@ -581,8 +595,16 @@ export type {
   IndependentCategorySeries,
   InferPlaceholderMap,
   JsxPlaceholders,
-  LineEndStyle,
+  LineAdjust,
+  LineEndpoint,
+  LineLayoutStyle,
   LineOrAreaChartGroup,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
   LinkTarget,
   MorphProps,
   MorphTransition,
@@ -639,7 +661,6 @@ export type {
   ScatterErrorBars,
   ScatterLine,
   ShapeTextStyle,
-  ShapeVisualStyle,
   SharedCategoryData,
   SlideLayoutSource,
   SpinOptions,

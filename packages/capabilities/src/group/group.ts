@@ -102,8 +102,9 @@ function bounds(members: readonly ResolvedObject[]): {
       !Number.isFinite(box.y) ||
       !Number.isFinite(box.width) ||
       !Number.isFinite(box.height) ||
-      box.width <= 0 ||
-      box.height <= 0
+      box.width < 0 ||
+      box.height < 0 ||
+      (box.width === 0 && box.height === 0)
     ) {
       throw new CapabilityError(
         "member-without-geometry",

@@ -197,7 +197,8 @@ describe("@officedk/pptxdk/build capability selection", () => {
   });
 
   it("validates capability names, deduplicates repeated selections, and respects AbortSignal", async () => {
-    assert.equal(officialCapabilityNames.length, 14);
+    assert.equal(officialCapabilityNames.length, 15);
+    assert.ok(officialCapabilityNames.includes("line"));
     assert.ok(officialCapabilityNames.includes("footer-placeholder"));
     assert.ok(officialCapabilityNames.includes("masters"));
     assert.ok(officialCapabilityNames.includes("placeholder"));

@@ -343,6 +343,7 @@ export type {
   ResolvedTable,
   ResolvedTableCell,
   ResolvedTableRow,
+  ScopeTargetObject,
   ScreenPoint,
   BackgroundRef,
   FooterPlaceholderSpec,

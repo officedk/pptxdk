@@ -112,6 +112,7 @@ import type {
   ResolvedObject,
   ResolvedObjectChildren,
   ResolvedSlide,
+  ScopeTargetObject,
   SlideCapabilityModule,
   SlideMasterInheritanceContext,
   SlideResolution,
@@ -252,10 +253,24 @@ type ResolvePassContext = {
 };
 
 type ResolvedLayerEntry = {
-  readonly layer: ResolvedObjectLayer;
-  readonly objects: readonly ResolvedObject[];
-  readonly reference: LayoutChildReference;
+  layer: ResolvedObjectLayer;
+  objects: readonly ResolvedObject[];
+  reference: LayoutChildReference;
 };
+
+type ScopeResolutionRegistry = {
+  readonly targetsByAuthorId: Map<string, ScopeTargetObject>;
+  readonly deferredTasks: (() => void)[];
+  readonly postFlushSyncs: (() => void)[];
+};
+
+function createScopeRegistry(): ScopeResolutionRegistry {
+  return {
+    targetsByAuthorId: new Map(),
+    deferredTasks: [],
+    postFlushSyncs: [],
+  };
+}
 
 type ResolvedChildrenResult = {
   readonly objects: readonly ResolvedObject[];
@@ -1516,6 +1531,7 @@ function createObjectResolveContext(args: {
   readonly restrictsMemberContinuity: boolean;
   readonly morphName: string | undefined;
   readonly link: ResolvedLink | undefined;
+  readonly scope: ScopeResolutionRegistry;
   readonly onChildrenResolved?: (resolved: ResolvedChildrenResult) => void;
 }): ObjectResolveContext {
   const {
@@ -1530,6 +1546,7 @@ function createObjectResolveContext(args: {
     restrictsMemberContinuity,
     morphName,
     link,
+    scope,
     onChildrenResolved,
   } = args;
   return {
@@ -1543,6 +1560,9 @@ function createObjectResolveContext(args: {
     ...(placeholder === undefined ? {} : { placeholder }),
     ...(morphName === undefined ? {} : { morphName }),
     ...(link === undefined ? {} : { link }),
+    resolveTargetObject(targetAuthorId: string): ScopeTargetObject | undefined {
+      return scope.targetsByAuthorId.get(targetAuthorId);
+    },
     resolveChildren(nested): ResolvedObjectChildren {
       const resolved = resolveChildrenPass(
         nested,
@@ -1556,18 +1576,201 @@ function createObjectResolveContext(args: {
   };
 }
 
+function registerScopeTarget(
+  scope: ScopeResolutionRegistry,
+  authorId: string | undefined,
+  spid: number,
+  emitsObject: boolean,
+  resolvedObj: ReturnType<BoundObjectCapability["resolve"]>,
+): void {
+  if (
+    authorId === undefined ||
+    !emitsObject ||
+    resolvedObj.observation.box === undefined
+  ) {
+    return;
+  }
+  scope.targetsByAuthorId.set(authorId, {
+    spid,
+    kind: resolvedObj.observation.kind,
+    box: resolvedObj.observation.box,
+    ...(resolvedObj.transform === undefined
+      ? {}
+      : { transform: resolvedObj.transform }),
+    ...(resolvedObj.connectionSites === undefined
+      ? {}
+      : { connectionSites: resolvedObj.connectionSites }),
+  });
+}
+
+function commitLeafResolution(args: {
+  readonly context: ResolvePassContext;
+  readonly child: CapabilityElement;
+  readonly index: number;
+  readonly path: string;
+  readonly authorId: string | undefined;
+  readonly order: number;
+  readonly id: number;
+  readonly bound: BoundObjectCapability;
+  readonly layoutBox: Rect | undefined;
+  readonly theme: ThemeContext;
+  readonly placeholder: PlaceholderResolutionContext | undefined;
+  readonly emitsObject: boolean;
+  readonly morphKey: MorphKey | undefined;
+  readonly morphName: string | undefined;
+  readonly resolvedLink: ResolvedLink | undefined;
+  readonly resolvedObj: ReturnType<BoundObjectCapability["resolve"]>;
+}): {
+  readonly entry: ResolvedLayerEntry;
+  readonly contentNode: QueryContentNode;
+} {
+  const {
+    context,
+    child,
+    index,
+    path,
+    authorId,
+    order,
+    id,
+    bound,
+    layoutBox,
+    theme,
+    placeholder,
+    emitsObject,
+    morphKey,
+    morphName,
+    resolvedLink,
+    resolvedObj,
+  } = args;
+  recordObjectMorph({
+    morphKey,
+    morphName,
+    nativeKind: bound.contract.nativeKind,
+    observationName: resolvedObj.observation.name,
+    hasOutput: emitsObject,
+    slide: context.slide,
+    declarationType: child.type,
+    path,
+  });
+  for (const extension of resolvedObj.extensions) {
+    context.document.usedExtensions.add(extension);
+  }
+  recordResourceClaims(
+    resolvedObj.resourceClaims,
+    context.document,
+    context.slide.diagnostics,
+    path,
+  );
+  recordFontUsages(resolvedObj.fontUsages, context.document, path);
+  for (const annotation of resolvedObj.annotations ?? []) {
+    context.slide.contributions.push({
+      ...annotation,
+      path,
+      targetId: id,
+      order,
+      declaration: child,
+    });
+  }
+  const gridArea = context.layout.gridAreas.get(child);
+  const observation: ResolvedObject = {
+    ...resolvedObj.observation,
+    id,
+    path,
+    ...(authorId === undefined ? {} : { authorId }),
+    ...(gridArea === undefined ? {} : { gridArea }),
+    ...(placeholder?.key === undefined
+      ? {}
+      : resolvedObj.observation.placeholder === undefined
+        ? { placeholder: placeholder.key }
+        : {}),
+    ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
+  };
+  if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
+  if (resolvedObj.transform !== undefined) {
+    context.slide.transformsById.set(id, resolvedObj.transform);
+  }
+  const contentNode: QueryContentNode = {
+    ...(authorId === undefined ? {} : { authorId }),
+    path,
+    reference: { kind: "object", id: observation.id },
+    children: subPartContentNodes(resolvedObj.parts),
+  };
+  const layer: ResolvedObjectLayer = {
+    declarationType: child.type,
+    ...(authorId === undefined ? {} : { authorId }),
+    sourceOrder: [index],
+    zIndex: paintOrder(bound.contract),
+    path,
+    objectId: observation.id,
+    paintObjectId: observation.id,
+    theme,
+    ...(resolvedObj.observation.box === undefined
+      ? {}
+      : { box: resolvedObj.observation.box }),
+    ...(resolvedObj.transform === undefined
+      ? {}
+      : { transform: resolvedObj.transform }),
+    emitsObject,
+    hasObservation: true,
+    childComposition: "leaf",
+    ...(resolvedLink === undefined ? {} : { resolvedLink }),
+    ...(morphKey === undefined ? {} : { morphKey }),
+    extensions: resolvedObj.extensions,
+    memberLayers: [],
+    siblingLayers: [],
+    emit: (emitContext) => resolvedObj.emit(emitContext),
+    ...(resolvedObj.paint === undefined
+      ? {}
+      : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
+  };
+  return {
+    entry: {
+      layer,
+      objects: [observation],
+      reference: { kind: "object", id: observation.id },
+    },
+    contentNode,
+  };
+}
+
 function resolveChildrenPass(
   children: readonly CapabilityChild[],
   context: ResolvePassContext,
   parentPath: string,
   insideGroup = false,
+  inheritedScope?: ScopeResolutionRegistry,
 ): ResolvedChildrenResult {
-  const layers: {
-    readonly layer: ResolvedObjectLayer;
-    readonly objects: readonly ResolvedObject[];
-    readonly reference: LayoutChildReference;
-  }[] = [];
+  const isScopeRoot = inheritedScope === undefined;
+  const scope = inheritedScope ?? createScopeRegistry();
+  const deferredBeforePass = scope.deferredTasks.length;
+  const entries: ResolvedLayerEntry[] = [];
   const content: QueryContentNode[] = [];
+  const syncEntries = (
+    targetObjects: ResolvedObject[],
+    targetReferences: LayoutChildReference[],
+    targetLayers: ResolvedObjectLayer[],
+  ) => {
+    entries.sort(
+      (left, right) =>
+        left.layer.zIndex - right.layer.zIndex ||
+        compareSourceOrder(left.layer.sourceOrder, right.layer.sourceOrder),
+    );
+    targetObjects.splice(
+      0,
+      targetObjects.length,
+      ...entries.flatMap(({ objects }) => objects),
+    );
+    targetReferences.splice(
+      0,
+      targetReferences.length,
+      ...entries.map(({ reference }) => reference),
+    );
+    targetLayers.splice(
+      0,
+      targetLayers.length,
+      ...entries.map(({ layer }) => layer),
+    );
+  };
 
   children.forEach((child, index) => {
     if (!("props" in child)) {
@@ -1635,20 +1838,45 @@ function resolveChildrenPass(
               ),
         );
       }
+      const deferredBefore = scope.deferredTasks.length;
       const childResolved = resolveChildrenPass(
         child.children,
         context,
         path,
         insideGroup,
+        scope,
       );
+      const childContentStart = content.length;
       content.push(...childResolved.content);
+      const wrappedEntries: ResolvedLayerEntry[] = [];
       for (const entry of childResolved.entries) {
-        layers.push({
+        const wrapped: ResolvedLayerEntry = {
           ...entry,
           layer: {
             ...entry.layer,
             sourceOrder: [index, ...entry.layer.sourceOrder],
           },
+        };
+        wrappedEntries.push(wrapped);
+        entries.push(wrapped);
+      }
+      if (scope.deferredTasks.length > deferredBefore) {
+        const childCount = childResolved.content.length;
+        const entryStart = entries.length - wrappedEntries.length;
+        scope.postFlushSyncs.push(() => {
+          content.splice(
+            childContentStart,
+            childCount,
+            ...childResolved.content,
+          );
+          const refreshed = childResolved.entries.map((entry) => ({
+            ...entry,
+            layer: {
+              ...entry.layer,
+              sourceOrder: [index, ...entry.layer.sourceOrder],
+            },
+          }));
+          entries.splice(entryStart, wrappedEntries.length, ...refreshed);
         });
       }
       return;
@@ -1694,8 +1922,9 @@ function resolveChildrenPass(
           theme,
           context,
           insideGroup,
-          layers,
+          layers: entries,
           content,
+          parentScope: scope,
         });
         return;
       }
@@ -1768,6 +1997,97 @@ function resolveChildrenPass(
               ),
               undefined);
 
+      if (bound.contract.excludedFromLayout === true) {
+        const contentSlot = content.length;
+        const placeholderContent: QueryContentNode = {
+          ...(authorId === undefined ? {} : { authorId }),
+          path,
+          reference: { kind: "object", id },
+          children: [],
+        };
+        content.push(placeholderContent);
+        const placeholderEntry: ResolvedLayerEntry = {
+          layer: {
+            declarationType: child.type,
+            ...(authorId === undefined ? {} : { authorId }),
+            sourceOrder: [index],
+            zIndex: paintOrder(bound.contract),
+            path,
+            objectId: id,
+            paintObjectId: id,
+            theme,
+            emitsObject,
+            hasObservation: false,
+            childComposition: "leaf",
+            extensions: [],
+            memberLayers: [],
+            siblingLayers: [],
+            emit: () => ({ xml: "" }),
+          },
+          objects: [],
+          reference: { kind: "object", id },
+        };
+        entries.push(placeholderEntry);
+        scope.deferredTasks.push(() => {
+          try {
+            const resolvedObj = bound.resolve(
+              createObjectResolveContext({
+                resolveContext: context,
+                id,
+                path,
+                layoutBox: undefined,
+                layoutSizedAxes: undefined,
+                theme,
+                placeholder,
+                insideGroup,
+                restrictsMemberContinuity:
+                  bound.contract.nativeKind === "grpSp",
+                morphName,
+                link: resolvedLink,
+                scope,
+              }),
+            );
+            const committed = commitLeafResolution({
+              context,
+              child,
+              index,
+              path,
+              authorId,
+              order,
+              id,
+              bound,
+              layoutBox: undefined,
+              theme,
+              placeholder,
+              emitsObject,
+              morphKey,
+              morphName,
+              resolvedLink,
+              resolvedObj,
+            });
+            placeholderEntry.layer = committed.entry.layer;
+            placeholderEntry.objects = committed.entry.objects;
+            placeholderEntry.reference = committed.entry.reference;
+            content[contentSlot] = committed.contentNode;
+          } catch (error) {
+            context.slide.diagnostics.push(
+              error instanceof CapabilityError
+                ? diagnostic(
+                    error.path === undefined ? path : `${path}/${error.path}`,
+                    error.code,
+                    error.message,
+                  )
+                : diagnostic(
+                    path,
+                    "capability-failure",
+                    error instanceof Error ? error.message : String(error),
+                  ),
+            );
+          }
+        });
+        return;
+      }
+
       const resolvedObj = bound.resolve(
         createObjectResolveContext({
           resolveContext: context,
@@ -1781,94 +2101,30 @@ function resolveChildrenPass(
           restrictsMemberContinuity: bound.contract.nativeKind === "grpSp",
           morphName,
           link: resolvedLink,
+          scope,
         }),
       );
-      recordObjectMorph({
+      registerScopeTarget(scope, authorId, id, emitsObject, resolvedObj);
+      const committed = commitLeafResolution({
+        context,
+        child,
+        index,
+        path,
+        authorId,
+        order,
+        id,
+        bound,
+        layoutBox,
+        theme,
+        placeholder,
+        emitsObject,
         morphKey,
         morphName,
-        nativeKind: bound.contract.nativeKind,
-        observationName: resolvedObj.observation.name,
-        hasOutput: emitsObject,
-        slide: context.slide,
-        declarationType: child.type,
-        path,
+        resolvedLink,
+        resolvedObj,
       });
-      for (const extension of resolvedObj.extensions) {
-        context.document.usedExtensions.add(extension);
-      }
-      recordResourceClaims(
-        resolvedObj.resourceClaims,
-        context.document,
-        context.slide.diagnostics,
-        path,
-      );
-      recordFontUsages(resolvedObj.fontUsages, context.document, path);
-      for (const annotation of resolvedObj.annotations ?? []) {
-        context.slide.contributions.push({
-          ...annotation,
-          path,
-          targetId: id,
-          order,
-          declaration: child,
-        });
-      }
-      const gridArea = context.layout.gridAreas.get(child);
-      const observation: ResolvedObject = {
-        ...resolvedObj.observation,
-        id,
-        path,
-        ...(authorId === undefined ? {} : { authorId }),
-        ...(gridArea === undefined ? {} : { gridArea }),
-        ...(placeholder?.key === undefined
-          ? {}
-          : resolvedObj.observation.placeholder === undefined
-            ? { placeholder: placeholder.key }
-            : {}),
-        ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
-      };
-      if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
-      if (resolvedObj.transform !== undefined) {
-        context.slide.transformsById.set(id, resolvedObj.transform);
-      }
-      content.push({
-        ...(authorId === undefined ? {} : { authorId }),
-        path,
-        reference: { kind: "object", id: observation.id },
-        children: subPartContentNodes(resolvedObj.parts),
-      });
-      const layer: ResolvedObjectLayer = {
-        declarationType: child.type,
-        ...(authorId === undefined ? {} : { authorId }),
-        sourceOrder: [index],
-        zIndex: paintOrder(bound.contract),
-        path,
-        objectId: observation.id,
-        paintObjectId: observation.id,
-        theme,
-        ...(resolvedObj.observation.box === undefined
-          ? {}
-          : { box: resolvedObj.observation.box }),
-        ...(resolvedObj.transform === undefined
-          ? {}
-          : { transform: resolvedObj.transform }),
-        emitsObject,
-        hasObservation: true,
-        childComposition: "leaf",
-        ...(resolvedLink === undefined ? {} : { resolvedLink }),
-        ...(morphKey === undefined ? {} : { morphKey }),
-        extensions: resolvedObj.extensions,
-        memberLayers: [],
-        siblingLayers: [],
-        emit: (emitContext) => resolvedObj.emit(emitContext),
-        ...(resolvedObj.paint === undefined
-          ? {}
-          : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
-      };
-      layers.push({
-        layer,
-        objects: [observation],
-        reference: { kind: "object", id: observation.id },
-      });
+      content.push(committed.contentNode);
+      entries.push(committed.entry);
     } catch (error) {
       context.slide.diagnostics.push(
         error instanceof CapabilityError
@@ -1886,17 +2142,31 @@ function resolveChildrenPass(
     }
   });
 
-  layers.sort(
-    (left, right) =>
-      left.layer.zIndex - right.layer.zIndex ||
-      compareSourceOrder(left.layer.sourceOrder, right.layer.sourceOrder),
-  );
+  const objects: ResolvedObject[] = [];
+  const references: LayoutChildReference[] = [];
+  const sortedLayers: ResolvedObjectLayer[] = [];
+
+  if (isScopeRoot) {
+    for (const task of scope.deferredTasks) {
+      task();
+    }
+    // Inner child syncs are appended before their enclosing container syncs, so flush forward.
+    for (const sync of scope.postFlushSyncs) {
+      sync();
+    }
+  } else if (scope.deferredTasks.length > deferredBeforePass) {
+    scope.postFlushSyncs.push(() => {
+      syncEntries(objects, references, sortedLayers);
+    });
+  }
+
+  syncEntries(objects, references, sortedLayers);
   return {
-    objects: layers.flatMap(({ objects }) => objects),
-    references: layers.map(({ reference }) => reference),
+    objects,
+    references,
     content,
-    layers: layers.map(({ layer }) => layer),
-    entries: layers,
+    layers: sortedLayers,
+    entries,
   };
 }
 
@@ -1911,12 +2181,9 @@ function resolveBoundContainer(args: {
   readonly theme: ThemeContext;
   readonly context: ResolvePassContext;
   readonly insideGroup: boolean;
-  readonly layers: {
-    readonly layer: ResolvedObjectLayer;
-    readonly objects: readonly ResolvedObject[];
-    readonly reference: LayoutChildReference;
-  }[];
+  readonly layers: ResolvedLayerEntry[];
   readonly content: QueryContentNode[];
+  readonly parentScope: ScopeResolutionRegistry;
 }): void {
   const {
     child,
@@ -1931,6 +2198,7 @@ function resolveBoundContainer(args: {
     insideGroup,
     layers,
     content,
+    parentScope,
   } = args;
   const box = context.layout.boxes.get(child);
   const layoutSizedAxes = context.layout.sizedAxes.get(child);
@@ -2037,6 +2305,7 @@ function resolveBoundContainer(args: {
         restrictsMemberContinuity,
         morphName,
         link: containerLink,
+        scope: parentScope,
         onChildrenResolved: (resolved) => {
           memberResolved = resolved;
         },
@@ -2052,6 +2321,7 @@ function resolveBoundContainer(args: {
         ...(gridArea === undefined ? {} : { gridArea }),
         ...(containerLink === undefined ? {} : { link: containerLink.summary }),
       };
+      registerScopeTarget(parentScope, authorId, objectId, true, resolvedObj);
       if (box !== undefined) context.slide.layoutDerivedObjectIds.add(objectId);
       if (resolvedObj.transform !== undefined) {
         context.slide.transformsById.set(objectId, resolvedObj.transform);
@@ -2141,6 +2411,9 @@ function resolveBoundContainer(args: {
     );
   }
 
+  // Named sibling containers establish a new authorId naming scope for descendants; anonymous sibling containers stay transparent.
+  const childScope = authorId === undefined ? parentScope : undefined;
+  const deferredBeforeChildren = childScope?.deferredTasks.length ?? 0;
   const resolvedChildren = enclosesChildren
     ? (memberResolved ?? {
         objects: [],
@@ -2154,15 +2427,15 @@ function resolveBoundContainer(args: {
         context,
         path,
         insideGroup || restrictsMemberContinuity,
+        childScope,
       );
 
+  const siblingLayers = enclosesChildren ? [] : [...resolvedChildren.layers];
   const finalLayer: ResolvedObjectLayer =
     containerLayer !== undefined
       ? {
           ...containerLayer,
-          ...(!enclosesChildren
-            ? { siblingLayers: resolvedChildren.layers }
-            : {}),
+          ...(!enclosesChildren ? { siblingLayers } : {}),
         }
       : {
           declarationType: child.type,
@@ -2177,11 +2450,11 @@ function resolveBoundContainer(args: {
           childComposition: enclosesChildren ? "members" : "siblings",
           extensions: [],
           memberLayers: enclosesChildren ? resolvedChildren.layers : [],
-          siblingLayers: enclosesChildren ? [] : resolvedChildren.layers,
+          siblingLayers,
           emit: () => ({ xml: "" }),
         };
 
-  const layerObservedObjects = [
+  const layerObservedObjects: ResolvedObject[] = [
     ...(containerObservation === undefined ? [] : [containerObservation]),
     ...(enclosesChildren ? [] : resolvedChildren.objects),
   ];
@@ -2189,6 +2462,12 @@ function resolveBoundContainer(args: {
   if (layoutId !== undefined && box !== undefined) {
     const gridTracks = context.layout.gridTracks.get(child);
     const layoutGridArea = context.layout.gridAreas.get(child);
+    const layoutChildren: LayoutChildReference[] = [
+      ...(containerObservation === undefined
+        ? []
+        : [{ kind: "object" as const, id: containerObservation.id }]),
+      ...resolvedChildren.references,
+    ];
     context.slide.layouts.push({
       id: layoutId,
       ...(authorId === undefined ? {} : { authorId }),
@@ -2201,13 +2480,10 @@ function resolveBoundContainer(args: {
             columnWidths: gridTracks.columnWidths,
             rowHeights: gridTracks.rowHeights,
           }),
-      children: [
-        ...(containerObservation === undefined
-          ? []
-          : [{ kind: "object" as const, id: containerObservation.id }]),
-        ...resolvedChildren.references,
-      ],
+      children: layoutChildren,
     });
+    const contentStart = content.length;
+    const initialChildContentLen = resolvedChildren.content.length;
     content.push({
       ...(authorId === undefined ? {} : { authorId }),
       path,
@@ -2219,13 +2495,58 @@ function resolveBoundContainer(args: {
       },
       children: resolvedChildren.content,
     });
-    layers.push({
+    const containerEntry: ResolvedLayerEntry = {
       layer: finalLayer,
       objects: layerObservedObjects,
       reference: { kind: "layout", id: layoutId },
-    });
+    };
+    layers.push(containerEntry);
+    if (
+      !enclosesChildren &&
+      childScope !== undefined &&
+      childScope.deferredTasks.length > deferredBeforeChildren
+    ) {
+      childScope.postFlushSyncs.push(() => {
+        siblingLayers.splice(
+          0,
+          siblingLayers.length,
+          ...resolvedChildren.layers,
+        );
+        layerObservedObjects.splice(
+          0,
+          layerObservedObjects.length,
+          ...(containerObservation === undefined ? [] : [containerObservation]),
+          ...resolvedChildren.objects,
+        );
+        layoutChildren.splice(
+          0,
+          layoutChildren.length,
+          ...(containerObservation === undefined
+            ? []
+            : [{ kind: "object" as const, id: containerObservation.id }]),
+          ...resolvedChildren.references,
+        );
+        if (initialChildContentLen === resolvedChildren.content.length) {
+          content[contentStart] = {
+            ...(authorId === undefined ? {} : { authorId }),
+            path,
+            reference: {
+              kind: "layout",
+              id: layoutId,
+              objectIds:
+                containerObservation === undefined
+                  ? []
+                  : [containerObservation.id],
+            },
+            children: resolvedChildren.content,
+          };
+        }
+      });
+    }
     return;
   }
+  const contentStart = content.length;
+  const initialChildContentLen = resolvedChildren.content.length;
   if (containerObservation !== undefined) {
     content.push({
       ...(authorId === undefined ? {} : { authorId }),
@@ -2236,14 +2557,44 @@ function resolveBoundContainer(args: {
   } else {
     content.push(...resolvedChildren.content);
   }
-  layers.push({
+  const containerEntry: ResolvedLayerEntry = {
     layer: finalLayer,
     objects: layerObservedObjects,
     reference:
       containerObservation !== undefined
         ? { kind: "object", id: containerObservation.id }
         : { kind: "layout", id: objectId },
-  });
+  };
+  layers.push(containerEntry);
+  if (
+    !enclosesChildren &&
+    childScope !== undefined &&
+    childScope.deferredTasks.length > deferredBeforeChildren
+  ) {
+    childScope.postFlushSyncs.push(() => {
+      siblingLayers.splice(0, siblingLayers.length, ...resolvedChildren.layers);
+      layerObservedObjects.splice(
+        0,
+        layerObservedObjects.length,
+        ...(containerObservation === undefined ? [] : [containerObservation]),
+        ...resolvedChildren.objects,
+      );
+      if (containerObservation !== undefined) {
+        content[contentStart] = {
+          ...(authorId === undefined ? {} : { authorId }),
+          path,
+          reference: { kind: "object", id: containerObservation.id },
+          children: resolvedChildren.content,
+        };
+      } else {
+        content.splice(
+          contentStart,
+          initialChildContentLen,
+          ...resolvedChildren.content,
+        );
+      }
+    });
+  }
 }
 
 function compareSourceOrder(

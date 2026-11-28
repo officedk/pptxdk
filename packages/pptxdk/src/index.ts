@@ -288,6 +288,7 @@ export type {
   LayoutPlaceholderSpec,
   LayoutSpacing,
   LayoutStyle,
+  LineHeight,
   LinearGradient,
   LinkTarget,
   Locator,
@@ -525,6 +526,7 @@ export {
 } from "@pptxdk/capabilities/text";
 export type {
   ParagraphStyle,
+  RunTextStyle,
   ShapeTextStyle,
   TextAlignment,
   TextList,

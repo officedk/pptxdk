@@ -572,8 +572,11 @@ function readChartTextProperties(
       const lnSpc = pPr.child(A_NS, "lnSpc");
       if (lnSpc !== undefined) {
         const spcPts = readIntVal(lnSpc.child(A_NS, "spcPts"));
+        const spcPct = readIntVal(lnSpc.child(A_NS, "spcPct"));
         if (spcPts !== undefined && spcPts > 0 && spcPts <= 158_400) {
           lineHeight = `${spcPts / 100}pt`;
+        } else if (spcPct !== undefined && spcPct > 0 && spcPct <= 13_200_000) {
+          lineHeight = `${spcPct / 1000}%`;
         }
         consumeSubtree(lnSpc);
       }
@@ -674,6 +677,17 @@ function styleFieldEqual(
 ): boolean {
   if (left === right) return true;
   if (key === "fontSize" || key === "lineHeight") {
+    if (
+      key === "lineHeight" &&
+      typeof left === "string" &&
+      typeof right === "string" &&
+      left.endsWith("%") &&
+      right.endsWith("%")
+    ) {
+      return (
+        Math.abs(Number(left.slice(0, -1)) - Number(right.slice(0, -1))) < 1e-6
+      );
+    }
     const lPt = fontSizePointsValue(left as ChartTextStyle["fontSize"]);
     const rPt = fontSizePointsValue(right as ChartTextStyle["fontSize"]);
     return lPt !== undefined && rPt !== undefined && Math.abs(lPt - rPt) < 1e-6;
@@ -770,8 +784,15 @@ function readChartTitle(
             const lnSpc = pPr.child(A_NS, "lnSpc");
             if (lnSpc !== undefined) {
               const spcPts = readIntVal(lnSpc.child(A_NS, "spcPts"));
+              const spcPct = readIntVal(lnSpc.child(A_NS, "spcPct"));
               if (spcPts !== undefined && spcPts > 0 && spcPts <= 158_400) {
                 lineHeight = `${spcPts / 100}pt`;
+              } else if (
+                spcPct !== undefined &&
+                spcPct > 0 &&
+                spcPct <= 13_200_000
+              ) {
+                lineHeight = `${spcPct / 1000}%`;
               }
               consumeSubtree(lnSpc);
             }

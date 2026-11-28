@@ -63,6 +63,8 @@ import {
   createParagraphNode,
   createSlideNumberNode,
   createSpanNode,
+  createSubNode,
+  createSupNode,
   createTextNode,
   type SpanDeclarationProps,
   type TextDeclarationProps,
@@ -118,6 +120,7 @@ const RunPrFragmentSchema = z.object({
   strike: z.enum(["noStrike", "sngStrike"]).optional(),
   cap: z.enum(["none", "all"]).optional(),
   spc: ooxmlIntSchema.optional(),
+  baseline: ooxmlIntSchema.optional(),
   dirty: ooxmlBoolSchema.optional(),
   smtClean: ooxmlBoolSchema.optional(),
 });
@@ -338,7 +341,11 @@ function readRunProperties(
   slideIndex: number,
   diagnostics: ImportDiagnostic[],
   allowShadowNone = false,
-): { readonly style: ParsedRunStyle; readonly sizePt?: number } {
+): {
+  readonly style: ParsedRunStyle;
+  readonly sizePt?: number;
+  readonly inlineKind?: "sup" | "sub";
+} {
   const raw = rPrCursor.attrsObject([
     "lang",
     "sz",
@@ -348,6 +355,7 @@ function readRunProperties(
     "strike",
     "cap",
     "spc",
+    "baseline",
     "dirty",
     "smtClean",
   ]);
@@ -360,6 +368,8 @@ function readRunProperties(
   let textDecoration: NonNullable<TextStyle["textDecoration"]> | undefined;
   let textTransform: NonNullable<TextStyle["textTransform"]> | undefined;
   let letterSpacing: number | undefined;
+  let baselineShift: ParsedRunStyle["baselineShift"] | undefined;
+  let inlineKind: "sup" | "sub" | undefined;
 
   if (!parsed.success) {
     diagnostics.push({
@@ -411,6 +421,30 @@ function readRunProperties(
     if (data.spc !== undefined) {
       letterSpacing = data.spc / 75;
     }
+    if (data.baseline !== undefined) {
+      if (data.baseline === 30_000) {
+        inlineKind = "sup";
+      } else if (data.baseline === -25_000) {
+        inlineKind = "sub";
+      } else if (data.baseline !== 0) {
+        if (data.baseline < -2_147_483_648 || data.baseline > 2_147_483_647) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: {
+              part,
+              xpath: `${rPrCursor.xpath}/@baseline`,
+              slideIndex,
+            },
+            attributeOrElement: "@baseline",
+            rawValue: String(data.baseline),
+          });
+        } else {
+          baselineShift = `${data.baseline / 1000}%`;
+        }
+      }
+    }
   }
 
   let color: NonNullable<TextStyle["color"]> | undefined;
@@ -442,8 +476,10 @@ function readRunProperties(
       ...(textDecoration === undefined ? {} : { textDecoration }),
       ...(textShadow === undefined ? {} : { textShadow }),
       ...(lang === undefined ? {} : { lang }),
+      ...(baselineShift === undefined ? {} : { baselineShift }),
     },
     ...(sizePt === undefined ? {} : { sizePt }),
+    ...(inlineKind === undefined ? {} : { inlineKind }),
   };
 }
 
@@ -518,7 +554,7 @@ export const textFieldSlideNumImportHandler: TextInlineImportHandler = {
 
 type ImportedRun =
   | {
-      readonly kind: "text";
+      readonly kind: "text" | "sup" | "sub";
       readonly text: string;
       readonly style: ParsedRunStyle;
       readonly sizePt?: number;
@@ -687,7 +723,7 @@ function readParagraph(
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
         runs.push({
-          kind: "text",
+          kind: parsedRPr.inlineKind ?? "text",
           text: t.textContent,
           style: parsedRPr.style,
           ...(parsedRPr.sizePt === undefined
@@ -710,7 +746,7 @@ function readParagraph(
               allowShadowNone,
             );
       runs.push({
-        kind: "text",
+        kind: parsedRPr.inlineKind ?? "text",
         text: "\n",
         style: parsedRPr.style,
         ...(parsedRPr.sizePt === undefined ? {} : { sizePt: parsedRPr.sizePt }),
@@ -735,9 +771,16 @@ function readParagraph(
                 diagnostics,
                 allowShadowNone,
               );
+        const fieldStyle: ParsedRunStyle =
+          parsedRPr.inlineKind === undefined
+            ? parsedRPr.style
+            : {
+                ...parsedRPr.style,
+                baselineShift: parsedRPr.inlineKind === "sup" ? "30%" : "-25%",
+              };
         runs.push({
           kind: "slide-number",
-          style: parsedRPr.style,
+          style: fieldStyle,
           ...(parsedRPr.sizePt === undefined
             ? {}
             : { sizePt: parsedRPr.sizePt }),
@@ -797,7 +840,7 @@ function readParagraph(
     } else if (spcPct !== undefined) {
       const raw = spcPct.attrsObject(["val"]);
       const parsed = SpacingPercentXmlSchema.safeParse(raw);
-      if (!parsed.success) {
+      if (!parsed.success || parsed.data.val > 13_200_000) {
         diagnostics.push({
           code: "invalid-xml-value",
           category: "corrupt-input",
@@ -807,12 +850,7 @@ function readParagraph(
           rawValue: raw["val"] ?? "",
         });
       } else {
-        const pt = Number(
-          ((baseFontPt * parsed.data.val) / 100_000).toFixed(2),
-        );
-        if (pt > 0) {
-          lineHeight = `${pt}pt`;
-        }
+        lineHeight = `${parsed.data.val / 1000}%`;
       }
     }
   }
@@ -973,6 +1011,14 @@ export function populateRichTextNode(
               Object.keys(run.style).length === 0 ? {} : { style: run.style },
             );
           }
+          const runProps =
+            Object.keys(run.style).length === 0 ? {} : { style: run.style };
+          if (run.kind === "sup") {
+            return createSupNode(runProps).content(run.text);
+          }
+          if (run.kind === "sub") {
+            return createSubNode(runProps).content(run.text);
+          }
           return Object.keys(run.style).length === 0
             ? run.text
             : createSpanNode({ style: run.style }).content(run.text);
@@ -1081,7 +1127,8 @@ function flattenImportedTextBody(
     singleParagraph !== undefined &&
     singleParagraph.style.list === undefined &&
     singleParagraph.runs.length === 1 &&
-    singleParagraph.runs[0]!.kind === "text"
+    singleParagraph.runs[0]!.kind === "text" &&
+    singleParagraph.runs[0]!.style.baselineShift === undefined
       ? singleParagraph.runs[0]
       : undefined;
   const singleEmptyParagraph =
@@ -1098,11 +1145,14 @@ function flattenImportedTextBody(
           return rest;
         })();
 
+  const { baselineShift: _baselineShift, ...hoistableRunStyle } =
+    singleTextRun === undefined ? {} : singleTextRun.style;
+
   const boxStyle: NonNullable<TextDeclarationProps["style"]> = {
     ...imported?.boxStyle,
     ...visualStyle,
     ...flatParagraphStyle,
-    ...(singleTextRun === undefined ? {} : singleTextRun.style),
+    ...hoistableRunStyle,
   };
 
   if (singleTextRun !== undefined) {

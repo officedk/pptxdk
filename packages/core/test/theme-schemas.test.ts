@@ -24,6 +24,7 @@ import {
   gradientStopSchema,
   isTheme,
   isThemeFontSlot,
+  lineHeightSchema,
   linearGradientSchema,
   nativeColorSlotSchema,
   radialGradientSchema,
@@ -54,6 +55,7 @@ import {
   type FontSize,
   type FormatScheme,
   type HexColor,
+  type LineHeight,
   type LinearGradient,
   type NativeColorSlot,
   type RadialGradient,
@@ -202,27 +204,38 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       assert.equal(validated.fontWeight, fontWeight);
     }
 
-    // Preserve native units ("32pt" vs 32 vs "32px") through schema & validateTextStyle
+    // Preserve native units ("32pt" vs 32 vs "32px") and proportional percentage lineHeight
     for (const fontSize of ["32pt", 32, "32px"] as const) {
-      const style: TextStyle = textStyleSchema.parse({
-        fontFamily: fontValue,
-        fontSize,
-        fontWeight: 600,
-        fontStyle: "italic",
-        color: colorValue,
-        lineHeight: "36pt",
-        verticalAlign: "middle",
-        align: "center",
-        spacingAfter: 8,
-        letterSpacing: 1.5,
-        textTransform: "uppercase",
-        textDecoration: "underline",
-        textShadow: shadow,
-        textWrap: "nowrap",
-        lang: "en-US",
-      });
-      assert.equal(style.fontSize, fontSize);
-      assert.equal(validateTextStyle(style).fontSize, fontSize);
+      for (const lineHeight of [
+        "36pt",
+        36,
+        "36px",
+        "140%",
+        "13200%",
+      ] as const satisfies readonly LineHeight[]) {
+        assert.equal(lineHeightSchema.parse(lineHeight), lineHeight);
+        const style: TextStyle = textStyleSchema.parse({
+          fontFamily: fontValue,
+          fontSize,
+          fontWeight: 600,
+          fontStyle: "italic",
+          color: colorValue,
+          lineHeight,
+          verticalAlign: "middle",
+          align: "center",
+          spacingAfter: 8,
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+          textDecoration: "underline",
+          textShadow: shadow,
+          textWrap: "nowrap",
+          lang: "en-US",
+        });
+        assert.equal(style.fontSize, fontSize);
+        assert.equal(style.lineHeight, lineHeight);
+        assert.equal(validateTextStyle(style).fontSize, fontSize);
+        assert.equal(validateTextStyle(style).lineHeight, lineHeight);
+      }
     }
   });
 
@@ -256,6 +269,12 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       [{ color: "red" }, "invalid-color"],
       [{ textShadow: { color: "tileAccent" } }, "invalid-color"],
       [{ lineHeight: 0 }, "invalid-text-length"],
+      [{ lineHeight: "0%" }, "invalid-text-length"],
+      [{ lineHeight: "-10%" }, "invalid-text-length"],
+      [{ lineHeight: "13201%" }, "invalid-text-length"],
+      [{ lineHeight: "0.0001%" }, "invalid-text-length"],
+      [{ lineHeight: "1.5" }, "invalid-text-length"],
+      [{ lineHeight: "NaN%" }, "invalid-text-length"],
       [{ verticalAlign: "baseline" }, "invalid-vertical-align"],
       [{ align: "start" }, "invalid-text-alignment"],
       [{ spacingAfter: -1 }, "invalid-paragraph-spacing"],

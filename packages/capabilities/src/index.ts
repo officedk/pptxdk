@@ -123,7 +123,7 @@ export type {
   TableProps,
 } from "#/table/table-elements.ts";
 export { font, fromFontCollection, textCapability } from "#/text/text.ts";
-export { P, SlideNumber, Span, Text } from "#/text/text-elements.ts";
+export { P, SlideNumber, Span, Sub, Sup, Text } from "#/text/text-elements.ts";
 export { notesCapability } from "#/notes/notes.ts";
 export { Notes } from "#/notes/notes-elements.ts";
 export type { NotesProps } from "#/notes/notes-elements.ts";
@@ -212,11 +212,15 @@ export type {
   FontOptions,
   FontReference,
   FontSize,
+  LineHeight,
   ParagraphDeclarationProps,
   ParagraphStyle,
+  RunTextStyle,
   ShapeTextStyle,
   SlideNumberDeclarationProps,
   SpanDeclarationProps,
+  SubDeclarationProps,
+  SupDeclarationProps,
   TextAlignment,
   TextDeclarationProps,
   TextList,
@@ -226,6 +230,8 @@ export type {
   ParagraphProps,
   SlideNumberProps,
   SpanProps,
+  SubProps,
+  SupProps,
   TextProps,
 } from "#/text/text-elements.ts";
 export type {

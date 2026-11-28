@@ -276,6 +276,8 @@ export type ProductionDeclarationKind =
   | "text"
   | "paragraph"
   | "span"
+  | "sup"
+  | "sub"
   | "slide-number"
   | "notes"
   | "image"

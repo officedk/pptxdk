@@ -85,10 +85,14 @@ import {
   createParagraphNode,
   createSlideNumberNode,
   createSpanNode,
+  createSubNode,
+  createSupNode,
   createTextNode,
   type ParagraphDeclarationProps,
   type SlideNumberDeclarationProps,
   type SpanDeclarationProps,
+  type SubDeclarationProps,
+  type SupDeclarationProps,
   type TextDeclarationProps,
 } from "./text/text-declaration.ts";
 import {
@@ -152,8 +156,17 @@ export type ImperativeTextPlaceholderValue =
   | TextNode
   | ParagraphNode
   | SpanNode
+  | SupNode
+  | SubNode
   | SlideNumberNode
-  | readonly (string | ParagraphNode | SpanNode | SlideNumberNode)[];
+  | readonly (
+      | string
+      | ParagraphNode
+      | SpanNode
+      | SupNode
+      | SubNode
+      | SlideNumberNode
+    )[];
 
 export type ImperativePlaceholderFillForRole<
   Role extends ContentPlaceholderRole,
@@ -194,12 +207,16 @@ export type JsxTextPlaceholderValue =
   | TextNode
   | ParagraphNode
   | SpanNode
+  | SupNode
+  | SubNode
   | SlideNumberNode
   | readonly (
       | string
       | JsxElementLike
       | ParagraphNode
       | SpanNode
+      | SupNode
+      | SubNode
       | SlideNumberNode
     )[];
 
@@ -243,6 +260,8 @@ export type ShapeAuthorProps = ShapeDeclarationProps;
 export type TextAuthorProps = TextDeclarationProps;
 export type ParagraphAuthorProps = ParagraphDeclarationProps;
 export type SpanAuthorProps = SpanDeclarationProps;
+export type SupAuthorProps = SupDeclarationProps;
+export type SubAuthorProps = SubDeclarationProps;
 export type SlideNumberAuthorProps = SlideNumberDeclarationProps;
 export type ChartAuthorProps = ChartProps;
 export type TableAuthorProps = TableDeclarationProps;
@@ -292,6 +311,16 @@ export type SpanNode = RichTextContainer<
   "span",
   SpanAuthorProps,
   NonNullable<SpanDeclarationProps["style"]>
+>;
+export type SupNode = RichTextContainer<
+  "sup",
+  SupAuthorProps,
+  NonNullable<SupDeclarationProps["style"]>
+>;
+export type SubNode = RichTextContainer<
+  "sub",
+  SubAuthorProps,
+  NonNullable<SubDeclarationProps["style"]>
 >;
 export type SlideNumberNode = CommonNode<
   "slide-number",
@@ -417,6 +446,8 @@ export function slide<
       if (
         value.type === "paragraph" ||
         value.type === "span" ||
+        value.type === "sup" ||
+        value.type === "sub" ||
         value.type === "slide-number"
       ) {
         node.append(text(value, { placeholder: key }));
@@ -557,6 +588,30 @@ export function span(
   return node;
 }
 
+/** Creates an inline superscript run (`baseline="30000"`). */
+export function sup(content?: SpanContent, props?: SupAuthorProps): SupNode;
+export function sup(...content: readonly SpanContent[]): SupNode;
+export function sup(
+  ...args: readonly (SpanContent | SupAuthorProps | undefined)[]
+): SupNode {
+  const { content, props } = splitContent(args);
+  const node = createSupNode(props ?? {});
+  node.content(...content);
+  return node;
+}
+
+/** Creates an inline subscript run (`baseline="-25000"`). */
+export function sub(content?: SpanContent, props?: SubAuthorProps): SubNode;
+export function sub(...content: readonly SpanContent[]): SubNode;
+export function sub(
+  ...args: readonly (SpanContent | SubAuthorProps | undefined)[]
+): SubNode {
+  const { content, props } = splitContent(args);
+  const node = createSubNode(props ?? {});
+  node.content(...content);
+  return node;
+}
+
 /** Emits the native slide number field, resolved by the presentation application. */
 export function slideNumber(
   props: SlideNumberAuthorProps = {},
@@ -686,6 +741,7 @@ export type {
 } from "./image/image-declaration.ts";
 export type {
   ParagraphStyle,
+  RunTextStyle,
   TextAlignment,
   TextList,
   TextStyle,

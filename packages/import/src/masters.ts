@@ -368,11 +368,14 @@ function readLevelParagraphProperties(
   const lnSpc = pPr.child(A_NS, "lnSpc");
   const lnSpcPts = lnSpc?.child(A_NS, "spcPts");
   const lnSpcPct = lnSpc?.child(A_NS, "spcPct");
-  lnSpcPct?.consumeAttr("val");
-  const lnSpcVal = ooxmlPositiveIntSchema.safeParse(lnSpcPts?.attr("val"));
-  const lineHeight = lnSpcVal.success
-    ? (`${lnSpcVal.data / 100}pt` as const)
-    : undefined;
+  const lnSpcPtsVal = ooxmlPositiveIntSchema.safeParse(lnSpcPts?.attr("val"));
+  const lnSpcPctVal = ooxmlPositiveIntSchema.safeParse(lnSpcPct?.attr("val"));
+  const lineHeight =
+    lnSpcPtsVal.success && lnSpcPtsVal.data <= 158_400
+      ? (`${lnSpcPtsVal.data / 100}pt` as const)
+      : lnSpcPctVal.success && lnSpcPctVal.data <= 13_200_000
+        ? (`${lnSpcPctVal.data / 1000}%` as const)
+        : undefined;
 
   pPr.ignoreEmptyChild(A_NS, "buNone");
   const buFont = pPr.child(A_NS, "buFont");

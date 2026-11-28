@@ -115,6 +115,9 @@ function inferStyleField(
   switch (code) {
     case "invalid-font-size":
       return "style.fontSize";
+    case "invalid-baseline-shift":
+    case "conflicting-baseline-shift":
+      return "style.baselineShift";
     case "invalid-letter-spacing":
       return "style.letterSpacing";
     case "invalid-paragraph-spacing":
@@ -170,6 +173,8 @@ const styleErrorCodes = new Set([
   "invalid-color",
   "invalid-shadow",
   "invalid-font-size",
+  "invalid-baseline-shift",
+  "conflicting-baseline-shift",
   "invalid-letter-spacing",
   "invalid-paragraph-spacing",
   "invalid-list",

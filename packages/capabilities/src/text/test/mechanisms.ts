@@ -11,9 +11,18 @@ import {
   slideMaster,
   slideNumber,
   span,
+  sub,
+  sup,
   text,
 } from "@pptxdk/capabilities/document";
-import { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
+import {
+  P,
+  SlideNumber,
+  Span,
+  Sub,
+  Sup,
+  Text,
+} from "@pptxdk/capabilities/text-elements";
 import { defineTheme } from "@pptxdk/core";
 import { Deck, Slide, SlideLayout, SlideMaster } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
@@ -305,6 +314,16 @@ export const embeddedFontRoundtripScenario: CapabilityScenario = {
               "Embedded",
             ),
           ),
+          createElement(
+            P,
+            { style: { lineHeight: "140%" } },
+            "H",
+            createElement(Sub, null, "2"),
+            "O + x",
+            createElement(Sup, null, "2"),
+            " ",
+            createElement(Span, { style: { baselineShift: "15%" } }, "s"),
+          ),
         ),
       ),
     );
@@ -320,6 +339,17 @@ export const embeddedFontRoundtripScenario: CapabilityScenario = {
                 style: { fontFamily: jostFont, fontWeight: "bold" },
               }),
             ]),
+            paragraph(
+              [
+                "H",
+                sub("2"),
+                "O + x",
+                sup("2"),
+                " ",
+                span("s", { style: { baselineShift: "15%" } }),
+              ],
+              { style: { lineHeight: "140%" } },
+            ),
           ],
           {
             id: "rich-font",

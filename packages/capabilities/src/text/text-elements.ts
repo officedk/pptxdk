@@ -7,10 +7,14 @@ import {
   createParagraphNode,
   createSlideNumberNode,
   createSpanNode,
+  createSubNode,
+  createSupNode,
   createTextNode,
   type ParagraphDeclarationProps,
   type SlideNumberDeclarationProps,
   type SpanDeclarationProps,
+  type SubDeclarationProps,
+  type SupDeclarationProps,
   type TextDeclarationProps,
 } from "./text-declaration.ts";
 
@@ -19,6 +23,8 @@ export type {
   ShapeTextStyle,
   SlideNumberDeclarationProps,
   SpanDeclarationProps,
+  SubDeclarationProps,
+  SupDeclarationProps,
   TextDeclarationProps,
 } from "./text-declaration.ts";
 
@@ -31,6 +37,14 @@ export type ParagraphProps = ParagraphDeclarationProps & {
 };
 
 export type SpanProps = SpanDeclarationProps & {
+  readonly children?: ReactNode;
+};
+
+export type SupProps = SupDeclarationProps & {
+  readonly children?: ReactNode;
+};
+
+export type SubProps = SubDeclarationProps & {
   readonly children?: ReactNode;
 };
 
@@ -64,6 +78,24 @@ export function Span(props: SpanProps): TypedElement<"span"> {
   ) as unknown as TypedElement<"span">;
 }
 
+/** Declares an inline superscript run (`baseline="30000"`). */
+export function Sup(props: SupProps): TypedElement<"sup"> {
+  return createElement(
+    "sup",
+    { ...props, [hostNodeCreator]: createSupNode },
+    props.children,
+  ) as unknown as TypedElement<"sup">;
+}
+
+/** Declares an inline subscript run (`baseline="-25000"`). */
+export function Sub(props: SubProps): TypedElement<"sub"> {
+  return createElement(
+    "sub",
+    { ...props, [hostNodeCreator]: createSubNode },
+    props.children,
+  ) as unknown as TypedElement<"sub">;
+}
+
 /** Emits a native slide number field resolved by presentation applications. */
 export function SlideNumber(
   props: SlideNumberProps,
@@ -77,4 +109,6 @@ export function SlideNumber(
 const inlineTextMarker = Symbol.for("@pptxdk/text-inline-element");
 Object.defineProperty(P, inlineTextMarker, { value: true });
 Object.defineProperty(Span, inlineTextMarker, { value: true });
+Object.defineProperty(Sup, inlineTextMarker, { value: true });
+Object.defineProperty(Sub, inlineTextMarker, { value: true });
 Object.defineProperty(SlideNumber, inlineTextMarker, { value: true });

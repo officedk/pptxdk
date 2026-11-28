@@ -16,7 +16,15 @@ import {
   table,
   text,
 } from "@pptxdk/capabilities/document";
-import { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
+import { Shape } from "@pptxdk/capabilities/shape-elements";
+import {
+  P,
+  SlideNumber,
+  Span,
+  Sub,
+  Sup,
+  Text,
+} from "@pptxdk/capabilities/text-elements";
 import { type CapabilityModule, CommonNode } from "@pptxdk/core";
 import { CapabilityError, createResolver } from "@pptxdk/core/build";
 import { getInternalResolution } from "@pptxdk/core/resolution";
@@ -1240,5 +1248,181 @@ describe("Slice 3: Text static preview & shared text-service outlines", () => {
     assert.equal(rightGlyphs.length, 2);
     // Relative x within each 80px box: right-aligned glyphs sit strictly further right than center-aligned glyphs.
     assert.ok(rightGlyphs[0]!.x - 260 > centerGlyphs[0]!.x - 160 + 10);
+  });
+
+  it("paints proportional lineHeight, scaled/shifted Sup/Sub/baselineShift, and parity-aligned Shape/Text list indents", async () => {
+    const previewDoc = runDocPreview(documentCapabilities);
+
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "t03-paint", background: "#FFFFFF" },
+          createElement(
+            Text,
+            {
+              id: "lh-100",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 60,
+                height: "auto",
+                fontFamily: jostFont,
+                fontSize: 20,
+                lineHeight: "100%",
+                padding: 0,
+                color: "#111111",
+              },
+            },
+            "Word Wrap",
+          ),
+          createElement(
+            Text,
+            {
+              id: "lh-150",
+              style: {
+                position: "absolute",
+                left: 150,
+                top: 20,
+                width: 60,
+                height: "auto",
+                fontFamily: jostFont,
+                fontSize: 20,
+                lineHeight: "150%",
+                padding: 0,
+                color: "#222222",
+              },
+            },
+            "Word Wrap",
+          ),
+          createElement(
+            Text,
+            {
+              id: "sub-sup",
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 140,
+                width: 260,
+                height: "auto",
+                fontFamily: jostFont,
+                fontSize: 24,
+                padding: 0,
+              },
+            },
+            createElement(Span, { style: { color: "#0F172A" } }, "A"),
+            createElement(Sup, { style: { color: "#DC2626" } }, "B"),
+            createElement(Sub, { style: { color: "#2563EB" } }, "C"),
+            createElement(
+              Span,
+              { style: { color: "#059669", baselineShift: "40%" } },
+              "D",
+            ),
+          ),
+          createElement(
+            Shape,
+            {
+              id: "list-shape",
+              style: {
+                position: "absolute",
+                left: 320,
+                top: 20,
+                width: 260,
+                height: 180,
+                fontFamily: jostFont,
+                fontSize: 18,
+                padding: 10,
+                verticalAlign: "top",
+              },
+            },
+            createElement(
+              P,
+              { style: { list: { type: "bullet", character: "•", level: 0 } } },
+              createElement(
+                Span,
+                { style: { color: "#7C3AED" } },
+                "Wrapped list item in shape container",
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const result = await previewDoc(doc);
+    assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+    const page = result.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.ok(page.png !== undefined);
+
+    const slideRes = result.resolution.slide("t03-paint");
+    const box100 = slideRes.get("lh-100").box!;
+    const box150 = slideRes.get("lh-150").box!;
+    assert.ok(Math.abs(box150.height / box100.height - 1.5) < 0.02);
+
+    const svg = page.svg!;
+    const extractPathTransforms = (color: string) =>
+      [
+        ...svg.matchAll(
+          new RegExp(
+            `fill="${color}"[^>]*transform="translate\\(([\\d.-]+)\\s+([\\d.-]+)\\)\\s*scale\\(([\\d.-]+)`,
+            "g",
+          ),
+        ),
+      ].map((m) => ({
+        x: Number(m[1]),
+        y: Number(m[2]),
+        scale: Number(m[3]),
+      }));
+
+    // Proportional lineHeight increases SVG baseline separation by 1.5x.
+    const lh100Glyphs = extractPathTransforms("#111111");
+    const lh150Glyphs = extractPathTransforms("#222222");
+    const sep100 = Math.max(...lh100Glyphs.map((g) => g.y)) - lh100Glyphs[0]!.y;
+    const sep150 = Math.max(...lh150Glyphs.map((g) => g.y)) - lh150Glyphs[0]!.y;
+    assert.ok(Math.abs(sep150 / sep100 - 1.5) < 0.02);
+
+    // Sup shifts upward & scales ~0.65x; Sub shifts downward & scales ~0.65x; baselineShift="40%" shifts further up.
+    const baseGlyph = extractPathTransforms("#0F172A")[0]!;
+    const supGlyph = extractPathTransforms("#DC2626")[0]!;
+    const subGlyph = extractPathTransforms("#2563EB")[0]!;
+    const shiftGlyph = extractPathTransforms("#059669")[0]!;
+
+    assert.ok(supGlyph.y < baseGlyph.y - 4);
+    assert.ok(subGlyph.y > baseGlyph.y + 3);
+    assert.ok(shiftGlyph.y < supGlyph.y - 1);
+    assert.ok(Math.abs(supGlyph.scale / baseGlyph.scale - 0.65) < 0.02);
+    assert.ok(Math.abs(subGlyph.scale / baseGlyph.scale - 0.65) < 0.02);
+
+    // Shape bullet prefix & wrapped continuation lines match emitted marL / indent parity.
+    const shapeGlyphs = extractPathTransforms("#7C3AED");
+    const bulletX = shapeGlyphs[0]!.x;
+    const firstLineY = shapeGlyphs[0]!.y;
+    const firstTextX = shapeGlyphs.find(
+      (g) => Math.abs(g.y - firstLineY) < 1 && g.x > bulletX + 10,
+    )!.x;
+    const secondLineY = Math.max(...shapeGlyphs.map((g) => g.y));
+    const secondTextX = shapeGlyphs.find(
+      (g) => Math.abs(g.y - secondLineY) < 1,
+    )!.x;
+
+    assert.ok(bulletX >= 329 && bulletX <= 333); // left 320 + padding 10
+    assert.ok(firstTextX - bulletX >= 20);
+    assert.ok(Math.abs(secondTextX - firstTextX) < 0.5);
+
+    const slideXml = strFromU8(
+      unzipSync(result.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(slideXml, /<a:spcPct val="150000"\/>/u);
+    assert.match(slideXml, /baseline="30000"/u);
+    assert.match(slideXml, /baseline="-25000"/u);
+    assert.match(slideXml, /baseline="40000"/u);
+    assert.match(
+      slideXml,
+      /<a:pPr[^>]*marL="214313"[^>]*indent="-214313"[^>]*><a:buChar char="•"\/>/u,
+    );
   });
 });

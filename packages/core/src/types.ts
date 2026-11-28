@@ -76,6 +76,7 @@ export type {
   ImageBackgroundFit,
   ImageBackgroundPosition,
   ImageFillSource,
+  LineHeight,
   LinearGradient,
   NativeColorSlot,
   ResolvedColor,

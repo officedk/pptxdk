@@ -7167,7 +7167,7 @@ describe("component choreography scope", () => {
           ]),
           [
             ["fade", 0, undefined, "unknown"],
-            ["spin", 0, 400, undefined],
+            ["spin", undefined, undefined, "unknown"],
           ],
         );
         const sourceScope = motion.scopes?.find(({ members }) =>
@@ -7215,7 +7215,7 @@ describe("component choreography scope", () => {
             ]),
           [
             ["fade", "known", 0, "unknown", undefined],
-            ["spin", "known", 0, "known", 400],
+            ["spin", "unknown", undefined, "unknown", undefined],
           ],
         );
 

@@ -25,6 +25,7 @@ export const motionDirectionSchema: z.ZodType<MotionDirection> =
   >;
 
 export type EntrancePreset =
+  | "appear"
   | "fade"
   | "wipe"
   | "zoom"
@@ -34,6 +35,7 @@ export type EntrancePreset =
   | "spinIn"
   | "stretch";
 const rawEntrancePresetSchema = z.enum([
+  "appear",
   "fade",
   "wipe",
   "zoom",
@@ -65,8 +67,35 @@ export const emphasisPresetSchema: z.ZodType<EmphasisPreset> =
       : never
   >;
 
-export type EffectPreset = EntrancePreset | EmphasisPreset;
+export type ExitPreset =
+  | "disappear"
+  | "fadeOut"
+  | "wipeOut"
+  | "flyOut"
+  | "zoomOut"
+  | "floatOut"
+  | "spinOut"
+  | "collapse";
+const rawExitPresetSchema = z.enum([
+  "disappear",
+  "fadeOut",
+  "wipeOut",
+  "flyOut",
+  "zoomOut",
+  "floatOut",
+  "spinOut",
+  "collapse",
+]);
+export const exitPresetSchema: z.ZodType<ExitPreset> =
+  rawExitPresetSchema satisfies z.ZodType<
+    AssertExact<ExitPreset, z.infer<typeof rawExitPresetSchema>> extends true
+      ? ExitPreset
+      : never
+  >;
+
+export type EffectPreset = EntrancePreset | EmphasisPreset | ExitPreset;
 const rawEffectPresetSchema = z.enum([
+  "appear",
   "fade",
   "wipe",
   "zoom",
@@ -78,6 +107,14 @@ const rawEffectPresetSchema = z.enum([
   "spin",
   "breathe",
   "fillColor",
+  "disappear",
+  "fadeOut",
+  "wipeOut",
+  "flyOut",
+  "zoomOut",
+  "floatOut",
+  "spinOut",
+  "collapse",
 ]);
 export const effectPresetSchema: z.ZodType<EffectPreset> =
   rawEffectPresetSchema satisfies z.ZodType<
@@ -243,6 +280,29 @@ export const spinAngleSchema = z
       units <= maximumRotationUnits
     );
   }, "spin angle converted value must fall within signed 32-bit angle range");
+
+export type InstantEffectOptions = {
+  readonly delay?: number | undefined;
+  readonly intervalMs?: number | undefined;
+  readonly by?: MotionGranularity | undefined;
+};
+
+const rawInstantEffectOptionsSchema = z
+  .strictObject({
+    delay: effectDelaySchema.optional(),
+    intervalMs: intervalMsSchema.optional(),
+    by: rawMotionGranularitySchema.optional(),
+  })
+  .readonly();
+export const instantEffectOptionsSchema: z.ZodType<InstantEffectOptions> =
+  rawInstantEffectOptionsSchema satisfies z.ZodType<
+    AssertExact<
+      InstantEffectOptions,
+      z.infer<typeof rawInstantEffectOptionsSchema>
+    > extends true
+      ? InstantEffectOptions
+      : never
+  >;
 
 export type EffectOptions = {
   readonly duration?: number | undefined;
@@ -443,6 +503,24 @@ export const emphasisEffectSchema: z.ZodType<EmphasisEffect> =
       : never
   >;
 
+export type ExitEffect = EffectCommon & {
+  readonly kind: "exit";
+  readonly preset: ExitPreset;
+};
+
+const exitEffectObjectSchema = z.strictObject({
+  ...effectCommonFields,
+  kind: z.literal("exit"),
+  preset: exitPresetSchema,
+});
+const rawExitEffectSchema = exitEffectObjectSchema.readonly();
+export const exitEffectSchema: z.ZodType<ExitEffect> =
+  rawExitEffectSchema satisfies z.ZodType<
+    AssertExact<ExitEffect, z.infer<typeof rawExitEffectSchema>> extends true
+      ? ExitEffect
+      : never
+  >;
+
 export type BreatheEffect = EffectCommon & {
   readonly kind: "emphasis";
   readonly preset: "breathe";
@@ -469,10 +547,11 @@ export const breatheEffectSchema: z.ZodType<BreatheEffect> =
       : never
   >;
 
-export type Effect = EntranceEffect | EmphasisEffect;
+export type Effect = EntranceEffect | EmphasisEffect | ExitEffect;
 const rawEffectSchema = z.discriminatedUnion("kind", [
   rawEntranceEffectSchema,
   rawEmphasisEffectSchema,
+  rawExitEffectSchema,
 ]);
 export const effectSchema: z.ZodType<Effect> =
   rawEffectSchema satisfies z.ZodType<
@@ -495,17 +574,49 @@ export const repeatedEffectSchema: z.ZodType<RepeatedEffect> = z
   })
   .readonly();
 
+const rawStepNumberSchema = z.number().int().min(1);
+
+export type SteppedEffect<
+  D extends
+    | EntranceEffect
+    | RepeatedEffect<EntranceEffect>
+    | EmphasisEffect
+    | RepeatedEffect<EmphasisEffect>
+    | ExitEffect
+    | RepeatedEffect<ExitEffect> =
+    | EntranceEffect
+    | RepeatedEffect<EntranceEffect>
+    | EmphasisEffect
+    | RepeatedEffect<EmphasisEffect>
+    | ExitEffect
+    | RepeatedEffect<ExitEffect>,
+> = {
+  readonly type: "stepped-effect";
+  readonly step: number;
+  readonly effect: D;
+};
+
+const rawRepeatedEntranceSchema = z
+  .strictObject({
+    type: z.literal("repeated-effect"),
+    effect: rawEntranceEffectSchema,
+    count: rawRepeatCountSchema,
+  })
+  .readonly();
+
 export type EntranceEffectDeclaration =
   | EntranceEffect
-  | RepeatedEffect<EntranceEffect>;
+  | RepeatedEffect<EntranceEffect>
+  | SteppedEffect<EntranceEffect | RepeatedEffect<EntranceEffect>>;
 
 const rawEntranceEffectDeclarationSchema = z.union([
   rawEntranceEffectSchema,
+  rawRepeatedEntranceSchema,
   z
     .strictObject({
-      type: z.literal("repeated-effect"),
-      effect: rawEntranceEffectSchema,
-      count: rawRepeatCountSchema,
+      type: z.literal("stepped-effect"),
+      step: rawStepNumberSchema,
+      effect: z.union([rawEntranceEffectSchema, rawRepeatedEntranceSchema]),
     })
     .readonly(),
 ]);
@@ -519,17 +630,27 @@ export const entranceEffectDeclarationSchema: z.ZodType<EntranceEffectDeclaratio
       : never
   >;
 
+const rawRepeatedEmphasisSchema = z
+  .strictObject({
+    type: z.literal("repeated-effect"),
+    effect: rawEmphasisEffectSchema,
+    count: rawRepeatCountSchema,
+  })
+  .readonly();
+
 export type EmphasisEffectDeclaration =
   | EmphasisEffect
-  | RepeatedEffect<EmphasisEffect>;
+  | RepeatedEffect<EmphasisEffect>
+  | SteppedEffect<EmphasisEffect | RepeatedEffect<EmphasisEffect>>;
 
 const rawEmphasisEffectDeclarationSchema = z.union([
   rawEmphasisEffectSchema,
+  rawRepeatedEmphasisSchema,
   z
     .strictObject({
-      type: z.literal("repeated-effect"),
-      effect: rawEmphasisEffectSchema,
-      count: rawRepeatCountSchema,
+      type: z.literal("stepped-effect"),
+      step: rawStepNumberSchema,
+      effect: z.union([rawEmphasisEffectSchema, rawRepeatedEmphasisSchema]),
     })
     .readonly(),
 ]);
@@ -543,15 +664,77 @@ export const emphasisEffectDeclarationSchema: z.ZodType<EmphasisEffectDeclaratio
       : never
   >;
 
+const rawRepeatedExitSchema = z
+  .strictObject({
+    type: z.literal("repeated-effect"),
+    effect: rawExitEffectSchema,
+    count: rawRepeatCountSchema,
+  })
+  .readonly();
+
+export type ExitEffectDeclaration =
+  | ExitEffect
+  | RepeatedEffect<ExitEffect>
+  | SteppedEffect<ExitEffect | RepeatedEffect<ExitEffect>>;
+
+const rawExitEffectDeclarationSchema = z.union([
+  rawExitEffectSchema,
+  rawRepeatedExitSchema,
+  z
+    .strictObject({
+      type: z.literal("stepped-effect"),
+      step: rawStepNumberSchema,
+      effect: z.union([rawExitEffectSchema, rawRepeatedExitSchema]),
+    })
+    .readonly(),
+]);
+export const exitEffectDeclarationSchema: z.ZodType<ExitEffectDeclaration> =
+  rawExitEffectDeclarationSchema satisfies z.ZodType<
+    AssertExact<
+      ExitEffectDeclaration,
+      z.infer<typeof rawExitEffectDeclarationSchema>
+    > extends true
+      ? ExitEffectDeclaration
+      : never
+  >;
+
+const rawSteppedEffectSchema = z
+  .strictObject({
+    type: z.literal("stepped-effect"),
+    step: rawStepNumberSchema,
+    effect: z.union([
+      rawEntranceEffectSchema,
+      rawRepeatedEntranceSchema,
+      rawEmphasisEffectSchema,
+      rawRepeatedEmphasisSchema,
+      rawExitEffectSchema,
+      rawRepeatedExitSchema,
+    ]),
+  })
+  .readonly();
+export const steppedEffectSchema: z.ZodType<SteppedEffect> =
+  rawSteppedEffectSchema satisfies z.ZodType<
+    AssertExact<
+      SteppedEffect,
+      z.infer<typeof rawSteppedEffectSchema>
+    > extends true
+      ? SteppedEffect
+      : never
+  >;
+
 export type NormalizedEffect =
   | (EntranceEffect & { readonly repeatCount?: RepeatCount | undefined })
-  | (EmphasisEffect & { readonly repeatCount?: RepeatCount | undefined });
+  | (EmphasisEffect & { readonly repeatCount?: RepeatCount | undefined })
+  | (ExitEffect & { readonly repeatCount?: RepeatCount | undefined });
 
 const rawNormalizedEffectSchema = z.discriminatedUnion("kind", [
   entranceEffectObjectSchema
     .extend({ repeatCount: rawRepeatCountSchema.optional() })
     .readonly(),
   emphasisEffectObjectSchema
+    .extend({ repeatCount: rawRepeatCountSchema.optional() })
+    .readonly(),
+  exitEffectObjectSchema
     .extend({ repeatCount: rawRepeatCountSchema.optional() })
     .readonly(),
 ]);
@@ -698,7 +881,17 @@ export type MotionProps = {
     | EntranceEffectDeclaration
     | readonly EntranceEffectDeclaration[]
     | undefined;
-  readonly emphasis?: EmphasisEffectDeclaration | undefined;
+  readonly emphasis?:
+    | EmphasisEffectDeclaration
+    | readonly EmphasisEffectDeclaration[]
+    | undefined;
+  readonly exit?:
+    | ExitEffectDeclaration
+    | readonly ExitEffectDeclaration[]
+    | undefined;
+  readonly startAt?: MotionTiming | undefined;
+  readonly publishStart?: MotionMoment | undefined;
+  readonly publishEnd?: MotionMoment | undefined;
   readonly motion?: boolean | undefined;
 };
 
@@ -709,10 +902,26 @@ const motionPropsObjectSchema = z.strictObject({
       z.array(rawEntranceEffectDeclarationSchema).readonly(),
     ])
     .optional(),
-  emphasis: rawEmphasisEffectDeclarationSchema.optional(),
+  emphasis: z
+    .union([
+      rawEmphasisEffectDeclarationSchema,
+      z.array(rawEmphasisEffectDeclarationSchema).readonly(),
+    ])
+    .optional(),
+  exit: z
+    .union([
+      rawExitEffectDeclarationSchema,
+      z.array(rawExitEffectDeclarationSchema).readonly(),
+    ])
+    .optional(),
+  startAt: rawMotionTimingSchema.optional(),
+  publishStart: rawMotionMomentSchema.optional(),
+  publishEnd: rawMotionMomentSchema.optional(),
   motion: z.boolean().optional(),
 });
 export const motionPropsShape = motionPropsObjectSchema.shape;
+export const motionPropKeys: readonly string[] = Object.keys(motionPropsShape);
+export const motionPropKeySet: ReadonlySet<string> = new Set(motionPropKeys);
 const rawMotionPropsSchema = motionPropsObjectSchema.readonly();
 export const motionPropsSchema: z.ZodType<MotionProps> =
   rawMotionPropsSchema satisfies z.ZodType<
@@ -801,7 +1010,13 @@ export const ownerMotionTargetSchema: z.ZodType<OwnerMotionTarget> =
 
 export type OwnerMotionEffect = {
   readonly target: OwnerMotionTarget;
-  readonly effect: EntranceEffectDeclaration | EmphasisEffectDeclaration;
+  readonly effect:
+    | EntranceEffect
+    | RepeatedEffect<EntranceEffect>
+    | EmphasisEffect
+    | RepeatedEffect<EmphasisEffect>
+    | ExitEffect
+    | RepeatedEffect<ExitEffect>;
   readonly range?: MotionTargetRange | undefined;
 };
 
@@ -809,8 +1024,12 @@ const rawOwnerMotionEffectSchema = z
   .strictObject({
     target: rawOwnerMotionTargetSchema,
     effect: z.union([
-      rawEntranceEffectDeclarationSchema,
-      rawEmphasisEffectDeclarationSchema,
+      rawEntranceEffectSchema,
+      rawRepeatedEntranceSchema,
+      rawEmphasisEffectSchema,
+      rawRepeatedEmphasisSchema,
+      rawExitEffectSchema,
+      rawRepeatedExitSchema,
     ]),
     range: rawMotionTargetRangeSchema.optional(),
   })

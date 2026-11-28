@@ -60,7 +60,12 @@ export {
   emphasisEffectSchema,
   entranceEffectDeclarationSchema,
   entranceEffectSchema,
+  entrancePresetSchema,
+  exitEffectDeclarationSchema,
+  exitEffectSchema,
+  exitPresetSchema,
   fillColorOptionsSchema,
+  instantEffectOptionsSchema,
   motionCompletionStateSchema,
   motionDirectionSchema,
   motionGranularitySchema,
@@ -83,20 +88,31 @@ export {
   repeatedEffectSchema,
   spinAngleSchema,
   spinOptionsSchema,
+  steppedEffectSchema,
   after,
+  appear,
   breathe,
+  collapse,
   createMotionScopeHandle,
+  disappear,
   fillColor,
   fade,
+  fadeOut,
   fly,
+  flyOut,
   floatDown,
+  floatOut,
   floatUp,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "./motion-api.ts";
 export { motionSchedule } from "./motion-query.ts";
 export type {
@@ -131,6 +147,11 @@ export type {
   EmphasisEffectDeclaration,
   EntranceEffect,
   EntranceEffectDeclaration,
+  EntrancePreset,
+  ExitEffect,
+  ExitEffectDeclaration,
+  ExitPreset,
+  InstantEffectOptions,
   MotionCompletionState,
   MotionDirection,
   MotionGranularity,
@@ -151,6 +172,7 @@ export type {
   ResolvedMotionStep,
   SpinOptions,
   StepProps,
+  SteppedEffect,
 } from "./motion-api.ts";
 
 type XmlAttributes = Record<string, string | number | boolean | undefined>;
@@ -240,6 +262,7 @@ function createTimingIds(): TimingIds {
 }
 
 export type TimingEffect = ResolvedMotionEffect & {
+  readonly targetKey?: string;
   readonly effectIndex: number;
   readonly partIndex?: number;
   readonly targetKind: string;
@@ -250,6 +273,7 @@ export type TimingEffect = ResolvedMotionEffect & {
   readonly targetHasBackground: boolean;
   readonly targetParagraphCount?: number;
   readonly targetMembers?: readonly MotionNativeMember[];
+  readonly groupNativeStart?: MotionPlanStart;
   readonly buildGroupId?: number;
   readonly groupSpinCenter?: { readonly x: number; readonly y: number };
 };
@@ -353,6 +377,7 @@ function visibilitySet(
   targetElement: string,
   visibility: "visible" | "hidden",
   ids: TimingIds,
+  delay = 0,
 ): string {
   return element(
     "p:set",
@@ -363,7 +388,7 @@ function visibilitySet(
       element(
         "p:cTn",
         { id: ids.take(), dur: 1, fill: "hold" },
-        element("p:stCondLst", undefined, element("p:cond", { delay: 0 })),
+        element("p:stCondLst", undefined, element("p:cond", { delay })),
       ),
       targetElement,
       attributeNames("style.visibility"),
@@ -377,13 +402,14 @@ function direction(effect: ResolvedMotionEffect): MotionDirection {
 }
 
 /**
- * Shape.text is native text inside the shape object, not a standalone text box. A whole entrance on
- * such a shape must keep its fill and text in one object target so applications cannot reveal the
- * background before the text. Standalone Text and explicit granularity keep their text projection.
+ * Shape.text is native text inside the shape object, not a standalone text box. A whole entrance
+ * or exit on such a shape must keep its fill and text in one object target so applications cannot
+ * reveal or hide the background independently from the text. Standalone Text and explicit
+ * granularity keep their text projection.
  */
-function isWholeShapeTextEntrance(effect: TimingEffect): boolean {
+function isWholeShapeTextLifecycle(effect: TimingEffect): boolean {
   return (
-    effect.kind === "entrance" &&
+    (effect.kind === "entrance" || effect.kind === "exit") &&
     effect.targetKind === "shape" &&
     effect.targetTextBody &&
     effect.targetHasBackground &&
@@ -399,7 +425,7 @@ function wholeTextRanges(effect: TimingEffect): readonly {
   readonly start: number;
   readonly end: number;
 }[] {
-  if (isWholeShapeTextEntrance(effect)) return [];
+  if (isWholeShapeTextLifecycle(effect)) return [];
   if (
     !effect.targetTextBody ||
     effect.target.range !== undefined ||
@@ -581,11 +607,19 @@ function behaviorIds(
     timeNodeValue(effect.intervalMs, "animation iteration interval");
   }
   const show = (targetElement: string) =>
-    visibilitySet(targetElement, "visible", ids);
-  const filter = (name: string, targetElement: string) =>
+    visibilitySet(targetElement, "visible", ids, 0);
+  const hideDelay =
+    effect.preset === "disappear" ? 0 : Math.max(0, duration - 1);
+  const hide = (targetElement: string) =>
+    visibilitySet(targetElement, "hidden", ids, hideDelay);
+  const filter = (
+    name: string,
+    targetElement: string,
+    transition: "in" | "out" = "in",
+  ) =>
     element(
       "p:animEffect",
-      { transition: "in", filter: name },
+      { transition, filter: name },
       element(
         "p:cBhvr",
         undefined,
@@ -648,21 +682,28 @@ function behaviorIds(
     targetElement = target(),
     additive: "sum" | "base" = "sum",
   ) => motion(name, 0, 1, additive, targetElement, formula);
-  const rotation = (targetElement: string, additive: boolean | "sum" = false) =>
+  const rotation = (
+    targetElement: string,
+    additive: boolean | "sum" = false,
+    fromOverride?: number,
+    toOverride?: number,
+  ) =>
     element(
       "p:animRot",
-      typeof effect.by === "number"
+      fromOverride === undefined && typeof effect.by === "number"
         ? { by: Math.round(effect.by * 60000) }
         : {
             from: Math.round(
-              (typeof effect.from === "number"
-                ? effect.from
-                : typeof effect.to === "number"
-                  ? 0
-                  : 360) * 60000,
+              (fromOverride ??
+                (typeof effect.from === "number"
+                  ? effect.from
+                  : typeof effect.to === "number"
+                    ? 0
+                    : 360)) * 60000,
             ),
             to: Math.round(
-              (typeof effect.to === "number" ? effect.to : 0) * 60000,
+              (toOverride ?? (typeof effect.to === "number" ? effect.to : 0)) *
+                60000,
             ),
           },
       element(
@@ -687,6 +728,12 @@ function behaviorIds(
           .map((targetElement) => show(targetElement))
           .join("")
       : show(wholeText ? timingTarget(effect, undefined) : target());
+  const hideOnce = () =>
+    wholeText && effect.kind === "exit"
+      ? [...paragraphTargets(), ...backgroundTargets()]
+          .map((targetElement) => hide(targetElement))
+          .join("")
+      : hide(wholeText ? timingTarget(effect, undefined) : target());
   const filterTargets = () => (wholeText ? paragraphTargets() : [target()]);
   const positionTargets = () => (wholeText ? paragraphTargets() : [target()]);
   const backgroundTargets = () =>
@@ -696,7 +743,9 @@ function behaviorIds(
   // builds, so the shape displacement must be repeated on complete pRg targets. Relative formulas
   // preserve each paragraph's local placement instead of copying the whole-object center.
   const mixedShapeRanges =
-    isWholeShapeTextEntrance(effect) && mixedShapeText
+    effect.kind === "entrance" &&
+    isWholeShapeTextLifecycle(effect) &&
+    mixedShapeText
       ? Array.from(
           { length: effect.targetParagraphCount ?? 0 },
           (_, index) => ({
@@ -805,6 +854,10 @@ function behaviorIds(
 
   const primaryBehaviors = (): readonly string[] => {
     switch (effect.preset) {
+      case "appear":
+        return [showOnce()];
+      case "disappear":
+        return [hideOnce()];
       case "fade":
         return [
           showOnce(),
@@ -814,6 +867,16 @@ function behaviorIds(
           ...backgroundTargets().map((targetElement) =>
             filter("fade", targetElement),
           ),
+        ];
+      case "fadeOut":
+        return [
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement, "out"),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter("fade", targetElement, "out"),
+          ),
+          hideOnce(),
         ];
       case "wipe": {
         const filters: Record<MotionDirection, string> = {
@@ -830,6 +893,23 @@ function behaviorIds(
           ...backgroundTargets().map((targetElement) =>
             filter(filters[direction(effect)], targetElement),
           ),
+        ];
+      }
+      case "wipeOut": {
+        const filters: Record<MotionDirection, string> = {
+          top: "wipe(up)",
+          right: "wipe(right)",
+          bottom: "wipe(down)",
+          left: "wipe(left)",
+        };
+        return [
+          ...filterTargets().map((targetElement) =>
+            filter(filters[direction(effect)], targetElement, "out"),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter(filters[direction(effect)], targetElement, "out"),
+          ),
+          hideOnce(),
         ];
       }
       case "zoom": {
@@ -1030,6 +1110,200 @@ function behaviorIds(
           ]),
         ];
       }
+      case "zoomOut": {
+        const targets = positionTargets();
+        if (!wholeText) {
+          return [
+            singleMotion("ppt_w", "#ppt_w", 0, false),
+            singleMotion("ppt_h", "#ppt_h", 0, false),
+            filter("fade", target(), "out"),
+            hideOnce(),
+          ];
+        }
+        const center = geometryCenter(
+          targetBox(effect, "whole-text zoom-out"),
+          dimensions,
+        );
+        const geometry = [...targets, ...backgroundTargets()].flatMap(
+          (targetElement) => [
+            singleMotion(
+              "ppt_x",
+              0,
+              `${formulaNumber(center.x)}-#ppt_x`,
+              "sum",
+              targetElement,
+            ),
+            singleMotion(
+              "ppt_y",
+              0,
+              `${formulaNumber(center.y)}-#ppt_y`,
+              "sum",
+              targetElement,
+            ),
+            singleMotion("ppt_w", "#ppt_w", 0, false, targetElement),
+            singleMotion("ppt_h", "#ppt_h", 0, false, targetElement),
+          ],
+        );
+        return [
+          ...geometry,
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement, "out"),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter("fade", targetElement, "out"),
+          ),
+          hideOnce(),
+        ];
+      }
+      case "flyOut": {
+        const flyTo: Record<MotionDirection, readonly [string, string]> = {
+          left: ["0-#ppt_w/2", "#ppt_y"],
+          right: ["1+#ppt_w/2", "#ppt_y"],
+          top: ["#ppt_x", "0-#ppt_h/2"],
+          bottom: ["#ppt_x", "1+#ppt_h/2"],
+        };
+        if (!wholeText) {
+          const [x, y] = flyTo[direction(effect)];
+          return [
+            singleMotion("ppt_x", "#ppt_x", x, true),
+            singleMotion("ppt_y", "#ppt_y", y, true),
+            hideOnce(),
+          ];
+        }
+        const offset = flyOffset(effect, dimensions);
+        const geometries = [
+          ...positionTargets(),
+          ...backgroundTargets(),
+        ].flatMap((targetElement) => [
+          singleMotion(
+            "ppt_x",
+            "#ppt_x",
+            formulaOffset("#ppt_x", offset.x),
+            true,
+            targetElement,
+          ),
+          singleMotion(
+            "ppt_y",
+            "#ppt_y",
+            formulaOffset("#ppt_y", offset.y),
+            true,
+            targetElement,
+          ),
+        ]);
+        return [...geometries, hideOnce()];
+      }
+      case "spinOut": {
+        if (!wholeText) {
+          return [
+            singleMotion("ppt_w", "#ppt_w", 0, false),
+            singleMotion("ppt_h", "#ppt_h", 0, false),
+            singleMotion("style.rotation", 0, 360, false),
+            filter("fade", target(), "out"),
+            hideOnce(),
+          ];
+        }
+        const box = targetBox(effect, "whole-text spin-out");
+        const center = serializedGeometryCenter(box, dimensions);
+        const geometry = positionTargets().flatMap((targetElement) => [
+          singleMotion("ppt_w", "#ppt_w", 0, false, targetElement),
+          singleMotion("ppt_h", "#ppt_h", 0, false, targetElement),
+          singleMotion("style.rotation", 0, 360, false, targetElement),
+          singleMotion(
+            "ppt_x",
+            0,
+            `${formulaNumber(center.x)}-#ppt_x`,
+            "sum",
+            targetElement,
+          ),
+          singleMotion(
+            "ppt_y",
+            0,
+            `${formulaNumber(center.y)}-#ppt_y`,
+            "sum",
+            targetElement,
+          ),
+        ]);
+        return [
+          ...geometry,
+          ...backgroundTargets().flatMap((targetElement) => [
+            singleMotion(
+              "ppt_x",
+              0,
+              `${formulaNumber(center.x)}-#ppt_x`,
+              "sum",
+              targetElement,
+            ),
+            singleMotion(
+              "ppt_y",
+              0,
+              `${formulaNumber(center.y)}-#ppt_y`,
+              "sum",
+              targetElement,
+            ),
+            singleMotion("ppt_w", "#ppt_w", 0, false, targetElement),
+            singleMotion("ppt_h", "#ppt_h", 0, false, targetElement),
+            rotation(targetElement, "sum", 0, 360),
+            filter("fade", targetElement, "out"),
+          ]),
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement, "out"),
+          ),
+          hideOnce(),
+        ];
+      }
+      case "collapse": {
+        if (!wholeText) {
+          return [
+            singleMotion("ppt_w", "#ppt_w", 0, false),
+            singleMotion("ppt_h", "#ppt_h", "#ppt_h", false),
+            hideOnce(),
+          ];
+        }
+        const center = geometryCenter(
+          targetBox(effect, "whole-text collapse"),
+          dimensions,
+        );
+        return [
+          ...[...positionTargets(), ...backgroundTargets()].flatMap(
+            (targetElement) => [
+              singleMotion(
+                "ppt_x",
+                0,
+                `${formulaNumber(center.x)}-#ppt_x`,
+                "sum",
+                targetElement,
+              ),
+              singleMotion("ppt_w", "#ppt_w", 0, false, targetElement),
+              singleMotion("ppt_h", "#ppt_h", "#ppt_h", false, targetElement),
+            ],
+          ),
+          hideOnce(),
+        ];
+      }
+      case "floatOut": {
+        if (!wholeText) {
+          return [
+            filter("fade", target(), "out"),
+            singleMotion("ppt_x", "#ppt_x", "#ppt_x", false),
+            singleMotion("ppt_y", "#ppt_y", "#ppt_y+.1", false),
+            hideOnce(),
+          ];
+        }
+        const targets = [...positionTargets(), ...backgroundTargets()];
+        return [
+          ...filterTargets().map((targetElement) =>
+            filter("fade", targetElement, "out"),
+          ),
+          ...backgroundTargets().map((targetElement) =>
+            filter("fade", targetElement, "out"),
+          ),
+          ...targets.flatMap((targetElement) => [
+            singleMotion("ppt_x", 0, 0, "sum", targetElement),
+            singleMotion("ppt_y", 0, 0.1, "sum", targetElement),
+          ]),
+          hideOnce(),
+        ];
+      }
       case "spin": {
         if (!wholeText && effect.groupSpinCenter === undefined) {
           return [
@@ -1134,6 +1408,7 @@ function effectTreeXml(
     );
   }
   const preset = {
+    appear: { id: 1, class: "entr" },
     fade: { id: 10, class: "entr" },
     wipe: { id: 22, class: "entr" },
     zoom: { id: 53, class: "entr" },
@@ -1145,13 +1420,24 @@ function effectTreeXml(
     spin: { id: 8, class: "emph" },
     breathe: { id: 0, class: "emph" },
     fillColor: { id: 9, class: "emph" },
+    disappear: { id: 1, class: "exit" },
+    fadeOut: { id: 10, class: "exit" },
+    wipeOut: { id: 22, class: "exit" },
+    zoomOut: { id: 53, class: "exit" },
+    flyOut: { id: 2, class: "exit" },
+    floatOut: { id: 42, class: "exit" },
+    spinOut: { id: 49, class: "exit" },
+    collapse: { id: 17, class: "exit" },
   }[effect.preset];
   const subtype =
-    effect.preset === "zoom"
+    effect.preset === "zoom" || effect.preset === "zoomOut"
       ? 16
-      : effect.preset === "stretch"
+      : effect.preset === "stretch" || effect.preset === "collapse"
         ? 10
-        : effect.preset === "wipe" || effect.preset === "fly"
+        : effect.preset === "wipe" ||
+            effect.preset === "wipeOut" ||
+            effect.preset === "fly" ||
+            effect.preset === "flyOut"
           ? { top: 1, right: 2, bottom: 4, left: 8 }[direction(effect)]
           : 0;
   const easing = effect.easing;
@@ -1392,6 +1678,34 @@ export type MotionChoreographyEmitInput = {
   readonly buildList: readonly string[];
 };
 
+/** Native show mechanism for `<p:par>` instant appear entrance (`presetID="1"`). */
+export const motionAppearMechanism = defineShowMechanism({
+  key: "motion-appear",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
+/** Native show mechanism for `<p:par>` exit effects (`presetClass="exit"`). */
+export const motionExitMechanism = defineShowMechanism({
+  key: "motion-exit",
+  role: "show",
+  emit: (model: MotionEffectEmitInput, _context: undefined) =>
+    emitMotionEffectTree(model),
+  import: {
+    target: "slide",
+    slot: "timing",
+    matches: () => false,
+    read: readSlideMotionImport,
+  },
+});
+
 /** Native show mechanism for root `<p:timing>` (`tmRoot`, `mainSeq`, `endSync`, `bldLst`) choreography. */
 export const motionChoreographyMechanism = defineShowMechanism({
   key: "motion-choreography",
@@ -1471,6 +1785,7 @@ export const motionChoreographyMechanism = defineShowMechanism({
 });
 
 const effectMechanismByPreset = {
+  appear: motionAppearMechanism,
   fade: motionFadeMechanism,
   wipe: motionWipeMechanism,
   zoom: motionZoomMechanism,
@@ -1482,6 +1797,14 @@ const effectMechanismByPreset = {
   spin: motionSpinMechanism,
   breathe: motionBreatheMechanism,
   fillColor: motionFillColorMechanism,
+  disappear: motionExitMechanism,
+  fadeOut: motionExitMechanism,
+  wipeOut: motionExitMechanism,
+  zoomOut: motionExitMechanism,
+  flyOut: motionExitMechanism,
+  floatOut: motionExitMechanism,
+  spinOut: motionExitMechanism,
+  collapse: motionExitMechanism,
 } as const;
 
 function effectTree(
@@ -1557,7 +1880,12 @@ function dependencyTimingId(
     );
   }
   if ("group" in dependency) {
-    return targetGroupIds.get(`${stepKey}:${dependency.targetId}`);
+    const targetKey = (dependency as { readonly targetKey?: unknown })
+      .targetKey;
+    return typeof targetKey === "string"
+      ? (targetGroupIds.get(`${stepKey}:${targetKey}`) ??
+          targetGroupIds.get(`${stepKey}:byId:${dependency.targetId}`))
+      : targetGroupIds.get(`${stepKey}:byId:${dependency.targetId}`);
   }
   return effectNodeIds.get(
     `${dependency.targetId}:${dependency.effectIndex}:${dependency.partIndex ?? ""}`,
@@ -1805,7 +2133,13 @@ function timingXml(
         referencedScopeNodes.add(key);
       }
     } else if ("group" in dependency) {
-      referencedTargetGroups.add(`${stepKey}:${dependency.targetId}`);
+      const targetKey = (dependency as { readonly targetKey?: unknown })
+        .targetKey;
+      referencedTargetGroups.add(
+        typeof targetKey === "string"
+          ? `${stepKey}:${targetKey}`
+          : `${stepKey}:${dependency.targetId}`,
+      );
     }
   };
   const collectStartReferences = (
@@ -1890,9 +2224,24 @@ function timingXml(
         continue;
       }
       if (node.effects.length > 1) {
-        targetGroupIds.set(`${stepKey}:${node.targetId}`, ids.take());
+        const groupTimingId = ids.take();
+        targetGroupIds.set(`${stepKey}:${node.targetKey}`, groupTimingId);
+        if (!targetGroupIds.has(`${stepKey}:byId:${node.targetId}`)) {
+          targetGroupIds.set(`${stepKey}:byId:${node.targetId}`, groupTimingId);
+        }
       }
       for (const effect of node.effects) {
+        if (effect.groupNativeStart !== undefined) {
+          const { base: groupStartBase } = motionPlanStartLayers(
+            effect.groupNativeStart,
+          );
+          if (
+            groupStartBase.kind === "condition-join" &&
+            !conditionNodeIds.has(`${stepKey}:${groupStartBase.id}`)
+          ) {
+            conditionNodeIds.set(`${stepKey}:${groupStartBase.id}`, ids.take());
+          }
+        }
         effectNodeIds.set(effectKey(effect), ids.take());
       }
     }
@@ -2247,7 +2596,7 @@ function timingXml(
             ? `scope:${node.id}`
             : node.kind === "completion-collector"
               ? `completion:${node.scopeId}`
-              : `target:${node.targetId}`;
+              : `target:${node.targetKey}`;
         for (const placement of conditionDefinitionsBefore) {
           if (placement.join.beforeNodeId !== nodeId) continue;
           rendered.push(
@@ -2465,13 +2814,22 @@ function timingXml(
           targetGroupIds,
           conditionNodeIds,
         );
-        const targetGroupKey = `${step.key}:${node.targetId}`;
-        const effectStarts = node.effects.map((effect) =>
-          addNativeStartDelay(effectiveStart, childDelay(effect)),
-        );
+        const targetGroupKey = `${step.key}:${node.targetKey}`;
+        const targetIdGroupKey = `${step.key}:${node.targetId}`;
+        const effectStarts = node.effects.map((effect) => {
+          const relative = effect.groupNativeStart;
+          if (relative === undefined || relative.kind === "parent-start") {
+            return addNativeStartDelay(
+              effectiveStart,
+              relative?.delayMs ?? childDelay(effect),
+            );
+          }
+          return composeMotionPlanStarts(effectiveStart, relative) ?? relative;
+        });
         const keepTargetGroup =
           node.effects.length > 1 &&
           (referencedTargetGroups.has(targetGroupKey) ||
+            referencedTargetGroups.has(targetIdGroupKey) ||
             effectStarts.some((start) => start === undefined));
         if (keepTargetGroup) {
           const groupId = targetGroupIds.get(targetGroupKey);
@@ -2493,10 +2851,63 @@ function timingXml(
               effect.target.range?.type === "chart"
                 ? chartBuildGroupIds.get(effect.target.id)
                 : undefined;
+            const childStart = effect.groupNativeStart ?? {
+              kind: "parent-start" as const,
+              delayMs: childDelay(effect),
+            };
+            let resolvedChildStart = childStart;
+            if (resolvedChildStart.kind === "condition-join") {
+              primaryChildren.push(
+                conditionJoinTree(
+                  resolvedChildStart,
+                  step.key,
+                  ids,
+                  effectNodeIds,
+                  scopeNodeIds,
+                  targetGroupIds,
+                  conditionNodeIds,
+                ),
+              );
+              resolvedChildStart = {
+                kind: "condition-end",
+                id: resolvedChildStart.id,
+                delayMs: 0,
+              };
+            }
+            if (resolvedChildStart.kind === "delay-layer") {
+              const lastDelay =
+                motionPlanStartLayers(resolvedChildStart).delays.at(-1) ?? 0;
+              const projection = renderedEffect(
+                effect,
+                effectIndex === 0 ? "afterEffect" : "withEffect",
+                element("p:cond", { delay: lastDelay }),
+                effectId,
+                buildGroupId,
+              );
+              primaryChildren.push(
+                ...wrapDelayLayers(
+                  resolvedChildStart,
+                  effectRoots(
+                    [...projection.primary, ...projection.companions],
+                    false,
+                  ),
+                  effectIndex === 0 ? "afterEffect" : "withEffect",
+                ).map(({ xml }) => xml),
+              );
+              continue;
+            }
+            const childCond = nativeStartCondition(
+              resolvedChildStart,
+              step.key,
+              effectNodeIds,
+              scopeNodeIds,
+              targetGroupIds,
+              conditionNodeIds,
+            );
             const projection = renderedEffect(
               effect,
               effectIndex === 0 ? "afterEffect" : "withEffect",
-              element("p:cond", { delay: childDelay(effect) }),
+              childCond,
               effectId,
               buildGroupId,
             );
@@ -2549,6 +2960,27 @@ function timingXml(
             }
             effectStart = { kind: "parent-start", delayMs: lastDelay };
             effectNodeType = effectIndex === 0 ? "afterEffect" : "withEffect";
+          }
+          if (effectStart.kind === "condition-join") {
+            rendered.push(
+              renderedRoot(
+                conditionJoinTree(
+                  effectStart,
+                  step.key,
+                  ids,
+                  effectNodeIds,
+                  scopeNodeIds,
+                  targetGroupIds,
+                  conditionNodeIds,
+                ),
+                "condition-definition",
+              ),
+            );
+            effectStart = {
+              kind: "condition-end",
+              id: effectStart.id,
+              delayMs: 0,
+            };
           }
           const effectCondition = nativeStartCondition(
             effectStart,
@@ -2674,7 +3106,7 @@ function timingXml(
       continue;
     }
     if (!isWholeTextProjection(declaration)) continue;
-    if (declaration.kind === "entrance") {
+    if (declaration.kind === "entrance" || declaration.kind === "exit") {
       wholeTextEntranceTargets.add(effect.target.id);
     }
     const declarations =
@@ -2692,7 +3124,7 @@ function timingXml(
     const isDeclaredTextEffect =
       declaration.targetTextBody && declaration.target.id === effect.target.id;
     const wholeShape =
-      isWholeShapeTextEntrance(effect) &&
+      isWholeShapeTextLifecycle(effect) &&
       declaration.target.id === effect.target.id;
     // Whole-text entrance builds by paragraph, preserving native responsibilities of pre-click hiding and per-paragraph delays.
     const build =
@@ -2903,6 +3335,7 @@ function buildOwnerMotionSteps(
       ([targetId, list]) => ({
         kind: "target",
         targetId,
+        targetKey: `${stepKey}:${targetId}:whole`,
         nativeStart: { kind: "parent-start", delayMs: 0 },
         effects: list,
       }),
@@ -2919,6 +3352,7 @@ function buildOwnerMotionSteps(
 }
 
 const motionMechanisms = [
+  motionAppearMechanism,
   motionFadeMechanism,
   motionWipeMechanism,
   motionZoomMechanism,
@@ -2929,6 +3363,7 @@ const motionMechanisms = [
   motionSpinMechanism,
   motionBreatheMechanism,
   motionFillColorMechanism,
+  motionExitMechanism,
   motionChoreographyMechanism,
 ] as const;
 
@@ -2936,6 +3371,7 @@ const motionMechanisms = [
 export const motionCapability: SlideCapabilityModule<
   BoundSlideCapability,
   readonly [
+    SealedShowMechanism<"motion-appear">,
     SealedShowMechanism<"motion-fade">,
     SealedShowMechanism<"motion-wipe">,
     SealedShowMechanism<"motion-zoom">,
@@ -2946,6 +3382,7 @@ export const motionCapability: SlideCapabilityModule<
     SealedShowMechanism<"motion-spin">,
     SealedShowMechanism<"motion-breathe">,
     SealedShowMechanism<"motion-fill-color">,
+    SealedShowMechanism<"motion-exit">,
     SealedShowMechanism<"motion-choreography">,
   ]
 > = Object.freeze({

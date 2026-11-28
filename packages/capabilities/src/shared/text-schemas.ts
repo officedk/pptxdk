@@ -194,9 +194,7 @@ const textAuthorPropsObjectSchema = z.strictObject({
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   style: rawTextBoxStyleSchema.optional(),
-  enter: motionPropsShape.enter,
-  emphasis: motionPropsShape.emphasis,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 export const textAuthorPropsKeys: readonly string[] = Object.keys(
@@ -218,7 +216,7 @@ export const textBoxAllowedParamKeys = new Set([
   "children",
 ]);
 
-export type ParagraphDeclarationProps = {
+export type ParagraphDeclarationProps = MotionProps & {
   readonly id?: AuthorId | undefined;
   readonly style?: ParagraphStyle | undefined;
 };
@@ -226,6 +224,7 @@ export type ParagraphDeclarationProps = {
 const paragraphAuthorPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
   style: rawParagraphStyleSchema.optional(),
+  ...motionPropsShape,
 });
 export const paragraphAuthorPropsKeys: readonly string[] = Object.keys(
   paragraphAuthorPropsObjectSchema.shape,

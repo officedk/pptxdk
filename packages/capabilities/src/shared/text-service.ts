@@ -45,6 +45,13 @@ import {
   type ShapedOutlineGlyph,
 } from "../font/font-engine.ts";
 import {
+  parseStepDeclarationProps,
+  pickMotionProps,
+  validateMotionFlag,
+  type StepDeclaration,
+} from "../motion/motion-api.ts";
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
+import {
   hasLocalDeclaration,
   localDeclaredKeySet,
   resolvePlaceholderBaseTextStyle,
@@ -1332,6 +1339,12 @@ function paragraphXml(
   return `<a:p>${pPr}${runs.map((run) => runXml(run, theme, differential)).join("")}${endProperties}</a:p>`;
 }
 
+export type ParsedParagraphMotion = {
+  readonly paragraphIndex: number;
+  readonly props: Readonly<Record<string, unknown>>;
+  readonly step?: StepDeclaration;
+};
+
 function normalizeParagraphs(
   children: readonly unknown[],
   textStyle: ResolvedTextStyle,
@@ -1339,7 +1352,11 @@ function normalizeParagraphs(
   fields: TextFieldContext,
   placeholder?: PlaceholderResolutionContext,
   localSlideDeclaredStyle?: Readonly<Record<string, unknown>>,
-): Paragraph[] {
+  allowParagraphMotion = false,
+): {
+  readonly paragraphs: Paragraph[];
+  readonly paragraphMotions: ParsedParagraphMotion[];
+} {
   const baseRunStyle: RunStyle = {
     fontFamily: textStyle.fontFamily,
     fontSize: textStyle.fontSize,
@@ -1391,6 +1408,7 @@ function normalizeParagraphs(
         };
 
   const paragraphs: Paragraph[] = [];
+  const paragraphMotions: ParsedParagraphMotion[] = [];
   let inline: Run[] = [];
   const baseParagraphStyle: ParagraphStyle = {
     ...(textStyle.lineHeight === undefined
@@ -1420,45 +1438,41 @@ function normalizeParagraphs(
     }
   };
 
-  for (const child of children) {
-    if (!hostChild(child)) {
-      throw new CapabilityError(
-        "invalid-text-child",
-        "Text content tree contains invalid nodes",
-      );
-    }
-    if (
-      isHostText(child) ||
-      child.type === "span" ||
-      child.type === "slide-number"
-    ) {
-      collectRuns(
-        [child],
-        baseRunStyle,
-        inline,
-        theme,
-        fields,
-        localSlideRunDeclared,
-      );
-      continue;
-    }
-    if (child.type !== "paragraph") {
-      throw new CapabilityError(
-        "unsupported-text-child",
-        `${child.type} cannot be used directly in text box`,
-      );
-    }
+  const appendParagraphNode = (
+    node: HostElement,
+    currentStep?: StepDeclaration,
+  ): void => {
     flushInline();
-    const unknown = Object.keys(child.props).find(
-      (key) => key !== "style" && !textAuthorMetadataKeys.has(key),
+    const unknown = Object.keys(node.props).find(
+      (key) =>
+        key !== "style" &&
+        !textAuthorMetadataKeys.has(key) &&
+        !(allowParagraphMotion && motionPropKeySet.has(key)),
     );
     if (unknown !== undefined) {
+      if (motionPropKeySet.has(unknown)) {
+        throw new CapabilityError(
+          "unsupported-motion-host",
+          "Paragraph motion properties are only supported inside page-level Text and Shape",
+        );
+      }
       throw new CapabilityError(
         "unknown-parameter",
         `P contains unimplemented parameter ${unknown}`,
       );
     }
-    const localPStyle = paragraphStyle(child.props["style"]);
+    if (allowParagraphMotion) {
+      const motionProps = pickMotionProps(node.props);
+      validateMotionFlag(motionProps["motion"]);
+      if (Object.keys(motionProps).length > 0) {
+        paragraphMotions.push({
+          paragraphIndex: paragraphs.length,
+          props: motionProps,
+          ...(currentStep === undefined ? {} : { step: currentStep }),
+        });
+      }
+    }
+    const localPStyle = paragraphStyle(node.props["style"]);
     const rawLevel = localPStyle.list?.level ?? 0;
     const levelBase =
       placeholder === undefined
@@ -1523,7 +1537,7 @@ function normalizeParagraphs(
           );
     const runs: Run[] = [];
     collectRuns(
-      child.children,
+      node.children,
       paragraphRunStyle,
       runs,
       effectiveTheme,
@@ -1542,6 +1556,61 @@ function normalizeParagraphs(
         : { localEndStyle: localPRunDeclared }),
       wrap: textStyle.textWrap ?? "normal",
     });
+  };
+
+  for (const child of children) {
+    if (!hostChild(child)) {
+      throw new CapabilityError(
+        "invalid-text-child",
+        "Text content tree contains invalid nodes",
+      );
+    }
+    if (
+      isHostText(child) ||
+      child.type === "span" ||
+      child.type === "slide-number"
+    ) {
+      collectRuns(
+        [child],
+        baseRunStyle,
+        inline,
+        theme,
+        fields,
+        localSlideRunDeclared,
+      );
+      continue;
+    }
+    if (child.type === "motion-step") {
+      if (!allowParagraphMotion) {
+        throw new CapabilityError(
+          "unsupported-text-child",
+          "Step cannot be used directly inside this text container",
+        );
+      }
+      flushInline();
+      const step = parseStepDeclarationProps(child.props);
+      for (const nested of child.children) {
+        if (
+          !hostChild(nested) ||
+          isHostText(nested) ||
+          nested.type !== "paragraph"
+        ) {
+          throw new CapabilityError(
+            "unsupported-text-child",
+            "Step inside Text or Shape can only contain P paragraphs",
+          );
+        }
+        appendParagraphNode(nested, step);
+      }
+      continue;
+    }
+    if (child.type !== "paragraph") {
+      throw new CapabilityError(
+        "unsupported-text-child",
+        `${child.type} cannot be used directly in text box`,
+      );
+    }
+    appendParagraphNode(child);
   }
   flushInline();
   if (paragraphs.length === 0) {
@@ -1558,7 +1627,7 @@ function normalizeParagraphs(
       wrap: textStyle.textWrap ?? "normal",
     });
   }
-  return paragraphs;
+  return { paragraphs, paragraphMotions };
 }
 
 function fontDetailsFromSource(source: {
@@ -3219,15 +3288,26 @@ export function parseTextContent(
   label = "Text.style",
   placeholder?: PlaceholderResolutionContext,
   fullSlideStyle?: unknown,
+  options?: { readonly allowParagraphMotion?: boolean },
 ): {
   readonly paragraphs: readonly Paragraph[];
+  readonly paragraphMotions: readonly ParsedParagraphMotion[];
   readonly style: ResolvedTextStyle;
   readonly localBodyDeclared?: ReadonlySet<string>;
 } {
+  const allowParagraphMotion = options?.allowParagraphMotion === true;
   if (placeholder === undefined) {
     const style = readTextStyle(styleValue, label, theme);
-    const paragraphs = normalizeParagraphs(children, style, theme, fields);
-    return { paragraphs, style };
+    const { paragraphs, paragraphMotions } = normalizeParagraphs(
+      children,
+      style,
+      theme,
+      fields,
+      undefined,
+      undefined,
+      allowParagraphMotion,
+    );
+    return { paragraphs, paragraphMotions, style };
   }
   const { style, localDeclaredStyle } = readPlaceholderTextStyle(
     styleValue,
@@ -3240,15 +3320,16 @@ export function parseTextContent(
     "verticalAlign",
     ...paddingStyleKeys,
   ]);
-  const paragraphs = normalizeParagraphs(
+  const { paragraphs, paragraphMotions } = normalizeParagraphs(
     children,
     style,
     placeholder.masterTheme,
     fields,
     placeholder,
     localDeclaredStyle,
+    allowParagraphMotion,
   );
-  return { paragraphs, style, localBodyDeclared };
+  return { paragraphs, paragraphMotions, style, localBodyDeclared };
 }
 
 export const parseTextParagraphs = parseTextContent;

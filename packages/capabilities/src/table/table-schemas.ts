@@ -251,9 +251,7 @@ const tableDeclarationPropsObjectSchema = z.strictObject({
   link: linkTargetSchema.optional(),
   columns: z.array(rawTableColumnSchema).nonempty().readonly(),
   style: rawTableStyleSchema.optional(),
-  enter: motionPropsShape.enter,
-  emphasis: motionPropsShape.emphasis,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 const rawTableDeclarationPropsSchema =

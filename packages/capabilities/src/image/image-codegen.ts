@@ -12,6 +12,7 @@ import {
 } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import { serializeGeometryProp } from "../shape/shape-codegen.ts";
 import { readImage } from "./image-decode.ts";
 import {
@@ -20,7 +21,7 @@ import {
   imageStyleSchema,
 } from "./image-schemas.ts";
 
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 const imageDescriptorAllowedKeys = new Set([
   "image",

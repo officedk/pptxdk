@@ -7,29 +7,41 @@ import {
   deck,
   defineSlideLayout,
   font,
+  paragraph,
   shape,
   slide,
   slideLayout,
   slideMaster,
-  paragraph,
+  step,
+  text,
 } from "@pptxdk/capabilities/document";
 import { Group } from "@pptxdk/capabilities/group-elements";
 import {
   after,
+  appear,
   breathe,
+  collapse,
   createMotionScopeHandle,
+  disappear,
   fade,
+  fadeOut,
   fillColor,
   floatDown,
+  floatOut,
   floatUp,
   fly,
+  flyOut,
   motionCapability,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "@pptxdk/capabilities/motion";
 import {
   breatheEffectSchema,
@@ -42,6 +54,8 @@ import {
   emphasisEffectSchema,
   entranceEffectDeclarationSchema,
   entranceEffectSchema,
+  exitEffectDeclarationSchema,
+  exitEffectSchema,
   fillColorOptionsSchema,
   motionDirectionSchema,
   motionGranularitySchema,
@@ -59,6 +73,7 @@ import {
   repeatCountSchema,
   repeatedEffectSchema,
   spinOptionsSchema,
+  steppedEffectSchema,
 } from "@pptxdk/capabilities/motion";
 import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
@@ -122,6 +137,7 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
     );
 
     const entrances = [
+      appear({ delay: 25 }),
       fade({ duration: 250, delay: 50 }),
       wipe({ from: "top", by: "paragraph" }),
       zoom({ easing: { accelerate: 0.2 } }),
@@ -136,6 +152,26 @@ describe("Motion Zod v4 schemas & Morph handle identity", () => {
       assert.deepEqual(entranceEffectSchema.parse(eff), eff);
       assert.deepEqual(entranceEffectDeclarationSchema.parse(eff), eff);
       assert.deepEqual(effectSchema.parse(eff), eff);
+      assert.equal(exitEffectSchema.safeParse(eff).success, false);
+    }
+
+    const exits = [
+      disappear({ delay: 10 }),
+      fadeOut({ duration: 250, delay: 40 }),
+      wipeOut({ from: "left" }),
+      flyOut({ from: "right" }),
+      zoomOut({ easing: { decelerate: 0.3 } }),
+      floatOut({ duration: 400 }),
+      spinOut({ duration: 500 }),
+      collapse({ duration: 300 }),
+    ] as const;
+
+    for (const eff of exits) {
+      assert.deepEqual(exitEffectSchema.parse(eff), eff);
+      assert.deepEqual(exitEffectDeclarationSchema.parse(eff), eff);
+      assert.deepEqual(effectSchema.parse(eff), eff);
+      assert.equal(entranceEffectSchema.safeParse(eff).success, false);
+      assert.equal(emphasisEffectSchema.safeParse(eff).success, false);
     }
 
     const spinEff = spin({ by: -90, duration: 400 });
@@ -275,6 +311,7 @@ describe("Motion mechanisms, roundtrip target identity, Morph continuity, owners
   it("registers typed show mechanisms on motionCapability with role 'show' and no paint", () => {
     const keys = motionCapability.mechanisms?.map((m) => m.key) ?? [];
     assert.deepEqual(keys, [
+      "motion-appear",
       "motion-fade",
       "motion-wipe",
       "motion-zoom",
@@ -285,6 +322,7 @@ describe("Motion mechanisms, roundtrip target identity, Morph continuity, owners
       "motion-spin",
       "motion-breathe",
       "motion-fill-color",
+      "motion-exit",
       "motion-choreography",
     ]);
     for (const mechanism of motionCapability.mechanisms ?? []) {
@@ -1129,5 +1167,246 @@ describe("Motion mechanisms, roundtrip target identity, Morph continuity, owners
     const anims = s2.animations?.flatMap((st) => st.effects) ?? [];
     const afterEffect = anims.find((e) => e.targetId === s2.objects[3]!.id);
     assert.ok(afterEffect?.startAfter !== undefined);
+  });
+
+  it("imports exit animations, appear, multi-emphasis arrays, and cross-step same-target effects folded back to onStep(n, ...)", async () => {
+    const steppedFade = onStep(1, fade({ duration: 200 }));
+    const steppedSpin = onStep(2, repeat(spin({ duration: 300 }), 2));
+    const steppedFadeOut = onStep(3, fadeOut({ duration: 250 }));
+    assert.equal(steppedEffectSchema.safeParse(steppedFade).success, true);
+    assert.equal(
+      entranceEffectDeclarationSchema.safeParse(steppedFade).success,
+      true,
+    );
+    assert.equal(
+      exitEffectDeclarationSchema.safeParse(steppedFade).success,
+      false,
+    );
+    assert.equal(
+      emphasisEffectDeclarationSchema.safeParse(steppedSpin).success,
+      true,
+    );
+    assert.equal(
+      exitEffectDeclarationSchema.safeParse(steppedFadeOut).success,
+      true,
+    );
+    assert.equal(
+      steppedEffectSchema.safeParse(onStep(0, fade())).success,
+      false,
+    );
+    assert.equal(
+      steppedEffectSchema.safeParse(onStep(1.5, fade())).success,
+      false,
+    );
+
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "exit-onstep-import" }).append(
+        step({ n: 1 }).append(
+          shape({
+            id: "lifecycle-card",
+            enter: appear(),
+            emphasis: [
+              spin({ duration: 300 }),
+              fillColor({ from: "#2563EB", to: "#10B981", duration: 200 }),
+            ],
+            exit: onStep(3, fadeOut({ duration: 250 })),
+            style: {
+              position: "absolute",
+              left: 30,
+              top: 30,
+              width: 120,
+              height: 60,
+              background: "#2563EB",
+            },
+          }),
+        ),
+        step({ n: 2 }).append(
+          shape({
+            id: "step2-card",
+            enter: zoom({ duration: 200 }),
+            exit: collapse({ duration: 180 }),
+            style: {
+              position: "absolute",
+              left: 180,
+              top: 30,
+              width: 120,
+              height: 60,
+              background: "#F59E0B",
+            },
+          }),
+        ),
+      ),
+    );
+
+    const built1 = emit(resolveAll(doc));
+    const pptxBytes = new Uint8Array(built1.pptx);
+    const imported = importAll(pptxBytes);
+    pptxBytes.fill(0);
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const built2 = emit(resolveAll(imported.document));
+    const validated2 = await validatePptx(built2.pptx);
+    assert.deepEqual(validated2.errors, []);
+
+    const s2 = validated2.slides[0]!;
+    assert.equal(s2.animations?.length, 3);
+    assert.equal(s2.animations?.[0]?.effects.length, 3); // appear + spin + fillColor in step 1
+    assert.deepEqual(
+      s2.animations?.[1]?.effects.map((e) => e.preset),
+      ["zoom", "collapse"],
+    ); // zoom + collapse in step 2
+    assert.equal(s2.animations?.[2]?.effects.length, 1); // fadeOut on lifecycle-card in step 3
+    assert.equal(s2.animations?.[2]?.effects[0]?.kind, "exit");
+    assert.equal(s2.animations?.[2]?.effects[0]?.preset, "fadeOut");
+    assert.equal(
+      s2.animations?.[2]?.effects[0]?.targetId,
+      s2.animations?.[0]?.effects[0]?.targetId,
+    );
+  });
+
+  it("roundtrips leaf startAt and publishEnd cues without diagnostics", async () => {
+    const cues = createMotionScopeHandle();
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "leaf-cue-roundtrip" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(Shape, {
+              id: "first",
+              enter: fade({ duration: 200 }),
+              publishEnd: cues.cue("ready"),
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 80,
+                height: 40,
+                background: "#2563EB",
+              },
+            }),
+            createElement(Shape, {
+              id: "second",
+              enter: fade({ duration: 150 }),
+              startAt: after(cues.cue("ready"), 45),
+              style: {
+                position: "absolute",
+                left: 120,
+                top: 20,
+                width: 80,
+                height: 40,
+                background: "#10B981",
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const built1 = emit(resolveAll(doc));
+    const pptxBytes = new Uint8Array(built1.pptx);
+    const imported = importAll(pptxBytes);
+    pptxBytes.fill(0);
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const built2 = emit(resolveAll(imported.document));
+    const validated2 = await validatePptx(built2.pptx);
+    assert.deepEqual(validated2.errors, []);
+    const effs = validated2.slides[0]?.animations?.[0]?.effects ?? [];
+    assert.equal(effs.length, 2);
+    assert.equal(effs[0]?.delayMs, 0);
+    assert.equal(effs[1]?.delayMs, 245);
+  });
+
+  it("folds single-paragraph <p:pRg> timelines back onto <P> nodes inside Text and Shape without breaking by:'paragraph'", async () => {
+    const doc = deck({ width: 720, height: 405 }).append(
+      slide({ id: "p-import-slide" }).append(
+        text(
+          [
+            paragraph("Line 0", {
+              enter: fade({ duration: 200 }),
+              exit: onStep(3, fadeOut({ duration: 150 })),
+            }),
+            step({ n: 2 }).append(
+              paragraph("Line 1", {
+                enter: wipe({ from: "left", duration: 160 }),
+              }),
+            ),
+          ],
+          {
+            id: "per-p-text",
+            style: {
+              position: "absolute",
+              left: 30,
+              top: 30,
+              width: 280,
+              height: 140,
+            },
+          },
+        ),
+        shape(
+          [
+            step({ n: 1 }).append(paragraph("Shape P0", { enter: appear() })),
+            step({ n: 2 }).append(
+              paragraph("Shape P1", { enter: fade({ duration: 180 }) }),
+            ),
+          ],
+          {
+            id: "per-p-shape",
+            style: {
+              position: "absolute",
+              left: 340,
+              top: 30,
+              width: 240,
+              height: 120,
+              background: "#1E293B",
+            },
+          },
+        ),
+        step({ n: 1 }).append(
+          text([paragraph("All A"), paragraph("All B")], {
+            id: "whole-by-p-text",
+            enter: fade({ by: "paragraph", duration: 200 }),
+            style: {
+              position: "absolute",
+              left: 30,
+              top: 200,
+              width: 280,
+              height: 90,
+            },
+          }),
+        ),
+      ),
+    );
+
+    const built1 = emit(resolveAll(doc));
+    const pptxBytes = new Uint8Array(built1.pptx);
+    const imported = importAll(pptxBytes);
+    pptxBytes.fill(0);
+    assert.deepEqual(imported.report.diagnostics, []);
+
+    const built2 = emit(resolveAll(imported.document));
+    const validated2 = await validatePptx(built2.pptx);
+    assert.deepEqual(validated2.errors, []);
+
+    const slide2 = validated2.slides[0]!;
+    // Auto (Line 0 enter) + Step 1 (Shape P0 + whole-by-p-text x2) + Step 2 (Line 1 + Shape P1) + Step 3 (Line 0 exit)
+    assert.equal(slide2.animations?.length, 4);
+    assert.equal(slide2.animations?.[0]?.trigger, "auto");
+    assert.deepEqual(slide2.animations?.[0]?.effects[0]?.targetRange, {
+      type: "paragraph",
+      start: 0,
+      end: 0,
+    });
+    assert.equal(slide2.animations?.[3]?.effects[0]?.kind, "exit");
+    assert.deepEqual(slide2.animations?.[3]?.effects[0]?.targetRange, {
+      type: "paragraph",
+      start: 0,
+      end: 0,
+    });
   });
 });

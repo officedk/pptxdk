@@ -7,12 +7,13 @@ import {
 import { readInternalDeclarationProps } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import {
   groupDeclarationPropsKeys,
   groupStyleSchema,
 } from "./group-declaration.ts";
 
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 const groupAllowedPropKeys = new Set(groupDeclarationPropsKeys);
 

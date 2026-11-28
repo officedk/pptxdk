@@ -414,6 +414,18 @@ export { footerPlaceholderCapability } from "@pptxdk/capabilities/footer-placeho
 export { groupCapability } from "@pptxdk/capabilities/group";
 export { imageCapability } from "@pptxdk/capabilities/image";
 export type { ImageSource, ImageVisualStyle } from "@pptxdk/capabilities/image";
+export { lineCapability } from "@pptxdk/capabilities/line";
+export type {
+  LineAdjust,
+  LineEndpoint,
+  LineLayoutStyle,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
+} from "@pptxdk/capabilities/line";
 export { mastersCapability } from "@pptxdk/capabilities/masters";
 export { placeholderCapability } from "@pptxdk/capabilities/placeholder";
 export type {
@@ -422,22 +434,32 @@ export type {
 } from "@pptxdk/capabilities/placeholder";
 export {
   after,
+  appear,
   breathe,
+  collapse,
   createMotionScopeHandle,
+  disappear,
   fade,
+  fadeOut,
   fillColor,
   floatDown,
+  floatOut,
   floatUp,
   fly,
+  flyOut,
   motionCapability,
   motionSchedule,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   spinOptionsSchema,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "@pptxdk/capabilities/motion";
 export type {
   BreatheEffect,
@@ -451,7 +473,11 @@ export type {
   EmphasisEffectDeclaration,
   EntranceEffect,
   EntranceEffectDeclaration,
+  ExitEffect,
+  ExitEffectDeclaration,
+  ExitPreset,
   FillColorOptions,
+  InstantEffectOptions,
   MotionCompletionState,
   MotionCue,
   MotionCueRef,
@@ -486,6 +512,7 @@ export type {
   ResolvedMotionScope,
   ResolvedMotionStep,
   SpinOptions,
+  SteppedEffect,
 } from "@pptxdk/capabilities/motion";
 export { notesCapability } from "@pptxdk/capabilities/notes";
 export type { NotesDeclarationProps } from "@pptxdk/capabilities/notes-declaration";
@@ -498,16 +525,13 @@ export {
   shapeCapability,
 } from "@pptxdk/capabilities/shape";
 export type {
-  ArrowType,
   CustomGeometry,
   Geometry,
   GeometryPath,
-  LineEndStyle,
   PathCommand,
   PathOptions,
   PresetGeometry,
   PresetGeometryName,
-  ShapeVisualStyle,
 } from "@pptxdk/capabilities/shape";
 export { tableCapability } from "@pptxdk/capabilities/table";
 export type {

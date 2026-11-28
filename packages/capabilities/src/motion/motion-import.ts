@@ -1,4 +1,9 @@
-import { CommonContainer, CommonNode } from "@pptxdk/core/document";
+import {
+  CommonContainer,
+  CommonNode,
+  RichTextContainer,
+  type RichTextItem,
+} from "@pptxdk/core/document";
 import {
   A_NS,
   ooxmlNonNegativeIntSchema,
@@ -11,28 +16,40 @@ import {
   type XmlElementCursor,
 } from "@pptxdk/import";
 
+import { createParagraphNode } from "../text/text-declaration.ts";
 import {
   after,
+  appear,
   breathe,
+  collapse,
   createMotionScopeHandle,
   createMotionScopeNode,
   createMotionStepIdentity,
   createMotionStepNode,
+  disappear,
   fade,
+  fadeOut,
   fillColor,
   floatDown,
+  floatOut,
   floatUp,
   fly,
+  flyOut,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
   type Easing,
   type Effect,
   type EmphasisEffectDeclaration,
   type EntranceEffectDeclaration,
+  type ExitEffectDeclaration,
   type MotionDirection,
   type MotionGranularity,
   type MotionScopeHandle,
@@ -53,10 +70,9 @@ const supportedBehaviorNames = new Set([
   "animClr",
 ]);
 
-const presetById: Readonly<Record<number, Effect["preset"]>> = {
+const entrancePresetById: Readonly<Record<number, Effect["preset"]>> = {
+  1: "appear",
   2: "fly",
-  8: "spin",
-  9: "fillColor",
   10: "fade",
   17: "stretch",
   22: "wipe",
@@ -65,6 +81,47 @@ const presetById: Readonly<Record<number, Effect["preset"]>> = {
   49: "spinIn",
   53: "zoom",
 };
+
+const emphasisPresetById: Readonly<Record<number, Effect["preset"]>> = {
+  8: "spin",
+  9: "fillColor",
+};
+
+const exitPresetById: Readonly<Record<number, Effect["preset"]>> = {
+  1: "disappear",
+  2: "flyOut",
+  10: "fadeOut",
+  17: "collapse",
+  22: "wipeOut",
+  42: "floatOut",
+  47: "floatOut",
+  49: "spinOut",
+  53: "zoomOut",
+};
+
+function resolvePreset(
+  presetClass: string | undefined,
+  presetId: number | undefined,
+  hasColorAnim: boolean,
+  autoRev: boolean,
+): Effect["preset"] | undefined {
+  if (presetId === undefined) return undefined;
+  if (presetClass === "emph") {
+    return (
+      emphasisPresetById[presetId] ??
+      (presetId === 0 && hasColorAnim && autoRev
+        ? ("breathe" as const)
+        : undefined)
+    );
+  }
+  if (presetClass === "exit") {
+    return exitPresetById[presetId];
+  }
+  if (presetClass === "entr") {
+    return entrancePresetById[presetId];
+  }
+  return undefined;
+}
 
 const directionBySubtype: Readonly<Record<number, MotionDirection>> = {
   1: "top",
@@ -499,8 +556,16 @@ function buildEffectDeclaration(args: {
     ...(typeof args.by === "string" ? { by: args.by } : {}),
     ...(args.intervalMs === undefined ? {} : { intervalMs: args.intervalMs }),
   };
+  const instantOptions = {
+    delay: args.delayMs,
+    ...(typeof args.by === "string" ? { by: args.by } : {}),
+    ...(args.intervalMs === undefined ? {} : { intervalMs: args.intervalMs }),
+  };
   let effect: Effect;
   switch (args.preset) {
+    case "appear":
+      effect = appear(instantOptions);
+      break;
     case "fade":
       effect = fade(granularityOptions);
       break;
@@ -559,6 +624,36 @@ function buildEffectDeclaration(args: {
         from: args.fromColor ?? "#000000",
         to: args.toColor ?? "#FFFFFF",
       });
+      break;
+    case "disappear":
+      effect = disappear(instantOptions);
+      break;
+    case "fadeOut":
+      effect = fadeOut(granularityOptions);
+      break;
+    case "wipeOut":
+      effect = wipeOut({
+        ...granularityOptions,
+        ...(typeof args.from === "string" ? { from: args.from } : {}),
+      });
+      break;
+    case "flyOut":
+      effect = flyOut({
+        ...granularityOptions,
+        ...(typeof args.from === "string" ? { from: args.from } : {}),
+      });
+      break;
+    case "zoomOut":
+      effect = zoomOut(granularityOptions);
+      break;
+    case "floatOut":
+      effect = floatOut(granularityOptions);
+      break;
+    case "spinOut":
+      effect = spinOut(granularityOptions);
+      break;
+    case "collapse":
+      effect = collapse(granularityOptions);
       break;
   }
   const declaration =
@@ -983,15 +1078,12 @@ export function readSlideMotionImport(
       continue;
     }
 
-    const preset =
-      rawNode.presetId === undefined
-        ? undefined
-        : (presetById[rawNode.presetId] ??
-          (rawNode.presetId === 0 &&
-          rawNode.behaviors.some((b) => b.localName === "animClr") &&
-          rawNode.autoRev
-            ? ("breathe" as const)
-            : undefined));
+    const preset = resolvePreset(
+      rawNode.presetClass,
+      rawNode.presetId,
+      rawNode.behaviors.some((b) => b.localName === "animClr"),
+      rawNode.autoRev,
+    );
 
     if (preset === undefined) {
       const targetId = rawNode.targetIds[0];
@@ -1166,25 +1258,30 @@ export function readSlideMotionImport(
       return;
     }
 
-    const preset =
-      node.presetId === undefined
-        ? undefined
-        : (presetById[node.presetId] ??
-          (node.presetId === 0 &&
-          node.behaviors.some((b) => b.localName === "animClr") &&
-          node.autoRev
-            ? ("breathe" as const)
-            : undefined));
+    const preset = resolvePreset(
+      node.presetClass,
+      node.presetId,
+      node.behaviors.some((b) => b.localName === "animClr"),
+      node.autoRev,
+    );
     if (preset === undefined || node.targetIds.length !== 1) return;
     const targetId = node.targetIds[0]!;
     const kind: Effect["kind"] =
-      node.presetClass === "emph" ? "emphasis" : "entrance";
+      node.presetClass === "emph"
+        ? "emphasis"
+        : node.presetClass === "exit"
+          ? "exit"
+          : "entrance";
     const nonSetDurations = node.behaviors
       .filter((b) => b.localName !== "set")
       .map((b) => b.durationMs)
       .filter((d): d is number => d !== undefined);
     const traversalDurationMs =
-      nonSetDurations.length > 0 ? Math.max(...nonSetDurations) : 500;
+      nonSetDurations.length > 0
+        ? Math.max(...nonSetDurations)
+        : preset === "appear" || preset === "disappear"
+          ? 1
+          : 500;
     const durationMs =
       preset === "breathe" ? traversalDurationMs * 2 : traversalDurationMs;
 
@@ -1202,7 +1299,12 @@ export function readSlideMotionImport(
         : undefined;
 
     let from: MotionDirection | number | undefined;
-    if (preset === "wipe" || preset === "fly") {
+    if (
+      preset === "wipe" ||
+      preset === "wipeOut" ||
+      preset === "fly" ||
+      preset === "flyOut"
+    ) {
       from =
         node.presetSubtype === undefined
           ? undefined
@@ -1420,13 +1522,28 @@ export function readSlideMotionImport(
       continue;
     }
 
-    // 6c. Paragraph-by-paragraph expansion (grpId=0, build=p, contiguous pRg 0..0, 1..1, ...)
+    // 6c. Paragraph-by-paragraph expansion (grpId=0, build=p, full staggered pRg 0..N-1)
     if (
       head.targetRange?.type === "paragraph" &&
+      head.targetRange.start === 0 &&
+      head.targetRange.end === 0 &&
       (head.buildGroupId ?? 0) === 0
     ) {
       const pBuild = paragraphBuilds.get(`${head.targetId}:0`);
-      if (pBuild?.build === "p") {
+      const targetObj = context.objectBySpid?.get(head.targetId);
+      const existingParaCount =
+        targetObj === undefined
+          ? 0
+          : targetObj.children.filter(
+              (c) => c instanceof CommonNode && c.type === "paragraph",
+            ).length;
+      const targetParaCount =
+        existingParaCount > 0
+          ? existingParaCount
+          : targetObj?.kind === "shape" && targetObj.children.length > 0
+            ? 1
+            : 0;
+      if (pBuild?.build === "p" && targetParaCount > 1) {
         const groupIndices: number[] = [i];
         let expectedNextStart = head.targetRange.end + 1;
         for (let j = i + 1; j < survivingEffects.length; j += 1) {
@@ -1435,8 +1552,12 @@ export function readSlideMotionImport(
           if (
             cand.targetRange?.type === "paragraph" &&
             cand.targetRange.start === expectedNextStart &&
+            cand.targetRange.end === expectedNextStart &&
             cand.stepIndex === head.stepIndex &&
             commonEffectPropsMatch(head, cand) &&
+            cand.effectiveDelayMs ===
+              head.effectiveDelayMs +
+                expectedNextStart * head.effect.duration &&
             cand.startAfterTimingId === head.startAfterTimingId &&
             cand.startAfterOffsetMs === head.startAfterOffsetMs
           ) {
@@ -1444,36 +1565,40 @@ export function readSlideMotionImport(
             expectedNextStart = cand.targetRange.end + 1;
           }
         }
-        for (const idx of groupIndices) consumedIndices.add(idx);
-        const baseDelay = Math.min(
-          ...groupIndices.map((idx) => survivingEffects[idx]!.effectiveDelayMs),
-        );
-        const rebuilt = buildEffectDeclaration({
-          preset: head.effect.preset,
-          kind: head.effect.kind,
-          durationMs: head.effect.duration,
-          delayMs: baseDelay,
-          ...(head.from === undefined ? {} : { from: head.from }),
-          ...(head.to === undefined ? {} : { to: head.to }),
-          ...(head.fromColor === undefined
-            ? {}
-            : { fromColor: head.fromColor }),
-          ...(head.toColor === undefined ? {} : { toColor: head.toColor }),
-          ...(head.easing === undefined ? {} : { easing: head.easing }),
-          by: "paragraph",
-          ...(head.repeatCount === undefined
-            ? {}
-            : { repeatCount: head.repeatCount }),
-        });
-        const { targetRange: _omittedRange, ...headRest } = head;
-        collapsedEffects.push({
-          ...headRest,
-          effectiveDelayMs: baseDelay,
-          by: "paragraph",
-          effect: rebuilt.effect,
-          declaration: rebuilt.declaration,
-        });
-        continue;
+        if (groupIndices.length === targetParaCount) {
+          for (const idx of groupIndices) consumedIndices.add(idx);
+          const baseDelay = Math.min(
+            ...groupIndices.map(
+              (idx) => survivingEffects[idx]!.effectiveDelayMs,
+            ),
+          );
+          const rebuilt = buildEffectDeclaration({
+            preset: head.effect.preset,
+            kind: head.effect.kind,
+            durationMs: head.effect.duration,
+            delayMs: baseDelay,
+            ...(head.from === undefined ? {} : { from: head.from }),
+            ...(head.to === undefined ? {} : { to: head.to }),
+            ...(head.fromColor === undefined
+              ? {}
+              : { fromColor: head.fromColor }),
+            ...(head.toColor === undefined ? {} : { toColor: head.toColor }),
+            ...(head.easing === undefined ? {} : { easing: head.easing }),
+            by: "paragraph",
+            ...(head.repeatCount === undefined
+              ? {}
+              : { repeatCount: head.repeatCount }),
+          });
+          const { targetRange: _omittedRange, ...headRest } = head;
+          collapsedEffects.push({
+            ...headRest,
+            effectiveDelayMs: baseDelay,
+            by: "paragraph",
+            effect: rebuilt.effect,
+            declaration: rebuilt.declaration,
+          });
+          continue;
+        }
       }
     }
 
@@ -1596,38 +1721,7 @@ export function readSlideMotionImport(
     }
   }
 
-  // 8. Attach enter & emphasis props directly onto live CommonNodes!
-  const effectsByNode = new Map<CommonNode, ImportedMotionEffect[]>();
-  for (const eff of liftedCollapsed) {
-    const targetNode = objectBySpid.get(eff.targetId);
-    if (targetNode === undefined) continue;
-    const list = effectsByNode.get(targetNode) ?? [];
-    list.push(eff);
-    effectsByNode.set(targetNode, list);
-  }
-
-  for (const [targetNode, list] of effectsByNode) {
-    const enters = list
-      .filter((e) => e.effect.kind === "entrance")
-      .map((e) => e.declaration as EntranceEffectDeclaration);
-    const emphases = list
-      .filter((e) => e.effect.kind === "emphasis")
-      .map((e) => e.declaration as EmphasisEffectDeclaration);
-
-    const patch: {
-      enter?: EntranceEffectDeclaration | readonly EntranceEffectDeclaration[];
-      emphasis?: EmphasisEffectDeclaration;
-    } = {};
-    if (enters.length === 1) patch.enter = enters[0]!;
-    else if (enters.length > 1) patch.enter = enters;
-    if (emphases.length >= 1) patch.emphasis = emphases[0]!;
-    if (patch.enter !== undefined || patch.emphasis !== undefined) {
-      targetNode.set(patch);
-    }
-  }
-
-  // 9. Reconstruct Step & MotionScope choreography wrappers on slideNode.children
-  // First assign canonical 1-based click step numbers to click steps in mainSeq order.
+  // 8. Compute click step numbering & attach enter/emphasis/exit (with slot-chain & onStep folding)
   const clickNumberByStepIndex = new Map<number, number>();
   let nextClickNumber = 1;
   for (const info of stepInfos) {
@@ -1641,15 +1735,331 @@ export function readSlideMotionImport(
     }
   }
 
-  // Identify every startAfter dependency timingId referenced by any surviving effect,
-  // and map each timingId (whether effect or container) to a unique MotionScopeHandle.
+  const wholeEffectsByNode = new Map<CommonNode, ImportedMotionEffect[]>();
+  const paragraphEffectsByNode = new Map<
+    CommonNode,
+    Map<number, ImportedMotionEffect[]>
+  >();
+  const topLevelStepIndices = new Map<CommonNode, Set<number>>();
+  for (const eff of liftedCollapsed) {
+    const targetNode = objectBySpid.get(eff.targetId);
+    if (targetNode === undefined) continue;
+    if (eff.targetRange?.type === "paragraph") {
+      let byPara = paragraphEffectsByNode.get(targetNode);
+      if (byPara === undefined) {
+        byPara = new Map<number, ImportedMotionEffect[]>();
+        paragraphEffectsByNode.set(targetNode, byPara);
+      }
+      const pIdx = eff.targetRange.start;
+      const pList = byPara.get(pIdx) ?? [];
+      pList.push(eff);
+      byPara.set(pIdx, pList);
+      continue;
+    }
+    const list = wholeEffectsByNode.get(targetNode) ?? [];
+    list.push(eff);
+    wholeEffectsByNode.set(targetNode, list);
+    const topLevelNode = topLevelOwnerByNode.get(targetNode) ?? targetNode;
+    const indices = topLevelStepIndices.get(topLevelNode) ?? new Set<number>();
+    indices.add(eff.stepIndex);
+    topLevelStepIndices.set(topLevelNode, indices);
+  }
+
+  const anchorStepIndexByTopLevel = new Map<CommonNode, number>();
+  for (const [topLevelNode, indices] of topLevelStepIndices) {
+    anchorStepIndexByTopLevel.set(topLevelNode, Math.min(...indices));
+  }
+
+  const internalChainTimingIds = new Set<number>();
+
+  const finiteDurationOf = (eff: ImportedMotionEffect): number | undefined => {
+    if (
+      eff.repeatCount === "forever" ||
+      eff.by === "word" ||
+      eff.by === "letter" ||
+      eff.by === "paragraph"
+    ) {
+      return undefined;
+    }
+    const rounds = typeof eff.repeatCount === "number" ? eff.repeatCount : 1;
+    return eff.effect.duration * rounds;
+  };
+
+  const applySlotAdjustedPatch = (
+    targetNode: CommonNode,
+    list: readonly ImportedMotionEffect[],
+    anchorStep: number | undefined,
+  ): void => {
+    const adjustedByEffect = new Map<
+      ImportedMotionEffect,
+      Effect | ReturnType<typeof repeat>
+    >();
+    const byStep = new Map<number, ImportedMotionEffect[]>();
+    for (const eff of list) {
+      const group = byStep.get(eff.stepIndex) ?? [];
+      group.push(eff);
+      byStep.set(eff.stepIndex, group);
+    }
+
+    for (const stepList of byStep.values()) {
+      let prevSlotTimingIds = new Set<number>();
+      let prevSlotEndMs: number | undefined = 0;
+      let prevSlotEndKnown = true;
+      let hasPrevSlot = false;
+      for (const slotKind of ["entrance", "emphasis", "exit"] as const) {
+        const slotItems = stepList.filter((e) => e.effect.kind === slotKind);
+        if (slotItems.length === 0) continue;
+        const slotTimingIds = new Set<number>(slotItems.map((e) => e.timingId));
+        let slotMaxEnd: number | undefined = 0;
+        let slotKnown: boolean = prevSlotEndKnown;
+        for (const item of slotItems) {
+          let adjustedDelay = item.effectiveDelayMs;
+          if (hasPrevSlot) {
+            if (
+              item.startAfterTimingId !== undefined &&
+              prevSlotTimingIds.has(item.startAfterTimingId)
+            ) {
+              internalChainTimingIds.add(item.timingId);
+              adjustedDelay = item.startAfterOffsetMs ?? 0;
+            } else if (prevSlotEndKnown && prevSlotEndMs !== undefined) {
+              adjustedDelay = Math.max(
+                0,
+                item.effectiveDelayMs - prevSlotEndMs,
+              );
+            }
+          }
+          const rebuiltDecl =
+            adjustedDelay === item.effectiveDelayMs
+              ? item.declaration
+              : buildEffectDeclaration({
+                  preset: item.effect.preset,
+                  kind: item.effect.kind,
+                  durationMs: item.effect.duration,
+                  delayMs: adjustedDelay,
+                  ...(item.from === undefined ? {} : { from: item.from }),
+                  ...(item.to === undefined ? {} : { to: item.to }),
+                  ...(item.fromColor === undefined
+                    ? {}
+                    : { fromColor: item.fromColor }),
+                  ...(item.toColor === undefined
+                    ? {}
+                    : { toColor: item.toColor }),
+                  ...(item.easing === undefined ? {} : { easing: item.easing }),
+                  ...(item.by === undefined ? {} : { by: item.by }),
+                  ...(item.intervalMs === undefined
+                    ? {}
+                    : { intervalMs: item.intervalMs }),
+                  ...(item.repeatCount === undefined
+                    ? {}
+                    : { repeatCount: item.repeatCount }),
+                }).declaration;
+          adjustedByEffect.set(item, rebuiltDecl);
+
+          const finiteDur = finiteDurationOf(item);
+          if (
+            slotKnown &&
+            finiteDur !== undefined &&
+            prevSlotEndMs !== undefined
+          ) {
+            const itemEnd: number = prevSlotEndMs + adjustedDelay + finiteDur;
+            slotMaxEnd =
+              slotMaxEnd === undefined
+                ? itemEnd
+                : Math.max(slotMaxEnd, itemEnd);
+          } else {
+            slotKnown = false;
+          }
+        }
+        prevSlotTimingIds = slotTimingIds;
+        prevSlotEndMs = slotMaxEnd;
+        prevSlotEndKnown = slotKnown;
+        hasPrevSlot = true;
+      }
+    }
+
+    const wrapWithStepIfNeeded = <
+      D extends
+        | EntranceEffectDeclaration
+        | EmphasisEffectDeclaration
+        | ExitEffectDeclaration,
+    >(
+      eff: ImportedMotionEffect,
+      decl: Effect | ReturnType<typeof repeat>,
+    ): D => {
+      if (anchorStep !== undefined && eff.stepIndex !== anchorStep) {
+        const clickNum = clickNumberByStepIndex.get(eff.stepIndex);
+        if (clickNum !== undefined) {
+          return onStep(
+            clickNum,
+            decl as Parameters<typeof onStep>[1],
+          ) as unknown as D;
+        }
+      }
+      return decl as D;
+    };
+
+    const enters = list
+      .filter((e) => e.effect.kind === "entrance")
+      .map((e) =>
+        wrapWithStepIfNeeded<EntranceEffectDeclaration>(
+          e,
+          adjustedByEffect.get(e) ?? e.declaration,
+        ),
+      );
+    const emphases = list
+      .filter((e) => e.effect.kind === "emphasis")
+      .map((e) =>
+        wrapWithStepIfNeeded<EmphasisEffectDeclaration>(
+          e,
+          adjustedByEffect.get(e) ?? e.declaration,
+        ),
+      );
+    const exits = list
+      .filter((e) => e.effect.kind === "exit")
+      .map((e) =>
+        wrapWithStepIfNeeded<ExitEffectDeclaration>(
+          e,
+          adjustedByEffect.get(e) ?? e.declaration,
+        ),
+      );
+
+    const patch: {
+      enter?: EntranceEffectDeclaration | readonly EntranceEffectDeclaration[];
+      emphasis?:
+        | EmphasisEffectDeclaration
+        | readonly EmphasisEffectDeclaration[];
+      exit?: ExitEffectDeclaration | readonly ExitEffectDeclaration[];
+    } = {};
+    if (enters.length === 1) patch.enter = enters[0]!;
+    else if (enters.length > 1) patch.enter = enters;
+    if (emphases.length === 1) patch.emphasis = emphases[0]!;
+    else if (emphases.length > 1) patch.emphasis = emphases;
+    if (exits.length === 1) patch.exit = exits[0]!;
+    else if (exits.length > 1) patch.exit = exits;
+    if (
+      patch.enter !== undefined ||
+      patch.emphasis !== undefined ||
+      patch.exit !== undefined
+    ) {
+      targetNode.set(patch);
+    }
+  };
+
+  for (const [targetNode, list] of wholeEffectsByNode) {
+    const topLevelNode = topLevelOwnerByNode.get(targetNode) ?? targetNode;
+    const anchorStep = anchorStepIndexByTopLevel.get(topLevelNode);
+    applySlotAdjustedPatch(targetNode, list, anchorStep);
+  }
+
+  const paragraphNodesByKey = new Map<
+    string,
+    {
+      readonly pNode: CommonNode;
+      readonly anchorStep: number;
+      readonly clickStep?: number;
+      readonly startAfterTimingId?: number;
+      readonly startAfterOffsetMs?: number;
+    }
+  >();
+  const paragraphPublishTimingIds = new Set<number>();
+
+  for (const [targetNode, byPara] of paragraphEffectsByNode) {
+    if (
+      targetNode instanceof RichTextContainer &&
+      !targetNode.children.some(
+        (c) => c instanceof CommonNode && c.type === "paragraph",
+      ) &&
+      targetNode.children.length > 0
+    ) {
+      const p0 = createParagraphNode({});
+      p0.content(...(targetNode.children as RichTextItem[]));
+      targetNode.content(p0);
+    }
+    const pNodes = targetNode.children.filter(
+      (c): c is CommonNode => c instanceof CommonNode && c.type === "paragraph",
+    );
+    const stepByParagraph = new Map<CommonNode, number>();
+    for (const [pIndex, pList] of byPara) {
+      const pNode = pNodes[pIndex];
+      if (pNode === undefined) continue;
+      const anchorStep = Math.min(...pList.map((e) => e.stepIndex));
+      applySlotAdjustedPatch(pNode, pList, anchorStep);
+      const clickStep = clickNumberByStepIndex.get(anchorStep);
+      if (clickStep !== undefined) {
+        stepByParagraph.set(pNode, clickStep);
+      }
+      const anchorEff =
+        pList.find((e) => e.stepIndex === anchorStep) ?? pList[0];
+      paragraphNodesByKey.set(`${targetNode.id}:${pIndex}`, {
+        pNode,
+        anchorStep,
+        ...(clickStep === undefined ? {} : { clickStep }),
+        ...(anchorEff?.startAfterTimingId !== undefined &&
+        !internalChainTimingIds.has(anchorEff.timingId)
+          ? {
+              startAfterTimingId: anchorEff.startAfterTimingId,
+              ...(anchorEff.startAfterOffsetMs === undefined
+                ? {}
+                : { startAfterOffsetMs: anchorEff.startAfterOffsetMs }),
+            }
+          : {}),
+      });
+    }
+    if (stepByParagraph.size > 0 && targetNode instanceof RichTextContainer) {
+      const originalPChildren = [...targetNode.children];
+      for (const child of originalPChildren) {
+        if (child instanceof CommonNode) {
+          child.remove();
+        }
+      }
+      const wrappedPChildren: RichTextItem[] = [];
+      let activeStepHost: CommonContainer | undefined;
+      let activeClickStep: number | undefined;
+      for (const child of originalPChildren) {
+        if (child instanceof CommonNode) {
+          const clickStep = stepByParagraph.get(child);
+          if (clickStep !== undefined) {
+            if (activeStepHost === undefined || activeClickStep !== clickStep) {
+              activeStepHost = createMotionStepNode({
+                n: clickStep,
+                stepIdentity: createMotionStepIdentity(),
+              });
+              activeClickStep = clickStep;
+              wrappedPChildren.push(activeStepHost);
+            }
+            activeStepHost.append(child);
+          } else {
+            activeStepHost = undefined;
+            activeClickStep = undefined;
+            wrappedPChildren.push(child);
+          }
+        } else {
+          activeStepHost = undefined;
+          activeClickStep = undefined;
+          wrappedPChildren.push((child as { readonly text: string }).text);
+        }
+      }
+      targetNode.content(...wrappedPChildren);
+    }
+  }
+
+  // 9. Reconstruct Step & MotionScope choreography wrappers on slideNode.children
+  // Identify every startAfter dependency timingId referenced by any surviving effect
+  // (excluding internal same-target auto-chain links), and map each timingId to a MotionScopeHandle.
   const referencedTimingIds = new Set<number>();
   for (const eff of liftedCollapsed) {
     if (
       eff.startAfterTimingId !== undefined &&
+      !internalChainTimingIds.has(eff.timingId) &&
       !omittedNodeIds.has(eff.startAfterTimingId)
     ) {
       referencedTimingIds.add(eff.startAfterTimingId);
+      const sourceEff = liftedCollapsed.find(
+        (candidate) => candidate.timingId === eff.startAfterTimingId,
+      );
+      if (sourceEff?.targetRange?.type === "paragraph") {
+        paragraphPublishTimingIds.add(eff.startAfterTimingId);
+      }
     }
   }
   const handleByTimingId = new Map<number, MotionScopeHandle>();
@@ -1657,12 +2067,49 @@ export function readSlideMotionImport(
     handleByTimingId.set(tid, createMotionScopeHandle());
   }
 
+  for (const pInfo of paragraphNodesByKey.values()) {
+    if (pInfo.startAfterTimingId === undefined) continue;
+    const sourceHandle = handleByTimingId.get(pInfo.startAfterTimingId);
+    if (sourceHandle === undefined) continue;
+    const offset = pInfo.startAfterOffsetMs ?? 0;
+    const moment = paragraphPublishTimingIds.has(pInfo.startAfterTimingId)
+      ? sourceHandle.cue("done")
+      : sourceHandle.end;
+    pInfo.pNode.set({
+      startAt: offset > 0 ? after(moment, offset) : moment,
+    });
+  }
+
+  for (const tid of paragraphPublishTimingIds) {
+    const sourceEff = liftedCollapsed.find((e) => e.timingId === tid);
+    const sourceNode =
+      sourceEff === undefined
+        ? undefined
+        : objectBySpid.get(sourceEff.targetId);
+    const handle = handleByTimingId.get(tid);
+    if (
+      sourceNode !== undefined &&
+      sourceEff?.targetRange?.type === "paragraph" &&
+      handle !== undefined
+    ) {
+      const pInfo = paragraphNodesByKey.get(
+        `${sourceNode.id}:${sourceEff.targetRange.start}`,
+      );
+      pInfo?.pNode.set({ publishEnd: handle.cue("done") });
+    }
+  }
+
   // Build ancestor chain for each timingId -> all MotionScopeHandles that should publish its end
   const ancestorsOfTimingId = (timingId: number): number[] => {
     const chain: number[] = [];
     let current: number | undefined = timingId;
     while (current !== undefined) {
-      if (handleByTimingId.has(current)) chain.unshift(current);
+      if (
+        handleByTimingId.has(current) &&
+        !paragraphPublishTimingIds.has(current)
+      ) {
+        chain.unshift(current);
+      }
       current = rawNodesById.get(current)?.parentTimingId;
     }
     return chain;
@@ -1676,20 +2123,28 @@ export function readSlideMotionImport(
   const assignmentByTopLevel = new Map<CommonNode, TopLevelMotionAssignment>();
 
   for (const eff of liftedCollapsed) {
+    if (eff.targetRange?.type === "paragraph") continue;
     const targetNode = objectBySpid.get(eff.targetId);
     if (targetNode === undefined) continue;
     const topLevelNode = topLevelOwnerByNode.get(targetNode) ?? targetNode;
+    const anchorStep = anchorStepIndexByTopLevel.get(topLevelNode);
+    if (eff.stepIndex !== anchorStep) continue;
     if (assignmentByTopLevel.has(topLevelNode)) continue;
 
     const clickStep = clickNumberByStepIndex.get(eff.stepIndex);
     const sourceScopeIds = ancestorsOfTimingId(eff.timingId);
     let startAfter: MotionTiming | undefined;
-    if (eff.startAfterTimingId !== undefined) {
+    if (
+      eff.startAfterTimingId !== undefined &&
+      !internalChainTimingIds.has(eff.timingId)
+    ) {
       const sourceHandle = handleByTimingId.get(eff.startAfterTimingId);
       if (sourceHandle !== undefined) {
         const offset = eff.startAfterOffsetMs ?? 0;
-        startAfter =
-          offset > 0 ? after(sourceHandle.end, offset) : sourceHandle.end;
+        const moment = paragraphPublishTimingIds.has(eff.startAfterTimingId)
+          ? sourceHandle.cue("done")
+          : sourceHandle.end;
+        startAfter = offset > 0 ? after(moment, offset) : moment;
       }
     }
     assignmentByTopLevel.set(topLevelNode, {

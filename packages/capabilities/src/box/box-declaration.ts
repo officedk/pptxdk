@@ -15,7 +15,7 @@ import { z } from "zod";
 
 import {
   motionPropsShape,
-  type EntranceEffectDeclaration,
+  type MotionProps,
 } from "../motion/motion-schemas.ts";
 import { morphKeySchema, type MorphKey } from "../shared/morph-api.ts";
 
@@ -43,16 +43,11 @@ export const boxStyleSchema: z.ZodType<BoxStyle> =
   >;
 
 /** Layout container appearance with visual styling that optionally generates a native background shape. */
-export type BoxDeclarationProps = {
+export type BoxDeclarationProps = MotionProps & {
   readonly id?: AuthorId | undefined;
   readonly morphKey?: MorphKey | undefined;
   readonly link?: LinkTarget | undefined;
   readonly style?: BoxStyle | undefined;
-  readonly enter?:
-    | EntranceEffectDeclaration
-    | readonly EntranceEffectDeclaration[]
-    | undefined;
-  readonly motion?: boolean | undefined;
 };
 
 const boxDeclarationPropsObjectSchema = z.strictObject({
@@ -60,8 +55,7 @@ const boxDeclarationPropsObjectSchema = z.strictObject({
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   style: rawBoxStyleSchema.optional(),
-  enter: motionPropsShape.enter,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 export const boxDeclarationPropsKeys = Object.keys(

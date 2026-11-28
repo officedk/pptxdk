@@ -29,6 +29,13 @@ export type DeferredSlideLink = {
   apply(targetSlideId: string): void;
 };
 
+export type ScopeConnectorResolutionContext = {
+  readonly scopeObjectsBySpid: ReadonlyMap<number, CommonNode>;
+  readonly omittedSpids: ReadonlyMap<number, OmittedSlideObjectInfo>;
+  readonly usedAuthorIds: Set<string>;
+  readonly diagnostics: ImportDiagnostic[];
+};
+
 export type ShapeTreeImportContext = {
   readonly cursor: XmlElementCursor;
   readonly part: string;
@@ -38,6 +45,9 @@ export type ShapeTreeImportContext = {
   readonly relationships?: ReadonlyMap<string, ParsedRelationshipEntry>;
   readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
   readonly registerImportedObject?: (spid: number, node: CommonNode) => void;
+  readonly registerDeferredConnector?: (
+    resolve: (ctx: ScopeConnectorResolutionContext) => void,
+  ) => void;
   readonly layoutPlaceholders?: PlaceholderMap;
   readonly masterPlaceholders?: MasterPlaceholderMap;
   readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;

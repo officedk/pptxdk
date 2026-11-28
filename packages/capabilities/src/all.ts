@@ -4,6 +4,7 @@ import { boxCapability } from "./box/box.ts";
 import { chartCapability } from "./chart/chart.ts";
 import { groupCapability } from "./group/group.ts";
 import { imageCapability } from "./image/image.ts";
+import { lineCapability } from "./line/line.ts";
 import {
   footerPlaceholderCapability,
   mastersCapability,
@@ -23,6 +24,7 @@ const baselineCapabilities = [
   footerPlaceholderCapability,
   groupCapability,
   imageCapability,
+  lineCapability,
   mastersCapability,
   motionCapability,
   notesCapability,
@@ -41,6 +43,7 @@ export const documentCapabilities: readonly [
   typeof footerPlaceholderCapability,
   typeof groupCapability,
   typeof imageCapability,
+  typeof lineCapability,
   typeof mastersCapability,
   typeof motionCapability,
   typeof notesCapability,

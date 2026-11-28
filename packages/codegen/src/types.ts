@@ -281,6 +281,7 @@ export type ProductionDeclarationKind =
   | "slide-number"
   | "notes"
   | "image"
+  | "line"
   | "shape"
   | "box"
   | "group"

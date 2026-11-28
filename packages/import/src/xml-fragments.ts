@@ -42,6 +42,15 @@ export const extentEmuFragmentSchema = z.object({
 });
 export type ExtentEmuFragment = z.infer<typeof extentEmuFragmentSchema>;
 
+/** `<a:ext cx="..." cy="..."/>` fragment schema allowing zero on one axis for 1D connectors. */
+export const nonNegativeExtentEmuFragmentSchema = z.object({
+  cx: ooxmlNonNegativeIntSchema,
+  cy: ooxmlNonNegativeIntSchema,
+});
+export type NonNegativeExtentEmuFragment = z.infer<
+  typeof nonNegativeExtentEmuFragmentSchema
+>;
+
 /** `<a:xfrm rot="..." flipH="..." flipV="..."/>` attribute fragment schema. */
 export const transformAttributesFragmentSchema = z.object({
   rot: ooxmlIntSchema.optional(),

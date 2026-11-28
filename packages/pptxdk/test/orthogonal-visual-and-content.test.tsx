@@ -23,6 +23,7 @@ import {
   Deck,
   Group,
   Image,
+  Line,
   P,
   Placeholder,
   Row,
@@ -40,6 +41,7 @@ import {
   deck,
   group,
   image,
+  line,
   paragraph,
   placeholder,
   row,
@@ -494,22 +496,21 @@ describe("Ticket 04: orthogonal visual and content props", () => {
           <SlideLayout layout={layoutDef} />
         </SlideMaster>
         <Slide id="visual-slide" layout={layoutDef}>
-          <Shape
+          <Line
             id="arrow-line"
-            geometry="line"
+            stroke={{
+              color: "#0F172A",
+              width: 2,
+              style: "dashed",
+              startArrow: "oval",
+              endArrow: "triangle",
+            }}
             style={{
               position: "absolute",
               left: 40,
               top: 40,
               width: 160,
               height: 40,
-              border: {
-                color: "#0F172A",
-                width: 2,
-                style: "dashed",
-                startArrow: "oval",
-                endArrow: "triangle",
-              },
               flipH: true,
               flipV: true,
             }}
@@ -653,22 +654,21 @@ describe("Ticket 04: orthogonal visual and content props", () => {
     }).append(
       slideMaster({ id: "master" }).append(slideLayout(layoutDef)),
       slide({ id: "visual-slide", layout: layoutDef }).append(
-        shape({
+        line({
           id: "arrow-line",
-          geometry: "line",
+          stroke: {
+            color: "#0F172A",
+            width: 2,
+            style: "dashed",
+            startArrow: "oval",
+            endArrow: "triangle",
+          },
           style: {
             position: "absolute",
             left: 40,
             top: 40,
             width: 160,
             height: 40,
-            border: {
-              color: "#0F172A",
-              width: 2,
-              style: "dashed",
-              startArrow: "oval",
-              endArrow: "triangle",
-            },
             flipH: true,
             flipV: true,
           },

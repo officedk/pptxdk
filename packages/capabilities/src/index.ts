@@ -20,15 +20,27 @@ export type {
 } from "#/shape/shape.ts";
 export { Shape } from "#/shape/shape-elements.ts";
 export type { ShapeProps } from "#/shape/shape-elements.ts";
+export { lineCapability } from "#/line/line.ts";
+export type {
+  LineAdjust,
+  LineDeclarationProps,
+  LineEndpoint,
+  LineLayoutStyle,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
+} from "#/line/line.ts";
+export { Line } from "#/line/line-elements.ts";
+export type { LineProps } from "#/line/line-elements.ts";
 export { boxCapability } from "#/box/box.ts";
 export { Box, type BoxProps } from "#/box/box-elements.ts";
 export {
   arrowTypes,
   hasVisibleBoxStyle,
-  lineEndStyleKeys,
   type ArrowType,
-  type LineEndStyle,
-  type ShapeVisualStyle,
 } from "#/shared/visual.ts";
 export type {
   GradientStop,
@@ -137,21 +149,31 @@ export { createMorphScope } from "#/shared/morph-api.ts";
 export type { MorphKey, MorphProps, MorphScope } from "#/shared/morph-api.ts";
 export {
   after,
+  appear,
   breathe,
+  collapse,
+  disappear,
   fillColor,
   motionSchedule,
   createMotionScopeHandle,
   fade,
+  fadeOut,
   fly,
+  flyOut,
   floatDown,
+  floatOut,
   floatUp,
   motionCapability,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "#/motion/motion.ts";
 export { MotionScope, Step, useMotionScope } from "#/motion/motion-elements.ts";
 export type {
@@ -167,6 +189,11 @@ export type {
   EmphasisEffectDeclaration,
   EntranceEffectDeclaration,
   EntranceEffect,
+  EntrancePreset,
+  ExitEffect,
+  ExitEffectDeclaration,
+  ExitPreset,
+  InstantEffectOptions,
   MotionDirection,
   MotionGranularity,
   MotionCompletionState,
@@ -204,6 +231,7 @@ export type {
   ResolvedMotionStep,
   SpinOptions,
   StepProps,
+  SteppedEffect,
 } from "#/motion/motion.ts";
 export type {
   Font,

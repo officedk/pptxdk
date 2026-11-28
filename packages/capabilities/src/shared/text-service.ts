@@ -14,6 +14,7 @@ import {
   type FontFaceStyle,
   type FontReference,
   type FontSize,
+  type LineHeight,
   type Rect,
   type PlaceholderResolutionContext,
   type ResolvedColor,
@@ -61,6 +62,7 @@ import {
 } from "./style-inheritance.ts";
 import {
   paragraphStyleSchema,
+  parseBaselineShiftThousandths,
   parseParagraphStyle,
   parseRunStyle,
   parseTextExtent,
@@ -77,6 +79,7 @@ export { paragraphStyleSchema, runStyleSchema, textListSchema };
 export type {
   FontReference,
   FontSize,
+  LineHeight,
   TextAlignment,
   TextStyle,
 } from "@pptxdk/core/capability";
@@ -160,6 +163,7 @@ type RunStyle = {
   readonly textDecoration?: TextStyle["textDecoration"] | undefined;
   readonly textShadow?: Shadow | "none" | undefined;
   readonly lang?: string | undefined;
+  readonly baselineShift?: `${number}%` | undefined;
 };
 export type Run = {
   readonly text: string;
@@ -180,6 +184,11 @@ export type TextFieldContext = {
  */
 const textAuthorMetadataKeys: ReadonlySet<string> = new Set(["id"]);
 
+export type ResolvedListIndent = {
+  readonly marginLeft: number;
+  readonly indent: number;
+};
+
 export type Paragraph = {
   readonly runs: readonly Run[];
   readonly style: ParagraphStyle;
@@ -187,6 +196,7 @@ export type Paragraph = {
   readonly endStyle: RunStyle;
   readonly localEndStyle?: RunStyle;
   readonly wrap: "normal" | "nowrap";
+  readonly resolvedListIndent?: ResolvedListIndent | undefined;
 };
 type NormalizedFont = {
   readonly family: string;
@@ -409,6 +419,39 @@ function positiveLength(value: unknown, label: string): number {
     );
   }
   return pixels;
+}
+
+const lineHeightPercentPattern = /^(\d+(?:\.\d+)?)%$/u;
+
+function isLineHeightPercent(value: unknown): value is `${number}%` {
+  return typeof value === "string" && value.endsWith("%");
+}
+
+function lineHeightPercentThousandths(value: string): number {
+  const match = lineHeightPercentPattern.exec(value);
+  if (match === null) {
+    throw new CapabilityError(
+      "invalid-text-length",
+      "lineHeight percentage must be greater than 0% and within DrawingML ST_TextSpacingPercent range (up to 13200%)",
+    );
+  }
+  const pct = Number(match[1]);
+  const thousandths = Math.round(pct * 1000);
+  if (!Number.isFinite(pct) || thousandths < 1 || thousandths > 13_200_000) {
+    throw new CapabilityError(
+      "invalid-text-length",
+      "lineHeight percentage must be greater than 0% and within DrawingML ST_TextSpacingPercent range (up to 13200%)",
+    );
+  }
+  return thousandths;
+}
+
+function lineSpacingXml(value: LineHeight | undefined): string {
+  if (value === undefined) return "";
+  if (isLineHeightPercent(value)) {
+    return `<a:lnSpc><a:spcPct val="${lineHeightPercentThousandths(value)}"/></a:lnSpc>`;
+  }
+  return `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(value, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
 }
 
 function centipoints(value: number): number {
@@ -679,17 +722,29 @@ function validateRunStyle(style: RunStyle): RunStyle {
     themeFont: _themeFont,
     eastAsianThemeFont: _eastAsianThemeFont,
     color,
+    baselineShift,
     ...rest
   } = style;
   validateTextStyle({
     ...rest,
     ...(color !== undefined && !isResolvedColor(color) ? { color } : {}),
   });
+  if (
+    baselineShift !== undefined &&
+    parseBaselineShiftThousandths(baselineShift) === undefined
+  ) {
+    throw new CapabilityError(
+      "invalid-baseline-shift",
+      "baselineShift must be a non-zero finite percentage string within DrawingML ST_Percentage range",
+      undefined,
+      { field: "style.baselineShift" },
+    );
+  }
   return style;
 }
 
-function readRunStyle(value: unknown): RunStyle {
-  return parseRunStyle(value, "Span.style");
+function readRunStyle(value: unknown, label = "Span.style"): RunStyle {
+  return parseRunStyle(value, label);
 }
 
 function mergeRunStyle(
@@ -1045,7 +1100,12 @@ function collectRuns(
       }
       continue;
     }
-    if (child.type !== "span" && child.type !== "slide-number") {
+    if (
+      child.type !== "span" &&
+      child.type !== "sup" &&
+      child.type !== "sub" &&
+      child.type !== "slide-number"
+    ) {
       throw new CapabilityError(
         "unsupported-text-child",
         `${child.type} cannot be used as text paragraph or run`,
@@ -1060,7 +1120,62 @@ function collectRuns(
         `Span contains unimplemented parameter ${unknown}`,
       );
     }
-    const spanStyle = readRunStyle(child.props["style"]);
+    const label =
+      child.type === "sup"
+        ? "Sup.style"
+        : child.type === "sub"
+          ? "Sub.style"
+          : child.type === "slide-number"
+            ? "SlideNumber.style"
+            : "Span.style";
+    const parsedSpanStyle = readRunStyle(child.props["style"], label);
+    let spanStyle: RunStyle = parsedSpanStyle;
+    if (child.type === "sup" || child.type === "sub") {
+      const defaultShift: `${number}%` = child.type === "sup" ? "30%" : "-25%";
+      const expectedMilli = child.type === "sup" ? 30_000 : -25_000;
+      const tagLabel = child.type === "sup" ? "Sup" : "Sub";
+      if (parsedSpanStyle.baselineShift !== undefined) {
+        const declaredMilli = parseBaselineShiftThousandths(
+          parsedSpanStyle.baselineShift,
+        );
+        if (declaredMilli !== expectedMilli) {
+          throw new CapabilityError(
+            "conflicting-baseline-shift",
+            `${tagLabel} cannot declare conflicting baselineShift ${parsedSpanStyle.baselineShift}`,
+            undefined,
+            { field: "style.baselineShift" },
+          );
+        }
+      }
+      if (style.baselineShift !== undefined) {
+        const parentMilli = parseBaselineShiftThousandths(style.baselineShift);
+        if (parentMilli !== expectedMilli) {
+          throw new CapabilityError(
+            "conflicting-baseline-shift",
+            `${tagLabel} cannot be nested inside conflicting baselineShift ${style.baselineShift}`,
+            undefined,
+            { field: "style.baselineShift" },
+          );
+        }
+      }
+      spanStyle = { ...parsedSpanStyle, baselineShift: defaultShift };
+    } else if (
+      parsedSpanStyle.baselineShift !== undefined &&
+      style.baselineShift !== undefined
+    ) {
+      const childMilli = parseBaselineShiftThousandths(
+        parsedSpanStyle.baselineShift,
+      );
+      const parentMilli = parseBaselineShiftThousandths(style.baselineShift);
+      if (childMilli !== parentMilli) {
+        throw new CapabilityError(
+          "conflicting-baseline-shift",
+          `Nested baselineShift ${parsedSpanStyle.baselineShift} conflicts with inherited ${style.baselineShift}`,
+          undefined,
+          { field: "style.baselineShift" },
+        );
+      }
+    }
     const nextStyle = mergeRunStyle(style, spanStyle, theme);
     const nextLocalDeclared =
       localDeclared === undefined
@@ -1302,6 +1417,12 @@ function runPropertiesXml(
     if (style.letterSpacing !== undefined) {
       attributes.push(`spc="${letterSpacingCentipoints(style.letterSpacing)}"`);
     }
+    if (style.baselineShift !== undefined) {
+      const baseline = parseBaselineShiftThousandths(style.baselineShift);
+      if (baseline !== undefined) {
+        attributes.push(`baseline="${baseline}"`);
+      }
+    }
     const fillXml =
       style.color === undefined
         ? ""
@@ -1337,6 +1458,13 @@ function runPropertiesXml(
   const fontSlots = runFontSlotsXml(style);
   const decoration = resolveDecoration(style.textDecoration);
   const transform = resolveTransform(style.textTransform);
+  const baselineAttr =
+    style.baselineShift === undefined
+      ? []
+      : (() => {
+          const baseline = parseBaselineShiftThousandths(style.baselineShift);
+          return baseline === undefined ? [] : [`baseline="${baseline}"`];
+        })();
   const attributes = [
     ...(style.lang !== undefined ? [`lang="${escapedXml(style.lang)}"`] : []),
     `sz="${centipoints(points)}"`,
@@ -1347,6 +1475,7 @@ function runPropertiesXml(
     ...(style.letterSpacing === undefined || style.letterSpacing === 0
       ? []
       : [`spc="${letterSpacingCentipoints(style.letterSpacing)}"`]),
+    ...baselineAttr,
   ].join(" ");
   return `<${tag} ${attributes}><a:solidFill>${resolvedColorXml(color)}</a:solidFill>${textShadowXml(theme, style.textShadow)}${fontSlots}</${tag}>`;
 }
@@ -1596,12 +1725,21 @@ function paragraphXml(
     attributes.push('rtl="1"');
   }
   const resolvedList = resolveListModel(style.list);
-  if (resolvedList !== undefined)
+  if (resolvedList !== undefined) {
     attributes.push(`lvl="${resolvedList.level}"`);
-  const lineSpacing =
-    style.lineHeight === undefined
-      ? ""
-      : `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(style.lineHeight, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
+  }
+  if (!differential && paragraph.resolvedListIndent !== undefined) {
+    const marL = Math.min(
+      51_206_400,
+      Math.max(0, pxToEmu(paragraph.resolvedListIndent.marginLeft)),
+    );
+    const hangingEmu = Math.min(
+      51_206_400,
+      Math.max(0, pxToEmu(-paragraph.resolvedListIndent.indent)),
+    );
+    attributes.push(`marL="${marL}"`, `indent="${-hangingEmu}"`);
+  }
+  const lineSpacing = lineSpacingXml(style.lineHeight);
   const spacingAfter =
     style.spacingAfter === undefined || style.spacingAfter === 0
       ? ""
@@ -1887,6 +2025,8 @@ function normalizeParagraphs(
     if (
       isHostText(child) ||
       child.type === "span" ||
+      child.type === "sup" ||
+      child.type === "sub" ||
       child.type === "slide-number"
     ) {
       collectRuns(
@@ -2065,7 +2205,11 @@ function rangeWidth(
     if (visible === "") continue;
     const face = piece.face;
     const advances = shapeFontAdvances(face, visible);
-    const points = fontSizePoints(piece.style.fontSize);
+    const unscaledPoints = fontSizePoints(piece.style.fontSize);
+    const points =
+      piece.style.baselineShift !== undefined
+        ? unscaledPoints * 0.65
+        : unscaledPoints;
     const tenths = Math.ceil(centipoints(points) / 10) / 10;
     for (const xAdvance of advances) {
       const advance = (xAdvance / face.unitsPerEm) * points;
@@ -2246,7 +2390,10 @@ function wrapParagraph(
 }
 
 function paragraphLineHeight(paragraph: Paragraph): number {
-  if (paragraph.style.lineHeight !== undefined) {
+  if (
+    paragraph.style.lineHeight !== undefined &&
+    !isLineHeightPercent(paragraph.style.lineHeight)
+  ) {
     const value = positiveLength(paragraph.style.lineHeight, "lineHeight");
     return spacingCentipoints(value, "lineHeight") / 75;
   }
@@ -2287,6 +2434,18 @@ function paragraphLineHeight(paragraph: Paragraph): number {
       undefined,
       { font: fontDetailsFromRunStyle(paragraph.endStyle) },
     );
+  }
+  if (paragraph.style.lineHeight !== undefined) {
+    const factor =
+      lineHeightPercentThousandths(paragraph.style.lineHeight) / 100_000;
+    const scaled = maximum * factor;
+    if (!Number.isFinite(scaled) || scaled <= 0) {
+      throw new CapabilityError(
+        "font-metrics-invalid",
+        "Font line metrics must produce a finite positive value",
+      );
+    }
+    return scaled;
   }
   return spacingCentipoints(maximum, "lineHeight") / 75;
 }
@@ -2348,21 +2507,16 @@ function paragraphPieces(paragraph: Paragraph): {
   return { text, pieces };
 }
 
-function listIndentMetrics(paragraph: Paragraph): {
-  readonly levelIndent: number;
-  readonly hangingIndent: number;
-  readonly contentIndent: number;
-  readonly baseFontPx: number;
-} {
+function computeDefaultListIndentMetrics(paragraph: Paragraph):
+  | {
+      readonly levelIndent: number;
+      readonly hangingIndent: number;
+      readonly contentIndent: number;
+      readonly baseFontPx: number;
+    }
+  | undefined {
   const resolvedList = resolveListModel(paragraph.style.list);
-  if (resolvedList === undefined) {
-    return {
-      levelIndent: 0,
-      hangingIndent: 0,
-      contentIndent: 0,
-      baseFontPx: 0,
-    };
-  }
+  if (resolvedList === undefined) return undefined;
   const firstStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
   const baseFontPx = (fontSizePoints(firstStyle.fontSize) * 4) / 3;
   const hangingIndent = Math.max(baseFontPx * 1.25, 20);
@@ -2373,6 +2527,34 @@ function listIndentMetrics(paragraph: Paragraph): {
     contentIndent: levelIndent + hangingIndent,
     baseFontPx,
   };
+}
+
+function listIndentMetrics(paragraph: Paragraph): {
+  readonly levelIndent: number;
+  readonly hangingIndent: number;
+  readonly contentIndent: number;
+  readonly baseFontPx: number;
+} {
+  const defaults = computeDefaultListIndentMetrics(paragraph);
+  if (defaults === undefined) {
+    return {
+      levelIndent: 0,
+      hangingIndent: 0,
+      contentIndent: 0,
+      baseFontPx: 0,
+    };
+  }
+  if (paragraph.resolvedListIndent !== undefined) {
+    const hangingIndent = Math.max(0, -paragraph.resolvedListIndent.indent);
+    const contentIndent = Math.max(0, paragraph.resolvedListIndent.marginLeft);
+    return {
+      levelIndent: Math.max(0, contentIndent - hangingIndent),
+      hangingIndent,
+      contentIndent,
+      baseFontPx: defaults.baseFontPx,
+    };
+  }
+  return defaults;
 }
 
 function paragraphMinContentWidth(paragraph: Paragraph): number {
@@ -2975,11 +3157,22 @@ export function previewParagraphOutlines(
       );
       if (shaped.length === 0) return;
       const face = piece.face;
-      const fontPx = (fontSizePoints(piece.style.fontSize) * 4) / 3;
+      const unscaledFontPx = (fontSizePoints(piece.style.fontSize) * 4) / 3;
+      const baselineMilli =
+        piece.style.baselineShift !== undefined
+          ? parseBaselineShiftThousandths(piece.style.baselineShift)
+          : undefined;
+      const fontPx =
+        baselineMilli !== undefined ? unscaledFontPx * 0.65 : unscaledFontPx;
       const scale = fontPx / face.unitsPerEm;
+      const unscaledScale = unscaledFontPx / face.unitsPerEm;
+      const baselineShiftPx =
+        baselineMilli !== undefined
+          ? -(baselineMilli / 100_000) * unscaledFontPx
+          : 0;
       const trackingPx = piece.style.letterSpacing ?? 0;
-      ascent = Math.max(ascent, face.ascent * scale);
-      descent = Math.max(descent, -face.descent * scale);
+      ascent = Math.max(ascent, face.ascent * unscaledScale);
+      descent = Math.max(descent, -face.descent * unscaledScale);
       let segStartX: number | undefined;
       let segEndX = cursor;
       const glyphStart = glyphs.length;
@@ -3003,7 +3196,7 @@ export function previewParagraphOutlines(
         glyphs.push({
           path: item.path,
           x: cursor + item.xOffset * scale,
-          y: -item.yOffset * scale,
+          y: baselineShiftPx - item.yOffset * scale,
           scale,
           color: piece.style.color,
           ...(piece.style.textShadow === undefined
@@ -3033,6 +3226,7 @@ export function previewParagraphOutlines(
         if (decoration !== undefined) {
           decorations.push({
             ...decoration,
+            y: decoration.y + baselineShiftPx,
             glyphStart,
             glyphEnd,
           });
@@ -3796,7 +3990,7 @@ export function computeTextMetrics(
  * and font resource claims from pre-parsed paragraphs without assigning emit-only field IDs.
  */
 export function resolveTextBody(
-  paragraphs: readonly Paragraph[],
+  rawParagraphs: readonly Paragraph[],
   style: ResolvedTextStyle | TextStyle,
   theme: ThemeContext,
   verticalAlign: TextStyle["verticalAlign"] = "top",
@@ -3807,6 +4001,23 @@ export function resolveTextBody(
     readonly localBodyDeclared?: ReadonlySet<string>;
   },
 ): ResolvedTextBody {
+  // Materialize hanging-indent defaults on non-placeholder lists so emit and paint consume identical geometry,
+  // while bound placeholders keep omitting marL/indent to preserve master/layout lstStyle inheritance.
+  const paragraphs =
+    placeholderOptions?.isPlaceholder === true
+      ? rawParagraphs
+      : rawParagraphs.map((paragraph) => {
+          const metrics = computeDefaultListIndentMetrics(paragraph);
+          return metrics === undefined
+            ? paragraph
+            : {
+                ...paragraph,
+                resolvedListIndent: {
+                  marginLeft: metrics.contentIndent,
+                  indent: -metrics.hangingIndent,
+                },
+              };
+        });
   const runs = paragraphs.flatMap((paragraph) =>
     paragraph.runs.length > 0
       ? paragraph.runs
@@ -3864,13 +4075,17 @@ export function resolveTextBody(
   }
   const outputParagraphs =
     layout?.contentSized === true && measured !== undefined
-      ? paragraphs.map((paragraph, index) => ({
-          ...paragraph,
-          style: {
-            ...paragraph.style,
-            lineHeight: measured.paragraphs[index]!.lineHeight,
-          },
-        }))
+      ? paragraphs.map((paragraph, index) =>
+          paragraph.style.lineHeight !== undefined
+            ? paragraph
+            : {
+                ...paragraph,
+                style: {
+                  ...paragraph.style,
+                  lineHeight: measured.paragraphs[index]!.lineHeight,
+                },
+              },
+        )
       : paragraphs;
   validateEmittableParagraphs(outputParagraphs, theme);
   const text = outputParagraphs
@@ -4049,10 +4264,7 @@ export function writeChartTextProperties(
     textResourceClaims(runs);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
   const outputText = texts.join("\n");
-  const lineSpacing =
-    style.lineHeight === undefined
-      ? ""
-      : `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(style.lineHeight, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
+  const lineSpacing = lineSpacingXml(style.lineHeight);
   const alignment = alignmentValue(style.align);
   const paragraphAlignment =
     alignment === undefined ? "" : ` algn="${alignment}"`;
@@ -4106,10 +4318,7 @@ export function writeChartTitle(
     textResourceClaims([{ text, style: runStyle }]);
   const runProperties = runPropertiesXml(runStyle, "a:rPr", theme);
   const defaultProperties = runPropertiesXml(runStyle, "a:defRPr", theme);
-  const lineSpacing =
-    style.lineHeight === undefined
-      ? ""
-      : `<a:lnSpc><a:spcPts val="${spacingCentipoints(positiveLength(style.lineHeight, "lineHeight"), "lineHeight")}"/></a:lnSpc>`;
+  const lineSpacing = lineSpacingXml(style.lineHeight);
   const alignment = alignmentValue(style.align);
   const paragraphAlignment =
     alignment === undefined ? "" : ` algn="${alignment}"`;

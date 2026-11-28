@@ -20,6 +20,8 @@ import {
   runStyleSchema,
   slideNumberAuthorPropsKeys,
   spanAuthorPropsKeys,
+  subAuthorPropsKeys,
+  supAuthorPropsKeys,
   textAuthorPropsKeys,
   textBoxStyleSchema,
 } from "../shared/text-schemas.ts";
@@ -29,6 +31,8 @@ const objectMotionPropKeys = motionPropKeySet;
 const textAllowedPropKeys = new Set(textAuthorPropsKeys);
 const paragraphAllowedPropKeys = new Set(paragraphAuthorPropsKeys);
 const spanAllowedPropKeys = new Set(spanAuthorPropsKeys);
+const supAllowedPropKeys = new Set(supAuthorPropsKeys);
+const subAllowedPropKeys = new Set(subAuthorPropsKeys);
 const slideNumberAllowedPropKeys = new Set(slideNumberAuthorPropsKeys);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -72,7 +76,10 @@ function serializeRichTextStyleProp(
       ? textBoxStyleSchema
       : nodeType === "paragraph"
         ? paragraphStyleSchema
-        : nodeType === "span" || nodeType === "slide-number"
+        : nodeType === "span" ||
+            nodeType === "sup" ||
+            nodeType === "sub" ||
+            nodeType === "slide-number"
           ? runStyleSchema
           : undefined;
   if (schema !== undefined) {
@@ -107,6 +114,8 @@ function serializeRichTextStyleProp(
 export const blockRichTextChildKinds: ReadonlySet<string> = new Set([
   "paragraph",
   "span",
+  "sup",
+  "sub",
   "slide-number",
 ]);
 
@@ -119,6 +128,8 @@ export const steppableRichTextChildKinds: ReadonlySet<string> = new Set([
 /** Inline-level rich-text child declaration types allowed inside `P` and `Span`. */
 export const inlineRichTextChildKinds: ReadonlySet<string> = new Set([
   "span",
+  "sup",
+  "sub",
   "slide-number",
 ]);
 
@@ -311,6 +322,20 @@ export const textCodegen = defineObjectCodegen({
       vanillaFactory: "span",
       reactComponent: "Span",
       allowedPropKeys: spanAllowedPropKeys,
+      allowedChildKinds: inlineRichTextChildKinds,
+      supportObjectExtras: false,
+    }),
+    sup: createRichTextCodegenHandler({
+      vanillaFactory: "sup",
+      reactComponent: "Sup",
+      allowedPropKeys: supAllowedPropKeys,
+      allowedChildKinds: inlineRichTextChildKinds,
+      supportObjectExtras: false,
+    }),
+    sub: createRichTextCodegenHandler({
+      vanillaFactory: "sub",
+      reactComponent: "Sub",
+      allowedPropKeys: subAllowedPropKeys,
       allowedChildKinds: inlineRichTextChildKinds,
       supportObjectExtras: false,
     }),

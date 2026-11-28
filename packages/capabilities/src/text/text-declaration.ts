@@ -4,6 +4,8 @@ import type {
   ParagraphDeclarationProps,
   SlideNumberDeclarationProps,
   SpanDeclarationProps,
+  SubDeclarationProps,
+  SupDeclarationProps,
   TextDeclarationProps,
   TextStyle,
 } from "../shared/text-schemas.ts";
@@ -13,6 +15,8 @@ export type {
   ParagraphDeclarationProps,
   SlideNumberDeclarationProps,
   SpanDeclarationProps,
+  SubDeclarationProps,
+  SupDeclarationProps,
   TextDeclarationProps,
 };
 
@@ -62,6 +66,36 @@ export function createSpanNode(
     SpanDeclarationProps,
     NonNullable<SpanDeclarationProps["style"]>
   >("span", "span", props);
+}
+
+/** Creates the editable superscript inline node shared by Sup JSX and command authoring. */
+export function createSupNode(
+  props: SupDeclarationProps,
+): RichTextContainer<
+  "sup",
+  SupDeclarationProps,
+  NonNullable<SupDeclarationProps["style"]>
+> {
+  return new RichTextContainer<
+    "sup",
+    SupDeclarationProps,
+    NonNullable<SupDeclarationProps["style"]>
+  >("sup", "sup", props);
+}
+
+/** Creates the editable subscript inline node shared by Sub JSX and command authoring. */
+export function createSubNode(
+  props: SubDeclarationProps,
+): RichTextContainer<
+  "sub",
+  SubDeclarationProps,
+  NonNullable<SubDeclarationProps["style"]>
+> {
+  return new RichTextContainer<
+    "sub",
+    SubDeclarationProps,
+    NonNullable<SubDeclarationProps["style"]>
+  >("sub", "sub", props);
 }
 
 /** Creates the editable slide number field shared by the command factory and JSX element. */

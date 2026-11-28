@@ -87,6 +87,8 @@ export type {
   SlideNumberDeclarationProps,
   ShapeTextStyle,
   SpanDeclarationProps,
+  SubDeclarationProps,
+  SupDeclarationProps,
   TextDeclarationProps,
 } from "./text-declaration.ts";
 export { font, fromFontCollection } from "../font/font.ts";
@@ -99,7 +101,9 @@ export type {
 export type {
   FontReference,
   FontSize,
+  LineHeight,
   ParagraphStyle,
+  RunTextStyle,
   TextAlignment,
   TextList,
   TextStyle,

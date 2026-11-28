@@ -240,10 +240,52 @@ const validatedFontSizeSchema = rawFontSizeSchema.refine((value) => {
   return serialized >= 100 && serialized <= 400_000;
 }, "fontSize converted value must be within DrawingML range of 1 to 4000pt");
 
-const validatedLineHeightSchema = rawFontSizeSchema.refine((value) => {
+const lineHeightPercentPattern = /^(\d+(?:\.\d+)?)%$/u;
+const lineHeightPercentStringSchema = z
+  .string()
+  .regex(lineHeightPercentPattern) as unknown as z.ZodType<`${number}%`>;
+
+function parseLineHeightPercentThousandths(value: string): number | undefined {
+  const match = lineHeightPercentPattern.exec(value);
+  if (match === null) return undefined;
+  const pct = Number(match[1]);
+  if (!Number.isFinite(pct)) return undefined;
+  const thousandths = Math.round(pct * 1000);
+  // DrawingML ST_TextSpacingPercent spans 0..13200000 (0%..13200%); proportional lineHeight requires a positive value.
+  if (thousandths < 1 || thousandths > 13_200_000) return undefined;
+  return thousandths;
+}
+
+/**
+ * Paragraph line height.
+ *
+ * Numeric values and `"px"` / `"pt"` strings emit fixed line spacing (`<a:spcPts>`), while positive
+ * `"${number}%"` percentage strings emit proportional line spacing (`<a:spcPct>`) scaled by the
+ * paragraph's native font single-line height (`0% < pct <= 13200%`).
+ */
+export type LineHeight = FontSize | `${number}%`;
+
+const rawLineHeightSchema = z.union([
+  rawFontSizeSchema,
+  lineHeightPercentStringSchema.refine(
+    (value) => parseLineHeightPercentThousandths(value) !== undefined,
+    "lineHeight percentage must be greater than 0% and within DrawingML ST_TextSpacingPercent range (up to 13200%)",
+  ),
+]);
+export const lineHeightSchema: z.ZodType<LineHeight> =
+  rawLineHeightSchema satisfies z.ZodType<
+    AssertExact<LineHeight, z.infer<typeof rawLineHeightSchema>> extends true
+      ? LineHeight
+      : never
+  >;
+
+const validatedLineHeightSchema = rawLineHeightSchema.refine((value) => {
+  if (typeof value === "string" && value.endsWith("%")) {
+    return parseLineHeightPercentThousandths(value) !== undefined;
+  }
   const centipoints = Math.round(textLengthToPixels(value) * 75);
   return centipoints >= 0 && centipoints <= 158_400;
-}, "lineHeight converted value must be within DrawingML range of 0 to 1584pt");
+}, "lineHeight must be a positive pixel value, px/pt length within 0 to 1584pt, or percentage within 0% to 13200%");
 
 export type TextAlignment = "left" | "center" | "right" | "justify";
 const rawTextAlignmentSchema = z.enum(["left", "center", "right", "justify"]);
@@ -911,7 +953,7 @@ export type TextStyle = {
   readonly fontWeight?: "normal" | "bold" | number | undefined;
   readonly fontStyle?: FontFaceStyle | undefined;
   readonly color?: ColorValue | undefined;
-  readonly lineHeight?: FontSize | undefined;
+  readonly lineHeight?: LineHeight | undefined;
   readonly verticalAlign?: "top" | "middle" | "bottom" | undefined;
   /** Paragraph alignment when not explicitly overridden. */
   readonly align?: TextAlignment | undefined;
@@ -1529,7 +1571,7 @@ function textStyleErrorForIssue(
   if (field === "lineHeight") {
     return new CapabilityError(
       "invalid-text-length",
-      "lineHeight must be a positive pixel value or px/pt length within 0 to 1584pt",
+      "lineHeight must be a positive pixel value, px/pt length within 0 to 1584pt, or percentage within 0% to 13200%",
     );
   }
   if (field === "verticalAlign") {

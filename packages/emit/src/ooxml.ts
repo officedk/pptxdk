@@ -28,6 +28,7 @@ import {
   type Font,
   type FontFaceStyle,
   type FontSize,
+  type LineHeight,
   type FormatColorTransform,
   type FormatEffectStyle,
   type FormatFillStyle,
@@ -645,6 +646,15 @@ function levelDefRPrXml(
     : `<a:defRPr${attrText}>${inner}</a:defRPr>`;
 }
 
+function levelLineSpacingXml(value: LineHeight | undefined): string {
+  if (value === undefined) return "";
+  if (typeof value === "string" && value.endsWith("%")) {
+    const val = Math.round(Number(value.slice(0, -1)) * 1000);
+    return `<a:lnSpc><a:spcPct val="${val}"/></a:lnSpc>`;
+  }
+  return `<a:lnSpc><a:spcPts val="${lengthCentipoints(value as FontSize)}"/></a:lnSpc>`;
+}
+
 function levelParagraphPropertiesXml(
   tagName: string,
   level: PlaceholderLevelStyle,
@@ -664,10 +674,7 @@ function levelParagraphPropertiesXml(
     level.spacingBefore === undefined
       ? ""
       : `<a:spcBef><a:spcPts val="${Math.round(level.spacingBefore * 75)}"/></a:spcBef>`;
-  const lnSpc =
-    level.lineHeight === undefined
-      ? ""
-      : `<a:lnSpc><a:spcPts val="${lengthCentipoints(level.lineHeight)}"/></a:lnSpc>`;
+  const lnSpc = levelLineSpacingXml(level.lineHeight);
   const spcAft =
     level.spacingAfter === undefined
       ? ""

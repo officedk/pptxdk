@@ -101,6 +101,8 @@ export {
   spinOut,
   step,
   stretch,
+  sub,
+  sup,
   table,
   text,
   transitions,
@@ -170,6 +172,10 @@ export type {
   SpanAuthorProps,
   SpanContent,
   SpanNode,
+  SubAuthorProps,
+  SubNode,
+  SupAuthorProps,
+  SupNode,
   TableAuthorProps,
   TableCellStyle,
   TableColumn,
@@ -337,7 +343,14 @@ export { Notes } from "@pptxdk/capabilities/notes-elements";
 export { Placeholder } from "@pptxdk/capabilities/placeholder-elements";
 export { Shape } from "@pptxdk/capabilities/shape-elements";
 export { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
-export { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
+export {
+  P,
+  SlideNumber,
+  Span,
+  Sub,
+  Sup,
+  Text,
+} from "@pptxdk/capabilities/text-elements";
 export {
   AuthorQuery,
   AuthorQueryError,
@@ -502,10 +515,14 @@ export {
   P,
   SlideNumber,
   Span,
+  Sub,
+  Sup,
   Text,
   type ParagraphProps,
   type SlideNumberProps,
   type SpanProps,
+  type SubProps,
+  type SupProps,
   type TextProps,
 } from "@pptxdk/capabilities/text-elements";
 export {
@@ -691,6 +708,7 @@ export type {
   ResolvedMotionMoment,
   ResolvedMotionScope,
   ResolvedMotionStep,
+  RunTextStyle,
   ScatterChartGroup,
   ScatterChartPoint,
   ScatterChartSeries,

@@ -41,6 +41,8 @@ import {
   createParagraphNode,
   createSlideNumberNode,
   createSpanNode,
+  createSubNode,
+  createSupNode,
   type ParagraphDeclarationProps,
   type SpanDeclarationProps,
 } from "../text/text-declaration.ts";
@@ -68,6 +70,8 @@ const ParagraphPrAttrSchema = z.object({
   algn: z.enum(["l", "ctr", "r", "just"]).optional(),
   rtl: ooxmlBoolSchema.optional(),
   lvl: ooxmlNonNegativeIntSchema.optional(),
+  marL: ooxmlNonNegativeIntSchema.optional(),
+  indent: ooxmlIntSchema.optional(),
 });
 
 const RunPrAttrSchema = z.object({
@@ -79,6 +83,7 @@ const RunPrAttrSchema = z.object({
   strike: z.enum(["noStrike", "sngStrike"]).optional(),
   cap: z.enum(["none", "all"]).optional(),
   spc: ooxmlIntSchema.optional(),
+  baseline: ooxmlIntSchema.optional(),
   dirty: ooxmlBoolSchema.optional(),
   smtClean: ooxmlBoolSchema.optional(),
 });
@@ -233,7 +238,7 @@ function readShapeRunProperties(
   rPrCursor: XmlElementCursor,
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
-): ParsedRunStyle {
+): { readonly style: ParsedRunStyle; readonly inlineKind?: "sup" | "sub" } {
   const raw = rPrCursor.attrsObject([
     "lang",
     "sz",
@@ -243,6 +248,7 @@ function readShapeRunProperties(
     "strike",
     "cap",
     "spc",
+    "baseline",
     "dirty",
     "smtClean",
   ]);
@@ -254,6 +260,8 @@ function readShapeRunProperties(
   let textDecoration: NonNullable<TextStyle["textDecoration"]> | undefined;
   let textTransform: NonNullable<TextStyle["textTransform"]> | undefined;
   let letterSpacing: number | undefined;
+  let baselineShift: ParsedRunStyle["baselineShift"] | undefined;
+  let inlineKind: "sup" | "sub" | undefined;
 
   if (!parsed.success) {
     diagnostics.push({
@@ -302,6 +310,26 @@ function readShapeRunProperties(
     if (data.spc !== undefined) {
       letterSpacing = data.spc / 75;
     }
+    if (data.baseline !== undefined) {
+      if (data.baseline === 30_000) {
+        inlineKind = "sup";
+      } else if (data.baseline === -25_000) {
+        inlineKind = "sub";
+      } else if (data.baseline !== 0) {
+        if (data.baseline < -2_147_483_648 || data.baseline > 2_147_483_647) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: { ...location, xpath: `${rPrCursor.xpath}/@baseline` },
+            attributeOrElement: "@baseline",
+            rawValue: String(data.baseline),
+          });
+        } else {
+          baselineShift = `${data.baseline / 1000}%`;
+        }
+      }
+    }
   }
 
   const solidFill = rPrCursor.child(A_NS, "solidFill");
@@ -319,25 +347,29 @@ function readShapeRunProperties(
   const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
 
   return {
-    ...(fontFamily === undefined ? {} : { fontFamily }),
-    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
-    ...(fontSize === undefined ? {} : { fontSize }),
-    ...(fontWeight === undefined ? {} : { fontWeight }),
-    ...(fontStyle === undefined ? {} : { fontStyle }),
-    ...(color === undefined ? {} : { color }),
-    ...(letterSpacing === undefined ? {} : { letterSpacing }),
-    ...(textTransform === undefined ? {} : { textTransform }),
-    ...(textDecoration === undefined ? {} : { textDecoration }),
-    ...(effects.boxShadow === undefined
-      ? {}
-      : { textShadow: effects.boxShadow }),
-    ...(lang === undefined ? {} : { lang }),
+    style: {
+      ...(fontFamily === undefined ? {} : { fontFamily }),
+      ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
+      ...(fontSize === undefined ? {} : { fontSize }),
+      ...(fontWeight === undefined ? {} : { fontWeight }),
+      ...(fontStyle === undefined ? {} : { fontStyle }),
+      ...(color === undefined ? {} : { color }),
+      ...(letterSpacing === undefined ? {} : { letterSpacing }),
+      ...(textTransform === undefined ? {} : { textTransform }),
+      ...(textDecoration === undefined ? {} : { textDecoration }),
+      ...(effects.boxShadow === undefined
+        ? {}
+        : { textShadow: effects.boxShadow }),
+      ...(lang === undefined ? {} : { lang }),
+      ...(baselineShift === undefined ? {} : { baselineShift }),
+    },
+    ...(inlineKind === undefined ? {} : { inlineKind }),
   };
 }
 
 type ImportedShapeRun =
   | {
-      readonly kind: "text";
+      readonly kind: "text" | "sup" | "sub";
       readonly text: string;
       readonly style: ParsedRunStyle;
     }
@@ -346,32 +378,41 @@ type ImportedShapeRun =
 type ImportedShapeParagraph = {
   readonly runs: readonly ImportedShapeRun[];
   readonly style: ParagraphStyle;
-  readonly defRunStyle?: ParsedRunStyle;
+  readonly defRunStyle?: Omit<ParsedRunStyle, "baselineShift">;
 };
 
 function readLineSpacing(
   lnSpcCursor: XmlElementCursor,
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
-): number | undefined {
+): ParagraphStyle["lineHeight"] | undefined {
   const spcPts = lnSpcCursor.child(A_NS, "spcPts");
   if (spcPts !== undefined) {
     const parsed = SpacingValAttrSchema.safeParse(spcPts.attrsObject(["val"]));
-    if (parsed.success && parsed.data.val > 0) {
+    if (parsed.success && parsed.data.val > 0 && parsed.data.val <= 158_400) {
       return parsed.data.val / 75;
     }
   }
   const spcPct = lnSpcCursor.child(A_NS, "spcPct");
   if (spcPct !== undefined) {
-    spcPct.consumeAttr("val");
-    diagnostics.push({
-      code: "unsupported-mechanism",
-      category: "unsupported",
-      disposition: "omitted",
-      location: { ...location, xpath: spcPct.xpath },
-      namespaceUri: A_NS,
-      localName: "spcPct",
-    });
+    const raw = spcPct.attrsObject(["val"]);
+    const parsed = SpacingValAttrSchema.safeParse(raw);
+    if (
+      !parsed.success ||
+      parsed.data.val < 1 ||
+      parsed.data.val > 13_200_000
+    ) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: spcPct.xpath },
+        attributeOrElement: "a:spcPct/@val",
+        rawValue: raw["val"] ?? "",
+      });
+    } else {
+      return `${parsed.data.val / 1000}%`;
+    }
   }
   return undefined;
 }
@@ -382,15 +423,15 @@ function readShapeParagraph(
   diagnostics: ImportDiagnostic[],
 ): ImportedShapeParagraph {
   let align: TextAlignment | undefined;
-  let lineHeight: number | undefined;
+  let lineHeight: ParagraphStyle["lineHeight"] | undefined;
   let spacingAfter: number | undefined;
   let list: TextList | undefined;
-  let defRunStyle: ParsedRunStyle | undefined;
+  let defRunStyle: Omit<ParsedRunStyle, "baselineShift"> | undefined;
   let level = 0;
 
   const pPr = pCursor.child(A_NS, "pPr");
   if (pPr !== undefined) {
-    const rawPPr = pPr.attrsObject(["algn", "rtl", "lvl"]);
+    const rawPPr = pPr.attrsObject(["algn", "rtl", "lvl", "marL", "indent"]);
     const parsedPPr = ParagraphPrAttrSchema.safeParse(rawPPr);
     if (!parsedPPr.success) {
       diagnostics.push({
@@ -462,7 +503,9 @@ function readShapeParagraph(
 
     const defRPr = pPr.child(A_NS, "defRPr");
     if (defRPr !== undefined) {
-      defRunStyle = readShapeRunProperties(defRPr, location, diagnostics);
+      const { baselineShift: _baselineShift, ...restDefRunStyle } =
+        readShapeRunProperties(defRPr, location, diagnostics).style;
+      defRunStyle = restDefRunStyle;
     }
   }
 
@@ -470,14 +513,18 @@ function readShapeParagraph(
   for (const child of pCursor.remainingElementChildren()) {
     if (child.namespaceUri === A_NS && child.localName === "r") {
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readShapeRunProperties(rPr, location, diagnostics);
       const t = child.child(A_NS, "t");
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
-        runs.push({ kind: "text", text: t.textContent, style: runStyle });
+        runs.push({
+          kind: parsedRPr.inlineKind ?? "text",
+          text: t.textContent,
+          style: parsedRPr.style,
+        });
       }
       continue;
     }
@@ -485,16 +532,23 @@ function readShapeParagraph(
       child.consumeAttr("id");
       const fieldType = child.attr("type");
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readShapeRunProperties(rPr, location, diagnostics);
       const t = child.child(A_NS, "t");
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
       }
       if (fieldType === "slidenum") {
-        runs.push({ kind: "slidenum", style: runStyle });
+        const fieldStyle: ParsedRunStyle =
+          parsedRPr.inlineKind === undefined
+            ? parsedRPr.style
+            : {
+                ...parsedRPr.style,
+                baselineShift: parsedRPr.inlineKind === "sup" ? "30%" : "-25%",
+              };
+        runs.push({ kind: "slidenum", style: fieldStyle });
       } else {
         diagnostics.push({
           code: "unsupported-mechanism",
@@ -506,18 +560,26 @@ function readShapeParagraph(
           mechanismHint: `field:${fieldType ?? "unknown"}`,
         });
         if (t !== undefined) {
-          runs.push({ kind: "text", text: t.textContent, style: runStyle });
+          runs.push({
+            kind: parsedRPr.inlineKind ?? "text",
+            text: t.textContent,
+            style: parsedRPr.style,
+          });
         }
       }
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "br") {
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readShapeRunProperties(rPr, location, diagnostics);
-      runs.push({ kind: "text", text: "\n", style: runStyle });
+      runs.push({
+        kind: parsedRPr.inlineKind ?? "text",
+        text: "\n",
+        style: parsedRPr.style,
+      });
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "endParaRPr") {
@@ -722,7 +784,8 @@ export function readShapeSp(
     singleParagraph !== undefined &&
     singleParagraph.style.list === undefined &&
     singleParagraph.runs.length === 1 &&
-    singleParagraph.runs[0]!.kind === "text"
+    singleParagraph.runs[0]!.kind === "text" &&
+    singleParagraph.runs[0]!.style.baselineShift === undefined
       ? singleParagraph.runs[0]!
       : undefined;
   const hasStyledEmptyParagraph =
@@ -767,9 +830,11 @@ export function readShapeSp(
     singleParagraph !== undefined
       ? (() => {
           const { list: _list, ...restPStyle } = singleParagraph.style;
+          const { baselineShift: _baselineShift, ...restRunStyle } =
+            singlePlainRun.style;
           return {
             ...restPStyle,
-            ...singlePlainRun.style,
+            ...restRunStyle,
           };
         })()
       : undefined;
@@ -838,6 +903,14 @@ export function readShapeSp(
               return createSlideNumberNode(
                 Object.keys(run.style).length === 0 ? {} : { style: run.style },
               );
+            }
+            const runProps =
+              Object.keys(run.style).length === 0 ? {} : { style: run.style };
+            if (run.kind === "sup") {
+              return createSupNode(runProps).content(run.text);
+            }
+            if (run.kind === "sub") {
+              return createSubNode(runProps).content(run.text);
             }
             return Object.keys(run.style).length === 0
               ? run.text

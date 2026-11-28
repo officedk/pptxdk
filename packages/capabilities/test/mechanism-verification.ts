@@ -198,6 +198,8 @@ const vanillaCalleeByKind: Readonly<Record<string, RegExp>> = {
   shape: /\bshape\(/gu,
   "slide-number": /\bslideNumber\(/gu,
   span: /\bspan\(/gu,
+  sub: /\bsub\(/gu,
+  sup: /\bsup\(/gu,
   table: /\btable\(/gu,
   text: /\btext\(/gu,
 };
@@ -218,6 +220,8 @@ const reactTagByKind: Readonly<Record<string, RegExp>> = {
   shape: /<Shape[\s/>]/gu,
   "slide-number": /<SlideNumber[\s/>]/gu,
   span: /<Span[\s>]/gu,
+  sub: /<Sub[\s>]/gu,
+  sup: /<Sup[\s>]/gu,
   table: /<Table[\s>]/gu,
   text: /<Text[\s>]/gu,
 };

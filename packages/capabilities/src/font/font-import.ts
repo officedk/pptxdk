@@ -310,7 +310,12 @@ function upgradeStyleRecordFontAndWeight(
 }
 
 function hasUnstyledTextLeaf(node: CommonNode): boolean {
-  if (node.type === "span" || node.type === "slide-number") {
+  if (
+    node.type === "span" ||
+    node.type === "sup" ||
+    node.type === "sub" ||
+    node.type === "slide-number"
+  ) {
     return true;
   }
   if (

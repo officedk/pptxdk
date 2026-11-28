@@ -22,6 +22,8 @@ const shapeAllowedPropKeys = new Set(shapeAllowedPropKeyList);
 const shapeAllowedChildKinds = new Set([
   "paragraph",
   "span",
+  "sup",
+  "sub",
   "slide-number",
   "br",
   "motion-step",

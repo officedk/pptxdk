@@ -258,6 +258,8 @@ process.stdout.write("ok");
       "shape",
       "slide-number",
       "span",
+      "sub",
+      "sup",
       "table",
       "text",
     ];

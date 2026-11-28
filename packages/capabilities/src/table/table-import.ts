@@ -311,7 +311,8 @@ function readAnchorCell(
       singleParagraph !== undefined &&
       !hasParagraphLevelStyle &&
       singleParagraph.runs.length === 1 &&
-      singleParagraph.runs[0]!.kind === "text"
+      singleParagraph.runs[0]!.kind === "text" &&
+      singleParagraph.runs[0]!.style.baselineShift === undefined
         ? singleParagraph.runs[0]
         : undefined;
     const isSingleEmptyParagraph =
@@ -321,6 +322,7 @@ function readAnchorCell(
 
     if (singleTextRun !== undefined) {
       const {
+        baselineShift: _baselineShift,
         fontFamily,
         eastAsianFontFamily,
         fontSize,

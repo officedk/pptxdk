@@ -21,6 +21,7 @@ import { runCapabilityScenario } from "../../../test/acceptance-runner.ts";
 import {
   textDualScriptScenario,
   textPositiveScenario,
+  textProportionalLineHeightAndSupSubScenario,
   textRejectionScenario,
   textRtlListsAndFillsScenario,
 } from "./scenarios.ts";
@@ -45,6 +46,7 @@ describe("Text capability acceptance", () => {
         textPositiveScenario,
         textRtlListsAndFillsScenario,
         textDualScriptScenario,
+        textProportionalLineHeightAndSupSubScenario,
         textRejectionScenario,
       ]) {
         const { runs } = await runCapabilityScenario(scenario, {

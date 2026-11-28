@@ -28,7 +28,7 @@ catalog:
   fontkit: ^2.0.4
   harfbuzzjs: ^1.6.4
   jpeg-js: 0.4.4
-  linebreak: ^1.1.0
+  linebreak: ^2.0.0
   yoga-layout: ^3.2.1
   "@types/fontkit": ^2.0.9
   "@types/emscripten": ^1.41.6

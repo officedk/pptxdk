@@ -70,6 +70,8 @@ export type ParsedCategoryAxis = {
   readonly position: ChartAxisPosition;
   /** Effective native crossing control; explicit author values are preserved. */
   readonly crossing: ParsedAxisCrossing;
+  /** Materialized default rotation for vertical axis titles (-90 deg); undefined for horizontal. */
+  readonly titleRotationDegrees?: -90 | 90;
   readonly spec: ChartCategoryAxis;
 };
 
@@ -84,6 +86,8 @@ export type ParsedValueAxis = {
   readonly position: ChartAxisPosition;
   /** Effective native crossing control; explicit author values are preserved. */
   readonly crossing: ParsedAxisCrossing;
+  /** Materialized default rotation for vertical axis titles (-90 deg); undefined for horizontal. */
+  readonly titleRotationDegrees?: -90 | 90;
   readonly spec: ChartValueAxis;
 };
 

@@ -615,7 +615,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
           ),
       },
       {
-        label: "unsupported align on Table.style",
+        label: "unsupported spacingAfter on Table.style",
         expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
@@ -629,7 +629,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
                 {
                   id: "bad-tbl",
                   columns: [120],
-                  style: { align: "center" } as never,
+                  style: { spacingAfter: 8 } as never,
                 },
                 createElement(Row, null, createElement(Cell, null, "A")),
               ),
@@ -641,7 +641,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
               table({
                 id: "bad-tbl",
                 columns: [120],
-                style: { align: "center" } as never,
+                style: { spacingAfter: 8 } as never,
               }).append(row().append(cell("A"))),
             ),
           ),

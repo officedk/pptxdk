@@ -510,6 +510,17 @@ function gradientStopsSvg(stops: readonly ResolvedGradientStop[]): string {
     .join("");
 }
 
+function isFinitePositiveBox(box: ShapeBox): boolean {
+  return (
+    Number.isFinite(box.x) &&
+    Number.isFinite(box.y) &&
+    Number.isFinite(box.width) &&
+    Number.isFinite(box.height) &&
+    box.width > 1e-6 &&
+    box.height > 1e-6
+  );
+}
+
 /** Generates deterministic SVG `<linearGradient>` or `<radialGradient>` definition markup. */
 export function gradientDefSvg(
   id: string,
@@ -518,14 +529,25 @@ export function gradientDefSvg(
   const stops = gradientStopsSvg(gradient.stops);
   switch (gradient.kind) {
     case "linear-gradient": {
-      const rad = (gradient.angle * Math.PI) / 180;
+      const angle = Number.isFinite(gradient.angle) ? gradient.angle : 0;
+      const rad = (angle * Math.PI) / 180;
       const dx = Math.sin(rad);
       const dy = -Math.cos(rad);
       const halfSpan = (Math.abs(dx) + Math.abs(dy)) / 2;
-      const x1 = roundSvgNumber(0.5 - dx * halfSpan);
-      const y1 = roundSvgNumber(0.5 - dy * halfSpan);
-      const x2 = roundSvgNumber(0.5 + dx * halfSpan);
-      const y2 = roundSvgNumber(0.5 + dy * halfSpan);
+      const x1Val = 0.5 - dx * halfSpan;
+      const y1Val = 0.5 - dy * halfSpan;
+      const x2Val = 0.5 + dx * halfSpan;
+      const y2Val = 0.5 + dy * halfSpan;
+      const validVec =
+        Number.isFinite(x1Val) &&
+        Number.isFinite(y1Val) &&
+        Number.isFinite(x2Val) &&
+        Number.isFinite(y2Val) &&
+        Math.hypot(x2Val - x1Val, y2Val - y1Val) > 1e-6;
+      const x1 = validVec ? roundSvgNumber(x1Val) : "0";
+      const y1 = validVec ? roundSvgNumber(y1Val) : "0";
+      const x2 = validVec ? roundSvgNumber(x2Val) : "1";
+      const y2 = validVec ? roundSvgNumber(y2Val) : "0";
       return `<linearGradient id="${id}" gradientUnits="objectBoundingBox" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops}</linearGradient>`;
     }
     case "radial-gradient":
@@ -1535,6 +1557,14 @@ export function paintVisualModel(options: {
 }): PaintOutput {
   const { model, slideNumber, objectId } = options;
   const { box } = model;
+  if (!isFinitePositiveBox(box)) {
+    return {
+      svg: "",
+      ...(model.fill.kind === "image" && model.fill.source.kind === "external"
+        ? { placeholders: [{ url: model.fill.source.externalUrl }] }
+        : {}),
+    };
+  }
   const prefix = `obj-s${slideNumber}-o${objectId}`;
   const defs: string[] = [];
 
@@ -1550,10 +1580,15 @@ export function paintVisualModel(options: {
       break;
     }
     case "image": {
-      fillDefId = `${prefix}-fill`;
-      defs.push(
-        imageFillMechanism.paint(model.fill, { id: fillDefId, box }).svg,
-      );
+      const candidateId = `${prefix}-fill`;
+      const patternSvg = imageFillMechanism.paint(model.fill, {
+        id: candidateId,
+        box,
+      }).svg;
+      if (patternSvg !== "") {
+        fillDefId = candidateId;
+        defs.push(patternSvg);
+      }
       break;
     }
     default: {
@@ -2039,6 +2074,9 @@ export function paintImageFillSvg(
   id: string,
   box: ShapeBox,
 ): string {
+  if (!isFinitePositiveBox(box)) {
+    return "";
+  }
   const bx = roundSvgNumber(box.x);
   const by = roundSvgNumber(box.y);
   const bw = roundSvgNumber(box.width);

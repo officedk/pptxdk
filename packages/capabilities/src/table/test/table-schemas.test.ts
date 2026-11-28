@@ -120,7 +120,11 @@ describe("table public contract schemas", () => {
             fontSize: "12pt",
             fontWeight: "bold",
             color: "#0F172A",
+            align: "center",
             verticalAlign: "middle",
+            border: "none",
+            borderTop: { color: "#0F172A", width: 2 },
+            borderBottom: { color: "#0F172A", width: 2 },
           },
         }).append(
           row({
@@ -129,6 +133,9 @@ describe("table public contract schemas", () => {
               height: 32,
               background: "#1E293B",
               color: "#FFFFFF",
+              align: "right",
+              borderBottom: { color: "#CBD5E1", width: 1 },
+              borderLeft: "none",
             },
           }).append(
             cell("Header", {
@@ -203,6 +210,54 @@ describe("table public contract schemas", () => {
                 verticalAlign: "center" as never,
               },
             }).append(row().append(cell("A"))),
+          ),
+      ],
+      [
+        "invalid align on Table",
+        () =>
+          tableDoc(
+            table({
+              columns: [120],
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 30,
+                width: 120,
+                align: "middle" as never,
+              },
+            }).append(row().append(cell("A", { style: { align: "left" } }))),
+          ),
+      ],
+      [
+        "invalid borderTop on Table",
+        () =>
+          tableDoc(
+            table({
+              columns: [120],
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 30,
+                width: 120,
+                borderTop: { color: "#0F172A", style: "double" } as never,
+              },
+            }).append(row().append(cell("A"))),
+          ),
+      ],
+      [
+        "invalid borderBottom on Row",
+        () =>
+          tableDoc(
+            table({
+              columns: [120],
+              style: { position: "absolute", left: 20, top: 30, width: 120 },
+            }).append(
+              row({
+                style: {
+                  borderBottom: { color: "#0F172A", width: -1 } as never,
+                },
+              }).append(cell("A")),
+            ),
           ),
       ],
       [

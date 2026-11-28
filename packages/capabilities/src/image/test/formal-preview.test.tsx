@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 
 import { documentCapabilities } from "@pptxdk/capabilities/all";
-import { deck, image, slide } from "@pptxdk/capabilities/document";
+import { deck, image, shape, slide } from "@pptxdk/capabilities/document";
 import { Image } from "@pptxdk/capabilities/image-elements";
 import { preset } from "@pptxdk/capabilities/shape";
 import { type CapabilityModule, CommonNode } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
+import {
+  layoutStyleKeys,
+  parseCapabilityLayoutContract,
+  type ObjectCapabilityModule,
+} from "@pptxdk/core/capability";
 import { emit } from "@pptxdk/emit";
 import { paint } from "@pptxdk/preview";
 import { Deck, Slide, expandDocument } from "@pptxdk/react";
@@ -805,5 +810,105 @@ describe("Image static preview positive behaviors", () => {
       },
     });
     assert.ok(page.png instanceof Uint8Array && page.png.length > 0);
+  });
+
+  it("rasterizes extreme parallax image/shape coordinates and degenerate SVG clips/gradients safely without native SIGABRT", async () => {
+    const degenerateSvgCapability: ObjectCapabilityModule = {
+      declaration: "degenerate-svg-probe",
+      bind: (input, context) => ({
+        contract: parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: input.props,
+          allowedStyleKeys: new Set(layoutStyleKeys),
+          path: context.path,
+        }),
+        resolve: (ctx) => ({
+          observation: {
+            id: ctx.id,
+            kind: "degenerate-svg-probe",
+            name: "degenerate-svg-probe",
+            ...(ctx.layoutBox === undefined ? {} : { box: ctx.layoutBox }),
+          },
+          extensions: [],
+          emit: () => ({ xml: "" }),
+          paint: ({ slideNumber, objectId }) => ({
+            svg: `<defs><clipPath id="deg-zero-${slideNumber}-${objectId}"><rect x="10" y="10" width="0" height="40"/></clipPath><clipPath id="deg-off-${slideNumber}-${objectId}"><rect x="10000" y="0" width="100" height="100"/></clipPath><clipPath id="deg-local-${slideNumber}-${objectId}"><rect x="0" y="0" width="80" height="80"/></clipPath><linearGradient id="deg-grad-${slideNumber}-${objectId}" gradientUnits="objectBoundingBox" x1="0.5" y1="0.5" x2="0.5" y2="0.5"><stop offset="0%" stop-color="#000000"/><stop offset="100%" stop-color="#16A34A"/></linearGradient></defs><rect clip-path="url(#deg-zero-${slideNumber}-${objectId})" x="0" y="0" width="80" height="80" fill="#DC2626"/><rect clip-path="url(#deg-off-${slideNumber}-${objectId})" x="10000" y="0" width="100" height="100" fill="#DC2626"/><g transform="translate(100000000 0)"><rect clip-path="url(#deg-local-${slideNumber}-${objectId})" x="0" y="0" width="80" height="80" fill="#DC2626"/></g><rect x="20" y="20" width="120" height="60" fill="url(#deg-grad-${slideNumber}-${objectId})"/>`,
+          }),
+        }),
+      }),
+    };
+
+    const resolveWith = createResolver([
+      ...documentCapabilities,
+      degenerateSvgCapability,
+    ]);
+    const samplePngBytes = new Uint8Array(
+      PNG.sync.write(createTwoToneSource()),
+    );
+    const doc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "parallax-and-degenerate", background: "#FFFFFF" }).append(
+        // Extreme parallax image spanning far beyond slide canvas with pattern-filled shape and off-canvas image.
+        image({
+          id: "parallax-img",
+          src: samplePngBytes,
+          style: {
+            position: "absolute",
+            left: -50000,
+            top: 0,
+            width: 100000,
+            height: 180,
+          },
+        }),
+        image({
+          id: "offcanvas-img",
+          src: samplePngBytes,
+          style: {
+            position: "absolute",
+            left: 10000,
+            top: 20,
+            width: 120,
+            height: 80,
+          },
+        }),
+        shape({
+          id: "parallax-pattern-shape",
+          style: {
+            position: "absolute",
+            left: -50000,
+            top: 120,
+            width: 100000,
+            height: 40,
+            background: {
+              image: samplePngBytes,
+            },
+          },
+        }),
+        new CommonNode("degenerate-svg-probe", "degenerate-svg-probe", {
+          id: "probe",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 120,
+            height: 60,
+          },
+        }),
+      ),
+    );
+
+    const resolution = resolveWith(doc);
+    const painted = paint(resolution);
+    const page = painted.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.ok(page.png instanceof Uint8Array && page.png.length > 0);
+    const rendered = PNG.sync.read(Buffer.from(page.png));
+    assert.equal(rendered.width, 320);
+    assert.equal(rendered.height, 180);
+    // Degenerate zero-length gradient fallback (#16A34A) painted cleanly inside (40, 40).
+    const idx = (40 * rendered.width + 40) * 4;
+    assert.deepEqual(
+      [...rendered.data.subarray(idx, idx + 4)],
+      [0x16, 0xa3, 0x4a, 255],
+    );
   });
 });

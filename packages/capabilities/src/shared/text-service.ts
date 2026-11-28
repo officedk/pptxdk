@@ -3630,6 +3630,7 @@ export function writeChartTitle(
   styleValue: unknown,
   label: string,
   theme: ThemeContext,
+  rotationDegrees?: number,
 ): ChartTextResult {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
@@ -3664,7 +3665,11 @@ export function writeChartTitle(
       : `<a:spcAft><a:spcPts val="${spacingCentipoints(style.spacingAfter, "spacingAfter")}"/></a:spcAft>`;
   const endParaLang =
     runStyle.lang !== undefined ? ` lang="${escapedXml(runStyle.lang)}"` : "";
-  const bodyProperties = `<a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/>`;
+  const rotationAttr =
+    rotationDegrees !== undefined && rotationDegrees !== 0
+      ? ` rot="${Math.round(rotationDegrees * 60000)}"`
+      : "";
+  const bodyProperties = `<a:bodyPr${rotationAttr} anchor="${bodyAnchor(style.verticalAlign)}"/>`;
   return {
     xml: `<c:title><c:tx><c:rich>${bodyProperties}<a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:r>${runProperties}<a:t>${escapedText}</a:t></a:r><a:endParaRPr${endParaLang}/></a:p></c:rich></c:tx><c:overlay val="0"/><c:txPr>${bodyProperties}<a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:endParaRPr${endParaLang}/></a:p></c:txPr></c:title>`,
     text,

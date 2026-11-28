@@ -3,29 +3,44 @@ import assert from "node:assert/strict";
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   after,
+  appear,
   breathe,
+  cell,
   chart,
+  collapse,
   createMotionScopeHandle,
   deck,
   defineSlideLayout,
+  disappear,
   fade,
+  fadeOut,
   fillColor,
   floatDown,
+  floatOut,
   floatUp,
   fly,
+  flyOut,
   motionScope,
+  notes,
+  onStep,
+  paragraph,
   repeat,
+  row,
   shape,
   slide,
   slideLayout,
   slideMaster,
   spin,
   spinIn,
+  spinOut,
   step,
   stretch,
+  table,
   text,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "@pptxdk/capabilities/document";
 import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
 import { CodegenError, createCodegen } from "@pptxdk/codegen";
@@ -826,5 +841,253 @@ describe("motion capability codegen", () => {
     assert.match(reactSource, /by: "series"/u);
     assert.match(reactSource, /by: "categoryElements"/u);
     assert.match(reactSource, /<Step n=\{1\}>/u);
+  });
+
+  it("serializes appear(), all 8 ExitEffect presets, onStep(n, effect), and multi-slot arrays while rejecting invalid onStep declarations", () => {
+    const generate = createCodegen(documentCapabilities);
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "s1" }).append(
+        step({ n: 1 }).append(
+          shape({
+            id: "sh1",
+            enter: appear({ delay: 15 }),
+            emphasis: [spin({ duration: 300 }), repeat(spin(), 2)],
+            exit: onStep(3, fadeOut({ duration: 220 })),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 40,
+              background: "#2563EB",
+            },
+          }),
+          shape({
+            id: "sh2",
+            exit: [
+              disappear(),
+              wipeOut({ from: "left" }),
+              flyOut({ from: "top" }),
+              zoomOut(),
+              floatOut(),
+              spinOut(),
+              collapse(),
+            ],
+            style: {
+              position: "absolute",
+              left: 120,
+              top: 20,
+              width: 80,
+              height: 40,
+              background: "#059669",
+            },
+          }),
+        ),
+      ),
+    );
+
+    const vanilla = generate(doc, { target: "vanilla" });
+    const vanillaSource = vanilla.files[vanilla.entry] as string;
+    assert.match(vanillaSource, /appear\(\{ delay: 15 \}\)/u);
+    assert.match(vanillaSource, /onStep\(3, fadeOut\(\{ duration: 220 \}\)\)/u);
+    assert.match(vanillaSource, /disappear\(\)/u);
+    assert.match(vanillaSource, /wipeOut\(\{ from: "left" \}\)/u);
+    assert.match(vanillaSource, /flyOut\(\{ from: "top" \}\)/u);
+    assert.match(vanillaSource, /zoomOut\(\)/u);
+    assert.match(vanillaSource, /floatOut\(\)/u);
+    assert.match(vanillaSource, /spinOut\(\)/u);
+    assert.match(vanillaSource, /collapse\(\)/u);
+
+    const react = generate(doc, { target: "react" });
+    const reactSource = react.files[react.entry] as string;
+    assert.match(reactSource, /onStep\(3, fadeOut\(\{ duration: 220 \}\)\)/u);
+
+    for (const badEnter of [
+      onStep(0, fade()),
+      onStep(1.5, fade()),
+      onStep(1, onStep(2, fade()) as never),
+      onStep(1, fadeOut() as never),
+    ]) {
+      const badDoc = deck().append(
+        slide({ id: "s1" }).append(
+          shape({
+            id: "bad",
+            enter: badEnter as never,
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 20,
+              height: 20,
+            },
+          }),
+        ),
+      );
+      assert.throws(
+        () => generate(badDoc, { target: "vanilla" }),
+        (error: unknown) => error instanceof CodegenError,
+      );
+    }
+  });
+
+  it("serializes startAt, publishStart, and publishEnd on leaf Shape objects in both targets", () => {
+    const cues = createMotionScopeHandle();
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "s1" }).append(
+        step({ n: 1 }).append(
+          shape({
+            id: "pub",
+            enter: fade({ duration: 200 }),
+            publishStart: cues.cue("begin"),
+            publishEnd: cues.cue("done"),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 40,
+              background: "#2563EB",
+            },
+          }),
+          shape({
+            id: "sub",
+            enter: wipe({ duration: 150 }),
+            startAt: after(cues.cue("done"), 50),
+            style: {
+              position: "absolute",
+              left: 120,
+              top: 20,
+              width: 80,
+              height: 40,
+              background: "#10B981",
+            },
+          }),
+        ),
+      ),
+    );
+
+    const generate = createCodegen(documentCapabilities);
+    const vanilla = generate(doc, { target: "vanilla" });
+    const vanillaSource = vanilla.files[vanilla.entry] as string;
+    assert.match(vanillaSource, /publishStart: \w+\.cue\("begin"\)/u);
+    assert.match(vanillaSource, /publishEnd: \w+\.cue\("done"\)/u);
+    assert.match(vanillaSource, /startAt: after\(\w+\.cue\("done"\), 50\)/u);
+
+    const react = generate(doc, { target: "react" });
+    const reactSource = react.files[react.entry] as string;
+    assert.match(reactSource, /publishStart=\{\w+\.cue\("begin"\)\}/u);
+    assert.match(reactSource, /publishEnd=\{\w+\.cue\("done"\)\}/u);
+    assert.match(reactSource, /startAt=\{after\(\w+\.cue\("done"\), 50\)\}/u);
+  });
+
+  it("serializes P MotionProps and Step inside Text and Shape in both targets while rejecting paragraph motion inside Notes, Cell, and SlideLayout", () => {
+    const pCues = createMotionScopeHandle();
+    const doc = deck({ width: 640, height: 360 }).append(
+      slide({ id: "s1" }).append(
+        text(
+          [
+            paragraph("Line 0", {
+              enter: fade({ duration: 150 }),
+              publishEnd: pCues.cue("p0"),
+            }),
+            step({ n: 2 }).append(
+              paragraph("Line 1", {
+                enter: wipe({ from: "left" }),
+                exit: onStep(3, fadeOut()),
+              }),
+            ),
+          ],
+          {
+            id: "t1",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 220,
+              height: 90,
+            },
+          },
+        ),
+        shape(
+          [
+            step({ n: 1 }).append(paragraph("Box line 0", { enter: appear() })),
+            paragraph("Box line 1", {
+              startAt: after(pCues.cue("p0"), 30),
+              enter: fade(),
+            }),
+          ],
+          {
+            id: "sh1",
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 20,
+              width: 220,
+              height: 90,
+              background: "#1E293B",
+            },
+          },
+        ),
+      ),
+    );
+
+    const generate = createCodegen(documentCapabilities);
+    const vanilla = generate(doc, { target: "vanilla" });
+    const vanillaSource = vanilla.files[vanilla.entry] as string;
+    assert.match(
+      vanillaSource,
+      /paragraph\(\s*"Line 0",\s*\{\s*enter: fade\(\{ duration: 150 \}\)/u,
+    );
+    assert.match(
+      vanillaSource,
+      /step\(\{ n: 2 \}\)\.append\(\s*paragraph\(\s*"Line 1"/u,
+    );
+    assert.match(vanillaSource, /onStep\(3, fadeOut\(\)\)/u);
+
+    const react = generate(doc, { target: "react" });
+    const reactSource = react.files[react.entry] as string;
+    assert.match(reactSource, /<Step n=\{2\}>/u);
+    assert.match(reactSource, /<P enter=\{fade\(\{ duration: 150 \}\)\}/u);
+    assert.match(reactSource, /<P enter=\{appear\(\)\}/u);
+
+    for (const badDoc of [
+      deck().append(
+        slide({ id: "bad-notes" }).append(
+          notes([paragraph("Bad", { enter: fade() as never })]),
+        ),
+      ),
+      deck().append(
+        slide({ id: "bad-cell" }).append(
+          table({ columns: [100] }).append(
+            row().append(cell(paragraph("Bad", { enter: fade() as never }))),
+          ),
+        ),
+      ),
+      deck().append(
+        slide({ id: "bad-notes-step" }).append(
+          notes([step({ n: 1 }).append(paragraph("Bad"))]),
+        ),
+      ),
+      deck().append(
+        slideMaster().append(
+          slideLayout().append(
+            text([paragraph("Master", { enter: fade() })], {
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 100,
+                height: 40,
+              },
+            }),
+          ),
+        ),
+      ),
+    ]) {
+      assert.throws(
+        () => generate(badDoc, { target: "vanilla" }),
+        (error: unknown) => error instanceof CodegenError,
+      );
+    }
   });
 });

@@ -227,9 +227,7 @@ const imageDeclarationPropsObjectSchema = z.strictObject({
   fit: rawImageFitSchema.optional(),
   /** Explicit crop fraction for each side of the original image; takes precedence over `fit` when provided. */
   crop: rawImageCropInputSchema.optional(),
-  enter: motionPropsShape.enter,
-  emphasis: motionPropsShape.emphasis,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 export const imageAltSchema = imageDeclarationPropsObjectSchema.shape.alt;

@@ -21,6 +21,7 @@ import {
   motionHexColorSchema,
   motionMomentOffsetSchema,
   motionMomentSchema,
+  motionPropKeys,
   motionScopeAuthorPropKeys,
   motionScopeHandleSchema,
   motionScopeModeSchema,
@@ -38,7 +39,9 @@ import {
   type EffectPreset,
   type EmphasisEffect,
   type EntranceEffect,
+  type ExitEffect,
   type FillColorOptions,
+  type InstantEffectOptions,
   type MotionCompletionState,
   type MotionDirection,
   type MotionGranularity,
@@ -54,6 +57,7 @@ import {
   type RepeatCount,
   type RepeatedEffect,
   type SpinOptions,
+  type SteppedEffect,
 } from "./motion-schemas.ts";
 
 export {
@@ -69,13 +73,20 @@ export {
   emphasisEffectSchema,
   entranceEffectDeclarationSchema,
   entranceEffectSchema,
+  entrancePresetSchema,
+  exitEffectDeclarationSchema,
+  exitEffectSchema,
+  exitPresetSchema,
   fillColorOptionsSchema,
+  instantEffectOptionsSchema,
   motionCompletionStateSchema,
   motionDirectionSchema,
   motionGranularitySchema,
   motionHexColorSchema,
   motionMomentOffsetSchema,
   motionMomentSchema,
+  motionPropKeys,
+  motionPropKeySet,
   motionPropsSchema,
   motionScopeAuthorPropsSchema,
   motionScopeHandleSchema,
@@ -92,6 +103,7 @@ export {
   repeatedEffectSchema,
   spinAngleSchema,
   spinOptionsSchema,
+  steppedEffectSchema,
   maximumTimeNodeValue,
 } from "./motion-schemas.ts";
 export type {
@@ -105,7 +117,12 @@ export type {
   EmphasisEffectDeclaration,
   EntranceEffect,
   EntranceEffectDeclaration,
+  EntrancePreset,
+  ExitEffect,
+  ExitEffectDeclaration,
+  ExitPreset,
   FillColorOptions,
+  InstantEffectOptions,
   MotionCompletionState,
   MotionDirection,
   MotionGranularity,
@@ -126,6 +143,7 @@ export type {
   RepeatCount,
   RepeatedEffect,
   SpinOptions,
+  SteppedEffect,
 } from "./motion-schemas.ts";
 
 /** Unknown start constraint points to the start or end time of an effect, effect collection for the same object, or real scope. */
@@ -280,6 +298,13 @@ function declaration(
   }) as Effect;
 }
 
+/** Creates instant reveal declaration (`entr#1`); no transition filter or duration. */
+export function appear(options: InstantEffectOptions = {}): EntranceEffect {
+  return declaration("entrance", "appear", options, {
+    duration: 1,
+  }) as EntranceEffect;
+}
+
 /** Creates pure fade-in declaration; default duration is 500 ms. */
 export function fade(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "fade", options, {
@@ -350,6 +375,78 @@ export function stretch(options: EffectOptions = {}): EntranceEffect {
   return declaration("entrance", "stretch", options, {
     duration: 500,
   }) as EntranceEffect;
+}
+
+/** Creates instant hide declaration (`exit#1`); sets visibility hidden without transition duration. */
+export function disappear(options: InstantEffectOptions = {}): ExitEffect {
+  return declaration("exit", "disappear", options, {
+    duration: 1,
+  }) as ExitEffect;
+}
+
+/** Fades out and sets visibility hidden at completion; default duration is 500 ms. */
+export function fadeOut(options: EffectOptions = {}): ExitEffect {
+  return declaration("exit", "fadeOut", options, {
+    duration: 500,
+  }) as ExitEffect;
+}
+
+/** Wipes out toward specified edge and hides at completion; default direction is bottom. */
+export function wipeOut(
+  options: EffectOptions & { readonly from?: MotionDirection } = {},
+): ExitEffect {
+  return declaration(
+    "exit",
+    "wipeOut",
+    options,
+    { duration: 500 },
+    {
+      from: options.from === undefined ? "bottom" : options.from,
+    },
+  ) as ExitEffect;
+}
+
+/** Flies out toward specified slide edge and hides at completion; default direction is bottom. */
+export function flyOut(
+  options: EffectOptions & { readonly from?: MotionDirection } = {},
+): ExitEffect {
+  return declaration(
+    "exit",
+    "flyOut",
+    options,
+    { duration: 500 },
+    {
+      from: options.from === undefined ? "bottom" : options.from,
+    },
+  ) as ExitEffect;
+}
+
+/** Zooms out to center, fades out, and hides at completion. */
+export function zoomOut(options: EffectOptions = {}): ExitEffect {
+  return declaration("exit", "zoomOut", options, {
+    duration: 500,
+  }) as ExitEffect;
+}
+
+/** Fades out, floats downward, and hides at completion. */
+export function floatOut(options: EffectOptions = {}): ExitEffect {
+  return declaration("exit", "floatOut", options, {
+    duration: 500,
+  }) as ExitEffect;
+}
+
+/** Spins out, shrinks, fades out, and hides at completion. */
+export function spinOut(options: EffectOptions = {}): ExitEffect {
+  return declaration("exit", "spinOut", options, {
+    duration: 500,
+  }) as ExitEffect;
+}
+
+/** Collapses toward center line and hides at completion. */
+export function collapse(options: EffectOptions = {}): ExitEffect {
+  return declaration("exit", "collapse", options, {
+    duration: 500,
+  }) as ExitEffect;
 }
 
 /** Rotates between specified `from`/`to` endpoint angles (defaulting to 360 -> 0, or 0 -> `to` when only `to` is declared), or rotates relative to initial angle using signed `by`. */
@@ -432,10 +529,24 @@ export function repeat<E extends Effect>(
   return Object.freeze({ type: "repeated-effect", effect, count });
 }
 
+/** Routes an entrance, emphasis, or exit effect declaration to the 1-based click step `n`. */
+export function onStep<
+  D extends
+    | EntranceEffect
+    | RepeatedEffect<EntranceEffect>
+    | EmphasisEffect
+    | RepeatedEffect<EmphasisEffect>
+    | ExitEffect
+    | RepeatedEffect<ExitEffect>,
+>(n: number, effect: D): SteppedEffect<D> {
+  return Object.freeze({ type: "stepped-effect", step: n, effect });
+}
+
 type MotionTarget = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
+  readonly range?: MotionTargetRange;
   readonly textBody: boolean;
   readonly filled: boolean;
   readonly solidFilled?: boolean;
@@ -464,18 +575,27 @@ type MotionValue = {
   readonly effects: readonly NormalizedEffect[];
 };
 
+type LocalEffectEntry = {
+  readonly effect: NormalizedEffect;
+  readonly step?: StepDeclaration;
+};
+
 /** Local object declaration before inherited scope, step, default effect, and disabled ancestors are resolved. */
 type LocalMotionValue = {
   readonly target: MotionTarget;
   readonly enterDeclared: boolean;
-  readonly effects: readonly NormalizedEffect[];
+  readonly entries: readonly LocalEffectEntry[];
+  readonly step?: StepDeclaration;
+  readonly startAt?: MotionTiming;
+  readonly publishStart?: MotionMoment;
+  readonly publishEnd?: MotionMoment;
 };
 
 type MotionFrame = {
   readonly enabled: boolean;
   readonly step?: StepDeclaration;
   readonly scopes: readonly MotionScopeDeclaration[];
-  readonly defaultEnter?: readonly NormalizedEffect[];
+  readonly defaultEnter?: readonly LocalEffectEntry[];
 };
 
 type LocalScopeValue = {
@@ -492,8 +612,11 @@ type LocalStepValue = {
 type LocalContainerValue = {
   readonly type: "container";
   readonly enabled: boolean;
-  readonly defaultEnter?: readonly NormalizedEffect[];
+  readonly defaultEnter?: readonly LocalEffectEntry[];
   readonly groupsAsParallelUnit?: true;
+  readonly startAt?: MotionTiming;
+  readonly publishStart?: MotionMoment;
+  readonly publishEnd?: MotionMoment;
 };
 
 export type ResolvedMotionEffect = {
@@ -583,6 +706,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
+  appear: "entrance",
   fade: "entrance",
   wipe: "entrance",
   zoom: "entrance",
@@ -594,8 +718,35 @@ const presetKinds: Readonly<Record<EffectPreset, Effect["kind"]>> = {
   spin: "emphasis",
   breathe: "emphasis",
   fillColor: "emphasis",
+  disappear: "exit",
+  fadeOut: "exit",
+  wipeOut: "exit",
+  flyOut: "exit",
+  zoomOut: "exit",
+  floatOut: "exit",
+  spinOut: "exit",
+  collapse: "exit",
 };
 const effectKeys: readonly string[] = Object.keys(entranceEffectShape);
+
+const slotPropByKind: Readonly<Record<Effect["kind"], string>> = {
+  entrance: "enter",
+  emphasis: "emphasis",
+  exit: "exit",
+};
+
+/** Extracts recognized MotionProps fields without hardcoding a partial subset per object capability. */
+export function pickMotionProps(
+  props: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const picked: Record<string, unknown> = {};
+  for (const key of motionPropKeys) {
+    if (props[key] !== undefined) {
+      picked[key] = props[key];
+    }
+  }
+  return picked;
+}
 
 function normalizeColor(
   value: unknown,
@@ -655,7 +806,9 @@ function validatedEffect(
       "invalid-motion",
       expected === "entrance"
         ? "enter must be an entrance effect declaration such as fade() or wipe()"
-        : "emphasis must be an emphasis effect declaration such as spin()",
+        : expected === "emphasis"
+          ? "emphasis must be an emphasis effect declaration such as spin()"
+          : "exit must be an exit effect declaration such as fadeOut() or disappear()",
     );
   }
   const unsupportedBreatheParameters = (
@@ -679,11 +832,11 @@ function validatedEffect(
     );
   }
   if (effectValue["kind"] !== expected) {
+    const actualKind = effectValue["kind"] as Effect["kind"];
+    const targetSlot = slotPropByKind[actualKind] ?? expected;
     return fail(
       "invalid-motion",
-      expected === "entrance"
-        ? `${String(effectValue["preset"])}() is an emphasis effect and should be passed to emphasis`
-        : `${String(effectValue["preset"])}() is an entrance effect and should be passed to enter`,
+      `${String(effectValue["preset"])}() is an ${String(actualKind)} effect and should be passed to ${targetSlot}`,
     );
   }
   const parsedPreset = effectPresetSchema.safeParse(effectValue["preset"]);
@@ -695,11 +848,10 @@ function validatedEffect(
   }
   const preset = parsedPreset.data;
   if (preset !== "breathe" && presetKinds[preset] !== expected) {
+    const actualKind = presetKinds[preset];
     return fail(
       "invalid-motion",
-      expected === "entrance"
-        ? `${preset}() is an emphasis effect and should be passed to emphasis`
-        : `${preset}() is an entrance effect and should be passed to enter`,
+      `${preset}() is an ${actualKind} effect and should be passed to ${slotPropByKind[actualKind]}`,
     );
   }
   const parsedDuration = effectDurationSchema.safeParse(
@@ -712,6 +864,15 @@ function validatedEffect(
     );
   }
   const duration = parsedDuration.data;
+  if (
+    (preset === "appear" || preset === "disappear") &&
+    (duration !== 1 || effectValue["easing"] !== undefined)
+  ) {
+    return fail(
+      "invalid-motion",
+      `${preset}() is an instant effect and does not accept duration or easing`,
+    );
+  }
   const parsedDelay = effectDelaySchema.safeParse(effectValue["delay"]);
   if (
     !parsedDelay.success ||
@@ -764,7 +925,10 @@ function validatedEffect(
     );
   }
   if (
-    (preset === "wipe" || preset === "fly") &&
+    (preset === "wipe" ||
+      preset === "wipeOut" ||
+      preset === "fly" ||
+      preset === "flyOut") &&
     !motionDirectionSchema.safeParse(effectValue["from"]).success
   ) {
     return fail(
@@ -794,7 +958,9 @@ function validatedEffect(
   }
   if (
     preset !== "wipe" &&
+    preset !== "wipeOut" &&
     preset !== "fly" &&
+    preset !== "flyOut" &&
     preset !== "spin" &&
     effectValue["from"] !== undefined
   ) {
@@ -1103,10 +1269,10 @@ export function motionScopeAnnotation(
   };
 }
 
-/** Validates Step wrapper parameters and emits a transparent step annotation resolved by tree order. */
-export function motionStepAnnotation(
+/** Validates a Step declaration wrapper and extracts its formal click-step trigger. */
+export function parseStepDeclarationProps(
   input: Readonly<Record<string, unknown>>,
-): readonly CapabilityAnnotation[] {
+): StepDeclaration {
   const unknown = Object.keys(input).find(
     (key) => !motionStepAllowedParameters.has(key),
   );
@@ -1116,7 +1282,14 @@ export function motionStepAnnotation(
       `Step contains unimplemented parameter ${unknown}`,
     );
   }
-  const step = stepDeclarationFromProps(input);
+  return stepDeclarationFromProps(input);
+}
+
+/** Validates Step wrapper parameters and emits a transparent step annotation resolved by tree order. */
+export function motionStepAnnotation(
+  input: Readonly<Record<string, unknown>>,
+): readonly CapabilityAnnotation[] {
+  const step = parseStepDeclarationProps(input);
   return [
     {
       capability: "motion",
@@ -1127,21 +1300,70 @@ export function motionStepAnnotation(
   ];
 }
 
+function validatedDeclaration(
+  value: unknown,
+  expected: Effect["kind"],
+): LocalEffectEntry {
+  if (isRecord(value) && value["type"] === "stepped-effect") {
+    const unknownStepField = Object.keys(value).find(
+      (key) => key !== "type" && key !== "step" && key !== "effect",
+    );
+    if (unknownStepField !== undefined) {
+      return fail(
+        "unknown-parameter",
+        `onStep declaration contains unimplemented parameter ${unknownStepField}`,
+      );
+    }
+    const parsedStep = motionStepAuthorPropsSchema.safeParse({
+      n: value["step"],
+    });
+    if (!parsedStep.success || parsedStep.data.n === undefined) {
+      return fail(
+        "invalid-step",
+        "onStep click step number must be a positive integer",
+      );
+    }
+    if (
+      isRecord(value["effect"]) &&
+      value["effect"]["type"] === "stepped-effect"
+    ) {
+      return fail("invalid-motion", "onStep cannot be nested");
+    }
+    return Object.freeze({
+      effect: validatedEffect(value["effect"], expected),
+      step: Object.freeze({
+        mode: "explicit" as const,
+        number: parsedStep.data.n,
+      }),
+    });
+  }
+  return Object.freeze({ effect: validatedEffect(value, expected) });
+}
+
 function localMotionValue(
   props: Readonly<Record<string, unknown>>,
   target: MotionTarget,
+  stepOverride?: StepDeclaration,
 ): LocalMotionValue {
   const enter = props["enter"];
-  const effects = [
-    ...listed(enter, true).map((value) => validatedEffect(value, "entrance")),
-    ...listed(props["emphasis"], false).map((value) =>
-      validatedEffect(value, "emphasis"),
+  const entries = [
+    ...listed(enter, true).map((value) =>
+      validatedDeclaration(value, "entrance"),
+    ),
+    ...listed(props["emphasis"], true).map((value) =>
+      validatedDeclaration(value, "emphasis"),
+    ),
+    ...listed(props["exit"], true).map((value) =>
+      validatedDeclaration(value, "exit"),
     ),
   ];
   if (
-    effects.some(
-      ({ preset }) =>
-        preset === "breathe" && (target.kind !== "shape" || !target.filled),
+    entries.some(
+      ({ effect: { preset } }) =>
+        preset === "breathe" &&
+        (target.kind !== "shape" ||
+          target.range !== undefined ||
+          !target.filled),
     )
   ) {
     return fail(
@@ -1150,10 +1372,12 @@ function localMotionValue(
     );
   }
   if (
-    effects.some(
-      ({ preset }) =>
+    entries.some(
+      ({ effect: { preset } }) =>
         preset === "fillColor" &&
-        (target.kind !== "shape" || !target.solidFilled),
+        (target.kind !== "shape" ||
+          target.range !== undefined ||
+          !target.solidFilled),
     )
   ) {
     return fail(
@@ -1161,10 +1385,20 @@ function localMotionValue(
       "fillColor() requires native Shape with solid fill",
     );
   }
+  const startAt =
+    props["startAt"] === undefined
+      ? undefined
+      : validatedTiming(props["startAt"]);
+  const publishStart = validatedPublisher(props["publishStart"]);
+  const publishEnd = validatedPublisher(props["publishEnd"]);
   return Object.freeze({
     target: Object.freeze({ ...target }),
     enterDeclared: enter !== undefined,
-    effects: Object.freeze(effects),
+    entries: Object.freeze(entries),
+    ...(stepOverride === undefined ? {} : { step: stepOverride }),
+    ...(startAt === undefined ? {} : { startAt }),
+    ...(publishStart === undefined ? {} : { publishStart }),
+    ...(publishEnd === undefined ? {} : { publishEnd }),
   });
 }
 
@@ -1176,16 +1410,65 @@ export function motionAnnotations(
   validateMotionFlag(props["motion"]);
   if (props["motion"] === false) return [];
   const value = localMotionValue(props, target);
+  const hasTimingProps =
+    value.startAt !== undefined ||
+    value.publishStart !== undefined ||
+    value.publishEnd !== undefined;
   return [
     {
       capability: "motion",
-      optional: value.effects.length === 0,
+      optional: value.entries.length === 0 && !hasTimingProps,
       value,
       // Attach the resolver even for an empty local declaration: an inherited Box default may still
       // make this object's motion required when the timing writer is trimmed.
       resolveContributions: resolveMotionContributions,
     },
   ];
+}
+
+/** Converts per-paragraph animation declarations on Text or Shape into local paragraph-targeted annotations. */
+export function motionParagraphAnnotations(
+  paragraphMotions: readonly {
+    readonly paragraphIndex: number;
+    readonly props: Readonly<Record<string, unknown>>;
+    readonly step?: StepDeclaration;
+  }[],
+  baseTarget: MotionTarget,
+  parentProps: Readonly<Record<string, unknown>>,
+): readonly CapabilityAnnotation[] {
+  validateMotionFlag(parentProps["motion"]);
+  if (parentProps["motion"] === false || paragraphMotions.length === 0) {
+    return [];
+  }
+  const annotations: CapabilityAnnotation[] = [];
+  for (const item of paragraphMotions) {
+    validateMotionFlag(item.props["motion"]);
+    if (item.props["motion"] === false) continue;
+    const value = localMotionValue(
+      item.props,
+      {
+        ...baseTarget,
+        range: {
+          type: "paragraph",
+          start: item.paragraphIndex,
+          end: item.paragraphIndex,
+        },
+      },
+      item.step,
+    );
+    const hasTimingProps =
+      value.startAt !== undefined ||
+      value.publishStart !== undefined ||
+      value.publishEnd !== undefined;
+    if (value.entries.length === 0 && !hasTimingProps) continue;
+    annotations.push({
+      capability: "motion",
+      optional: false,
+      value,
+      resolveContributions: resolveMotionContributions,
+    });
+  }
+  return annotations;
 }
 
 /**
@@ -1203,26 +1486,47 @@ export function motionContainerAnnotations(
   validateMotionFlag(props["motion"]);
   const enabled = props["motion"] !== false;
   const propagatesDefaultEnter = options.propagatesDefaultEnter === true;
+  const startAt =
+    enabled && props["startAt"] !== undefined
+      ? validatedTiming(props["startAt"])
+      : undefined;
+  const publishStart = enabled
+    ? validatedPublisher(props["publishStart"])
+    : undefined;
+  const publishEnd = enabled
+    ? validatedPublisher(props["publishEnd"])
+    : undefined;
+  const hasTimingProps =
+    startAt !== undefined ||
+    publishStart !== undefined ||
+    publishEnd !== undefined;
   const hasExplicitMotion =
     enabled &&
     (props["enter"] !== undefined ||
       props["emphasis"] !== undefined ||
+      props["exit"] !== undefined ||
+      hasTimingProps ||
       props["motion"] === true);
   const groupsAsParallelUnit =
     options.groupsAsParallelUnit === true && hasExplicitMotion;
-  let defaultEnter: readonly NormalizedEffect[] | undefined;
+  let defaultEnter: readonly LocalEffectEntry[] | undefined;
   if (enabled && propagatesDefaultEnter && props["enter"] !== undefined) {
     defaultEnter = Object.freeze(
       listed(props["enter"], true).map((effect) =>
-        validatedEffect(effect, "entrance"),
+        validatedDeclaration(effect, "entrance"),
       ),
     );
   }
   const annotations: CapabilityAnnotation[] = [];
-  if (!enabled || defaultEnter !== undefined || groupsAsParallelUnit) {
+  if (
+    !enabled ||
+    defaultEnter !== undefined ||
+    groupsAsParallelUnit ||
+    hasTimingProps
+  ) {
     annotations.push({
       capability: "motion",
-      optional: true,
+      optional: !hasTimingProps,
       value: Object.freeze({
         type: "container",
         enabled,
@@ -1230,12 +1534,27 @@ export function motionContainerAnnotations(
         ...(groupsAsParallelUnit
           ? { groupsAsParallelUnit: true as const }
           : {}),
+        ...(groupsAsParallelUnit
+          ? {
+              ...(startAt === undefined ? {} : { startAt }),
+              ...(publishStart === undefined ? {} : { publishStart }),
+              ...(publishEnd === undefined ? {} : { publishEnd }),
+            }
+          : {}),
       } satisfies LocalContainerValue),
       resolveContributions: resolveMotionContributions,
     });
   }
   if (enabled && target !== undefined) {
-    annotations.push(...motionAnnotations(props, target));
+    const targetProps = groupsAsParallelUnit
+      ? {
+          ...props,
+          startAt: undefined,
+          publishStart: undefined,
+          publishEnd: undefined,
+        }
+      : props;
+    annotations.push(...motionAnnotations(targetProps, target));
   }
   return annotations;
 }
@@ -1245,7 +1564,7 @@ function isLocalMotionValue(value: unknown): value is LocalMotionValue {
     isRecord(value) &&
     isRecord(value["target"]) &&
     typeof value["enterDeclared"] === "boolean" &&
-    Array.isArray(value["effects"])
+    Array.isArray(value["entries"])
   );
 }
 
@@ -1315,7 +1634,7 @@ export function resolveMotionContributions(
     const containerContribution = localContributions.find((contribution) =>
       isLocalContainerValue(contribution.value),
     );
-    const localContribution = localContributions.find((contribution) =>
+    const localMotionContributions = localContributions.filter((contribution) =>
       isLocalMotionValue(contribution.value),
     );
 
@@ -1348,7 +1667,7 @@ export function resolveMotionContributions(
 
     if (
       containerContribution !== undefined ||
-      localContribution !== undefined
+      localMotionContributions.length > 0
     ) {
       const container = containerContribution?.value as
         | LocalContainerValue
@@ -1357,10 +1676,15 @@ export function resolveMotionContributions(
         childFrame.enabled && (container === undefined || container.enabled);
       // Group explicit-motion containers (e.g., Box with enter/motion) inside an outer MotionScope
       // as a single parallel unit before emitting the container's own background shape and children.
+      const containerHasTiming =
+        container?.startAt !== undefined ||
+        container?.publishStart !== undefined ||
+        container?.publishEnd !== undefined;
       if (
-        container?.groupsAsParallelUnit === true &&
         enabled &&
-        childFrame.scopes.length > 0
+        (containerHasTiming ||
+          (container?.groupsAsParallelUnit === true &&
+            childFrame.scopes.length > 0))
       ) {
         const parent = childFrame.scopes.at(-1);
         const implicitScope: MotionScopeDeclaration = Object.freeze({
@@ -1369,12 +1693,21 @@ export function resolveMotionContributions(
           ...(childFrame.step === undefined ? {} : { step: childFrame.step }),
           mode: "parallel",
           delay: 0,
+          ...(container?.startAt === undefined
+            ? {}
+            : { startAt: container.startAt }),
+          ...(container?.publishStart === undefined
+            ? {}
+            : { publishStart: container.publishStart }),
+          ...(container?.publishEnd === undefined
+            ? {}
+            : { publishEnd: container.publishEnd }),
           implicit: true,
         });
         resolved.push(
           Object.freeze({
             ...containerContribution!,
-            optional: true,
+            optional: !containerHasTiming,
             value: Object.freeze({
               type: "scope" as const,
               scope: implicitScope,
@@ -1386,27 +1719,90 @@ export function resolveMotionContributions(
           scopes: Object.freeze([...childFrame.scopes, implicitScope]),
         };
       }
-      if (localContribution !== undefined && enabled) {
-        const local = localContribution.value as LocalMotionValue;
-        const inherited = local.enterDeclared
-          ? []
-          : (childFrame.defaultEnter ?? []);
-        const effects = Object.freeze([...inherited, ...local.effects]);
-        if (effects.length > 0) {
-          resolved.push(
-            Object.freeze({
-              ...localContribution,
-              optional: false,
-              value: Object.freeze({
-                target: local.target,
-                ...(childFrame.step === undefined
-                  ? {}
-                  : { step: childFrame.step }),
-                scopes: childFrame.scopes,
-                effects,
-              } satisfies MotionValue),
-            }),
-          );
+      if (enabled) {
+        for (const localContribution of localMotionContributions) {
+          const local = localContribution.value as LocalMotionValue;
+          const isParagraphTarget = local.target.range !== undefined;
+          const inherited =
+            local.enterDeclared || isParagraphTarget
+              ? []
+              : (childFrame.defaultEnter ?? []);
+          const entries = [...inherited, ...local.entries];
+          const baseStep = local.step ?? childFrame.step;
+          const hasLocalTiming =
+            local.startAt !== undefined ||
+            local.publishStart !== undefined ||
+            local.publishEnd !== undefined;
+          let targetScopes = childFrame.scopes;
+          if (hasLocalTiming && entries.length > 0) {
+            const parent = childFrame.scopes.at(-1);
+            const implicitScope: MotionScopeDeclaration = Object.freeze({
+              identity: createMotionIdentity("scope"),
+              ...(parent === undefined ? {} : { parent: parent.identity }),
+              ...(baseStep === undefined ? {} : { step: baseStep }),
+              mode: "parallel",
+              delay: 0,
+              ...(local.startAt === undefined
+                ? {}
+                : { startAt: local.startAt }),
+              ...(local.publishStart === undefined
+                ? {}
+                : { publishStart: local.publishStart }),
+              ...(local.publishEnd === undefined
+                ? {}
+                : { publishEnd: local.publishEnd }),
+              implicit: true,
+            });
+            resolved.push(
+              Object.freeze({
+                ...localContribution,
+                optional: false,
+                value: Object.freeze({
+                  type: "scope" as const,
+                  scope: implicitScope,
+                }),
+              }),
+            );
+            targetScopes = Object.freeze([...childFrame.scopes, implicitScope]);
+          }
+          if (entries.length > 0) {
+            const byStepKey = new Map<
+              string,
+              {
+                readonly step?: StepDeclaration;
+                readonly effects: NormalizedEffect[];
+              }
+            >();
+            for (const entry of entries) {
+              const effectiveStep = entry.step ?? baseStep;
+              const key =
+                effectiveStep === undefined
+                  ? "auto"
+                  : effectiveStep.mode === "automatic"
+                    ? `auto:${effectiveStep.identity}`
+                    : `explicit:${effectiveStep.number}`;
+              const group = byStepKey.get(key) ?? {
+                ...(effectiveStep === undefined ? {} : { step: effectiveStep }),
+                effects: [],
+              };
+              group.effects.push(entry.effect);
+              byStepKey.set(key, group);
+            }
+            for (const group of byStepKey.values()) {
+              resolved.push(
+                Object.freeze({
+                  ...localContribution,
+                  optional: false,
+                  value: Object.freeze({
+                    target: local.target,
+                    ...(group.step === undefined ? {} : { step: group.step }),
+                    scopes: targetScopes,
+                    effects: Object.freeze(group.effects),
+                  } satisfies MotionValue),
+                }),
+              );
+            }
+          }
         }
       }
       if (container !== undefined) {

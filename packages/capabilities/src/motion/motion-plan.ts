@@ -37,6 +37,7 @@ type MotionTarget = {
   readonly kind: string;
   readonly name: string;
   readonly authorId?: string;
+  readonly range?: MotionTargetRange;
   readonly textBody: boolean;
   readonly filled: boolean;
   readonly paragraphCount?: number;
@@ -71,6 +72,7 @@ type ScopeValue = {
 
 export type ScheduledEffect = ResolvedMotionEffect & {
   readonly stepKey: string;
+  readonly targetKey?: string;
   readonly order: number;
   readonly effectIndex: number;
   readonly partIndex?: number;
@@ -82,6 +84,7 @@ export type ScheduledEffect = ResolvedMotionEffect & {
   readonly targetHasBackground: boolean;
   readonly targetParagraphCount?: number;
   readonly targetMembers?: readonly MotionNativeMember[];
+  readonly groupNativeStart?: MotionPlanStart;
   readonly iterate?: {
     readonly type: "wd" | "lt";
     readonly intervalMs: number;
@@ -121,6 +124,7 @@ export type MotionPlanNode =
   | {
       readonly kind: "target";
       readonly targetId: number;
+      readonly targetKey: string;
       readonly nativeStart: MotionPlanStart;
       readonly effects: readonly ScheduledEffect[];
     };
@@ -345,7 +349,12 @@ type Completion =
 
 type ScopeMember =
   | { readonly kind: "scope"; readonly id: string; readonly order: number }
-  | { readonly kind: "object"; readonly id: number; readonly order: number };
+  | {
+      readonly kind: "object";
+      readonly key: string;
+      readonly id: number;
+      readonly order: number;
+    };
 
 type ScopeState = {
   readonly declaration: MotionScopeDeclaration;
@@ -356,6 +365,8 @@ type ScopeState = {
 
 type TargetState = {
   readonly id: number;
+  readonly entryKey: string;
+  readonly effectIndexBase: number;
   readonly path: string;
   readonly order: number;
   readonly value: MotionValue;
@@ -461,8 +472,26 @@ function eventSource(event: MotionStartDependency): string {
       ? `scope-start:${event.scopeId}`
       : `scope:${event.scopeId}`;
   }
-  if ("group" in event) return `target:${event.targetId}`;
+  if ("group" in event) {
+    const targetKey = (event as { readonly targetKey?: unknown }).targetKey;
+    return typeof targetKey === "string"
+      ? `target:${targetKey}`
+      : `target:${event.targetId}`;
+  }
   return `effect:${event.targetId}:${event.effectIndex}:${event.partIndex ?? ""}`;
+}
+
+function stripPublicDependency(
+  dependency: MotionStartDependency,
+): MotionStartDependency {
+  if (!("group" in dependency) || !("targetKey" in dependency)) {
+    return dependency;
+  }
+  const { targetKey: _targetKey, ...publicDependency } =
+    dependency as MotionStartDependency & {
+      readonly targetKey?: unknown;
+    };
+  return publicDependency;
 }
 
 function dependencyAtEvent(
@@ -1080,31 +1109,6 @@ function expansionFor(
   return { type: "parts", count: ranges.length, ranges };
 }
 
-function effectEnd(
-  base: TimeExpression,
-  target: TargetState,
-  effect: NormalizedEffect,
-  effectIndex: number,
-  expansion: EffectExpansion,
-  facts: MotionTimingFacts,
-): TimePoint {
-  const partIndex =
-    expansion.type === "parts" ? expansion.count - 1 : undefined;
-  const startOffsetMs =
-    Math.round(effect.delay) +
-    (partIndex === undefined ? 0 : partIndex * Math.round(effect.duration));
-  const startExpression = add(base, startOffsetMs);
-  return effectTimingAt(
-    startExpression,
-    target,
-    effect,
-    effectIndex,
-    partIndex,
-    expansion,
-    facts,
-  ).end;
-}
-
 function effectTimingAt(
   startExpression: TimeExpression,
   target: TargetState,
@@ -1189,19 +1193,35 @@ function motionScope(value: MotionScopeDeclaration): boolean {
   );
 }
 
+function targetRangeKey(range: MotionTargetRange | undefined): string {
+  if (range === undefined) return "";
+  return range.type === "paragraph"
+    ? `p:${range.start}:${range.end}`
+    : `c:${range.step}:${range.seriesIndex}:${range.categoryIndex}`;
+}
+
+function slotEndExpression(
+  ends: readonly TimePoint[],
+  facts: MotionTimingFacts,
+): TimeExpression {
+  if (ends.length === 1) return asExpression(ends[0]!);
+  return maximum(ends, facts);
+}
+
 function motionPlan(
   contributions: readonly CapabilityContribution[],
 ): MotionPlan {
   const stepRootHostIdentity = "\u0000motion-step-root";
   const scopes = new Map<string, ScopeState>();
-  const targets = new Map<number, TargetState>();
+  const targets = new Map<string, TargetState>();
+  const nextEffectIndexByTargetId = new Map<number, number>();
   const roots: ScopeMember[] = [];
   const effectExpansions = new Map<string, EffectExpansion>();
-  const getExpansion = (target: TargetState, effectIndex: number) => {
-    const key = `${target.id}:${effectIndex}`;
+  const getExpansion = (target: TargetState, rawIndex: number) => {
+    const key = `${target.entryKey}:${rawIndex}`;
     const existing = effectExpansions.get(key);
     if (existing !== undefined) return existing;
-    const effect = target.value.effects[effectIndex];
+    const effect = target.value.effects[rawIndex];
     if (effect === undefined) {
       fail("invalid-motion", "Motion effect index does not exist", target.path);
     }
@@ -1251,15 +1271,24 @@ function motionPlan(
       );
     }
     const trigger = stepInfo(contribution.value.step);
-    if (targets.has(contribution.targetId)) {
+    const entryKey = `${trigger.key}:${contribution.targetId}:${targetRangeKey(contribution.value.target.range)}`;
+    if (targets.has(entryKey)) {
       fail(
         "invalid-motion",
         "Same native object repeatedly submitted motion declarations",
         contribution.path,
       );
     }
-    targets.set(contribution.targetId, {
+    const effectIndexBase =
+      nextEffectIndexByTargetId.get(contribution.targetId) ?? 0;
+    nextEffectIndexByTargetId.set(
+      contribution.targetId,
+      effectIndexBase + contribution.value.effects.length,
+    );
+    targets.set(entryKey, {
       id: contribution.targetId,
+      entryKey,
+      effectIndexBase,
       path: contribution.path,
       order: contribution.order,
       value: contribution.value,
@@ -1355,6 +1384,7 @@ function motionPlan(
     }
     const member: ScopeMember = {
       kind: "object",
+      key: target.entryKey,
       id: target.id,
       order: target.order,
     };
@@ -1390,7 +1420,7 @@ function motionPlan(
     if (scope === undefined) return result;
     for (const member of scope.members) {
       if (member.kind === "object") {
-        const target = targets.get(member.id);
+        const target = targets.get(member.key);
         if (target !== undefined) result.add(target.stepKey);
       } else {
         for (const key of collectActiveSteps(member.id)) result.add(key);
@@ -1404,7 +1434,7 @@ function motionPlan(
   };
   const activeMemberSteps = (member: ScopeMember): readonly string[] =>
     member.kind === "object"
-      ? [targets.get(member.id)?.stepKey ?? "slide-entry"]
+      ? [targets.get(member.key)?.stepKey ?? "slide-entry"]
       : [...collectActiveSteps(member.id)];
   const memberExistsInStep = (member: ScopeMember, key: string): boolean => {
     const memberSteps = activeMemberSteps(member);
@@ -1553,7 +1583,6 @@ function motionPlan(
     >();
     const resolvingStarts = new Set<string>();
     const resolvingEnds = new Set<string>();
-    const scheduledObjects = new Set<number>();
     const queryScopes: MotionQueryScopeSource[] = [];
     const queryEffectSources = new Map<string, MotionQueryEffectSource>();
     // Query completes scopes along structural parent chain; each source still binds to local clock of current step.
@@ -1633,6 +1662,25 @@ function motionPlan(
       );
     };
 
+    const findTargetForDependency = (
+      dependency: Exclude<MotionStartDependency, { readonly scopeId: string }>,
+    ): TargetState | undefined => {
+      const candidates = [...targets.values()].filter(
+        (target) => target.stepKey === key && target.id === dependency.targetId,
+      );
+      if ("effectIndex" in dependency) {
+        return (
+          candidates.find(
+            (target) =>
+              dependency.effectIndex >= target.effectIndexBase &&
+              dependency.effectIndex <
+                target.effectIndexBase + target.value.effects.length,
+          ) ?? candidates[0]
+        );
+      }
+      return candidates[0];
+    };
+
     const directMemberForDependency = (
       host: ScopeState,
       dependency: MotionStartDependency,
@@ -1646,12 +1694,13 @@ function motionPlan(
           ? undefined
           : directMemberForScope(host, source.declaration.identity);
       }
-      const source = targets.get(dependency.targetId);
+      const source = findTargetForDependency(dependency);
       if (source === undefined) return undefined;
       const containingScope = source.value.scopes.at(-1)?.identity;
       if (containingScope === host.declaration.identity) {
         return host.members.findIndex(
-          (member) => member.kind === "object" && member.id === source.id,
+          (member) =>
+            member.kind === "object" && member.key === source.entryKey,
         );
       }
       return containingScope === undefined
@@ -1683,7 +1732,8 @@ function motionPlan(
       }
       return target.stepKey === key
         ? roots.find(
-            (member) => member.kind === "object" && member.id === target.id,
+            (member) =>
+              member.kind === "object" && member.key === target.entryKey,
           )
         : undefined;
     };
@@ -1697,7 +1747,7 @@ function motionPlan(
           ? undefined
           : rootMemberForScope(source.declaration.identity);
       }
-      const source = targets.get(dependency.targetId);
+      const source = findTargetForDependency(dependency);
       return source === undefined ? undefined : rootMemberForTarget(source);
     };
 
@@ -1707,14 +1757,14 @@ function motionPlan(
       if (consumer.kind === "scope") {
         return rootMemberForScope(consumer.id);
       }
-      const target = targets.get(consumer.id);
+      const target = targets.get(consumer.key);
       return target === undefined ? undefined : rootMemberForTarget(target);
     };
 
     const memberNodeId = (member: ScopeMember): string =>
       member.kind === "scope"
         ? `scope:${scopeId(member.id, scopes)}`
-        : `target:${member.id}`;
+        : `target:${member.key}`;
 
     const directConsumerAtHost = (
       candidateHost: ScopeState,
@@ -2444,16 +2494,20 @@ function motionPlan(
         const unwrapped = unwrapImplicitReportedDependencies(
           nativeStart.dependency,
         );
-        return unwrapped.length === 1 ? unwrapped[0] : undefined;
+        return unwrapped.length === 1
+          ? stripPublicDependency(unwrapped[0]!)
+          : undefined;
       }
       if (nativeStart.kind !== "parent-start") return undefined;
       if (parentStart.state === "no-natural-completion") return undefined;
       const inherited = parentStart.reportedStartAfter;
       return inherited === undefined
         ? undefined
-        : dependencyAtEvent(
-            inherited,
-            inherited.offsetMs + nativeStart.delayMs,
+        : stripPublicDependency(
+            dependencyAtEvent(
+              inherited,
+              inherited.offsetMs + nativeStart.delayMs,
+            ),
           );
     };
 
@@ -2554,15 +2608,19 @@ function motionPlan(
         return reportedDependencies(gate.start, parentStart) ?? [];
       };
       if (nativeStart.kind === "end" || nativeStart.kind === "event") {
-        const expanded = expandStartDependency(nativeStart.dependency).flatMap(
-          (dependency) => unwrapImplicitReportedDependencies(dependency),
-        );
+        const expanded = expandStartDependency(nativeStart.dependency)
+          .flatMap((dependency) =>
+            unwrapImplicitReportedDependencies(dependency),
+          )
+          .map(stripPublicDependency);
         return Object.freeze(expanded);
       }
       if (nativeStart.kind === "condition-join") {
-        const dependencies = nativeStart.gates.flatMap((gate) =>
-          reportedGateDependencies(gate, nativeStart.hostScopeId),
-        );
+        const dependencies = nativeStart.gates
+          .flatMap((gate) =>
+            reportedGateDependencies(gate, nativeStart.hostScopeId),
+          )
+          .map(stripPublicDependency);
         return Object.freeze(dependencies);
       }
       if (nativeStart.kind === "condition-end") {
@@ -2577,9 +2635,11 @@ function motionPlan(
         );
         return Object.freeze(
           dependencies.map((dependency) =>
-            dependencyAtEvent(
-              dependency,
-              dependency.offsetMs + nativeStart.delayMs,
+            stripPublicDependency(
+              dependencyAtEvent(
+                dependency,
+                dependency.offsetMs + nativeStart.delayMs,
+              ),
             ),
           ),
         );
@@ -2590,9 +2650,11 @@ function motionPlan(
       if (inherited === undefined) return undefined;
       return Object.freeze(
         inherited.map((dependency) =>
-          dependencyAtEvent(
-            dependency,
-            dependency.offsetMs + nativeStart.delayMs,
+          stripPublicDependency(
+            dependencyAtEvent(
+              dependency,
+              dependency.offsetMs + nativeStart.delayMs,
+            ),
           ),
         ),
       );
@@ -2620,24 +2682,8 @@ function motionPlan(
       reference: MotionMoment,
       fromPath: string,
     ): TimePoint | TimeExpression => {
-      const owner = scopes.get(reference.scope);
-      if (owner === undefined) {
-        fail(
-          "missing-cue",
-          "Choreography scope corresponding to moment handle does not exist",
-          fromPath,
-        );
-      }
-      ensureSingleStep(owner);
-      if (scopeSteps(owner)[0] !== key) {
-        fail(
-          "cross-step-motion",
-          "Moment dependencies cannot cross different click steps",
-          fromPath,
-        );
-      }
-      let sourceScope = owner;
-      let point: "start" | "end" = reference.point === "end" ? "end" : "start";
+      let sourceScope: ScopeState;
+      let point: "start" | "end";
       if (reference.point === "named") {
         const publisher = cuePublishers.get(momentKey(reference));
         if (publisher === undefined) {
@@ -2665,6 +2711,25 @@ function motionPlan(
         }
         sourceScope = publishedScope;
         point = publisher.point;
+      } else {
+        const owner = scopes.get(reference.scope);
+        if (owner === undefined) {
+          fail(
+            "missing-cue",
+            "Choreography scope corresponding to moment handle does not exist",
+            fromPath,
+          );
+        }
+        ensureSingleStep(owner);
+        if (scopeSteps(owner)[0] !== key) {
+          fail(
+            "cross-step-motion",
+            "Moment dependencies cannot cross different click steps",
+            fromPath,
+          );
+        }
+        sourceScope = owner;
+        point = reference.point === "end" ? "end" : "start";
       }
       if (point === "start") {
         const start = resolveScopeStart(sourceScope);
@@ -2699,6 +2764,151 @@ function motionPlan(
     const directChildren = (scope: ScopeState): readonly ScopeMember[] =>
       membersInStep(scope, key);
 
+    const computeTargetSlotStarts = (
+      target: TargetState,
+      base: TimeExpression,
+    ): readonly {
+      readonly rawIndex: number;
+      readonly effectIndex: number;
+      readonly effect: NormalizedEffect;
+      readonly expansion: EffectExpansion;
+      readonly entries: readonly (
+        | { readonly range: MotionTargetRange; readonly partIndex: number }
+        | {
+            readonly iterate: Extract<
+              EffectExpansion,
+              { readonly type: "iterate" }
+            >;
+          }
+        | Record<never, never>
+      )[];
+      readonly parts: readonly {
+        readonly partIndex?: number;
+        readonly range?: MotionTargetRange;
+        readonly iterate?: Extract<
+          EffectExpansion,
+          { readonly type: "iterate" }
+        >;
+        readonly start: TimeExpression;
+        readonly firstSlotOffsetMs?: number;
+        readonly timing: { readonly start: TimePoint; readonly end: TimePoint };
+      }[];
+    }[] => {
+      const indexed = target.value.effects.map((effect, rawIndex) => ({
+        rawIndex,
+        effectIndex: target.effectIndexBase + rawIndex,
+        effect,
+      }));
+      const slotByRawIndex = new Map<
+        number,
+        {
+          readonly rawIndex: number;
+          readonly effectIndex: number;
+          readonly effect: NormalizedEffect;
+          readonly expansion: EffectExpansion;
+          readonly entries: readonly (
+            | { readonly range: MotionTargetRange; readonly partIndex: number }
+            | {
+                readonly iterate: Extract<
+                  EffectExpansion,
+                  { readonly type: "iterate" }
+                >;
+              }
+            | Record<never, never>
+          )[];
+          readonly parts: {
+            readonly partIndex?: number;
+            readonly range?: MotionTargetRange;
+            readonly iterate?: Extract<
+              EffectExpansion,
+              { readonly type: "iterate" }
+            >;
+            readonly start: TimeExpression;
+            readonly firstSlotOffsetMs?: number;
+            readonly timing: {
+              readonly start: TimePoint;
+              readonly end: TimePoint;
+            };
+          }[];
+        }
+      >();
+      let slotBase = base;
+      let isFirstSlot = true;
+      for (const slotKind of ["entrance", "emphasis", "exit"] as const) {
+        const slotEffects = indexed.filter(
+          ({ effect }) => effect.kind === slotKind,
+        );
+        if (slotEffects.length === 0) continue;
+        const slotEnds: TimePoint[] = [];
+        for (const { rawIndex, effectIndex, effect } of slotEffects) {
+          const expansion = getExpansion(target, rawIndex);
+          const entries =
+            expansion.type === "parts"
+              ? expansion.ranges.map((range, partIndex) => ({
+                  range,
+                  partIndex,
+                }))
+              : [expansion.type === "iterate" ? { iterate: expansion } : {}];
+          const parts: {
+            readonly partIndex?: number;
+            readonly range?: MotionTargetRange;
+            readonly iterate?: Extract<
+              EffectExpansion,
+              { readonly type: "iterate" }
+            >;
+            readonly start: TimeExpression;
+            readonly firstSlotOffsetMs?: number;
+            readonly timing: {
+              readonly start: TimePoint;
+              readonly end: TimePoint;
+            };
+          }[] = [];
+          for (const entry of entries) {
+            const partIndex =
+              "partIndex" in entry ? entry.partIndex : undefined;
+            const startOffsetMs =
+              Math.round(effect.delay) +
+              (partIndex === undefined
+                ? 0
+                : partIndex * Math.round(effect.duration));
+            const start = add(slotBase, startOffsetMs);
+            const timing = effectTimingAt(
+              start,
+              target,
+              effect,
+              effectIndex,
+              partIndex,
+              expansion,
+              facts,
+            );
+            parts.push({
+              ...(partIndex === undefined ? {} : { partIndex }),
+              ...("range" in entry ? { range: entry.range } : {}),
+              ...("iterate" in entry ? { iterate: entry.iterate } : {}),
+              start,
+              ...(isFirstSlot ? { firstSlotOffsetMs: startOffsetMs } : {}),
+              timing,
+            });
+          }
+          const lastPart = parts.at(-1);
+          if (lastPart !== undefined) {
+            slotEnds.push(lastPart.timing.end);
+          }
+          slotByRawIndex.set(rawIndex, {
+            rawIndex,
+            effectIndex,
+            effect,
+            expansion,
+            entries,
+            parts,
+          });
+        }
+        slotBase = slotEndExpression(slotEnds, facts);
+        isFirstSlot = false;
+      }
+      return indexed.map(({ rawIndex }) => slotByRawIndex.get(rawIndex)!);
+    };
+
     const memberEnd = (parent: ScopeState, member: ScopeMember): TimePoint => {
       if (member.kind === "scope") {
         const child = scopes.get(member.id);
@@ -2711,7 +2921,7 @@ function motionPlan(
         }
         return resolveScopeEnd(child);
       }
-      const target = targets.get(member.id);
+      const target = targets.get(member.key);
       if (target === undefined) {
         fail(
           "invalid-motion",
@@ -2720,28 +2930,19 @@ function motionPlan(
         );
       }
       const base = memberStart(parent, member);
-      const effectEnds = target.value.effects.map((effect, effectIndex) =>
-        effectEnd(
-          base,
-          target,
-          effect,
-          effectIndex,
-          getExpansion(target, effectIndex),
-          facts,
-        ),
-      );
-      const animationNodeCount = target.value.effects.reduce(
-        (count, _effect, effectIndex) => {
-          const expansion = getExpansion(target, effectIndex);
-          return count + (expansion.type === "parts" ? expansion.count : 1);
-        },
+      const scheduledSlots = computeTargetSlotStarts(target, base);
+      const effectEnds = scheduledSlots
+        .map(({ parts }) => parts.at(-1)?.timing.end)
+        .filter((end): end is TimePoint => end !== undefined);
+      const animationNodeCount = scheduledSlots.reduce(
+        (count, { parts }) => count + parts.length,
         0,
       );
       if (animationNodeCount > 1) {
         return completion(
           materializeEvent(
             base,
-            `target-start:${target.id}`,
+            `target-start:${target.entryKey}`,
             undefined,
             facts,
             target.path,
@@ -2752,7 +2953,10 @@ function motionPlan(
             group: "effects",
             point: "end",
             offsetMs: 0,
-          },
+            ...(target.value.target.range === undefined
+              ? {}
+              : { targetKey: target.entryKey }),
+          } as MotionStartDependency,
           facts,
           target.path,
         );
@@ -2770,9 +2974,12 @@ function motionPlan(
     ): TimeExpression => {
       const parentStart = resolveScopeStart(parent);
       const active = activeChildren(parent);
-      const activeIndex = active.findIndex(
-        (candidate) =>
-          candidate.kind === member.kind && candidate.id === member.id,
+      const activeIndex = active.findIndex((candidate) =>
+        candidate.kind !== member.kind
+          ? false
+          : candidate.kind === "scope"
+            ? candidate.id === (member as { readonly id: string }).id
+            : candidate.key === (member as { readonly key: string }).key,
       );
       if (parent.declaration.mode === "parallel") {
         return pointExpression(parentStart);
@@ -3133,42 +3340,44 @@ function motionPlan(
       });
     }
 
+    const scheduledObjects = new Set<string>();
     const targetsForStep = [...targets.values()]
       .filter((target) => target.stepKey === key)
       .sort((left, right) => left.order - right.order);
     for (const target of targetsForStep) {
-      if (scheduledObjects.has(target.id)) continue;
+      if (scheduledObjects.has(target.entryKey)) continue;
       const containingScope = target.value.scopes.at(-1)?.identity;
       const parent =
         containingScope === undefined ? undefined : scopes.get(containingScope);
       const parentStart =
         parent === undefined ? origin : resolveScopeStart(parent);
+      const memberRef: ScopeMember = {
+        kind: "object",
+        key: target.entryKey,
+        id: target.id,
+        order: target.order,
+      };
       const base =
         parent === undefined
           ? pointExpression(origin)
-          : memberStart(parent, {
-              kind: "object",
-              id: target.id,
-              order: target.order,
-            });
-      for (const [index, effect] of target.value.effects.entries()) {
-        const expansion = getExpansion(target, index);
-        const entries =
-          expansion.type === "parts"
-            ? expansion.ranges.map((range, partIndex) => ({
-                range,
-                partIndex,
-              }))
-            : [expansion.type === "iterate" ? { iterate: expansion } : {}];
-        for (const entry of entries) {
-          const partIndex = "partIndex" in entry ? entry.partIndex : undefined;
-          const start = add(
-            base,
-            Math.round(effect.delay) +
-              (partIndex === undefined
-                ? 0
-                : partIndex * Math.round(effect.duration)),
-          );
+          : memberStart(parent, memberRef);
+      const targetBasePoint = materializeEvent(
+        base,
+        `target-start:${target.entryKey}`,
+        undefined,
+        facts,
+        target.path,
+      );
+      const scheduledSlots = computeTargetSlotStarts(target, base);
+      for (const {
+        rawIndex,
+        effectIndex,
+        effect,
+        expansion,
+        parts,
+      } of scheduledSlots) {
+        for (const part of parts) {
+          const { partIndex, start, timing } = part;
           if (start.state === "no-natural-completion") {
             fail(
               "no-natural-completion",
@@ -3180,14 +3389,45 @@ function motionPlan(
             start,
             parentStart,
             target.path,
-            `effect-start:${target.id}:${index}:${partIndex ?? ""}`,
+            `effect-start:${target.id}:${effectIndex}:${partIndex ?? ""}`,
             parent,
-            {
-              kind: "object",
-              id: target.id,
-              order: target.order,
-            },
+            memberRef,
           );
+          const groupNativeStart =
+            part.firstSlotOffsetMs !== undefined
+              ? (addMotionPlanStartDelay(
+                  { kind: "parent-start", delayMs: 0 },
+                  part.firstSlotOffsetMs,
+                ) ??
+                resolveNativeStart(
+                  start,
+                  targetBasePoint,
+                  target.path,
+                  `group-effect-start:${target.id}:${effectIndex}:${partIndex ?? ""}`,
+                  parent,
+                  memberRef,
+                ))
+              : start.state === "known" && targetBasePoint.state === "known"
+                ? (addMotionPlanStartDelay(
+                    { kind: "parent-start", delayMs: 0 },
+                    start.timeMs - targetBasePoint.timeMs,
+                  ) ??
+                  resolveNativeStart(
+                    start,
+                    targetBasePoint,
+                    target.path,
+                    `group-effect-start:${target.id}:${effectIndex}:${partIndex ?? ""}`,
+                    parent,
+                    memberRef,
+                  ))
+                : resolveNativeStart(
+                    start,
+                    targetBasePoint,
+                    target.path,
+                    `group-effect-start:${target.id}:${effectIndex}:${partIndex ?? ""}`,
+                    parent,
+                    memberRef,
+                  );
           const startAfter =
             start.state === "unknown"
               ? reportedDependency(nativeStart, parentStart)
@@ -3196,15 +3436,6 @@ function motionPlan(
             start.state === "unknown"
               ? reportedDependencies(nativeStart, parentStart)
               : undefined;
-          const timing = effectTimingAt(
-            start,
-            target,
-            effect,
-            index,
-            partIndex,
-            expansion,
-            facts,
-          );
           const knownStart =
             timing.start.state === "known" ? timing.start.timeMs : undefined;
           const endMs =
@@ -3229,7 +3460,11 @@ function motionPlan(
               ...(target.value.target.authorId === undefined
                 ? {}
                 : { authorId: target.value.target.authorId }),
-              ...("range" in entry ? { range: entry.range } : {}),
+              ...(part.range !== undefined
+                ? { range: part.range }
+                : target.value.target.range !== undefined
+                  ? { range: target.value.target.range }
+                  : {}),
             },
             kind: effect.kind,
             preset: effect.preset,
@@ -3264,8 +3499,9 @@ function motionPlan(
             ...(startAfter === undefined ? {} : { startAfter }),
             ...(startAfterAll === undefined ? {} : { startAfterAll }),
             stepKey: key,
-            order: target.order + index,
-            effectIndex: index,
+            targetKey: target.entryKey,
+            order: target.order + rawIndex,
+            effectIndex,
             ...(partIndex === undefined ? {} : { partIndex }),
             targetKind: target.value.target.kind,
             targetTextBody: target.value.target.textBody,
@@ -3283,6 +3519,7 @@ function motionPlan(
             ...(target.value.target.members === undefined
               ? {}
               : { targetMembers: target.value.target.members }),
+            groupNativeStart,
             ...(expansion.type === "iterate"
               ? {
                   iterate: {
@@ -3293,20 +3530,23 @@ function motionPlan(
               : {}),
           };
           addStepEffect(scheduledEffect);
-          queryEffectSources.set(motionEffectKey(target.id, index, partIndex), {
-            observation: scheduledEffect,
-            targetId: target.id,
-            effectIndex: index,
-            ...(partIndex === undefined ? {} : { partIndex }),
-            start: queryMomentSource(timing.start),
-            end: queryMomentSource(timing.end),
-            scopeIdentities: target.value.scopes
-              .filter(({ implicit }) => implicit !== true)
-              .map(({ identity }) => identity),
-          });
+          queryEffectSources.set(
+            motionEffectKey(target.id, effectIndex, partIndex),
+            {
+              observation: scheduledEffect,
+              targetId: target.id,
+              effectIndex,
+              ...(partIndex === undefined ? {} : { partIndex }),
+              start: queryMomentSource(timing.start),
+              end: queryMomentSource(timing.end),
+              scopeIdentities: target.value.scopes
+                .filter(({ implicit }) => implicit !== true)
+                .map(({ identity }) => identity),
+            },
+          );
         }
       }
-      scheduledObjects.add(target.id);
+      scheduledObjects.add(target.entryKey);
     }
 
     const targetNode = (
@@ -3314,37 +3554,34 @@ function motionPlan(
       parent?: ScopeState,
     ): MotionPlanNode | undefined => {
       const effects = (allScheduledEffects.get(key) ?? []).filter(
-        (effect) => effect.target.id === target.id,
+        (effect) => effect.targetKey === target.entryKey,
       );
       if (effects.length === 0) return undefined;
       const parentStart =
         parent === undefined ? origin : resolveScopeStart(parent);
+      const memberRef: ScopeMember = {
+        kind: "object",
+        key: target.entryKey,
+        id: target.id,
+        order: target.order,
+      };
       const start =
         parent === undefined
           ? pointExpression(origin)
-          : memberStart(parent, {
-              kind: "object",
-              id: target.id,
-              order: target.order,
-            });
+          : memberStart(parent, memberRef);
       const nativeStart = resolveNativeStart(
         start,
         parentStart,
         target.path,
-        `target-start:${target.id}`,
+        `target-start:${target.entryKey}`,
         parent,
-        parent === undefined
-          ? undefined
-          : {
-              kind: "object",
-              id: target.id,
-              order: target.order,
-            },
+        parent === undefined ? undefined : memberRef,
       );
       recordStartCondition(nativeStart);
       return {
         kind: "target",
         targetId: target.id,
+        targetKey: target.entryKey,
         nativeStart: consumerStart(nativeStart),
         effects,
       };
@@ -3564,7 +3801,7 @@ function motionPlan(
         ? `scope:${node.id}`
         : node.kind === "completion-collector"
           ? `completion:${node.scopeId}`
-          : `target:${node.targetId}`;
+          : `target:${node.targetKey}`;
     const nodePath = (node: MotionPlanNode): string | undefined =>
       node.kind === "scope"
         ? [...scopes.values()].find(
@@ -3575,7 +3812,7 @@ function motionPlan(
               (scope) =>
                 scopeId(scope.declaration.identity, scopes) === node.scopeId,
             )?.path
-          : targets.get(node.targetId)?.path;
+          : targets.get(node.targetKey)?.path;
     const sortNativeRoots = (
       rootNodes: readonly MotionPlanNode[],
       conditionDefinitionsBefore: readonly MotionPlanConditionPlacement[] = [],
@@ -3621,6 +3858,7 @@ function motionPlan(
           }
         } else {
           if (node.effects.length > 1) {
+            rootDefinitions.set(`target:${node.targetKey}`, rootIndex);
             rootDefinitions.set(`target:${node.targetId}`, rootIndex);
           }
           for (const effect of node.effects) {
@@ -3746,9 +3984,7 @@ function motionPlan(
             return parentId === undefined ? undefined : scopes.get(parentId);
           }
           if (consumerId.startsWith("target:")) {
-            const target = targets.get(
-              Number(consumerId.slice("target:".length)),
-            );
+            const target = targets.get(consumerId.slice("target:".length));
             const parentId = target?.value.scopes.at(-1)?.identity;
             return parentId === undefined ? undefined : scopes.get(parentId);
           }
@@ -3902,7 +4138,7 @@ function motionPlan(
           }
           return scopeNode(childScope);
         }
-        const target = targets.get(member.id);
+        const target = targets.get(member.key);
         if (target === undefined) {
           fail(
             "invalid-motion",
@@ -3912,7 +4148,9 @@ function motionPlan(
         }
         const node = targetNode(target, scope);
         if (node === undefined) return [];
-        const projectedHost = projectedNodeHosts.get(`target:${target.id}`);
+        const projectedHost = projectedNodeHosts.get(
+          `target:${target.entryKey}`,
+        );
         if (
           projectedHost !== undefined &&
           projectedHost !== scope.declaration.identity
@@ -3999,7 +4237,7 @@ function motionPlan(
             return [];
           return scopeNode(scope);
         }
-        const target = targets.get(member.id);
+        const target = targets.get(member.key);
         if (target === undefined || target.stepKey !== key) return [];
         const node = targetNode(target);
         return node === undefined ? [] : [node];
@@ -4097,6 +4335,7 @@ function motionPlan(
         }
       } else {
         if (node.effects.length > 1) {
+          definedEvents.add(`target:${node.targetKey}`);
           definedEvents.add(`target:${node.targetId}`);
         }
         for (const effect of node.effects) {
@@ -4255,6 +4494,9 @@ function motionPlan(
     .sort((left, right) => {
       if (left.trigger !== right.trigger)
         return left.trigger === "auto" ? -1 : 1;
+      if (left.number !== undefined && right.number !== undefined) {
+        return left.number - right.number || left.order - right.order;
+      }
       return left.order - right.order;
     })
     .map((step) => {
@@ -4324,6 +4566,8 @@ function motionPlan(
           effects.map(
             ({
               stepKey: _stepKey,
+              targetKey: _targetKey,
+              groupNativeStart: _groupNativeStart,
               order: _order,
               targetKind: _targetKind,
               targetTextBody: _targetTextBody,

@@ -10,6 +10,7 @@ import {
 import { CommonNode } from "@pptxdk/core/document";
 import type { z } from "zod";
 
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import {
   chartAllowedPropKeys,
   chartAxesSchema,
@@ -22,7 +23,7 @@ import {
 } from "./chart-schemas.ts";
 
 const chartAllowedPropKeySet = new Set(chartAllowedPropKeys);
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

@@ -149,21 +149,31 @@ export { createMorphScope } from "#/shared/morph-api.ts";
 export type { MorphKey, MorphProps, MorphScope } from "#/shared/morph-api.ts";
 export {
   after,
+  appear,
   breathe,
+  collapse,
+  disappear,
   fillColor,
   motionSchedule,
   createMotionScopeHandle,
   fade,
+  fadeOut,
   fly,
+  flyOut,
   floatDown,
+  floatOut,
   floatUp,
   motionCapability,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "#/motion/motion.ts";
 export { MotionScope, Step, useMotionScope } from "#/motion/motion-elements.ts";
 export type {
@@ -179,6 +189,11 @@ export type {
   EmphasisEffectDeclaration,
   EntranceEffectDeclaration,
   EntranceEffect,
+  EntrancePreset,
+  ExitEffect,
+  ExitEffectDeclaration,
+  ExitPreset,
+  InstantEffectOptions,
   MotionDirection,
   MotionGranularity,
   MotionCompletionState,
@@ -216,6 +231,7 @@ export type {
   ResolvedMotionStep,
   SpinOptions,
   StepProps,
+  SteppedEffect,
 } from "#/motion/motion.ts";
 export type {
   Font,

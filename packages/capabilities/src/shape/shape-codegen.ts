@@ -9,12 +9,13 @@ import { readInternalDeclarationProps } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import {
   shapeAllowedPropKeyList,
   shapeStyleSchema,
 } from "./shape-declaration.ts";
 
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 const shapeAllowedPropKeys = new Set(shapeAllowedPropKeyList);
 
@@ -23,6 +24,7 @@ const shapeAllowedChildKinds = new Set([
   "span",
   "slide-number",
   "br",
+  "motion-step",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

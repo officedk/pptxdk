@@ -53,7 +53,11 @@ import {
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "../shared/visual.ts";
 export type { PaddingStyle, VisualStyle } from "@pptxdk/core/capability";
-import { motionAnnotations } from "../motion/motion-api.ts";
+import {
+  motionAnnotations,
+  motionParagraphAnnotations,
+  pickMotionProps,
+} from "../motion/motion-api.ts";
 import {
   computeTextMetrics,
   emitTextBody,
@@ -63,6 +67,7 @@ import {
   resolveTextBody,
   textInsets,
   type Paragraph,
+  type ParsedParagraphMotion,
   type ResolvedTextBody,
   type TextStyle,
 } from "../shared/text-service.ts";
@@ -385,16 +390,24 @@ export const shapeCapability: ObjectCapabilityModule<
       ...rawTextStyle,
       verticalAlign: rawTextStyle["verticalAlign"] ?? "middle",
     };
-    const { paragraphs, style: parsedTextStyle } = hasTextBody
+    const {
+      paragraphs,
+      paragraphMotions,
+      style: parsedTextStyle,
+    } = hasTextBody
       ? parseTextContent(
           input.children,
           effectiveTextStyle,
           context.theme,
           { slideNumber: context.slideNumber },
           "Shape.style",
+          undefined,
+          undefined,
+          { allowParagraphMotion: true },
         )
       : {
           paragraphs: [] as readonly Paragraph[],
+          paragraphMotions: [] as readonly ParsedParagraphMotion[],
           style: parseTextContent(
             [],
             {},
@@ -408,17 +421,9 @@ export const shapeCapability: ObjectCapabilityModule<
     const geometry = input.props["geometry"] as Geometry | undefined;
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+    const motionProps: Readonly<Record<string, unknown>> = pickMotionProps(
+      input.props,
+    );
 
     // Validate geometry and visual properties during bind before layout runs.
     resolveVisualModel({
@@ -535,7 +540,7 @@ export const shapeCapability: ObjectCapabilityModule<
           resolveContext.morphName ??
           requestedName ??
           `Shape ${resolveContext.id - 1}`;
-        const annotations = motionAnnotations(motionProps, {
+        const target = {
           kind: "shape",
           name,
           ...(authorId === undefined ? {} : { authorId }),
@@ -549,7 +554,11 @@ export const shapeCapability: ObjectCapabilityModule<
           ...(resolvedText === undefined
             ? {}
             : { paragraphCount: resolvedText.paragraphCount }),
-        });
+        } as const;
+        const annotations = [
+          ...motionAnnotations(motionProps, target),
+          ...motionParagraphAnnotations(paragraphMotions, target, motionProps),
+        ];
         let escapedName: string;
         try {
           escapedName = xmlEscape(name);

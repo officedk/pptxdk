@@ -2502,9 +2502,7 @@ const chartPropsObjectSchema = z.strictObject({
   legend: rawChartLegendSchema.optional(),
   plotArea: rawChartPlotAreaSchema.optional(),
   style: rawChartStyleSchema.optional(),
-  enter: motionPropsShape.enter,
-  emphasis: motionPropsShape.emphasis,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 const rawChartPropsSchema = chartPropsObjectSchema.readonly();

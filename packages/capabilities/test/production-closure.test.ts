@@ -272,7 +272,15 @@ process.stdout.write("ok");
       "slideNumber",
       "transition",
     ];
-    const expectedObjectProps = ["emphasis", "enter", "motion"] as const;
+    const expectedObjectProps = [
+      "emphasis",
+      "enter",
+      "exit",
+      "motion",
+      "publishEnd",
+      "publishStart",
+      "startAt",
+    ] as const;
 
     const coveredDeclarations = new Set<string>();
     const coveredSlotProps = new Set<string>();

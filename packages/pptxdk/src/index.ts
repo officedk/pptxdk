@@ -433,22 +433,32 @@ export type {
 } from "@pptxdk/capabilities/placeholder";
 export {
   after,
+  appear,
   breathe,
+  collapse,
   createMotionScopeHandle,
+  disappear,
   fade,
+  fadeOut,
   fillColor,
   floatDown,
+  floatOut,
   floatUp,
   fly,
+  flyOut,
   motionCapability,
   motionSchedule,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   spinOptionsSchema,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "@pptxdk/capabilities/motion";
 export type {
   BreatheEffect,
@@ -462,7 +472,11 @@ export type {
   EmphasisEffectDeclaration,
   EntranceEffect,
   EntranceEffectDeclaration,
+  ExitEffect,
+  ExitEffectDeclaration,
+  ExitPreset,
   FillColorOptions,
+  InstantEffectOptions,
   MotionCompletionState,
   MotionCue,
   MotionCueRef,
@@ -497,6 +511,7 @@ export type {
   ResolvedMotionScope,
   ResolvedMotionStep,
   SpinOptions,
+  SteppedEffect,
 } from "@pptxdk/capabilities/motion";
 export { notesCapability } from "@pptxdk/capabilities/notes";
 export type { NotesDeclarationProps } from "@pptxdk/capabilities/notes-declaration";

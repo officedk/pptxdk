@@ -76,9 +76,7 @@ const shapeDeclarationPropsObjectSchema = z.strictObject({
   link: linkTargetSchema.optional(),
   geometry: geometrySchema.optional(),
   style: rawShapeStyleSchema.optional(),
-  enter: motionPropsShape.enter,
-  emphasis: motionPropsShape.emphasis,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 export const shapeAllowedPropKeyList: readonly string[] = Object.keys(

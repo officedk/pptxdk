@@ -36,6 +36,7 @@ import {
   type ScreenGeometry,
   type ScreenPoint,
 } from "#/options.ts";
+import { sanitizeSvgForRasterization } from "#/svg-guard.ts";
 
 export type { PreviewTransform };
 export {
@@ -46,6 +47,7 @@ export {
   previewPageNumberSchema,
   previewPagesSchema,
   previewPlaceholderSchema,
+  sanitizeSvgForRasterization,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
@@ -636,7 +638,8 @@ export function paint(
               : { themeOverride: slide.effectiveThemeOverride }),
           }).svg
         : defaultCanvasBackground;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? fallbackBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
+    const rawSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? fallbackBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
+    const svg = sanitizeSvgForRasterization(rawSvg, internal.dimensions);
     const Resvg = getResvg();
     const png = new Uint8Array(
       new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng(),

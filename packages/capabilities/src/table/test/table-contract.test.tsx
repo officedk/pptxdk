@@ -17,6 +17,7 @@ import { P, SlideNumber } from "@pptxdk/capabilities/text-elements";
 import { BuildError } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
+import { createImporter } from "@pptxdk/import";
 import { paint } from "@pptxdk/preview";
 import { Deck, expandDocument, Slide } from "@pptxdk/react";
 import { validatePptx } from "@pptxdk/validation";
@@ -461,5 +462,167 @@ describe("tableCapability resolved contract", () => {
     );
     assert.ok(slideXml.includes("Snapshot cell"));
     assert.equal(slideXml.includes("Mutated cell"), false);
+  });
+
+  it("cascades align (Table -> Row -> Cell -> P) and 4-side borders (6 layers) consistently across emit, paint, and import", async () => {
+    const resolve = createResolver([
+      slideBackgroundCapability,
+      tableCapability,
+    ]);
+    const importTable = createImporter([tableCapability]);
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 480, height: 270 },
+        createElement(
+          Slide,
+          { id: "cascade" },
+          createElement(
+            Table,
+            {
+              id: "three-line",
+              columns: [120, 120, 120],
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 360,
+                fontFamily: jostFont,
+                fontSize: 14,
+                align: "center",
+                border: { color: "#94A3B8", width: 1 },
+                borderLeft: "none",
+                borderRight: "none",
+                borderTop: { color: "#0F172A", width: 2 },
+              },
+            },
+            createElement(
+              Row,
+              {
+                id: "hdr",
+                style: {
+                  height: 36,
+                  borderBottom: { color: "#0F172A", width: 1 },
+                },
+              },
+              createElement(Cell, { id: "h1" }, "Metric"),
+              createElement(
+                Cell,
+                { id: "h2", style: { align: "right" } },
+                "Value",
+              ),
+              createElement(
+                Cell,
+                {
+                  id: "h3",
+                  style: {
+                    border: "none",
+                    borderBottom: { color: "#DC2626", width: 2 },
+                  },
+                },
+                createElement(P, { style: { align: "left" } }, "Delta"),
+              ),
+            ),
+            createElement(
+              Row,
+              {
+                id: "body",
+                style: {
+                  height: 36,
+                  align: "right",
+                  border: "none",
+                  borderBottom: { color: "#0F172A", width: 2 },
+                },
+              },
+              createElement(Cell, { id: "b1", style: { align: "left" } }, "Q1"),
+              createElement(Cell, { id: "b2" }, "120"),
+              createElement(
+                Cell,
+                {
+                  id: "b3",
+                  style: {
+                    borderBottom: "none",
+                    borderRight: { color: "#2563EB", width: 1 },
+                  },
+                },
+                "+8%",
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const resolution = resolve(doc);
+    const painted = paint(resolution);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    assert.ok(painted.pages[0]?.png instanceof Uint8Array);
+    const svg = painted.pages[0]?.svg ?? "";
+    assert.ok(svg.includes("#0F172A"));
+    assert.ok(svg.includes("#DC2626"));
+    assert.ok(svg.includes("#2563EB"));
+
+    const emitted = emit(resolution);
+    const validated = await validatePptx(emitted.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const cellTexts = validated.slides[0]?.objects[0]?.table?.cellTexts ?? [];
+    // h1 inherits Table.align="center", h2 overrides to "right", h3 P overrides to "left"
+    // b1 overrides Row.align="right" to "left", b2 inherits Row.align="right", b3 inherits Row.align="right"
+    assert.deepEqual(
+      cellTexts.map((entry) => entry.text.paragraphs[0]?.alignment),
+      ["ctr", "r", "l", "l", "r", "r"],
+    );
+
+    const slideXml = strFromU8(
+      unzipSync(emitted.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    const tcPrMatches = [
+      ...slideXml.matchAll(/<a:tcPr\b[^>]*>[\s\S]*?<\/a:tcPr>/gu),
+    ].map((match) => match[0]);
+    assert.equal(tcPrMatches.length, 6);
+    // h1: top=#0F172A (2px=19050), bottom=#0F172A (1px=9525), left=noFill, right=noFill
+    assert.match(tcPrMatches[0]!, /<a:lnL><a:noFill\/><\/a:lnL>/u);
+    assert.match(tcPrMatches[0]!, /<a:lnR><a:noFill\/><\/a:lnR>/u);
+    assert.match(
+      tcPrMatches[0]!,
+      /<a:lnT w="19050"><a:solidFill><a:srgbClr val="0F172A"\/>/u,
+    );
+    assert.match(
+      tcPrMatches[0]!,
+      /<a:lnB w="9525"><a:solidFill><a:srgbClr val="0F172A"\/>/u,
+    );
+    // h3: cell.border="none" clears top, cell.borderBottom=#DC2626
+    assert.match(tcPrMatches[2]!, /<a:lnT><a:noFill\/><\/a:lnT>/u);
+    assert.match(
+      tcPrMatches[2]!,
+      /<a:lnB w="19050"><a:solidFill><a:srgbClr val="DC2626"\/>/u,
+    );
+    // b2: row.border="none" clears table.borderTop, row.borderBottom=#0F172A (2px)
+    assert.match(tcPrMatches[4]!, /<a:lnT><a:noFill\/><\/a:lnT>/u);
+    assert.match(
+      tcPrMatches[4]!,
+      /<a:lnB w="19050"><a:solidFill><a:srgbClr val="0F172A"\/>/u,
+    );
+    // b3: cell.borderBottom="none" clears row.borderBottom, cell.borderRight=#2563EB
+    assert.match(tcPrMatches[5]!, /<a:lnB><a:noFill\/><\/a:lnB>/u);
+    assert.match(
+      tcPrMatches[5]!,
+      /<a:lnR w="9525"><a:solidFill><a:srgbClr val="2563EB"\/>/u,
+    );
+
+    // Import roundtrip preserves align and per-side borders identically.
+    const imported = importTable(emitted.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const rtValidated = await validatePptx(
+      emit(resolve(imported.document)).pptx,
+    );
+    assert.deepEqual(rtValidated.errors, []);
+    assert.deepEqual(
+      rtValidated.slides[0]?.objects[0]?.table?.cellTexts.map(
+        (entry) => entry.text.paragraphs[0]?.alignment,
+      ),
+      ["ctr", "r", "l", "l", "r", "r"],
+    );
   });
 });

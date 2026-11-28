@@ -301,9 +301,12 @@ function readAnchorCell(
     );
     const singleParagraph =
       importedParagraphs.length === 1 ? importedParagraphs[0] : undefined;
+    const singleParagraphExtraStyleKeys =
+      singleParagraph === undefined
+        ? []
+        : Object.keys(singleParagraph.style).filter((key) => key !== "align");
     const hasParagraphLevelStyle =
-      singleParagraph !== undefined &&
-      Object.keys(singleParagraph.style).length > 0;
+      singleParagraph !== undefined && singleParagraphExtraStyleKeys.length > 0;
     const singleTextRun =
       singleParagraph !== undefined &&
       !hasParagraphLevelStyle &&
@@ -330,7 +333,9 @@ function readAnchorCell(
         textShadow,
         lang,
       } = singleTextRun.style;
+      const hoistedAlign = singleParagraph?.style.align;
       hoistedRunStyle = {
+        ...(hoistedAlign === undefined ? {} : { align: hoistedAlign }),
         ...(fontFamily === undefined ? {} : { fontFamily }),
         ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
         ...(fontSize === undefined ? {} : { fontSize }),

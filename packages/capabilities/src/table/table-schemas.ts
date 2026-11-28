@@ -98,6 +98,7 @@ export const tableSpacingSchema: z.ZodType<TableSpacing> =
 export type TableTextStyle = Pick<
   TextStyle,
   | "fontFamily"
+  | "eastAsianFontFamily"
   | "fontSize"
   | "fontWeight"
   | "fontStyle"
@@ -114,6 +115,7 @@ export type TableTextStyle = Pick<
 
 const tableTextStyleObjectSchema = z.strictObject({
   fontFamily: textStyleShape.fontFamily,
+  eastAsianFontFamily: textStyleShape.eastAsianFontFamily,
   fontSize: textStyleShape.fontSize,
   fontWeight: textStyleShape.fontWeight,
   fontStyle: textStyleShape.fontStyle,

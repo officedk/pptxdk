@@ -41,6 +41,7 @@ import {
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
   P_NS,
+  readRunFontSlots,
   XML_NS,
   defineCanvasMechanism,
   emuToPx,
@@ -567,10 +568,6 @@ const SchemeClrAttrSchema = z.object({
   val: schemeColorNameSchema,
 });
 
-const TypefaceAttrSchema = z.object({
-  typeface: z.string().min(1),
-});
-
 const algnMap: Readonly<Record<"l" | "ctr" | "r" | "just", TextAlignment>> = {
   l: "left",
   ctr: "center",
@@ -744,28 +741,10 @@ function readFooterRunStyle(
     const color = readFooterXmlColor(solidFill, location, diagnostics);
     if (color !== undefined) style["color"] = color;
   }
-  const latin = rPrCursor.child(A_NS, "latin");
-  const ea = rPrCursor.child(A_NS, "ea");
-  const cs = rPrCursor.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  if (fontCursor !== undefined) {
-    const parsedFont = TypefaceAttrSchema.safeParse(
-      fontCursor.attrsObject(["typeface", "pitchFamily", "charset", "panose"]),
-    );
-    if (parsedFont.success) {
-      const tf = parsedFont.data.typeface;
-      style["fontFamily"] =
-        tf === "+mj-lt" || tf === "+mj-ea" || tf === "+mj-cs"
-          ? "major"
-          : tf === "+mn-lt" || tf === "+mn-ea" || tf === "+mn-cs"
-            ? "minor"
-            : tf;
-    }
-  }
-  for (const extra of [ea, cs]) {
-    if (extra !== undefined && extra !== fontCursor) {
-      extra.attrsObject(["typeface", "pitchFamily", "charset", "panose"]);
-    }
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
+  if (fontFamily !== undefined) style["fontFamily"] = fontFamily;
+  if (eastAsianFontFamily !== undefined) {
+    style["eastAsianFontFamily"] = eastAsianFontFamily;
   }
   return style;
 }

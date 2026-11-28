@@ -322,6 +322,7 @@ function readAnchorCell(
     if (singleTextRun !== undefined) {
       const {
         fontFamily,
+        eastAsianFontFamily,
         fontSize,
         fontWeight,
         fontStyle,
@@ -336,6 +337,7 @@ function readAnchorCell(
       hoistedRunStyle = {
         ...(hoistedAlign === undefined ? {} : { align: hoistedAlign }),
         ...(fontFamily === undefined ? {} : { fontFamily }),
+        ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
         ...(fontSize === undefined ? {} : { fontSize }),
         ...(fontWeight === undefined ? {} : { fontWeight }),
         ...(fontStyle === undefined ? {} : { fontStyle }),

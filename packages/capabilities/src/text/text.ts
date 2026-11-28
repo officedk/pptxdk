@@ -85,7 +85,7 @@ export type {
   SpanDeclarationProps,
   TextDeclarationProps,
 } from "./text-declaration.ts";
-export { font } from "../font/font.ts";
+export { font, fromFontCollection } from "../font/font.ts";
 export type {
   Font,
   FontFace,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { BuildError } from "@pptxdk/core";
+import { defineTheme, isTheme } from "@pptxdk/core";
 import { createResolver, targets } from "@pptxdk/core/build";
 import type { SlideCapabilityModule } from "@pptxdk/core/capability";
 import {
@@ -15,6 +16,8 @@ import {
   emittedBuildQuery,
   pxToEmu,
   resolvedColorXml,
+  themeOverrideXml,
+  themeXml,
   validateOptions,
   xmlDocument,
   xmlEscape,
@@ -136,5 +139,78 @@ describe("@pptxdk/emit pure unit contract", () => {
     );
 
     assert.ok(CommonNode);
+  });
+
+  it("emits OS/2 panose and pitchFamily attributes on theme font slots when Font faces carry SFNT bytes", () => {
+    // Build a minimal valid SFNT containing OS/2 (panose=02 0B 06 03 02 02 02 02 02 04 -> Swiss/Sans proportional = 0x22 = 34) and post.
+    const os2 = new Uint8Array(78);
+    const panose = [2, 11, 6, 3, 2, 2, 2, 2, 2, 4];
+    os2.set(panose, 32);
+    const post = new Uint8Array(32);
+
+    const sfnt = new Uint8Array(12 + 2 * 16 + 80 + 32);
+    const view = new DataView(sfnt.buffer);
+    view.setUint32(0, 0x00010000);
+    view.setUint16(4, 2);
+    sfnt.set([0x4f, 0x53, 0x2f, 0x32], 12); // "OS/2"
+    view.setUint32(20, 44);
+    view.setUint32(24, 78);
+    sfnt.set([0x70, 0x6f, 0x73, 0x74], 28); // "post"
+    view.setUint32(36, 44 + 80);
+    view.setUint32(40, 32);
+    sfnt.set(os2, 44);
+    sfnt.set(post, 44 + 80);
+
+    const theme = defineTheme({
+      name: "Classified Theme",
+      fonts: {
+        major: {
+          family: "Custom Sans",
+          faces: [{ weight: 400, style: "normal", data: sfnt }],
+          substitute: true,
+        },
+        minor: "Plain System Font",
+      },
+    });
+    assert.equal(isTheme(theme), true);
+    const xml = themeXml(theme);
+    assert.match(
+      xml,
+      /<a:majorFont><a:latin typeface="Custom Sans" panose="020B0603020202020204" pitchFamily="34"\/><a:ea typeface="Custom Sans" panose="020B0603020202020204" pitchFamily="34"\/><a:cs typeface="Custom Sans"\/><\/a:majorFont>/u,
+    );
+    assert.match(
+      xml,
+      /<a:minorFont><a:latin typeface="Plain System Font"\/><a:ea typeface="Plain System Font"\/><a:cs typeface="Plain System Font"\/><\/a:minorFont>/u,
+    );
+  });
+
+  it("emits orthogonal majorEastAsian and minorEastAsian slots on themeXml and themeOverrideXml", () => {
+    const base = defineTheme({
+      name: "Bilingual",
+      fonts: {
+        major: "Inter",
+        minor: "Aptos",
+        majorEastAsian: "PingFang SC",
+        minorEastAsian: "Noto Sans SC",
+      },
+    });
+    const xml = themeXml(base);
+    assert.match(
+      xml,
+      /<a:majorFont><a:latin typeface="Inter"\/><a:ea typeface="PingFang SC"\/><a:cs typeface="Inter"\/><\/a:majorFont>/u,
+    );
+    assert.match(
+      xml,
+      /<a:minorFont><a:latin typeface="Aptos"\/><a:ea typeface="Noto Sans SC"\/><a:cs typeface="Aptos"\/><\/a:minorFont>/u,
+    );
+
+    const ovrXml = themeOverrideXml(
+      { fonts: { minorEastAsian: "Microsoft YaHei" } },
+      base,
+    );
+    assert.match(
+      ovrXml,
+      /<a:minorFont><a:latin typeface="Aptos"\/><a:ea typeface="Microsoft YaHei"\/><a:cs typeface="Aptos"\/><\/a:minorFont>/u,
+    );
   });
 });

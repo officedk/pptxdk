@@ -39,6 +39,8 @@ export type PresentationFontSchemeInfo = {
   readonly themeName?: string;
   readonly majorTypeface?: string;
   readonly minorTypeface?: string;
+  readonly majorEastAsianTypeface?: string;
+  readonly minorEastAsianTypeface?: string;
 };
 
 export type UnpackedEotResult =
@@ -365,9 +367,10 @@ export function readPresentationThemeFontScheme(
   if (fontScheme === undefined) return undefined;
 
   const readFontSlotTypeface = (
-    latinCursor: XmlElementCursor | undefined,
+    slotCursor: XmlElementCursor | undefined,
+    elementTag: "a:latin" | "a:ea",
   ): string | undefined => {
-    const attrs = latinCursor?.attrsObject(["typeface"]);
+    const attrs = slotCursor?.attrsObject(["typeface"]);
     const parsed = themeTypefaceXmlSchema.safeParse(attrs);
     if (parsed.success) {
       return parsed.data.typeface;
@@ -375,17 +378,17 @@ export function readPresentationThemeFontScheme(
     const rawTypeface = attrs?.["typeface"];
     if (
       diagnostics !== undefined &&
-      latinCursor !== undefined &&
+      slotCursor !== undefined &&
       rawTypeface !== undefined &&
       rawTypeface.trim() !== "" &&
       reservedThemeFontPattern.test(rawTypeface.trim())
     ) {
-      const xpath = `${latinCursor.xpath}/@typeface`;
+      const xpath = `${slotCursor.xpath}/@typeface`;
       const duplicate = diagnostics.some(
         (existing) =>
           existing.code === "invalid-xml-value" &&
           existing.location.part === themePath &&
-          existing.attributeOrElement === "a:latin/@typeface" &&
+          existing.attributeOrElement === `${elementTag}/@typeface` &&
           existing.rawValue === rawTypeface &&
           (existing.location.xpath === undefined ||
             existing.location.xpath === xpath),
@@ -396,7 +399,7 @@ export function readPresentationThemeFontScheme(
           category: "corrupt-input",
           disposition: "omitted",
           location: { part: themePath, xpath },
-          attributeOrElement: "a:latin/@typeface",
+          attributeOrElement: `${elementTag}/@typeface`,
           rawValue: rawTypeface,
         });
       }
@@ -404,11 +407,23 @@ export function readPresentationThemeFontScheme(
     return undefined;
   };
 
+  const majorFont = fontScheme.child(A_NS, "majorFont");
+  const minorFont = fontScheme.child(A_NS, "minorFont");
   const majorTypeface = readFontSlotTypeface(
-    fontScheme.child(A_NS, "majorFont")?.child(A_NS, "latin"),
+    majorFont?.child(A_NS, "latin"),
+    "a:latin",
   );
   const minorTypeface = readFontSlotTypeface(
-    fontScheme.child(A_NS, "minorFont")?.child(A_NS, "latin"),
+    minorFont?.child(A_NS, "latin"),
+    "a:latin",
+  );
+  const majorEastAsianTypeface = readFontSlotTypeface(
+    majorFont?.child(A_NS, "ea"),
+    "a:ea",
+  );
+  const minorEastAsianTypeface = readFontSlotTypeface(
+    minorFont?.child(A_NS, "ea"),
+    "a:ea",
   );
 
   return {
@@ -417,5 +432,56 @@ export function readPresentationThemeFontScheme(
       : {}),
     ...(majorTypeface === undefined ? {} : { majorTypeface }),
     ...(minorTypeface === undefined ? {} : { minorTypeface }),
+    ...(majorEastAsianTypeface === undefined ? {} : { majorEastAsianTypeface }),
+    ...(minorEastAsianTypeface === undefined ? {} : { minorEastAsianTypeface }),
+  };
+}
+
+function normalizeRunFontSlotTypeface(typeface: string): string {
+  if (typeface === "+mj-lt" || typeface === "+mj-ea" || typeface === "+mj-cs") {
+    return "major";
+  }
+  if (typeface === "+mn-lt" || typeface === "+mn-ea" || typeface === "+mn-cs") {
+    return "minor";
+  }
+  return typeface;
+}
+
+/**
+ * Reads `<a:latin>`, `<a:ea>`, and `<a:cs>` font slots under `<a:rPr>` or `<a:defRPr>`,
+ * preserving orthogonal `eastAsianFontFamily` when `<a:ea>` differs from `<a:latin>` or appears alone.
+ */
+export function readRunFontSlots(rPrCursor: XmlElementCursor): {
+  readonly fontFamily?: string;
+  readonly eastAsianFontFamily?: string;
+} {
+  const readSlot = (
+    cursor: XmlElementCursor | undefined,
+  ): string | undefined => {
+    if (cursor === undefined) return undefined;
+    const raw = cursor.attrsObject([
+      "typeface",
+      "pitchFamily",
+      "charset",
+      "panose",
+    ]);
+    const typeface = raw["typeface"];
+    return typeface !== undefined && typeface.trim() !== ""
+      ? normalizeRunFontSlotTypeface(typeface)
+      : undefined;
+  };
+
+  const latinToken = readSlot(rPrCursor.child(A_NS, "latin"));
+  const eaToken = readSlot(rPrCursor.child(A_NS, "ea"));
+  const csToken = readSlot(rPrCursor.child(A_NS, "cs"));
+
+  const fontFamily =
+    latinToken ?? (eaToken === undefined ? csToken : undefined);
+  const eastAsianFontFamily =
+    eaToken !== undefined && eaToken !== fontFamily ? eaToken : undefined;
+
+  return {
+    ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
   };
 }

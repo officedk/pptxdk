@@ -491,4 +491,63 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
     assert.equal(theme.colors.accent1, "#0055AA");
     assert.equal(overriddenCtx.theme, theme);
   });
+
+  it("supports orthogonal majorEastAsian/minorEastAsian theme slots and eastAsianFontFamily text style", () => {
+    const eaTheme = defineTheme({
+      name: "Dual Script Theme",
+      fonts: {
+        major: "Inter",
+        minor: "Aptos",
+        majorEastAsian: "PingFang SC",
+        minorEastAsian: "Noto Sans SC",
+      },
+    });
+    assert.equal(eaTheme.fonts.majorEastAsian, "PingFang SC");
+    assert.equal(eaTheme.fonts.minorEastAsian, "Noto Sans SC");
+
+    const ctx = createThemeContext(eaTheme);
+    assert.equal(ctx.resolveFont("major").family, "Inter");
+    assert.equal(ctx.resolveEastAsianFont("major").family, "PingFang SC");
+    assert.equal(ctx.resolveEastAsianFont("major").themeFont, "major");
+    assert.equal(ctx.resolveEastAsianFont("minor").family, "Noto Sans SC");
+    assert.equal(ctx.resolveEastAsianFont("minor").themeFont, "minor");
+
+    // Fallback when EA slots are omitted
+    const latinOnlyCtx = createThemeContext(
+      defineTheme({ fonts: { major: "Georgia", minor: "Verdana" } }),
+    );
+    assert.equal(latinOnlyCtx.resolveEastAsianFont("major").family, "Georgia");
+    assert.equal(latinOnlyCtx.resolveEastAsianFont("minor").family, "Verdana");
+
+    // ThemeOverride overrides only minorEastAsian without clobbering minor
+    const overridden = ctx.withNativeOverrides({
+      fonts: { minorEastAsian: "Microsoft YaHei" },
+    });
+    assert.equal(overridden.resolveFont("minor").family, "Aptos");
+    assert.equal(
+      overridden.resolveEastAsianFont("minor").family,
+      "Microsoft YaHei",
+    );
+
+    // Reject reserved tokens in majorEastAsian / minorEastAsian
+    assert.throws(
+      () => defineTheme({ fonts: { majorEastAsian: "+mj-ea" } }),
+      CapabilityError,
+    );
+    assert.throws(() =>
+      themeOverrideSchema.parse({ fonts: { minorEastAsian: "minor" } }),
+    );
+
+    // eastAsianFontFamily accepted in textStyleSchema and validated
+    const parsedStyle = textStyleSchema.parse({
+      fontFamily: "Inter",
+      eastAsianFontFamily: "Noto Sans SC",
+    });
+    assert.equal(parsedStyle.eastAsianFontFamily, "Noto Sans SC");
+    assert.throws(
+      () => validateTextStyle({ eastAsianFontFamily: "   " }),
+      (err: unknown) =>
+        err instanceof CapabilityError && err.code === "invalid-font-family",
+    );
+  });
 });

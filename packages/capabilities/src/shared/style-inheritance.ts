@@ -72,6 +72,7 @@ function spPrRule<T>(): StylePropertyRule<T> {
 export const sharedStyleRules: ExhaustiveStyleRuleMap = Object.freeze({
   // Text run & paragraph properties (inherited on free containers, level-cascaded on placeholders)
   fontFamily: levelRule<TextStyle["fontFamily"]>(),
+  eastAsianFontFamily: levelRule<TextStyle["eastAsianFontFamily"]>(),
   fontSize: levelRule<TextStyle["fontSize"]>(),
   fontWeight: levelRule<TextStyle["fontWeight"]>(),
   fontStyle: levelRule<TextStyle["fontStyle"]>(),

@@ -38,7 +38,7 @@ import {
   type ChartNode,
   type ChartProps,
 } from "./chart/chart-declaration.ts";
-import { font } from "./font/font.ts";
+import { font, fromFontCollection } from "./font/font.ts";
 import {
   createGroupNode,
   type GroupDeclarationProps,
@@ -599,7 +599,7 @@ export {
 export { motionSchedule } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
-export { font, transitions };
+export { font, fromFontCollection, transitions };
 export type {
   ContentPlaceholderRole,
   EmptyPlaceholderMap,

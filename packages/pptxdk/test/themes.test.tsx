@@ -167,11 +167,11 @@ describe("public theme entry", () => {
     assert.match(theme, /<a:accent1><a:srgbClr val="336699"\/><\/a:accent1>/u);
     assert.match(
       theme,
-      /<a:majorFont><a:latin typeface="Theme Metrics Sans"\/><a:ea typeface="Theme Metrics Sans"\/><a:cs typeface="Theme Metrics Sans"\/><\/a:majorFont>/u,
+      /<a:majorFont><a:latin typeface="Theme Metrics Sans"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/><a:ea typeface="Theme Metrics Sans"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/><a:cs typeface="Theme Metrics Sans"\/><\/a:majorFont>/u,
     );
     assert.match(
       theme,
-      /<a:minorFont><a:latin typeface="Jost\*"\/><a:ea typeface="Jost\*"\/><a:cs typeface="Jost\*"\/>/u,
+      /<a:minorFont><a:latin typeface="Jost\*"\s+panose="00000000000000000000"\s+pitchFamily="2"\/><a:ea typeface="Jost\*"\s+panose="00000000000000000000"\s+pitchFamily="2"\/><a:cs typeface="Jost\*"\/>/u,
     );
     assert.match(
       slide,
@@ -530,7 +530,10 @@ describe("public theme entry", () => {
       assert.notEqual(start, -1, `missing native object ${name}`);
       return slide.slice(start, slide.indexOf("</p:sp>", start));
     };
-    assert.match(slide, /<a:latin typeface="Jost\*"\/>/u);
+    assert.match(
+      slide,
+      /<a:latin typeface="Jost\*"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/>/u,
+    );
     assert.match(
       slide,
       /<a:solidFill><a:srgbClr val="C00000"\/><\/a:solidFill>/u,
@@ -543,23 +546,38 @@ describe("public theme entry", () => {
     assert.match(objectXml("nested-text"), /<a:latin typeface="\+mj-lt"\/>/u);
     assert.match(objectXml("nested-shape"), /<a:srgbClr val="C00000"\/>/u);
     assert.match(objectXml("outer-after"), /<a:srgbClr val="C00000"\/>/u);
-    assert.match(objectXml("outer-after"), /<a:latin typeface="Jost\*"\/>/u);
+    assert.match(
+      objectXml("outer-after"),
+      /<a:latin typeface="Jost\*"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/>/u,
+    );
     assert.match(objectXml("outer-after"), /sz="1425"/u);
     assert.match(objectXml("local-shape"), /sz="1350"/u);
     assert.match(table, /<a:srgbClr val="C00000"\/>/u);
-    assert.match(table, /<a:latin typeface="Jost\*"\/>/u);
+    assert.match(
+      table,
+      /<a:latin typeface="Jost\*"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/>/u,
+    );
     assert.match(table, /sz="1425"/u);
     assert.match(table, /<a:schemeClr val="accent1"\/>/u);
     assert.match(chart, /<a:srgbClr val="C00000"\/>/u);
-    assert.match(chart, /<a:latin typeface="Jost\*"\/>/u);
+    assert.match(
+      chart,
+      /<a:latin typeface="Jost\*"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/>/u,
+    );
     assert.match(chart, /<a:schemeClr val="accent1"\/>/u);
     assert.match(categoryAxis ?? "", /<a:srgbClr val="C00000"\/>/u);
-    assert.match(categoryAxis ?? "", /<a:latin typeface="Jost\*"\/>/u);
+    assert.match(
+      categoryAxis ?? "",
+      /<a:latin typeface="Jost\*"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/>/u,
+    );
     assert.match(categoryAxis ?? "", /<a:schemeClr val="accent1"\/>/u);
     assert.match(valueAxis ?? "", /<a:alpha val="50000"\/>/u);
     assert.match(valueAxis ?? "", /<a:schemeClr val="accent1"\/>/u);
     assert.match(dataLabels ?? "", /<a:srgbClr val="C00000"\/>/u);
-    assert.match(dataLabels ?? "", /<a:latin typeface="Jost\*"\/>/u);
+    assert.match(
+      dataLabels ?? "",
+      /<a:latin typeface="Jost\*"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/>/u,
+    );
     assert.match(chart, /<c:txPr>/u);
     const theme = strFromU8(parts["ppt/theme/theme1.xml"]!);
     const slideOverrideXml = strFromU8(parts["ppt/slides/slide2.xml"]!);
@@ -1616,11 +1634,11 @@ describe("public theme entry", () => {
 
     assert.match(
       themeXml,
-      /<a:majorFont><a:latin typeface="Theme Metrics Sans"\/><a:ea typeface="Theme Metrics Sans"\/><a:cs typeface="Theme Metrics Sans"\/><\/a:majorFont>/u,
+      /<a:majorFont><a:latin typeface="Theme Metrics Sans"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/><a:ea typeface="Theme Metrics Sans"(?:\s+panose="[^"]+"\s+pitchFamily="\d+")?\/><a:cs typeface="Theme Metrics Sans"\/><\/a:majorFont>/u,
     );
     assert.match(
       themeXml,
-      /<a:minorFont><a:latin typeface="Jost\*"\/><a:ea typeface="Jost\*"\/><a:cs typeface="Jost\*"\/>/u,
+      /<a:minorFont><a:latin typeface="Jost\*"\s+panose="00000000000000000000"\s+pitchFamily="2"\/><a:ea typeface="Jost\*"\s+panose="00000000000000000000"\s+pitchFamily="2"\/><a:cs typeface="Jost\*"\/>/u,
     );
 
     assert.match(

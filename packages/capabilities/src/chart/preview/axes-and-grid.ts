@@ -503,12 +503,7 @@ export function renderAxesSvg(options: {
     const titleBox = layout.axisTitleBoxes.get(axis.name);
     if (title !== undefined && titleBox !== undefined) {
       const titleStyle = mergeChartTextStyle(axisTextStyle, title.style);
-      const rotationDegrees =
-        axis.direction === "vertical"
-          ? titleBox.x < plotRect.x
-            ? -90
-            : 90
-          : undefined;
+      const rotationDegrees = axis.titleRotationDegrees;
       parts.push(
         renderChartTextSvg({
           text: title.text,

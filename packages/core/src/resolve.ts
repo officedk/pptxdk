@@ -3721,7 +3721,8 @@ function buildResolvedPlaceholders(
     for (const [styleKey, styleValue] of Object.entries(rawMerged)) {
       if (styleValue === undefined) continue;
       mergedStyle[styleKey] =
-        styleKey === "fontFamily" && isFont(styleValue)
+        (styleKey === "fontFamily" || styleKey === "eastAsianFontFamily") &&
+        isFont(styleValue)
           ? styleValue.family
           : styleValue;
     }

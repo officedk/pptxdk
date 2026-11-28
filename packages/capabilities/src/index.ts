@@ -134,7 +134,7 @@ export type {
   RowProps,
   TableProps,
 } from "#/table/table-elements.ts";
-export { font, textCapability } from "#/text/text.ts";
+export { font, fromFontCollection, textCapability } from "#/text/text.ts";
 export { P, SlideNumber, Span, Text } from "#/text/text-elements.ts";
 export { notesCapability } from "#/notes/notes.ts";
 export { Notes } from "#/notes/notes-elements.ts";

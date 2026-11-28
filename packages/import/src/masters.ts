@@ -44,6 +44,7 @@ import { z } from "zod";
 
 import { readAlternateContent } from "#/alternate-content.ts";
 import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
+import { readRunFontSlots } from "#/fonts.ts";
 import type {
   DeferredSlideLink,
   OmittedSlideObjectInfo,
@@ -306,44 +307,10 @@ function readDefRPr(
     }
   }
 
-  const latin = rPr.child(A_NS, "latin");
-  const ea = rPr.child(A_NS, "ea");
-  const cs = rPr.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  let fontFamily: string | undefined;
-  if (fontCursor !== undefined) {
-    const typeface = fontCursor.attr("typeface");
-    fontCursor.consumeAttr("pitchFamily");
-    fontCursor.consumeAttr("charset");
-    fontCursor.consumeAttr("panose");
-    if (typeface !== undefined && typeface.trim() !== "") {
-      if (
-        typeface === "+mj-lt" ||
-        typeface === "+mj-ea" ||
-        typeface === "+mj-cs"
-      ) {
-        fontFamily = "major";
-      } else if (
-        typeface === "+mn-lt" ||
-        typeface === "+mn-ea" ||
-        typeface === "+mn-cs"
-      ) {
-        fontFamily = "minor";
-      } else {
-        fontFamily = typeface;
-      }
-    }
-  }
-  for (const extra of [ea, cs]) {
-    if (extra !== undefined && extra !== fontCursor) {
-      extra.consumeAttr("typeface");
-      extra.consumeAttr("pitchFamily");
-      extra.consumeAttr("charset");
-      extra.consumeAttr("panose");
-    }
-  }
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPr);
   return {
     ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
     ...(fontSize === undefined ? {} : { fontSize }),
     ...(fontWeight === undefined ? {} : { fontWeight }),
     ...(fontStyle === undefined ? {} : { fontStyle }),

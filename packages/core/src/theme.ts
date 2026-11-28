@@ -906,6 +906,7 @@ export const bcp47LangSchema = z
 /** Inheritable text style fields shared across text objects and containers. */
 export type TextStyle = {
   readonly fontFamily?: FontReference | undefined;
+  readonly eastAsianFontFamily?: FontReference | undefined;
   readonly fontSize?: FontSize | undefined;
   readonly fontWeight?: "normal" | "bold" | number | undefined;
   readonly fontStyle?: FontFaceStyle | undefined;
@@ -929,6 +930,7 @@ export type TextStyle = {
 
 const textStyleObjectSchema = z.strictObject({
   fontFamily: rawFontReferenceSchema.optional(),
+  eastAsianFontFamily: rawFontReferenceSchema.optional(),
   fontSize: validatedFontSizeSchema.optional(),
   fontWeight: fontWeightSchema.optional(),
   fontStyle: rawFontFaceStyleSchema.optional(),
@@ -1216,6 +1218,8 @@ export type ThemeInput = {
     | {
         readonly major?: Font | string | undefined;
         readonly minor?: Font | string | undefined;
+        readonly majorEastAsian?: Font | string | undefined;
+        readonly minorEastAsian?: Font | string | undefined;
       }
     | undefined;
   readonly formatScheme?: FormatScheme | undefined;
@@ -1245,6 +1249,8 @@ const rawThemeInputSchema = z
       .strictObject({
         major: rawThemeFontValueSchema.optional(),
         minor: rawThemeFontValueSchema.optional(),
+        majorEastAsian: rawThemeFontValueSchema.optional(),
+        minorEastAsian: rawThemeFontValueSchema.optional(),
       })
       .readonly()
       .optional(),
@@ -1281,6 +1287,8 @@ export type ThemeOverride = {
     | {
         readonly major?: Font | string | undefined;
         readonly minor?: Font | string | undefined;
+        readonly majorEastAsian?: Font | string | undefined;
+        readonly minorEastAsian?: Font | string | undefined;
       }
     | undefined;
   readonly formatScheme?: FormatScheme | undefined;
@@ -1309,6 +1317,8 @@ const rawThemeOverrideSchema = z
       .strictObject({
         major: rawThemeFontValueSchema.optional(),
         minor: rawThemeFontValueSchema.optional(),
+        majorEastAsian: rawThemeFontValueSchema.optional(),
+        minorEastAsian: rawThemeFontValueSchema.optional(),
       })
       .readonly()
       .optional(),
@@ -1345,6 +1355,8 @@ export type ThemeData = {
   readonly fonts: {
     readonly major: Font | string;
     readonly minor: Font | string;
+    readonly majorEastAsian?: Font | string | undefined;
+    readonly minorEastAsian?: Font | string | undefined;
   };
   readonly formatScheme?: FormatScheme | undefined;
 };
@@ -1372,6 +1384,8 @@ const rawThemeDataSchema = z
       .strictObject({
         major: rawThemeFontValueSchema,
         minor: rawThemeFontValueSchema,
+        majorEastAsian: rawThemeFontValueSchema.optional(),
+        minorEastAsian: rawThemeFontValueSchema.optional(),
       })
       .readonly(),
     formatScheme: rawFormatSchemeSchema.optional(),
@@ -1432,6 +1446,7 @@ export type ThemeContext = {
   ): ThemeContext;
   resolveColor(value: ColorValue): ResolvedColor;
   resolveFont(value: FontReference): ResolvedThemeFont;
+  resolveEastAsianFont(value: FontReference): ResolvedThemeFont;
 };
 
 const officeColors: Record<NativeColorSlot, HexColor> = {
@@ -1458,7 +1473,7 @@ function textStyleErrorForIssue(
   rawStyle: Readonly<Record<string, unknown>>,
 ): CapabilityError {
   const field = issue?.path[0];
-  if (field === "fontFamily") {
+  if (field === "fontFamily" || field === "eastAsianFontFamily") {
     const hasFacesIssue =
       issue?.path[1] === "faces" ||
       (issue?.code === "invalid_union" &&
@@ -1474,7 +1489,7 @@ function textStyleErrorForIssue(
     return new CapabilityError(
       "invalid-font-family",
       issue?.message ??
-        "fontFamily must be a font value or non-empty family string",
+        `${field} must be a font value or non-empty family string`,
     );
   }
   if (field === "fontSize") {
@@ -1606,6 +1621,9 @@ export function validateTextStyle(
   if (theme !== undefined) {
     if (typeof validated.fontFamily === "string") {
       theme.resolveFont(validated.fontFamily);
+    }
+    if (typeof validated.eastAsianFontFamily === "string") {
+      theme.resolveEastAsianFont(validated.eastAsianFontFamily);
     }
     if (validated.color !== undefined) {
       theme.resolveColor(validated.color);
@@ -1775,10 +1793,13 @@ class NativeThemeRecord implements Theme {
       }) as ThemeData["colors"];
     }
     if (validPatch.fonts !== undefined) {
-      this.#fonts = snapshotValue({
-        ...this.#fonts,
-        ...validPatch.fonts,
-      }) as ThemeData["fonts"];
+      const mergedFonts: Record<string, unknown> = { ...this.#fonts };
+      for (const [key, value] of Object.entries(validPatch.fonts)) {
+        if (value !== undefined) {
+          mergedFonts[key] = value;
+        }
+      }
+      this.#fonts = snapshotValue(mergedFonts) as ThemeData["fonts"];
     }
     if (validPatch.formatScheme !== undefined) {
       const hadFormatScheme = Object.hasOwn(this, "formatScheme");
@@ -1818,9 +1839,14 @@ function parseThemeInputData(input: ThemeInput = {}): ThemeData {
     ...validInput.colors,
   }) as ThemeData["colors"];
   const fonts = snapshotValue({
-    ...validInput.fonts,
     major: validInput.fonts?.major ?? "Aptos Display",
     minor: validInput.fonts?.minor ?? "Aptos",
+    ...(validInput.fonts?.majorEastAsian === undefined
+      ? {}
+      : { majorEastAsian: validInput.fonts.majorEastAsian }),
+    ...(validInput.fonts?.minorEastAsian === undefined
+      ? {}
+      : { minorEastAsian: validInput.fonts.minorEastAsian }),
   }) as ThemeData["fonts"];
   const formatScheme =
     validInput.formatScheme === undefined
@@ -2186,6 +2212,37 @@ function createContext(
       }
       if (isThemeFontSlot(value)) {
         const slotFont = themeOverride?.fonts?.[value] ?? theme.fonts[value];
+        if (isFont(slotFont)) {
+          return {
+            family: slotFont.family,
+            font: slotFont,
+            themeFont: value,
+          };
+        }
+        return {
+          family: slotFont,
+          themeFont: value,
+        };
+      }
+      return {
+        family: value.trim(),
+      };
+    },
+    resolveEastAsianFont(value: FontReference) {
+      if (isFont(value)) return { family: value.family, font: value };
+      if (typeof value !== "string" || value.trim() === "") {
+        throw new CapabilityError(
+          "invalid-font-family",
+          "eastAsianFontFamily cannot be empty",
+        );
+      }
+      if (isThemeFontSlot(value)) {
+        const eaKey = value === "major" ? "majorEastAsian" : "minorEastAsian";
+        const slotFont =
+          themeOverride?.fonts?.[eaKey] ??
+          theme.fonts[eaKey] ??
+          themeOverride?.fonts?.[value] ??
+          theme.fonts[value];
         if (isFont(slotFont)) {
           return {
             family: slotFont.family,

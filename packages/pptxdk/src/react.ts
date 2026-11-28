@@ -187,6 +187,7 @@ export {
   floatUp,
   fly,
   font,
+  fromFontCollection,
   linearGradient,
   motionSchedule,
   path,

@@ -12,11 +12,57 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { build } from "@officedk/pptxdk";
+import { build, defineTheme } from "@officedk/pptxdk";
 import { deck, shape, slide, text } from "@officedk/pptxdk/vanilla";
 import { describe, it } from "vitest";
 
 import { runExternalCorpusCheck } from "../scripts/check-external-corpus.ts";
+
+function packSingleFaceTtc(sfnt: Uint8Array): Uint8Array {
+  const view = new DataView(sfnt.buffer, sfnt.byteOffset, sfnt.byteLength);
+  const sfntVersion = view.getUint32(0);
+  const numTables = view.getUint16(4);
+  const headerSize = 16; // ttcf v1 with 1 face
+  const dirSize = 12 + numTables * 16;
+  let dataCursor = headerSize + dirSize;
+  const recs: {
+    tag: Uint8Array;
+    checksum: number;
+    data: Uint8Array;
+    offset: number;
+  }[] = [];
+  for (let i = 0; i < numTables; i += 1) {
+    const rec = 12 + i * 16;
+    const offset = view.getUint32(rec + 8);
+    const length = view.getUint32(rec + 12);
+    recs.push({
+      tag: sfnt.subarray(rec, rec + 4),
+      checksum: view.getUint32(rec + 4),
+      data: sfnt.subarray(offset, offset + length),
+      offset: dataCursor,
+    });
+    dataCursor += Math.ceil(length / 4) * 4;
+  }
+  const out = new Uint8Array(dataCursor);
+  const outView = new DataView(out.buffer);
+  out.set([0x74, 0x74, 0x63, 0x66], 0);
+  outView.setUint16(4, 1);
+  outView.setUint32(8, 1);
+  outView.setUint32(12, headerSize);
+  outView.setUint32(headerSize, sfntVersion);
+  outView.setUint16(headerSize + 4, numTables);
+  out.set(sfnt.subarray(6, 12), headerSize + 6);
+  for (let i = 0; i < numTables; i += 1) {
+    const tbl = recs[i]!;
+    const recOff = headerSize + 12 + i * 16;
+    out.set(tbl.tag, recOff);
+    outView.setUint32(recOff + 4, tbl.checksum);
+    outView.setUint32(recOff + 8, tbl.offset);
+    outView.setUint32(recOff + 12, tbl.data.byteLength);
+    out.set(tbl.data, tbl.offset);
+  }
+  return out;
+}
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const jostAssetUrl = new URL(
@@ -28,7 +74,18 @@ describe("L4 decoupled conditional external corpus runner", () => {
   it("verifies a single .pptx file and a flat top-layer directory with substitute fonts while ignoring subdirectories and non-pptx files", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "pptxdk-l4-runner-test-"));
     try {
-      const validDeck = deck({ width: 640, height: 360 }).append(
+      const dualDeck = deck({
+        width: 640,
+        height: 360,
+        theme: defineTheme({
+          fonts: {
+            major: "Jost*",
+            minor: "Jost*",
+            majorEastAsian: "Missing EA Sans",
+            minorEastAsian: "Missing EA Sans",
+          },
+        }),
+      }).append(
         slide({ id: "s1", background: "#FFFFFF" }).append(
           shape({
             id: "card",
@@ -50,12 +107,13 @@ describe("L4 decoupled conditional external corpus runner", () => {
               width: 300,
               height: 48,
               fontFamily: "Missing System Sans",
+              eastAsianFontFamily: "Jost*",
               fontSize: 18,
             },
           }),
         ),
       );
-      const validBytes = (await build(validDeck)).pptx;
+      const validBytes = (await build(dualDeck)).pptx;
 
       // 1. Single .pptx file input.
       const singlePptx = join(tempRoot, "single.pptx");
@@ -87,7 +145,10 @@ describe("L4 decoupled conditional external corpus runner", () => {
 
       const fontsDir = join(tempRoot, "flat-fonts");
       await mkdir(join(fontsDir, "nested-fonts"), { recursive: true });
-      await copyFile(jostAssetUrl, join(fontsDir, "Jost-400-Book.ttf"));
+      const jostTtcBytes = packSingleFaceTtc(
+        new Uint8Array(await readFile(jostAssetUrl)),
+      );
+      await writeFile(join(fontsDir, "Jost.ttc"), jostTtcBytes);
       await copyFile(
         jostAssetUrl,
         join(fontsDir, "nested-fonts", "Nested.ttf"),

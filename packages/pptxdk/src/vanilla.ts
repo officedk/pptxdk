@@ -123,6 +123,7 @@ export {
   floatUp,
   fly,
   font,
+  fromFontCollection,
   group,
   image,
   line,

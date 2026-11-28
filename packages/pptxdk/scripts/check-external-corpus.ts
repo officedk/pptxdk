@@ -22,6 +22,7 @@ import {
   defineTheme,
   emit,
   font,
+  fromFontCollection,
   importPptx,
   isTheme,
   isThemeFontSlot,
@@ -165,7 +166,9 @@ async function loadTopLevelSubstituteFontPool(
     .filter((entry) => {
       if (!entry.isFile()) return false;
       const ext = extname(entry.name).toLowerCase();
-      return ext === ".ttf" || ext === ".otf";
+      return (
+        ext === ".ttf" || ext === ".otf" || ext === ".ttc" || ext === ".otc"
+      );
     })
     .map((entry) => join(absDir, entry.name))
     .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -175,6 +178,47 @@ async function loadTopLevelSubstituteFontPool(
 
   for (const filePath of fontFiles) {
     const raw = new Uint8Array(await readFile(filePath));
+    const ext = extname(filePath).toLowerCase();
+    if (ext === ".ttc" || ext === ".otc") {
+      let collectionFamilies: string[] = [];
+      try {
+        const opened = fontkit.create(Buffer.from(raw)) as {
+          readonly fonts?: readonly { readonly familyName?: unknown }[];
+        };
+        if (Array.isArray(opened.fonts)) {
+          collectionFamilies = [
+            ...new Set(
+              opened.fonts
+                .map((member) =>
+                  typeof member.familyName === "string"
+                    ? member.familyName.trim()
+                    : "",
+                )
+                .filter((name) => name !== ""),
+            ),
+          ];
+        }
+      } catch {
+        continue;
+      }
+      for (const fam of collectionFamilies) {
+        try {
+          const unpackedFont = fromFontCollection(raw, fam, {
+            substitute: true,
+          });
+          const faces = unpackedFont.faces ?? [];
+          if (faces.length === 0) continue;
+          fallback.push(...faces);
+          const key = fam.toLowerCase();
+          const bucket = byFamily.get(key) ?? [];
+          bucket.push(...faces);
+          byFamily.set(key, bucket);
+        } catch {
+          continue;
+        }
+      }
+      continue;
+    }
     let familyName: string | undefined;
     let weight = 400;
     let style: FontFaceStyle = "normal";
@@ -235,6 +279,8 @@ function replaceThemeFonts(
 ): Theme {
   const major = theme.fonts?.major;
   const minor = theme.fonts?.minor;
+  const majorEastAsian = theme.fonts?.majorEastAsian;
+  const minorEastAsian = theme.fonts?.minorEastAsian;
   const nextMajor =
     typeof major === "string"
       ? createSubstituteFont(major, pool, cache)
@@ -243,13 +289,30 @@ function replaceThemeFonts(
     typeof minor === "string"
       ? createSubstituteFont(minor, pool, cache)
       : minor;
-  if (nextMajor === major && nextMinor === minor) return theme;
+  const nextMajorEa =
+    typeof majorEastAsian === "string"
+      ? createSubstituteFont(majorEastAsian, pool, cache)
+      : majorEastAsian;
+  const nextMinorEa =
+    typeof minorEastAsian === "string"
+      ? createSubstituteFont(minorEastAsian, pool, cache)
+      : minorEastAsian;
+  if (
+    nextMajor === major &&
+    nextMinor === minor &&
+    nextMajorEa === majorEastAsian &&
+    nextMinorEa === minorEastAsian
+  ) {
+    return theme;
+  }
   return defineTheme({
     name: theme.name,
     colors: theme.colors,
     fonts: {
       ...(nextMajor === undefined ? {} : { major: nextMajor }),
       ...(nextMinor === undefined ? {} : { minor: nextMinor }),
+      ...(nextMajorEa === undefined ? {} : { majorEastAsian: nextMajorEa }),
+      ...(nextMinorEa === undefined ? {} : { minorEastAsian: nextMinorEa }),
     },
     ...(theme.formatScheme === undefined
       ? {}
@@ -281,7 +344,12 @@ function replacePlainFonts(
   const out: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
     if (
-      (key === "fontFamily" || key === "major" || key === "minor") &&
+      (key === "fontFamily" ||
+        key === "eastAsianFontFamily" ||
+        key === "major" ||
+        key === "minor" ||
+        key === "majorEastAsian" ||
+        key === "minorEastAsian") &&
       typeof entry === "string" &&
       entry.trim() !== "" &&
       !isThemeFontSlot(entry)

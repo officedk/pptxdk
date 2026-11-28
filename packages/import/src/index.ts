@@ -57,6 +57,7 @@ export {
 export {
   readEmbeddedFontList,
   readPresentationThemeFontScheme,
+  readRunFontSlots,
   unpackEotFontData,
 } from "#/fonts.ts";
 export type {

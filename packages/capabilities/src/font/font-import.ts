@@ -41,11 +41,14 @@ type EmbeddedFontLookup = {
 type ThemeFontMap = {
   readonly major?: Font | string | undefined;
   readonly minor?: Font | string | undefined;
+  readonly majorEastAsian?: Font | string | undefined;
+  readonly minorEastAsian?: Font | string | undefined;
 };
 
 type FontCascadeContext = {
   readonly themeFonts: ThemeFontMap;
   readonly fontFamily: unknown;
+  readonly eastAsianFontFamily: unknown;
   readonly bold: boolean;
   readonly italic: boolean;
   readonly effectiveWeight: number;
@@ -125,6 +128,7 @@ function upgradeFontToken(
 function resolveEffectiveFamilyKey(
   fontFamily: unknown,
   themeFonts: ThemeFontMap,
+  script: "latin" | "ea" = "latin",
 ): string | undefined {
   if (isFont(fontFamily)) {
     return fontFamilyKey(fontFamily.family);
@@ -133,7 +137,12 @@ function resolveEffectiveFamilyKey(
     return undefined;
   }
   if (fontFamily === "major" || fontFamily === "minor") {
-    const mapped = themeFonts[fontFamily];
+    const mapped =
+      script === "ea"
+        ? (themeFonts[
+            fontFamily === "major" ? "majorEastAsian" : "minorEastAsian"
+          ] ?? themeFonts[fontFamily])
+        : themeFonts[fontFamily];
     if (isFont(mapped)) return fontFamilyKey(mapped.family);
     if (typeof mapped === "string" && mapped.trim() !== "") {
       return fontFamilyKey(mapped);
@@ -151,6 +160,10 @@ function applyStyleContextOnly(
     style["fontFamily"] !== undefined
       ? style["fontFamily"]
       : inherited.fontFamily;
+  const nextEaFontFamily =
+    style["eastAsianFontFamily"] !== undefined
+      ? style["eastAsianFontFamily"]
+      : inherited.eastAsianFontFamily;
   const nextBold = isBoldWeight(style["fontWeight"]) ?? inherited.bold;
   const nextItalic = isItalicFontStyle(style["fontStyle"]) ?? inherited.italic;
   const nextWeight =
@@ -158,6 +171,7 @@ function applyStyleContextOnly(
   return {
     themeFonts: inherited.themeFonts,
     fontFamily: nextFontFamily,
+    eastAsianFontFamily: nextEaFontFamily,
     bold: nextBold,
     italic: nextItalic,
     effectiveWeight: nextWeight,
@@ -214,28 +228,46 @@ function upgradeStyleRecordFontAndWeight(
   }
 
   const matched = upgradeFontToken(style["fontFamily"], lookup.fontsByKey);
-  const nextRec: Record<string, unknown> =
-    matched === undefined ? { ...style } : { ...style, fontFamily: matched };
-  let changed = matched !== undefined;
+  const matchedEa = upgradeFontToken(
+    style["eastAsianFontFamily"],
+    lookup.fontsByKey,
+  );
+  const nextRec: Record<string, unknown> = {
+    ...style,
+    ...(matched === undefined ? {} : { fontFamily: matched }),
+    ...(matchedEa === undefined ? {} : { eastAsianFontFamily: matchedEa }),
+  };
+  let changed = matched !== undefined || matchedEa !== undefined;
 
   const hasLocalFontFamily = style["fontFamily"] !== undefined;
+  const hasLocalEaFontFamily = style["eastAsianFontFamily"] !== undefined;
   const hasLocalFontWeight = style["fontWeight"] !== undefined;
   const hasLocalFontStyle = style["fontStyle"] !== undefined;
   const hasAnyLocalFontDecl =
-    hasLocalFontFamily || hasLocalFontWeight || hasLocalFontStyle;
+    hasLocalFontFamily ||
+    hasLocalEaFontFamily ||
+    hasLocalFontWeight ||
+    hasLocalFontStyle;
 
   const nextFontFamily = hasLocalFontFamily
     ? nextRec["fontFamily"]
     : inherited.fontFamily;
+  const nextEaFontFamily = hasLocalEaFontFamily
+    ? nextRec["eastAsianFontFamily"]
+    : inherited.eastAsianFontFamily;
   const nextBold = isBoldWeight(style["fontWeight"]) ?? inherited.bold;
   const nextItalic = isItalicFontStyle(style["fontStyle"]) ?? inherited.italic;
   const currentEffectiveWeight =
     numericWeightOrUndefined(style["fontWeight"]) ?? inherited.effectiveWeight;
 
-  const familyKey = resolveEffectiveFamilyKey(
-    nextFontFamily,
-    inherited.themeFonts,
-  );
+  const familyKey =
+    hasLocalEaFontFamily && !hasLocalFontFamily
+      ? (resolveEffectiveFamilyKey(
+          nextEaFontFamily,
+          inherited.themeFonts,
+          "ea",
+        ) ?? resolveEffectiveFamilyKey(nextFontFamily, inherited.themeFonts))
+      : resolveEffectiveFamilyKey(nextFontFamily, inherited.themeFonts);
   const slot = slotForBoldItalic(nextBold, nextItalic);
   const slotWeights =
     familyKey === undefined
@@ -266,6 +298,7 @@ function upgradeStyleRecordFontAndWeight(
   const nextContext: FontCascadeContext = {
     themeFonts: inherited.themeFonts,
     fontFamily: nextFontFamily,
+    eastAsianFontFamily: nextEaFontFamily,
     bold: nextBold,
     italic: nextItalic,
     effectiveWeight: nextEffectiveWeight,
@@ -452,16 +485,23 @@ function upgradeThemeFontMap(
   fonts: Readonly<Record<string, unknown>> | undefined,
   fontsByKey: ReadonlyMap<string, Font>,
 ): {
-  readonly fonts?: {
-    readonly major?: Font | string;
-    readonly minor?: Font | string;
-  };
+  readonly fonts?: ThemeFontMap;
   readonly changed: boolean;
 } {
   if (fonts === undefined) return { changed: false };
-  const nextFonts: { major?: Font | string; minor?: Font | string } = {};
+  const nextFonts: {
+    major?: Font | string;
+    minor?: Font | string;
+    majorEastAsian?: Font | string;
+    minorEastAsian?: Font | string;
+  } = {};
   let changed = false;
-  for (const slot of ["major", "minor"] as const) {
+  for (const slot of [
+    "major",
+    "minor",
+    "majorEastAsian",
+    "minorEastAsian",
+  ] as const) {
     const token = fonts[slot];
     if (token === undefined) continue;
     if (typeof token === "string") {
@@ -763,6 +803,7 @@ function attachEmbeddedFontsToSubtree(
     currentContext = {
       themeFonts: effectiveThemeFonts,
       fontFamily: "minor",
+      eastAsianFontFamily: "minor",
       bold: false,
       italic: false,
       effectiveWeight: 400,
@@ -852,6 +893,7 @@ function attachEmbeddedFontsToSubtree(
     currentContext = {
       themeFonts: effectiveThemeFonts,
       fontFamily: "minor",
+      eastAsianFontFamily: "minor",
       bold: false,
       italic: false,
       effectiveWeight: 400,
@@ -943,6 +985,7 @@ function attachEmbeddedFontsToSubtree(
         {
           themeFonts: currentContext.themeFonts,
           fontFamily: "minor",
+          eastAsianFontFamily: "minor",
           bold: false,
           italic: false,
           effectiveWeight: 400,
@@ -983,6 +1026,7 @@ function attachEmbeddedFontsToSubtree(
           {
             themeFonts: currentContext.themeFonts,
             fontFamily: "minor",
+            eastAsianFontFamily: "minor",
             bold: false,
             italic: false,
             effectiveWeight: 400,
@@ -1018,6 +1062,12 @@ function attachEmbeddedFontsToSubtree(
       : undefined;
     if (styleUp.value["fontFamily"] !== prevStyle?.["fontFamily"]) {
       patch["fontFamily"] = styleUp.value["fontFamily"];
+    }
+    if (
+      styleUp.value["eastAsianFontFamily"] !==
+      prevStyle?.["eastAsianFontFamily"]
+    ) {
+      patch["eastAsianFontFamily"] = styleUp.value["eastAsianFontFamily"];
     }
     if (styleUp.value["fontWeight"] !== prevStyle?.["fontWeight"]) {
       patch["fontWeight"] = styleUp.value["fontWeight"];
@@ -1205,9 +1255,19 @@ export function readEmbeddedFontsIntoDeck(
   } => {
     if (existing === undefined) return { changed: false };
     const existingFonts = existing.fonts ?? {};
-    const nextFonts: { major?: Font | string; minor?: Font | string } = {};
+    const nextFonts: {
+      major?: Font | string;
+      minor?: Font | string;
+      majorEastAsian?: Font | string;
+      minorEastAsian?: Font | string;
+    } = {};
     let changed = false;
-    for (const slot of ["major", "minor"] as const) {
+    for (const slot of [
+      "major",
+      "minor",
+      "majorEastAsian",
+      "minorEastAsian",
+    ] as const) {
       const token = existingFonts[slot];
       if (token === undefined) continue;
       if (typeof token === "string") {
@@ -1276,19 +1336,48 @@ export function readEmbeddedFontsIntoDeck(
         ? undefined
         : (fontsByKey.get(fontFamilyKey(scheme.minorTypeface)) ??
           scheme.minorTypeface);
+    const hasDistinctMajorEa =
+      scheme.majorEastAsianTypeface !== undefined &&
+      scheme.majorEastAsianTypeface !== scheme.majorTypeface;
+    const hasDistinctMinorEa =
+      scheme.minorEastAsianTypeface !== undefined &&
+      scheme.minorEastAsianTypeface !== scheme.minorTypeface;
+    const resolvedMajorEa = !hasDistinctMajorEa
+      ? undefined
+      : (fontsByKey.get(fontFamilyKey(scheme.majorEastAsianTypeface!)) ??
+        scheme.majorEastAsianTypeface);
+    const resolvedMinorEa = !hasDistinctMinorEa
+      ? undefined
+      : (fontsByKey.get(fontFamilyKey(scheme.minorEastAsianTypeface!)) ??
+        scheme.minorEastAsianTypeface);
 
     const hasCustomMajor =
       resolvedMajor !== undefined && resolvedMajor !== defaultTheme.fonts.major;
     const hasCustomMinor =
       resolvedMinor !== undefined && resolvedMinor !== defaultTheme.fonts.minor;
 
-    if (hasCustomMajor || hasCustomMinor) {
+    if (
+      hasCustomMajor ||
+      hasCustomMinor ||
+      resolvedMajorEa !== undefined ||
+      resolvedMinorEa !== undefined
+    ) {
       const upgradedBase =
         attachFontsToThemeInput(baseDeckTheme).theme ?? baseDeckTheme;
       const themeName = scheme.themeName ?? upgradedBase?.name;
-      const nextFonts: { major?: Font | string; minor?: Font | string } = {};
+      const nextFonts: {
+        major?: Font | string;
+        minor?: Font | string;
+        majorEastAsian?: Font | string;
+        minorEastAsian?: Font | string;
+      } = {};
       if (upgradedBase?.fonts !== undefined) {
-        for (const slot of ["major", "minor"] as const) {
+        for (const slot of [
+          "major",
+          "minor",
+          "majorEastAsian",
+          "minorEastAsian",
+        ] as const) {
           const token = upgradedBase.fonts[slot];
           if (token !== undefined) {
             nextFonts[slot] = token;
@@ -1300,6 +1389,12 @@ export function readEmbeddedFontsIntoDeck(
       }
       if (resolvedMinor !== undefined) {
         nextFonts["minor"] = resolvedMinor;
+      }
+      if (resolvedMajorEa !== undefined) {
+        nextFonts["majorEastAsian"] = resolvedMajorEa;
+      }
+      if (resolvedMinorEa !== undefined) {
+        nextFonts["minorEastAsian"] = resolvedMinorEa;
       }
       deckNode.set({
         theme: defineTheme({
@@ -1326,6 +1421,7 @@ export function readEmbeddedFontsIntoDeck(
     const initialContext: FontCascadeContext = {
       themeFonts: deckThemeFonts,
       fontFamily: "minor",
+      eastAsianFontFamily: "minor",
       bold: false,
       italic: false,
       effectiveWeight: 400,

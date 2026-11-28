@@ -527,7 +527,11 @@ export type {
   TableTextStyle,
   TableVerticalAlign,
 } from "@pptxdk/capabilities/table";
-export { font, textCapability } from "@pptxdk/capabilities/text";
+export {
+  font,
+  fromFontCollection,
+  textCapability,
+} from "@pptxdk/capabilities/text";
 export type {
   ParagraphStyle,
   ShapeTextStyle,

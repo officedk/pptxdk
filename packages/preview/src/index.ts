@@ -36,11 +36,17 @@ import {
   type ScreenGeometry,
   type ScreenPoint,
 } from "#/options.ts";
-import { sanitizeSvgForRasterization } from "#/svg-guard.ts";
+import {
+  buildSharedRasterDefsSvg,
+  deduplicateSvgRasterImages,
+  hoistSvgRasterImages,
+  sanitizeSvgForRasterization,
+} from "#/svg-guard.ts";
 
 export type { PreviewTransform };
 export {
   PreviewPageRangeError,
+  deduplicateSvgRasterImages,
   paintOptionsSchema,
   previewErrorSchema,
   previewOptionsSchema,
@@ -311,95 +317,6 @@ function recordPaintPlaceholders(
   }
 }
 
-const HOIST_DATA_URI_MIN_LENGTH = 4096;
-const IMAGE_ELEMENT_PATTERN = /<image\b([^>]*?)\/>/gu;
-const SVG_ATTR_PATTERN = /([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/gu;
-
-function hoistRasterImages(
-  svgFragment: string,
-  pageNumber: number,
-  sharedRasterImages: Map<string, string>,
-): string {
-  if (!svgFragment.includes('href="data:image/')) {
-    return svgFragment;
-  }
-  return svgFragment.replace(
-    IMAGE_ELEMENT_PATTERN,
-    (fullMatch: string, rawAttrs: string) => {
-      let dataUri: string | undefined;
-      let x = "0";
-      let y = "0";
-      let width: string | undefined;
-      let height: string | undefined;
-      const passthroughAttrs: string[] = [];
-
-      for (const match of rawAttrs.matchAll(SVG_ATTR_PATTERN)) {
-        const key = match[1];
-        const value = match[2] ?? match[3] ?? "";
-        if (key === undefined) continue;
-        switch (key) {
-          case "href":
-            dataUri = value;
-            break;
-          case "x":
-            x = value;
-            break;
-          case "y":
-            y = value;
-            break;
-          case "width":
-            width = value;
-            break;
-          case "height":
-            height = value;
-            break;
-          case "preserveAspectRatio":
-            break;
-          default:
-            passthroughAttrs.push(`${key}="${value}"`);
-            break;
-        }
-      }
-
-      if (
-        dataUri === undefined ||
-        !dataUri.startsWith("data:image/") ||
-        dataUri.length < HOIST_DATA_URI_MIN_LENGTH ||
-        width === undefined ||
-        height === undefined
-      ) {
-        return fullMatch;
-      }
-
-      const numW = Number(width);
-      const numH = Number(height);
-      const numX = Number(x);
-      const numY = Number(y);
-      if (
-        !Number.isFinite(numX) ||
-        !Number.isFinite(numY) ||
-        !Number.isFinite(numW) ||
-        !Number.isFinite(numH) ||
-        numW <= 0 ||
-        numH <= 0
-      ) {
-        return fullMatch;
-      }
-
-      let sharedId = sharedRasterImages.get(dataUri);
-      if (sharedId === undefined) {
-        sharedId = `shared-img-s${pageNumber}-${sharedRasterImages.size + 1}`;
-        sharedRasterImages.set(dataUri, sharedId);
-      }
-
-      const useNode = `<use href="#${sharedId}" transform="translate(${x} ${y}) scale(${width} ${height})"/>`;
-      return passthroughAttrs.length === 0
-        ? useNode
-        : `<g ${passthroughAttrs.join(" ")}>${useNode}</g>`;
-    },
-  );
-}
-
 function paintLayer(
   layer: ResolvedObjectLayer,
   pageNumber: number,
@@ -479,7 +396,11 @@ function paintLayer(
         layer.path,
         layer.authorId,
       );
-      return hoistRasterImages(output.svg, pageNumber, sharedRasterImages);
+      return hoistSvgRasterImages(
+        output.svg,
+        `shared-img-s${pageNumber}`,
+        sharedRasterImages,
+      );
     } catch (error) {
       recordNodeIdentity();
       const errorPath =
@@ -611,18 +532,18 @@ export function paint(
             slideNumber: pageNumber,
           });
           if (slideCap.slot === "background" && previewOutput.svg !== "") {
-            background = hoistRasterImages(
+            background = hoistSvgRasterImages(
               previewOutput.svg,
-              pageNumber,
+              `shared-img-s${pageNumber}`,
               sharedRasterImages,
             );
           } else if (
             slideCap.slot === "shape-tree" &&
             previewOutput.svg !== ""
           ) {
-            shapeTreeCapSvg += hoistRasterImages(
+            shapeTreeCapSvg += hoistSvgRasterImages(
               previewOutput.svg,
-              pageNumber,
+              `shared-img-s${pageNumber}`,
               sharedRasterImages,
             );
           }
@@ -662,9 +583,9 @@ export function paint(
           slideNumber: pageNumber,
         });
         if (inheritedOutput.svg !== "") {
-          background = hoistRasterImages(
+          background = hoistSvgRasterImages(
             inheritedOutput.svg,
-            pageNumber,
+            `shared-img-s${pageNumber}`,
             sharedRasterImages,
           );
         }
@@ -746,10 +667,7 @@ export function paint(
               : { themeOverride: slide.effectiveThemeOverride }),
           }).svg
         : defaultCanvasBackground;
-    const sharedDefsSvg =
-      sharedRasterImages.size > 0
-        ? `<defs>${[...sharedRasterImages.entries()].map(([dataUri, id]) => `<image id="${id}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${dataUri}"/>`).join("")}</defs>`
-        : "";
+    const sharedDefsSvg = buildSharedRasterDefsSvg(sharedRasterImages);
     const rawSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${sharedDefsSvg}${background ?? fallbackBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
     const svg = sanitizeSvgForRasterization(rawSvg, internal.dimensions);
     const Resvg = getResvg();

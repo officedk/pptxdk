@@ -298,4 +298,160 @@ describe("Line import and <p:sp> normalization", () => {
       true,
     );
   });
+
+  it("preserves port >= 4 bindings on <p:cxnSp> targeting octagon (slide and group) and degrades out-of-range idx=8", () => {
+    const pptx = buildPptxWithSlideBody(`
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="OctA"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="952500" y="952500"/><a:ext cx="952500" cy="952500"/></a:xfrm>
+          <a:prstGeom prst="octagon"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill>
+        </p:spPr>
+      </p:sp>
+      <p:cxnSp>
+        <p:nvCxnSpPr>
+          <p:cNvPr id="3" name="OctPort5"/>
+          <p:cNvCxnSpPr><a:stCxn id="2" idx="5"/><a:endCxn id="2" idx="7"/></p:cNvCxnSpPr>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="952500" y="952500"/><a:ext cx="673500" cy="279000"/></a:xfrm>
+          <a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="1D4ED8"/></a:solidFill></a:ln>
+        </p:spPr>
+      </p:cxnSp>
+      <p:cxnSp>
+        <p:nvCxnSpPr>
+          <p:cNvPr id="4" name="OctOutOfRange"/>
+          <p:cNvCxnSpPr><a:stCxn id="2" idx="8"/></p:cNvCxnSpPr>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1905000" y="952500"/><a:ext cx="952500" cy="0"/></a:xfrm>
+          <a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="DC2626"/></a:solidFill></a:ln>
+        </p:spPr>
+      </p:cxnSp>
+      <p:grpSp>
+        <p:nvGrpSpPr><p:cNvPr id="5" name="OctGroup"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+        <p:grpSpPr>
+          <a:xfrm>
+            <a:off x="952500" y="2381250"/><a:ext cx="1905000" cy="952500"/>
+            <a:chOff x="952500" y="2381250"/><a:chExt cx="1905000" cy="952500"/>
+          </a:xfrm>
+        </p:grpSpPr>
+        <p:sp>
+          <p:nvSpPr><p:cNvPr id="6" name="GrpOct"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="952500" y="2381250"/><a:ext cx="952500" cy="952500"/></a:xfrm>
+            <a:prstGeom prst="octagon"><a:avLst/></a:prstGeom>
+            <a:solidFill><a:srgbClr val="E2E8F0"/></a:solidFill>
+          </p:spPr>
+        </p:sp>
+        <p:cxnSp>
+          <p:nvCxnSpPr>
+            <p:cNvPr id="7" name="GrpOctConn"/>
+            <p:cNvCxnSpPr><a:stCxn id="6" idx="4"/></p:cNvCxnSpPr>
+            <p:nvPr/>
+          </p:nvCxnSpPr>
+          <p:spPr>
+            <a:xfrm><a:off x="952500" y="3054750"/><a:ext cx="1905000" cy="0"/></a:xfrm>
+            <a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>
+            <a:ln w="12700"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill></a:ln>
+          </p:spPr>
+        </p:cxnSp>
+      </p:grpSp>
+    `);
+
+    const imported = importDocument(pptx);
+    const nodes = collectNodes(imported.document);
+    const octPort5 = nodes.find((n) => n.props["name"] === "OctPort5");
+    assert.ok(octPort5 !== undefined);
+    assert.deepEqual(
+      { ...(octPort5.props["from"] as object) },
+      { id: "OctA", port: 5 },
+    );
+    assert.deepEqual(
+      { ...(octPort5.props["to"] as object) },
+      { id: "OctA", port: 7 },
+    );
+
+    const grpOctConn = nodes.find((n) => n.props["name"] === "GrpOctConn");
+    assert.ok(grpOctConn !== undefined);
+    assert.deepEqual(
+      { ...(grpOctConn.props["from"] as object) },
+      { id: "GrpOct", port: 4 },
+    );
+
+    const octBad = nodes.find((n) => n.props["name"] === "OctOutOfRange");
+    assert.ok(octBad !== undefined);
+    assert.equal(octBad.props["from"], undefined);
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "compatibility-fallback" &&
+          d.preferredMechanism === "connector-anchor",
+      ),
+    );
+  });
+
+  it("imports custom geometry <a:custGeom><a:cxnLst> connection sites and preserves port >= 4 on <p:cxnSp>", () => {
+    const pptx = buildPptxWithSlideBody(`
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="CustShape"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="952500" y="952500"/><a:ext cx="952500" cy="952500"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst/><a:gdLst/><a:ahLst/>
+            <a:cxnLst>
+              <a:cxn ang="0"><a:pos x="50000" y="0"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="0" y="50000"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="50000" y="100000"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="100000" y="50000"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="25000" y="25000"/></a:cxn>
+            </a:cxnLst>
+            <a:rect l="0" t="0" r="100000" b="100000"/>
+            <a:pathLst>
+              <a:path w="100000" h="100000">
+                <a:moveTo><a:pt x="0" y="0"/></a:moveTo>
+                <a:lnTo><a:pt x="100000" y="0"/></a:lnTo>
+                <a:lnTo><a:pt x="100000" y="100000"/></a:lnTo>
+                <a:lnTo><a:pt x="0" y="100000"/></a:lnTo>
+                <a:close/>
+              </a:path>
+            </a:pathLst>
+          </a:custGeom>
+          <a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill>
+        </p:spPr>
+      </p:sp>
+      <p:cxnSp>
+        <p:nvCxnSpPr>
+          <p:cNvPr id="3" name="CustPort4"/>
+          <p:cNvCxnSpPr><a:stCxn id="2" idx="4"/></p:cNvCxnSpPr>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1190625" y="1190625"/><a:ext cx="952500" cy="0"/></a:xfrm>
+          <a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill></a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `);
+    const imported = importDocument(pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const nodes = collectNodes(imported.document);
+    const conn = nodes.find((n) => n.props["name"] === "CustPort4");
+    assert.deepEqual(
+      { ...(conn?.props["from"] as object) },
+      { id: "CustShape", port: 4 },
+    );
+    const resolution = resolveDocument(imported.document);
+    const resolvedConn = resolution.slides[0]?.objects.find(
+      (o) => o.name === "CustPort4",
+    );
+    // CustShape at (100, 100) 100x100, site 4 at (25, 25) / (100, 100) => (125, 125)
+    assert.equal(resolvedConn?.box?.x, 125);
+    assert.equal(resolvedConn?.box?.y, 125);
+  });
 });

@@ -350,4 +350,100 @@ describe("Line schemas and L1 contract", () => {
       "broken-reference",
     );
   });
+
+  it("resolves ECMA-376 connection sites >= 4 on preset octagon (with flip/rotate) and rejects out-of-range port 8", () => {
+    // Octagon 100x100 at (100, 100) with default adj=29289:
+    // x1 = 29.289px, x2 = 70.711px, y2 = 70.711px
+    // ECMA-376 octagon sites:
+    // 4: (l, y2) = (100, 170.711), 5: (l, x1) = (100, 129.289),
+    // 6: (x1, t) = (129.289, 100), 7: (x2, t) = (170.711, 100)
+    const doc = createDeckNode({ width: 960, height: 540 }).append(
+      createSlideNode({ id: "s1" }).append(
+        createShapeNode({
+          id: "oct",
+          geometry: "octagon",
+          style: {
+            position: "absolute",
+            left: 100,
+            top: 100,
+            width: 100,
+            height: 100,
+          },
+        }),
+        createLineNode({
+          id: "l4",
+          from: { id: "oct", port: 4 },
+          to: { x: 0, y: 200 },
+        }),
+        createLineNode({
+          id: "l7",
+          from: { id: "oct", port: 7 },
+          to: { x: 300, y: 100 },
+        }),
+        createShapeNode({
+          id: "oct-rot",
+          geometry: "octagon",
+          style: {
+            position: "absolute",
+            left: 400,
+            top: 100,
+            width: 100,
+            height: 100,
+            flipH: true,
+            rotate: 90,
+          },
+        }),
+        createLineNode({
+          id: "l4-rot",
+          from: { id: "oct-rot", port: 4 },
+          to: { x: 450, y: 50 },
+        }),
+      ),
+    );
+    const res = resolveLineDeck(doc);
+    // site 4 on unrotated 100x100 octagon at (100,100): (100, ~170.711) -> box to (0, 200) has x=0, width=100
+    const l4Box = res.slide("s1").get("l4").box!;
+    assert.equal(l4Box.x, 0);
+    assert.ok(Math.abs(l4Box.width - 100) < 0.01);
+    assert.ok(Math.abs(l4Box.y - 170.711) < 0.05);
+
+    // site 7 on unrotated 100x100 octagon at (100,100): (~170.711, 100) -> box to (300, 100) has y=100, height=0
+    const l7Box = res.slide("s1").get("l7").box!;
+    assert.ok(Math.abs(l7Box.x - 170.711) < 0.05);
+    assert.equal(l7Box.y, 100);
+    assert.equal(l7Box.height, 0);
+
+    // site 4 local (-50, +20.711) -> flipH (+50, +20.711) -> rotate 90deg (-20.711, +50) -> world (429.289, 200)
+    const l4RotBox = res.slide("s1").get("l4-rot").box!;
+    assert.ok(Math.abs(l4RotBox.x - 429.289) < 0.05);
+    assert.ok(Math.abs(l4RotBox.y - 50) < 0.01);
+    assert.ok(Math.abs(l4RotBox.height - 150) < 0.05);
+
+    // Out-of-bounds port 8 on 8-site octagon rejected
+    expectBuildErrorCode(
+      () =>
+        resolveLineDeck(
+          createDeckNode({ width: 960, height: 540 }).append(
+            createSlideNode({ id: "s1" }).append(
+              createShapeNode({
+                id: "oct",
+                geometry: "octagon",
+                style: {
+                  position: "absolute",
+                  left: 100,
+                  top: 100,
+                  width: 100,
+                  height: 100,
+                },
+              }),
+              createLineNode({
+                from: { id: "oct", port: 8 },
+                to: { x: 300, y: 200 },
+              }),
+            ),
+          ),
+        ),
+      "invalid-prop",
+    );
+  });
 });

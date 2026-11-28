@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 
-import { BuildError } from "@pptxdk/core";
-import { defineTheme, isTheme } from "@pptxdk/core";
+import { BuildError, defineTheme, isTheme } from "@pptxdk/core";
 import { createResolver, targets } from "@pptxdk/core/build";
 import type { SlideCapabilityModule } from "@pptxdk/core/capability";
 import {
@@ -10,10 +9,13 @@ import {
   createSectionNode,
   createSlideNode,
 } from "@pptxdk/core/document";
+import { createThemeContext } from "@pptxdk/core/theme";
 import {
   assertXml10Characters,
   emit,
   emittedBuildQuery,
+  layoutXml,
+  masterXml,
   pxToEmu,
   resolvedColorXml,
   themeOverrideXml,
@@ -238,5 +240,78 @@ describe("@pptxdk/emit pure unit contract", () => {
     assert.equal(lnMatch[1]!.match(/<a:ln\b/gu)?.length, 3);
     assert.equal(effMatch[1]!.match(/<a:effectStyle>/gu)?.length, 3);
     assert.equal(bgMatch[1]!.match(/<a:solidFill>/gu)?.length, 3);
+  });
+
+  it("keeps <a:latin> and <a:ea> orthogonal in master/layout <a:defRPr> without leaking fontFamily into <a:ea>", () => {
+    const theme = defineTheme({
+      name: "DualScript",
+      fonts: {
+        major: "Inter",
+        minor: "Aptos",
+        majorEastAsian: "PingFang SC",
+        minorEastAsian: "Noto Sans SC",
+      },
+    });
+    const themeContext = createThemeContext(theme);
+    const mXml = masterXml(
+      {
+        key: "master-1",
+        theme,
+        layouts: [],
+        textStyles: {
+          titleStyle: {
+            1: { fontFamily: "Arial" },
+          },
+          bodyStyle: {
+            1: { eastAsianFontFamily: "Microsoft YaHei" },
+          },
+        },
+      },
+      [{ id: 2147483649, rId: "rId1" }],
+      themeContext,
+    );
+    assert.match(
+      mXml,
+      /<p:titleStyle><a:lvl1pPr><a:defRPr><a:latin typeface="Arial"\/><a:cs typeface="Arial"\/><\/a:defRPr><\/a:lvl1pPr><\/p:titleStyle>/u,
+    );
+    assert.doesNotMatch(mXml, /<a:ea typeface="Arial"\/>/u);
+    assert.match(
+      mXml,
+      /<p:bodyStyle><a:lvl1pPr><a:defRPr><a:ea typeface="Microsoft YaHei"\/><\/a:defRPr><\/a:lvl1pPr><\/p:bodyStyle>/u,
+    );
+
+    const lXml = layoutXml(
+      {
+        key: "layout-1",
+        name: "DualScriptLayout",
+        type: "obj",
+        placeholders: {
+          title: {
+            type: "title",
+            style: { fontFamily: "Georgia" },
+          },
+          body: {
+            type: "body",
+            idx: 1,
+            listStyles: {
+              1: { fontFamily: "Helvetica" },
+              2: { eastAsianFontFamily: "SimSun" },
+            },
+          },
+        },
+      },
+      themeContext,
+    );
+    assert.match(
+      lXml,
+      /<a:latin typeface="Georgia"\/><a:cs typeface="Georgia"\/>/u,
+    );
+    assert.doesNotMatch(lXml, /<a:ea typeface="Georgia"\/>/u);
+    assert.match(
+      lXml,
+      /<a:latin typeface="Helvetica"\/><a:cs typeface="Helvetica"\/>/u,
+    );
+    assert.doesNotMatch(lXml, /<a:ea typeface="Helvetica"\/>/u);
+    assert.match(lXml, /<a:ea typeface="SimSun"\/>/u);
   });
 });

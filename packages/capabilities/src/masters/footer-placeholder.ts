@@ -37,10 +37,9 @@ import {
   hexRgb6Schema,
   offsetEmuFragmentSchema,
   ooxmlBoolSchema,
-  ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
-  ooxmlPositiveIntSchema,
   P_NS,
+  readOoxmlRunAttrStyles,
   readRunFontSlots,
   XML_NS,
   defineCanvasMechanism,
@@ -537,20 +536,6 @@ const LvlPPrAttrSchema = z.object({
   algn: z.enum(["l", "ctr", "r", "just"]).optional(),
 });
 
-const RunPrAttrSchema = z.object({
-  lang: z.string().min(1).optional(),
-  sz: ooxmlPositiveIntSchema.optional(),
-  b: ooxmlBoolSchema.optional(),
-  i: ooxmlBoolSchema.optional(),
-  dirty: ooxmlBoolSchema.optional(),
-  smtClean: ooxmlBoolSchema.optional(),
-  kern: ooxmlNonNegativeIntSchema.optional(),
-});
-
-const spcAttrSchema = ooxmlIntSchema.refine(
-  (value) => value >= -400_000 && value <= 400_000,
-);
-
 const FieldAttrSchema = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
@@ -695,58 +680,38 @@ function readFooterRunStyle(
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
 ): TextStyle {
-  const raw = rPrCursor.attrsObject([
-    "lang",
-    "sz",
-    "b",
-    "i",
-    "dirty",
-    "smtClean",
-    "kern",
-    "spc",
-  ]);
-  const parsed = RunPrAttrSchema.safeParse(raw);
-  const style: Record<string, unknown> = {};
-  if (parsed.success) {
-    if (parsed.data.sz !== undefined) {
-      style["fontSize"] = `${parsed.data.sz / 100}pt`;
-    }
-    if (parsed.data.b !== undefined) {
-      style["fontWeight"] = parsed.data.b ? "bold" : "normal";
-    }
-    if (parsed.data.i !== undefined) {
-      style["fontStyle"] = parsed.data.i ? "italic" : "normal";
-    }
-    if (parsed.data.lang !== undefined) {
-      style["lang"] = parsed.data.lang;
-    }
-  }
-  if (raw["spc"] !== undefined) {
-    const parsedSpc = spcAttrSchema.safeParse(raw["spc"]);
-    if (parsedSpc.success) {
-      style["letterSpacing"] = parsedSpc.data === 0 ? 0 : parsedSpc.data / 75;
-    } else {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "omitted",
-        location: { ...location, xpath: `${rPrCursor.xpath}/@spc` },
-        attributeOrElement: "@spc",
-        rawValue: raw["spc"],
-      });
-    }
-  }
+  const attrStyles = readOoxmlRunAttrStyles({
+    rPrCursor,
+    location,
+    diagnostics,
+    allowBaseline: false,
+    allowNoneTextDecoration: false,
+    diagnoseUnsupportedEnums: false,
+  });
   const solidFill = rPrCursor.child(A_NS, "solidFill");
-  if (solidFill !== undefined) {
-    const color = readFooterXmlColor(solidFill, location, diagnostics);
-    if (color !== undefined) style["color"] = color;
-  }
+  const color =
+    solidFill === undefined
+      ? undefined
+      : readFooterXmlColor(solidFill, location, diagnostics);
   const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
-  if (fontFamily !== undefined) style["fontFamily"] = fontFamily;
-  if (eastAsianFontFamily !== undefined) {
-    style["eastAsianFontFamily"] = eastAsianFontFamily;
-  }
-  return style;
+  return {
+    ...(attrStyles.fontSize === undefined
+      ? {}
+      : { fontSize: attrStyles.fontSize }),
+    ...(attrStyles.fontWeight === undefined
+      ? {}
+      : { fontWeight: attrStyles.fontWeight }),
+    ...(attrStyles.fontStyle === undefined
+      ? {}
+      : { fontStyle: attrStyles.fontStyle }),
+    ...(attrStyles.lang === undefined ? {} : { lang: attrStyles.lang }),
+    ...(attrStyles.letterSpacing === undefined
+      ? {}
+      : { letterSpacing: attrStyles.letterSpacing }),
+    ...(color === undefined ? {} : { color }),
+    ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
+  };
 }
 
 function readSpPrTransformBox(

@@ -612,12 +612,10 @@ function levelDefRPrXml(
       return `<a:latin typeface="${xmlEscape(latin)}"${clsAttrs}/>`;
     })();
     const eaPart = (() => {
-      const eaSource = style.eastAsianFontFamily ?? style.fontFamily;
-      if (eaSource === undefined) return "";
-      const resolvedEa =
-        style.eastAsianFontFamily !== undefined
-          ? themeContext.resolveEastAsianFont(style.eastAsianFontFamily)
-          : themeContext.resolveFont(eaSource);
+      if (style.eastAsianFontFamily === undefined) return "";
+      const resolvedEa = themeContext.resolveEastAsianFont(
+        style.eastAsianFontFamily,
+      );
       const clsAttrs =
         resolvedEa.themeFont === undefined
           ? fontClassificationAttrs(resolvedEa.font, weight, style.fontStyle)

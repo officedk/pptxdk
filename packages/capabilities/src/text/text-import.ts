@@ -1,5 +1,4 @@
 import {
-  assertValidLang,
   placeholderStyleSchema,
   schemeColorNameSchema,
   type ColorValue,
@@ -20,11 +19,16 @@ import {
   hexRgb6Schema,
   normalizeBulletCharacter,
   offsetEmuFragmentSchema,
+  ooxmlAutoNumStartAtSchema,
   ooxmlBoolSchema,
   ooxmlIntSchema,
+  ooxmlLineSpacingPercentSchema,
+  ooxmlLineSpacingPointsSchema,
+  ooxmlListLevelSchema,
   ooxmlNonNegativeIntSchema,
-  ooxmlPositiveIntSchema,
+  ooxmlParagraphSpacingPointsSchema,
   P_NS,
+  readOoxmlRunAttrStyles,
   readRunFontSlots,
   transformAttributesFragmentSchema,
   XML_NS,
@@ -103,37 +107,18 @@ const BodyPrFragmentSchema = z.object({
   spcCol: z.string().optional(),
 });
 
-const ParagraphPrFragmentSchema = z.object({
-  algn: z.enum(["l", "ctr", "r", "just"]).optional(),
-  rtl: ooxmlBoolSchema.optional(),
-  lvl: ooxmlNonNegativeIntSchema.refine((value) => value <= 8).optional(),
-});
+const ParagraphAlignSchema = z.enum(["l", "ctr", "r", "just"]);
 
 const SpacingPointsXmlSchema = z.object({
-  val: ooxmlNonNegativeIntSchema,
+  val: ooxmlParagraphSpacingPointsSchema,
+});
+
+const LineSpacingPointsXmlSchema = z.object({
+  val: ooxmlLineSpacingPointsSchema,
 });
 
 const SpacingPercentXmlSchema = z.object({
-  val: ooxmlPositiveIntSchema,
-});
-
-const AutoNumXmlSchema = z.object({
-  type: z.string().min(1),
-  startAt: ooxmlPositiveIntSchema.optional(),
-});
-
-const RunPrFragmentSchema = z.object({
-  lang: z.string().min(1).optional(),
-  sz: ooxmlPositiveIntSchema.optional(),
-  b: ooxmlBoolSchema.optional(),
-  i: ooxmlBoolSchema.optional(),
-  u: z.enum(["none", "sng"]).optional(),
-  strike: z.enum(["noStrike", "sngStrike"]).optional(),
-  cap: z.enum(["none", "all"]).optional(),
-  spc: ooxmlIntSchema.optional(),
-  baseline: ooxmlIntSchema.optional(),
-  dirty: ooxmlBoolSchema.optional(),
-  smtClean: ooxmlBoolSchema.optional(),
+  val: ooxmlLineSpacingPercentSchema,
 });
 
 const TextFieldXmlSchema = z.object({
@@ -359,106 +344,14 @@ function readRunProperties(
   readonly sizePt?: number;
   readonly inlineKind?: "sup" | "sub";
 } {
-  const raw = rPrCursor.attrsObject([
-    "lang",
-    "sz",
-    "b",
-    "i",
-    "u",
-    "strike",
-    "cap",
-    "spc",
-    "baseline",
-    "dirty",
-    "smtClean",
-  ]);
-  const parsed = RunPrFragmentSchema.safeParse(raw);
-  let lang: string | undefined;
-  let fontSize: NonNullable<TextStyle["fontSize"]> | undefined;
-  let sizePt: number | undefined;
-  let fontWeight: NonNullable<TextStyle["fontWeight"]> | undefined;
-  let fontStyle: NonNullable<TextStyle["fontStyle"]> | undefined;
-  let textDecoration: NonNullable<TextStyle["textDecoration"]> | undefined;
-  let textTransform: NonNullable<TextStyle["textTransform"]> | undefined;
-  let letterSpacing: number | undefined;
-  let baselineShift: ParsedRunStyle["baselineShift"] | undefined;
-  let inlineKind: "sup" | "sub" | undefined;
-
-  if (!parsed.success) {
-    diagnostics.push({
-      code: "invalid-xml-value",
-      category: "corrupt-input",
-      disposition: "recovered",
-      location: { part, xpath: rPrCursor.xpath, slideIndex },
-      attributeOrElement: "a:rPr",
-      rawValue: JSON.stringify(raw),
-    });
-  } else {
-    const data = parsed.data;
-    if (data.lang !== undefined) {
-      try {
-        lang = assertValidLang(data.lang);
-      } catch {
-        diagnostics.push({
-          code: "invalid-xml-value",
-          category: "corrupt-input",
-          disposition: "omitted",
-          location: { part, xpath: `${rPrCursor.xpath}/@lang`, slideIndex },
-          attributeOrElement: "@lang",
-          rawValue: data.lang,
-        });
-      }
-    }
-    if (data.sz !== undefined) {
-      sizePt = data.sz / 100;
-      fontSize = `${sizePt}pt`;
-    }
-    if (data.b !== undefined) {
-      fontWeight = data.b ? "bold" : "normal";
-    }
-    if (data.i !== undefined) {
-      fontStyle = data.i ? "italic" : "normal";
-    }
-    if (data.u === "sng") {
-      textDecoration = "underline";
-    } else if (data.strike === "sngStrike") {
-      textDecoration = "line-through";
-    } else if (data.u === "none" && data.strike === "noStrike") {
-      textDecoration = "none";
-    }
-    if (data.cap === "all") {
-      textTransform = "uppercase";
-    } else if (data.cap === "none") {
-      textTransform = "none";
-    }
-    if (data.spc !== undefined) {
-      letterSpacing = data.spc / 75;
-    }
-    if (data.baseline !== undefined) {
-      if (data.baseline === 30_000) {
-        inlineKind = "sup";
-      } else if (data.baseline === -25_000) {
-        inlineKind = "sub";
-      } else if (data.baseline !== 0) {
-        if (data.baseline < -2_147_483_648 || data.baseline > 2_147_483_647) {
-          diagnostics.push({
-            code: "invalid-xml-value",
-            category: "corrupt-input",
-            disposition: "omitted",
-            location: {
-              part,
-              xpath: `${rPrCursor.xpath}/@baseline`,
-              slideIndex,
-            },
-            attributeOrElement: "@baseline",
-            rawValue: String(data.baseline),
-          });
-        } else {
-          baselineShift = `${data.baseline / 1000}%`;
-        }
-      }
-    }
-  }
+  const attrStyles = readOoxmlRunAttrStyles({
+    rPrCursor,
+    location: { part, slideIndex },
+    diagnostics,
+    allowBaseline: true,
+    allowNoneTextDecoration: true,
+    diagnoseUnsupportedEnums: true,
+  });
 
   let color: NonNullable<TextStyle["color"]> | undefined;
   const solidFill = rPrCursor.child(A_NS, "solidFill");
@@ -480,19 +373,35 @@ function readRunProperties(
     style: {
       ...(fontFamily === undefined ? {} : { fontFamily }),
       ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
-      ...(fontSize === undefined ? {} : { fontSize }),
-      ...(fontWeight === undefined ? {} : { fontWeight }),
-      ...(fontStyle === undefined ? {} : { fontStyle }),
+      ...(attrStyles.fontSize === undefined
+        ? {}
+        : { fontSize: attrStyles.fontSize }),
+      ...(attrStyles.fontWeight === undefined
+        ? {}
+        : { fontWeight: attrStyles.fontWeight }),
+      ...(attrStyles.fontStyle === undefined
+        ? {}
+        : { fontStyle: attrStyles.fontStyle }),
       ...(color === undefined ? {} : { color }),
-      ...(letterSpacing === undefined ? {} : { letterSpacing }),
-      ...(textTransform === undefined ? {} : { textTransform }),
-      ...(textDecoration === undefined ? {} : { textDecoration }),
+      ...(attrStyles.letterSpacing === undefined
+        ? {}
+        : { letterSpacing: attrStyles.letterSpacing }),
+      ...(attrStyles.textTransform === undefined
+        ? {}
+        : { textTransform: attrStyles.textTransform }),
+      ...(attrStyles.textDecoration === undefined
+        ? {}
+        : { textDecoration: attrStyles.textDecoration }),
       ...(textShadow === undefined ? {} : { textShadow }),
-      ...(lang === undefined ? {} : { lang }),
-      ...(baselineShift === undefined ? {} : { baselineShift }),
+      ...(attrStyles.lang === undefined ? {} : { lang: attrStyles.lang }),
+      ...(attrStyles.baselineShift === undefined
+        ? {}
+        : { baselineShift: attrStyles.baselineShift }),
     },
-    ...(sizePt === undefined ? {} : { sizePt }),
-    ...(inlineKind === undefined ? {} : { inlineKind }),
+    ...(attrStyles.sizePt === undefined ? {} : { sizePt: attrStyles.sizePt }),
+    ...(attrStyles.inlineKind === undefined
+      ? {}
+      : { inlineKind: attrStyles.inlineKind }),
   };
 }
 
@@ -615,25 +524,48 @@ function readParagraph(
       "hangingPunct",
       "defTabSz",
     ]);
-    const parsedPPr = ParagraphPrFragmentSchema.safeParse({
-      algn: rawPPr["algn"],
-      rtl: rawPPr["rtl"],
-      lvl: rawPPr["lvl"],
-    });
-    if (!parsedPPr.success) {
+    if (rawPPr["algn"] !== undefined) {
+      const parsedAlgn = ParagraphAlignSchema.safeParse(rawPPr["algn"]);
+      if (parsedAlgn.success) {
+        align = algnToTextAlign[parsedAlgn.data];
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { part, xpath: `${pPr.xpath}/@algn`, slideIndex },
+          attributeOrElement: "@algn",
+          rawValue: rawPPr["algn"],
+        });
+      }
+    }
+    if (
+      rawPPr["rtl"] !== undefined &&
+      !ooxmlBoolSchema.safeParse(rawPPr["rtl"]).success
+    ) {
       diagnostics.push({
         code: "invalid-xml-value",
         category: "corrupt-input",
         disposition: "recovered",
-        location: { part, xpath: pPr.xpath, slideIndex },
-        attributeOrElement: "a:pPr",
-        rawValue: JSON.stringify(rawPPr),
+        location: { part, xpath: `${pPr.xpath}/@rtl`, slideIndex },
+        attributeOrElement: "@rtl",
+        rawValue: rawPPr["rtl"],
       });
-    } else {
-      if (parsedPPr.data.algn !== undefined) {
-        align = algnToTextAlign[parsedPPr.data.algn];
+    }
+    if (rawPPr["lvl"] !== undefined) {
+      const parsedLvl = ooxmlListLevelSchema.safeParse(rawPPr["lvl"]);
+      if (parsedLvl.success) {
+        lvl = parsedLvl.data;
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { part, xpath: `${pPr.xpath}/@lvl`, slideIndex },
+          attributeOrElement: "@lvl",
+          rawValue: rawPPr["lvl"],
+        });
       }
-      lvl = parsedPPr.data.lvl;
     }
 
     const spcBefNode = pPr.child(A_NS, "spcBef");
@@ -671,8 +603,8 @@ function readParagraph(
       };
     } else if (buAutoNum !== undefined) {
       const rawNum = buAutoNum.attrsObject(["type", "startAt"]);
-      const parsedNum = AutoNumXmlSchema.safeParse(rawNum);
-      if (!parsedNum.success) {
+      const rawType = rawNum["type"];
+      if (rawType === undefined || rawType.length === 0) {
         diagnostics.push({
           code: "invalid-xml-value",
           category: "corrupt-input",
@@ -682,7 +614,7 @@ function readParagraph(
           rawValue: JSON.stringify(rawNum),
         });
       } else {
-        if (parsedNum.data.type !== "arabicPeriod") {
+        if (rawType !== "arabicPeriod") {
           diagnostics.push({
             code: "invalid-xml-value",
             category: "corrupt-input",
@@ -693,15 +625,35 @@ function readParagraph(
               slideIndex,
             },
             attributeOrElement: "a:buAutoNum/@type",
-            rawValue: parsedNum.data.type,
+            rawValue: rawType,
           });
+        }
+        let startAt: number | undefined;
+        if (rawNum["startAt"] !== undefined) {
+          const parsedStart = ooxmlAutoNumStartAtSchema.safeParse(
+            rawNum["startAt"],
+          );
+          if (parsedStart.success) {
+            startAt = parsedStart.data;
+          } else {
+            diagnostics.push({
+              code: "invalid-xml-value",
+              category: "corrupt-input",
+              disposition: "omitted",
+              location: {
+                part,
+                xpath: `${buAutoNum.xpath}/@startAt`,
+                slideIndex,
+              },
+              attributeOrElement: "a:buAutoNum/@startAt",
+              rawValue: rawNum["startAt"],
+            });
+          }
         }
         list = {
           type: "number",
           style: "arabicPeriod",
-          ...(parsedNum.data.startAt === undefined
-            ? {}
-            : { startAt: parsedNum.data.startAt }),
+          ...(startAt === undefined ? {} : { startAt }),
           ...(lvl === undefined ? {} : { level: lvl }),
         };
       }
@@ -841,8 +793,8 @@ function readParagraph(
       spcPts === undefined ? lnSpcNode.child(A_NS, "spcPct") : undefined;
     if (spcPts !== undefined) {
       const raw = spcPts.attrsObject(["val"]);
-      const parsed = SpacingPointsXmlSchema.safeParse(raw);
-      if (!parsed.success || parsed.data.val === 0) {
+      const parsed = LineSpacingPointsXmlSchema.safeParse(raw);
+      if (!parsed.success) {
         diagnostics.push({
           code: "invalid-xml-value",
           category: "corrupt-input",
@@ -857,7 +809,7 @@ function readParagraph(
     } else if (spcPct !== undefined) {
       const raw = spcPct.attrsObject(["val"]);
       const parsed = SpacingPercentXmlSchema.safeParse(raw);
-      if (!parsed.success || parsed.data.val > 13_200_000) {
+      if (!parsed.success) {
         diagnostics.push({
           code: "invalid-xml-value",
           category: "corrupt-input",
@@ -894,9 +846,25 @@ function readParagraph(
       }
     } else if (spcPct !== undefined) {
       const raw = spcPct.attrsObject(["val"]);
-      const parsed = SpacingPercentXmlSchema.safeParse(raw);
-      if (parsed.success) {
-        spacingAfter = ((baseFontPt * parsed.data.val) / 100_000) * (4 / 3);
+      const parsed = ooxmlNonNegativeIntSchema.safeParse(raw["val"]);
+      const computed = parsed.success
+        ? ((baseFontPt * parsed.data) / 100_000) * (4 / 3)
+        : undefined;
+      if (
+        computed === undefined ||
+        !Number.isFinite(computed) ||
+        Math.round(computed * 75) > 158_400
+      ) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part, xpath: spcPct.xpath, slideIndex },
+          attributeOrElement: "a:spcPct/@val",
+          rawValue: raw["val"] ?? "",
+        });
+      } else {
+        spacingAfter = computed;
       }
     }
   }

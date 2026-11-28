@@ -1,5 +1,4 @@
 import {
-  assertValidLang,
   type LinkTarget,
   type TextAlignment,
   type TextStyle,
@@ -7,11 +6,15 @@ import {
 import {
   A_NS,
   normalizeBulletCharacter,
+  ooxmlAutoNumStartAtSchema,
   ooxmlBoolSchema,
-  ooxmlIntSchema,
+  ooxmlLineSpacingPercentSchema,
+  ooxmlLineSpacingPointsSchema,
+  ooxmlListLevelSchema,
   ooxmlNonNegativeIntSchema,
-  ooxmlPositiveIntSchema,
+  ooxmlParagraphSpacingPointsSchema,
   P_NS,
+  readOoxmlRunAttrStyles,
   readRunFontSlots,
   XML_NS,
   emuToPx,
@@ -67,35 +70,18 @@ const BodyPrAttrSchema = z.object({
   anchor: z.enum(["t", "ctr", "b"]).optional(),
 });
 
-const ParagraphPrAttrSchema = z.object({
-  algn: z.enum(["l", "ctr", "r", "just"]).optional(),
-  rtl: ooxmlBoolSchema.optional(),
-  lvl: ooxmlNonNegativeIntSchema.optional(),
-  marL: ooxmlNonNegativeIntSchema.optional(),
-  indent: ooxmlIntSchema.optional(),
-});
-
-const RunPrAttrSchema = z.object({
-  lang: z.string().min(1).optional(),
-  sz: ooxmlPositiveIntSchema.optional(),
-  b: ooxmlBoolSchema.optional(),
-  i: ooxmlBoolSchema.optional(),
-  u: z.enum(["none", "sng"]).optional(),
-  strike: z.enum(["noStrike", "sngStrike"]).optional(),
-  cap: z.enum(["none", "all"]).optional(),
-  spc: ooxmlIntSchema.optional(),
-  baseline: ooxmlIntSchema.optional(),
-  dirty: ooxmlBoolSchema.optional(),
-  smtClean: ooxmlBoolSchema.optional(),
-});
-
-const BulletAutoNumAttrSchema = z.object({
-  type: z.string().min(1),
-  startAt: ooxmlIntSchema.optional(),
-});
+const ParagraphAlignAttrSchema = z.enum(["l", "ctr", "r", "just"]);
 
 const SpacingValAttrSchema = z.object({
-  val: ooxmlNonNegativeIntSchema,
+  val: ooxmlParagraphSpacingPointsSchema,
+});
+
+const LineSpacingPtsAttrSchema = z.object({
+  val: ooxmlLineSpacingPointsSchema,
+});
+
+const LineSpacingPctAttrSchema = z.object({
+  val: ooxmlLineSpacingPercentSchema,
 });
 
 const anchorToVerticalAlign: Readonly<
@@ -236,98 +222,14 @@ function readShapeRunProperties(
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
 ): { readonly style: ParsedRunStyle; readonly inlineKind?: "sup" | "sub" } {
-  const raw = rPrCursor.attrsObject([
-    "lang",
-    "sz",
-    "b",
-    "i",
-    "u",
-    "strike",
-    "cap",
-    "spc",
-    "baseline",
-    "dirty",
-    "smtClean",
-  ]);
-  const parsed = RunPrAttrSchema.safeParse(raw);
-  let lang: string | undefined;
-  let fontSize: NonNullable<TextStyle["fontSize"]> | undefined;
-  let fontWeight: NonNullable<TextStyle["fontWeight"]> | undefined;
-  let fontStyle: NonNullable<TextStyle["fontStyle"]> | undefined;
-  let textDecoration: NonNullable<TextStyle["textDecoration"]> | undefined;
-  let textTransform: NonNullable<TextStyle["textTransform"]> | undefined;
-  let letterSpacing: number | undefined;
-  let baselineShift: ParsedRunStyle["baselineShift"] | undefined;
-  let inlineKind: "sup" | "sub" | undefined;
-
-  if (!parsed.success) {
-    diagnostics.push({
-      code: "invalid-xml-value",
-      category: "corrupt-input",
-      disposition: "recovered",
-      location: { ...location, xpath: rPrCursor.xpath },
-      attributeOrElement: "a:rPr",
-      rawValue: JSON.stringify(raw),
-    });
-  } else {
-    const data = parsed.data;
-    if (data.lang !== undefined) {
-      try {
-        lang = assertValidLang(data.lang);
-      } catch {
-        diagnostics.push({
-          code: "invalid-xml-value",
-          category: "corrupt-input",
-          disposition: "omitted",
-          location: { ...location, xpath: `${rPrCursor.xpath}/@lang` },
-          attributeOrElement: "@lang",
-          rawValue: data.lang,
-        });
-      }
-    }
-    if (data.sz !== undefined) {
-      fontSize = `${data.sz / 100}pt`;
-    }
-    if (data.b !== undefined) {
-      fontWeight = data.b ? "bold" : "normal";
-    }
-    if (data.i !== undefined) {
-      fontStyle = data.i ? "italic" : "normal";
-    }
-    if (data.u === "sng") {
-      textDecoration = "underline";
-    } else if (data.strike === "sngStrike") {
-      textDecoration = "line-through";
-    }
-    if (data.cap === "all") {
-      textTransform = "uppercase";
-    } else if (data.cap === "none") {
-      textTransform = "none";
-    }
-    if (data.spc !== undefined) {
-      letterSpacing = data.spc / 75;
-    }
-    if (data.baseline !== undefined) {
-      if (data.baseline === 30_000) {
-        inlineKind = "sup";
-      } else if (data.baseline === -25_000) {
-        inlineKind = "sub";
-      } else if (data.baseline !== 0) {
-        if (data.baseline < -2_147_483_648 || data.baseline > 2_147_483_647) {
-          diagnostics.push({
-            code: "invalid-xml-value",
-            category: "corrupt-input",
-            disposition: "omitted",
-            location: { ...location, xpath: `${rPrCursor.xpath}/@baseline` },
-            attributeOrElement: "@baseline",
-            rawValue: String(data.baseline),
-          });
-        } else {
-          baselineShift = `${data.baseline / 1000}%`;
-        }
-      }
-    }
-  }
+  const attrStyles = readOoxmlRunAttrStyles({
+    rPrCursor,
+    location,
+    diagnostics,
+    allowBaseline: true,
+    allowNoneTextDecoration: false,
+    diagnoseUnsupportedEnums: true,
+  });
 
   const solidFill = rPrCursor.child(A_NS, "solidFill");
   const color =
@@ -347,20 +249,36 @@ function readShapeRunProperties(
     style: {
       ...(fontFamily === undefined ? {} : { fontFamily }),
       ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
-      ...(fontSize === undefined ? {} : { fontSize }),
-      ...(fontWeight === undefined ? {} : { fontWeight }),
-      ...(fontStyle === undefined ? {} : { fontStyle }),
+      ...(attrStyles.fontSize === undefined
+        ? {}
+        : { fontSize: attrStyles.fontSize }),
+      ...(attrStyles.fontWeight === undefined
+        ? {}
+        : { fontWeight: attrStyles.fontWeight }),
+      ...(attrStyles.fontStyle === undefined
+        ? {}
+        : { fontStyle: attrStyles.fontStyle }),
       ...(color === undefined ? {} : { color }),
-      ...(letterSpacing === undefined ? {} : { letterSpacing }),
-      ...(textTransform === undefined ? {} : { textTransform }),
-      ...(textDecoration === undefined ? {} : { textDecoration }),
+      ...(attrStyles.letterSpacing === undefined
+        ? {}
+        : { letterSpacing: attrStyles.letterSpacing }),
+      ...(attrStyles.textTransform === undefined
+        ? {}
+        : { textTransform: attrStyles.textTransform }),
+      ...(attrStyles.textDecoration === undefined
+        ? {}
+        : { textDecoration: attrStyles.textDecoration }),
       ...(effects.boxShadow === undefined
         ? {}
         : { textShadow: effects.boxShadow }),
-      ...(lang === undefined ? {} : { lang }),
-      ...(baselineShift === undefined ? {} : { baselineShift }),
+      ...(attrStyles.lang === undefined ? {} : { lang: attrStyles.lang }),
+      ...(attrStyles.baselineShift === undefined
+        ? {}
+        : { baselineShift: attrStyles.baselineShift }),
     },
-    ...(inlineKind === undefined ? {} : { inlineKind }),
+    ...(attrStyles.inlineKind === undefined
+      ? {}
+      : { inlineKind: attrStyles.inlineKind }),
   };
 }
 
@@ -385,20 +303,26 @@ function readLineSpacing(
 ): ParagraphStyle["lineHeight"] | undefined {
   const spcPts = lnSpcCursor.child(A_NS, "spcPts");
   if (spcPts !== undefined) {
-    const parsed = SpacingValAttrSchema.safeParse(spcPts.attrsObject(["val"]));
-    if (parsed.success && parsed.data.val > 0 && parsed.data.val <= 158_400) {
+    const raw = spcPts.attrsObject(["val"]);
+    const parsed = LineSpacingPtsAttrSchema.safeParse(raw);
+    if (!parsed.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: spcPts.xpath },
+        attributeOrElement: "a:spcPts/@val",
+        rawValue: raw["val"] ?? "",
+      });
+    } else {
       return parsed.data.val / 75;
     }
   }
   const spcPct = lnSpcCursor.child(A_NS, "spcPct");
   if (spcPct !== undefined) {
     const raw = spcPct.attrsObject(["val"]);
-    const parsed = SpacingValAttrSchema.safeParse(raw);
-    if (
-      !parsed.success ||
-      parsed.data.val < 1 ||
-      parsed.data.val > 13_200_000
-    ) {
+    const parsed = LineSpacingPctAttrSchema.safeParse(raw);
+    if (!parsed.success) {
       diagnostics.push({
         code: "invalid-xml-value",
         category: "corrupt-input",
@@ -429,22 +353,34 @@ function readShapeParagraph(
   const pPr = pCursor.child(A_NS, "pPr");
   if (pPr !== undefined) {
     const rawPPr = pPr.attrsObject(["algn", "rtl", "lvl", "marL", "indent"]);
-    const parsedPPr = ParagraphPrAttrSchema.safeParse(rawPPr);
-    if (!parsedPPr.success) {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "recovered",
-        location: { ...location, xpath: pPr.xpath },
-        attributeOrElement: "a:pPr",
-        rawValue: JSON.stringify(rawPPr),
-      });
-    } else {
-      if (parsedPPr.data.algn !== undefined) {
-        align = algnToTextAlign[parsedPPr.data.algn];
+    if (rawPPr["algn"] !== undefined) {
+      const parsedAlgn = ParagraphAlignAttrSchema.safeParse(rawPPr["algn"]);
+      if (parsedAlgn.success) {
+        align = algnToTextAlign[parsedAlgn.data];
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...location, xpath: `${pPr.xpath}/@algn` },
+          attributeOrElement: "@algn",
+          rawValue: rawPPr["algn"],
+        });
       }
-      if (parsedPPr.data.lvl !== undefined) {
-        level = parsedPPr.data.lvl;
+    }
+    if (rawPPr["lvl"] !== undefined) {
+      const parsedLvl = ooxmlListLevelSchema.safeParse(rawPPr["lvl"]);
+      if (parsedLvl.success) {
+        level = parsedLvl.data;
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...location, xpath: `${pPr.xpath}/@lvl` },
+          attributeOrElement: "@lvl",
+          rawValue: rawPPr["lvl"],
+        });
       }
     }
 
@@ -457,11 +393,19 @@ function readShapeParagraph(
     if (spcAft !== undefined) {
       const spcPts = spcAft.child(A_NS, "spcPts");
       if (spcPts !== undefined) {
-        const parsed = SpacingValAttrSchema.safeParse(
-          spcPts.attrsObject(["val"]),
-        );
+        const raw = spcPts.attrsObject(["val"]);
+        const parsed = SpacingValAttrSchema.safeParse(raw);
         if (parsed.success) {
           spacingAfter = parsed.data.val / 75;
+        } else {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: { ...location, xpath: spcPts.xpath },
+            attributeOrElement: "a:spcPts/@val",
+            rawValue: raw["val"] ?? "",
+          });
         }
       }
     }
@@ -489,16 +433,40 @@ function readShapeParagraph(
     } else {
       const buAutoNum = pPr.child(A_NS, "buAutoNum");
       if (buAutoNum !== undefined) {
-        const parsedAuto = BulletAutoNumAttrSchema.safeParse(
-          buAutoNum.attrsObject(["type", "startAt"]),
-        );
-        if (parsedAuto.success) {
+        const rawAuto = buAutoNum.attrsObject(["type", "startAt"]);
+        const rawType = rawAuto["type"];
+        if (rawType === undefined || rawType.length === 0) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: { ...location, xpath: buAutoNum.xpath },
+            attributeOrElement: "a:buAutoNum",
+            rawValue: JSON.stringify(rawAuto),
+          });
+        } else {
+          let startAt: number | undefined;
+          if (rawAuto["startAt"] !== undefined) {
+            const parsedStart = ooxmlAutoNumStartAtSchema.safeParse(
+              rawAuto["startAt"],
+            );
+            if (parsedStart.success) {
+              startAt = parsedStart.data;
+            } else {
+              diagnostics.push({
+                code: "invalid-xml-value",
+                category: "corrupt-input",
+                disposition: "omitted",
+                location: { ...location, xpath: `${buAutoNum.xpath}/@startAt` },
+                attributeOrElement: "a:buAutoNum/@startAt",
+                rawValue: rawAuto["startAt"],
+              });
+            }
+          }
           list = {
             type: "number",
             style: "arabicPeriod",
-            ...(parsedAuto.data.startAt === undefined
-              ? {}
-              : { startAt: parsedAuto.data.startAt }),
+            ...(startAt === undefined ? {} : { startAt }),
             ...(level > 0 ? { level } : {}),
           };
         }

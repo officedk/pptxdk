@@ -22,9 +22,13 @@ import {
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
 
-import { motionAnnotations } from "../motion/motion-api.ts";
-import { motionPropsShape } from "../motion/motion-schemas.ts";
-import type { Geometry, PresetGeometry } from "../shared/geometry.ts";
+import { motionAnnotations, pickMotionProps } from "../motion/motion-api.ts";
+import {
+  applyTransformToPoints,
+  standardBoxConnectionSites,
+  type Geometry,
+  type PresetGeometry,
+} from "../shared/geometry.ts";
 import {
   nativeLinkXml,
   parseLinkTarget,
@@ -227,31 +231,11 @@ function computeTargetConnectionSites(
   if (target.connectionSites !== undefined) {
     return target.connectionSites;
   }
-  const { box, transform } = target;
-  const hw = box.width / 2;
-  const hh = box.height / 2;
-  const cx = box.x + hw;
-  const cy = box.y + hh;
-  const flipH = transform?.flipH ?? false;
-  const flipV = transform?.flipV ?? false;
-  const angleRad = ((transform?.angle ?? 0) * Math.PI) / 180;
-  const cos = Math.cos(angleRad);
-  const sin = Math.sin(angleRad);
-  // ECMA-376 standard 4 cardinal connection sites: 0=top, 1=left, 2=bottom, 3=right.
-  const localOffsets: readonly ScreenPoint[] = [
-    { x: 0, y: -hh },
-    { x: -hw, y: 0 },
-    { x: 0, y: hh },
-    { x: hw, y: 0 },
-  ];
-  return localOffsets.map((offset) => {
-    const fx = flipH ? -offset.x : offset.x;
-    const fy = flipV ? -offset.y : offset.y;
-    return {
-      x: cx + fx * cos - fy * sin,
-      y: cy + fx * sin + fy * cos,
-    };
-  });
+  return applyTransformToPoints(
+    standardBoxConnectionSites(target.box),
+    target.box,
+    target.transform,
+  );
 }
 
 function resolveEndpointPosition(
@@ -276,7 +260,9 @@ function resolveEndpointPosition(
   if (!Number.isSafeInteger(idx) || idx < 0 || idx >= sites.length) {
     throw new CapabilityError(
       "invalid-connection-port",
-      `Connection port ${String(endpoint.port)} is out of bounds for target "${endpoint.id}" (valid indices: 0..${sites.length - 1})`,
+      sites.length === 0
+        ? `Connection port ${String(endpoint.port)} is invalid because target "${endpoint.id}" has no connection sites`
+        : `Connection port ${String(endpoint.port)} is out of bounds for target "${endpoint.id}" (valid indices: 0..${sites.length - 1})`,
     );
   }
   const site = sites[idx]!;
@@ -478,12 +464,9 @@ export const lineCapability: ObjectCapabilityModule<
 
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Record<string, unknown> = {};
-    for (const key of Object.keys(motionPropsShape)) {
-      if (input.props[key] !== undefined) {
-        motionProps[key] = input.props[key];
-      }
-    }
+    const motionProps: Readonly<Record<string, unknown>> = pickMotionProps(
+      input.props,
+    );
 
     const declaredWidth = contract.explicitPixelSize?.width;
     const declaredHeight = contract.explicitPixelSize?.height;

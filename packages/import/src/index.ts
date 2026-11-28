@@ -159,15 +159,25 @@ export {
   hexRgb6Schema,
   normalizeBulletCharacter,
   offsetEmuFragmentSchema,
+  ooxmlAutoNumStartAtSchema,
+  ooxmlBaselineShiftThousandthsSchema,
   ooxmlBoolSchema,
+  ooxmlFontSizeCentipointsSchema,
   ooxmlIntSchema,
+  ooxmlLetterSpacingCentipointsSchema,
+  ooxmlLineSpacingPercentSchema,
+  ooxmlLineSpacingPointsSchema,
+  ooxmlListLevelSchema,
   ooxmlNonNegativeIntSchema,
+  ooxmlParagraphSpacingPointsSchema,
   ooxmlPositiveIntSchema,
+  readOoxmlRunAttrStyles,
   transformAttributesFragmentSchema,
 } from "#/xml-fragments.ts";
 export type {
   ExtentEmuFragment,
   OffsetEmuFragment,
+  OoxmlRunAttrStyleResult,
   TransformAttributesFragment,
 } from "#/xml-fragments.ts";
 export { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";

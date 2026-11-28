@@ -37,10 +37,11 @@ import {
   hexRgb6Schema,
   offsetEmuFragmentSchema,
   ooxmlBoolSchema,
-  ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
-  ooxmlPositiveIntSchema,
   P_NS,
+  readOoxmlBoxInsets,
+  readOoxmlRunAttrStyles,
+  readRunFontSlots,
   XML_NS,
   defineCanvasMechanism,
   emuToPx,
@@ -525,30 +526,12 @@ const BodyPrAttrSchema = z.object({
   vert: z.string().optional(),
   wrap: z.enum(["square", "none"]).optional(),
   rtlCol: ooxmlBoolSchema.optional(),
-  lIns: ooxmlNonNegativeIntSchema.optional(),
-  tIns: ooxmlNonNegativeIntSchema.optional(),
-  rIns: ooxmlNonNegativeIntSchema.optional(),
-  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
 });
 
 const LvlPPrAttrSchema = z.object({
   algn: z.enum(["l", "ctr", "r", "just"]).optional(),
 });
-
-const RunPrAttrSchema = z.object({
-  lang: z.string().min(1).optional(),
-  sz: ooxmlPositiveIntSchema.optional(),
-  b: ooxmlBoolSchema.optional(),
-  i: ooxmlBoolSchema.optional(),
-  dirty: ooxmlBoolSchema.optional(),
-  smtClean: ooxmlBoolSchema.optional(),
-  kern: ooxmlNonNegativeIntSchema.optional(),
-});
-
-const spcAttrSchema = ooxmlIntSchema.refine(
-  (value) => value >= -400_000 && value <= 400_000,
-);
 
 const FieldAttrSchema = z.object({
   id: z.string().min(1),
@@ -565,10 +548,6 @@ const SrgbAttrSchema = z.object({
 
 const SchemeClrAttrSchema = z.object({
   val: schemeColorNameSchema,
-});
-
-const TypefaceAttrSchema = z.object({
-  typeface: z.string().min(1),
 });
 
 const algnMap: Readonly<Record<"l" | "ctr" | "r" | "just", TextAlignment>> = {
@@ -698,76 +677,38 @@ function readFooterRunStyle(
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
 ): TextStyle {
-  const raw = rPrCursor.attrsObject([
-    "lang",
-    "sz",
-    "b",
-    "i",
-    "dirty",
-    "smtClean",
-    "kern",
-    "spc",
-  ]);
-  const parsed = RunPrAttrSchema.safeParse(raw);
-  const style: Record<string, unknown> = {};
-  if (parsed.success) {
-    if (parsed.data.sz !== undefined) {
-      style["fontSize"] = `${parsed.data.sz / 100}pt`;
-    }
-    if (parsed.data.b !== undefined) {
-      style["fontWeight"] = parsed.data.b ? "bold" : "normal";
-    }
-    if (parsed.data.i !== undefined) {
-      style["fontStyle"] = parsed.data.i ? "italic" : "normal";
-    }
-    if (parsed.data.lang !== undefined) {
-      style["lang"] = parsed.data.lang;
-    }
-  }
-  if (raw["spc"] !== undefined) {
-    const parsedSpc = spcAttrSchema.safeParse(raw["spc"]);
-    if (parsedSpc.success) {
-      style["letterSpacing"] = parsedSpc.data === 0 ? 0 : parsedSpc.data / 75;
-    } else {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "omitted",
-        location: { ...location, xpath: `${rPrCursor.xpath}/@spc` },
-        attributeOrElement: "@spc",
-        rawValue: raw["spc"],
-      });
-    }
-  }
+  const attrStyles = readOoxmlRunAttrStyles({
+    rPrCursor,
+    location,
+    diagnostics,
+    allowBaseline: false,
+    allowNoneTextDecoration: false,
+    diagnoseUnsupportedEnums: false,
+  });
   const solidFill = rPrCursor.child(A_NS, "solidFill");
-  if (solidFill !== undefined) {
-    const color = readFooterXmlColor(solidFill, location, diagnostics);
-    if (color !== undefined) style["color"] = color;
-  }
-  const latin = rPrCursor.child(A_NS, "latin");
-  const ea = rPrCursor.child(A_NS, "ea");
-  const cs = rPrCursor.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  if (fontCursor !== undefined) {
-    const parsedFont = TypefaceAttrSchema.safeParse(
-      fontCursor.attrsObject(["typeface", "pitchFamily", "charset", "panose"]),
-    );
-    if (parsedFont.success) {
-      const tf = parsedFont.data.typeface;
-      style["fontFamily"] =
-        tf === "+mj-lt" || tf === "+mj-ea" || tf === "+mj-cs"
-          ? "major"
-          : tf === "+mn-lt" || tf === "+mn-ea" || tf === "+mn-cs"
-            ? "minor"
-            : tf;
-    }
-  }
-  for (const extra of [ea, cs]) {
-    if (extra !== undefined && extra !== fontCursor) {
-      extra.attrsObject(["typeface", "pitchFamily", "charset", "panose"]);
-    }
-  }
-  return style;
+  const color =
+    solidFill === undefined
+      ? undefined
+      : readFooterXmlColor(solidFill, location, diagnostics);
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
+  return {
+    ...(attrStyles.fontSize === undefined
+      ? {}
+      : { fontSize: attrStyles.fontSize }),
+    ...(attrStyles.fontWeight === undefined
+      ? {}
+      : { fontWeight: attrStyles.fontWeight }),
+    ...(attrStyles.fontStyle === undefined
+      ? {}
+      : { fontStyle: attrStyles.fontStyle }),
+    ...(attrStyles.lang === undefined ? {} : { lang: attrStyles.lang }),
+    ...(attrStyles.letterSpacing === undefined
+      ? {}
+      : { letterSpacing: attrStyles.letterSpacing }),
+    ...(color === undefined ? {} : { color }),
+    ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
+  };
 }
 
 function readSpPrTransformBox(
@@ -859,23 +800,34 @@ function readFooterPlaceholderImport(
   if (txBody !== undefined) {
     const bodyPr = txBody.child(A_NS, "bodyPr");
     if (bodyPr !== undefined) {
-      const parsedBody = BodyPrAttrSchema.safeParse(
-        bodyPr.attrsObject([
-          "vert",
-          "wrap",
-          "rtlCol",
-          "lIns",
-          "tIns",
-          "rIns",
-          "bIns",
-          "anchor",
-        ]),
-      );
+      const rawBody = bodyPr.attrsObject([
+        "vert",
+        "wrap",
+        "rtlCol",
+        "lIns",
+        "tIns",
+        "rIns",
+        "bIns",
+        "anchor",
+      ]);
+      const parsedBody = BodyPrAttrSchema.safeParse(rawBody);
       if (parsedBody.success && parsedBody.data.anchor !== undefined) {
         style = mergeFooterStyle(style, {
           verticalAlign: anchorMap[parsedBody.data.anchor],
         });
       }
+      readOoxmlBoxInsets({
+        rawAttrs: rawBody,
+        attrNames: {
+          left: "lIns",
+          top: "tIns",
+          right: "rIns",
+          bottom: "bIns",
+        },
+        elementXpath: bodyPr.xpath,
+        location,
+        diagnostics,
+      });
       bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
       bodyPr.ignoreEmptyChild(A_NS, "normAutofit");
       bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");

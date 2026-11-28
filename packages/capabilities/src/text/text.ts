@@ -31,7 +31,11 @@ import {
   type FontEmbeddingUse,
 } from "../font/font-embedding.ts";
 import { embeddedFontImportHandler } from "../font/font-import.ts";
-import { motionAnnotations } from "../motion/motion-api.ts";
+import {
+  motionAnnotations,
+  motionParagraphAnnotations,
+  pickMotionProps,
+} from "../motion/motion-api.ts";
 import {
   nativeLinkXml,
   parseLinkTarget,
@@ -83,9 +87,11 @@ export type {
   SlideNumberDeclarationProps,
   ShapeTextStyle,
   SpanDeclarationProps,
+  SubDeclarationProps,
+  SupDeclarationProps,
   TextDeclarationProps,
 } from "./text-declaration.ts";
-export { font } from "../font/font.ts";
+export { font, fromFontCollection } from "../font/font.ts";
 export type {
   Font,
   FontFace,
@@ -95,7 +101,9 @@ export type {
 export type {
   FontReference,
   FontSize,
+  LineHeight,
   ParagraphStyle,
+  RunTextStyle,
   TextAlignment,
   TextList,
   TextStyle,
@@ -397,6 +405,7 @@ export const textCapability: ObjectCapabilityModule<
 
     const {
       paragraphs,
+      paragraphMotions,
       style: parsedTextStyle,
       localBodyDeclared,
     } = parseTextContent(
@@ -409,6 +418,7 @@ export const textCapability: ObjectCapabilityModule<
       "Text.style",
       placeholder,
       input.props["style"],
+      { allowParagraphMotion: true },
     );
 
     const rawSlideStyle = record(input.props["style"])
@@ -434,17 +444,9 @@ export const textCapability: ObjectCapabilityModule<
 
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+    const motionProps: Readonly<Record<string, unknown>> = pickMotionProps(
+      input.props,
+    );
 
     const native: BoundObjectNativeCollaboration = {
       ...(morphKey === undefined ? {} : { morphKey }),
@@ -580,7 +582,7 @@ export const textCapability: ObjectCapabilityModule<
             "Text.name contains characters not allowed in XML 1.0",
           );
         }
-        const annotations = motionAnnotations(motionProps, {
+        const target = {
           kind: "text",
           name,
           ...(authorId === undefined ? {} : { authorId }),
@@ -591,7 +593,11 @@ export const textCapability: ObjectCapabilityModule<
           hasBackground:
             visual.fill.kind !== "none" || visual.border !== undefined,
           paragraphCount: resolvedText.paragraphCount,
-        });
+        } as const;
+        const annotations = [
+          ...motionAnnotations(motionProps, target),
+          ...motionParagraphAnnotations(paragraphMotions, target, motionProps),
+        ];
         const transform: PreviewTransform = {
           box,
           angle: visual.rotate,

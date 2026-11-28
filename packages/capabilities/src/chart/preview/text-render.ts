@@ -214,8 +214,12 @@ export function renderChartTextSvg(options: {
   if (
     overflowsBounds &&
     options.clipAllocator !== undefined &&
-    clipTarget.width > 0 &&
-    clipTarget.height > 0
+    Number.isFinite(clipTarget.x) &&
+    Number.isFinite(clipTarget.y) &&
+    Number.isFinite(clipTarget.width) &&
+    Number.isFinite(clipTarget.height) &&
+    clipTarget.width > 1e-6 &&
+    clipTarget.height > 1e-6
   ) {
     const clipId = options.clipAllocator.nextClipId();
     options.clipAllocator.defs.push(

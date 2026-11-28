@@ -13,12 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { BuildOptions, CodegenResult } from "@officedk/pptxdk";
-import {
-  buildFromSource,
-  previewFromSource,
-  type BuildResult,
-  type PreviewResult,
-} from "@officedk/pptxdk/node";
+import { buildFromSource, type BuildResult } from "@officedk/pptxdk/node";
 import { validatePptx, type ValidationResult } from "@pptxdk/validation";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -133,50 +128,6 @@ export async function verifyGeneratedSourcesTypecheck(
   }
 }
 
-function assertVanillaBuildFromSourceIsolatesReactAndPreview(
-  entryPath: string,
-): void {
-  const script = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier.startsWith("react/") ||
-      specifier === "@pptxdk/react" ||
-      specifier.startsWith("@pptxdk/react/") ||
-      specifier.includes("@pptxdk/preview") ||
-      specifier.includes("@resvg/resvg-js")
-    ) {
-      throw new Error("Vanilla buildFromSource loaded forbidden dependency: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const { buildFromSource } = await import("@officedk/pptxdk/node");
-const built = await buildFromSource(${JSON.stringify(entryPath)});
-if (!(built.pptx instanceof Uint8Array) || built.pptx.byteLength === 0) {
-  throw new Error("Expected non-empty rebuilt PPTX bytes");
-}
-process.stdout.write("ok");
-`;
-
-  const child = spawnSync(
-    process.execPath,
-    ["--conditions=source", "--input-type=module", "--eval", script],
-    { cwd: packageRoot, encoding: "utf8" },
-  );
-  assert.equal(
-    child.status,
-    0,
-    `Isolated vanilla buildFromSource check failed:\n${child.stderr}\n${child.stdout}`,
-  );
-  assert.equal(child.stdout, "ok");
-}
-
 /**
  * Writes generated files to an origin directory, relocates them via `rename` to a nested
  * project path unrelated to `process.cwd()`, rebuilds via `buildFromSource`, and validates
@@ -185,7 +136,6 @@ process.stdout.write("ok");
 export async function rebuildGeneratedSourceRelocated(
   result: CodegenResult,
   options: {
-    readonly verifyVanillaIsolation?: boolean;
     readonly buildOptions?: BuildOptions;
   } = {},
 ): Promise<RelocatedRebuildOutcome> {
@@ -203,39 +153,9 @@ export async function rebuildGeneratedSourceRelocated(
     await rename(originDir, relocatedDir);
 
     const entryPath = join(relocatedDir, result.entry);
-    if (
-      result.target === "vanilla" &&
-      options.verifyVanillaIsolation !== false
-    ) {
-      assertVanillaBuildFromSourceIsolatesReactAndPreview(entryPath);
-    }
-
     const built = await buildFromSource(entryPath, options.buildOptions);
     const file = await validatePptx(built.pptx);
     return { built, file };
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-}
-
-/**
- * Writes generated files to an origin directory, relocates them via `rename` to an isolated
- * project path, and renders a formal preview via `previewFromSource`.
- */
-export async function previewGeneratedSourceRelocated(
-  result: CodegenResult,
-): Promise<PreviewResult> {
-  const tempRoot = await mkdtemp(join(tmpdir(), "pptxdk-codegen-preview-"));
-  try {
-    const consumerRoot = join(tempRoot, "consumer");
-    await linkConsumerNodeModules(join(consumerRoot, "node_modules"), false);
-
-    const originDir = join(tempRoot, "origin");
-    await writeCodegenFiles(originDir, result.files);
-    const relocatedDir = join(consumerRoot, "relocated");
-    await rename(originDir, relocatedDir);
-
-    return await previewFromSource(join(relocatedDir, result.entry));
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

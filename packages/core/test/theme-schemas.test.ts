@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { CapabilityError, deckPropsSchema } from "@pptxdk/core";
+import { createDeckNode } from "@pptxdk/core/document";
 import {
   backgroundValueSchema,
   borderObjectSchema,
@@ -23,6 +24,7 @@ import {
   gradientStopSchema,
   isTheme,
   isThemeFontSlot,
+  lineHeightSchema,
   linearGradientSchema,
   nativeColorSlotSchema,
   radialGradientSchema,
@@ -53,6 +55,7 @@ import {
   type FontSize,
   type FormatScheme,
   type HexColor,
+  type LineHeight,
   type LinearGradient,
   type NativeColorSlot,
   type RadialGradient,
@@ -68,8 +71,6 @@ import {
   type VisualStyle,
 } from "@pptxdk/core/theme";
 import { describe, it } from "vitest";
-
-import { snapshotValue } from "../src/input-values.ts";
 
 describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
   it("exports Zod schemas for color, font, visual, and text style primitives and preserves units", () => {
@@ -203,27 +204,38 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       assert.equal(validated.fontWeight, fontWeight);
     }
 
-    // Preserve native units ("32pt" vs 32 vs "32px") through schema & validateTextStyle
+    // Preserve native units ("32pt" vs 32 vs "32px") and proportional percentage lineHeight
     for (const fontSize of ["32pt", 32, "32px"] as const) {
-      const style: TextStyle = textStyleSchema.parse({
-        fontFamily: fontValue,
-        fontSize,
-        fontWeight: 600,
-        fontStyle: "italic",
-        color: colorValue,
-        lineHeight: "36pt",
-        verticalAlign: "middle",
-        align: "center",
-        spacingAfter: 8,
-        letterSpacing: 1.5,
-        textTransform: "uppercase",
-        textDecoration: "underline",
-        textShadow: shadow,
-        textWrap: "nowrap",
-        lang: "en-US",
-      });
-      assert.equal(style.fontSize, fontSize);
-      assert.equal(validateTextStyle(style).fontSize, fontSize);
+      for (const lineHeight of [
+        "36pt",
+        36,
+        "36px",
+        "140%",
+        "13200%",
+      ] as const satisfies readonly LineHeight[]) {
+        assert.equal(lineHeightSchema.parse(lineHeight), lineHeight);
+        const style: TextStyle = textStyleSchema.parse({
+          fontFamily: fontValue,
+          fontSize,
+          fontWeight: 600,
+          fontStyle: "italic",
+          color: colorValue,
+          lineHeight,
+          verticalAlign: "middle",
+          align: "center",
+          spacingAfter: 8,
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+          textDecoration: "underline",
+          textShadow: shadow,
+          textWrap: "nowrap",
+          lang: "en-US",
+        });
+        assert.equal(style.fontSize, fontSize);
+        assert.equal(style.lineHeight, lineHeight);
+        assert.equal(validateTextStyle(style).fontSize, fontSize);
+        assert.equal(validateTextStyle(style).lineHeight, lineHeight);
+      }
     }
   });
 
@@ -257,6 +269,12 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
       [{ color: "red" }, "invalid-color"],
       [{ textShadow: { color: "tileAccent" } }, "invalid-color"],
       [{ lineHeight: 0 }, "invalid-text-length"],
+      [{ lineHeight: "0%" }, "invalid-text-length"],
+      [{ lineHeight: "-10%" }, "invalid-text-length"],
+      [{ lineHeight: "13201%" }, "invalid-text-length"],
+      [{ lineHeight: "0.0001%" }, "invalid-text-length"],
+      [{ lineHeight: "1.5" }, "invalid-text-length"],
+      [{ lineHeight: "NaN%" }, "invalid-text-length"],
       [{ verticalAlign: "baseline" }, "invalid-vertical-align"],
       [{ align: "start" }, "invalid-text-alignment"],
       [{ spacingAfter: -1 }, "invalid-paragraph-spacing"],
@@ -378,8 +396,8 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
     assert.equal(isTheme({ name: "Plain", colors: {}, fonts: {} }), false);
     assert.equal(brand.colors.accent2, "#AABBCC");
 
-    // snapshotValue preserves Theme reference identity (used by CommonNode props).
-    assert.equal(snapshotValue(brand), brand);
+    // CommonNode preserves Theme reference identity when snapshotting props.
+    assert.equal(createDeckNode({ theme: brand }).props["theme"], brand);
 
     const same = brand.set({
       name: "Brand A v2",
@@ -491,5 +509,64 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
     assert.equal(overriddenCtx.resolveFont("major").family, "Georgia");
     assert.equal(theme.colors.accent1, "#0055AA");
     assert.equal(overriddenCtx.theme, theme);
+  });
+
+  it("supports orthogonal majorEastAsian/minorEastAsian theme slots and eastAsianFontFamily text style", () => {
+    const eaTheme = defineTheme({
+      name: "Dual Script Theme",
+      fonts: {
+        major: "Inter",
+        minor: "Aptos",
+        majorEastAsian: "PingFang SC",
+        minorEastAsian: "Noto Sans SC",
+      },
+    });
+    assert.equal(eaTheme.fonts.majorEastAsian, "PingFang SC");
+    assert.equal(eaTheme.fonts.minorEastAsian, "Noto Sans SC");
+
+    const ctx = createThemeContext(eaTheme);
+    assert.equal(ctx.resolveFont("major").family, "Inter");
+    assert.equal(ctx.resolveEastAsianFont("major").family, "PingFang SC");
+    assert.equal(ctx.resolveEastAsianFont("major").themeFont, "major");
+    assert.equal(ctx.resolveEastAsianFont("minor").family, "Noto Sans SC");
+    assert.equal(ctx.resolveEastAsianFont("minor").themeFont, "minor");
+
+    // Fallback when EA slots are omitted
+    const latinOnlyCtx = createThemeContext(
+      defineTheme({ fonts: { major: "Georgia", minor: "Verdana" } }),
+    );
+    assert.equal(latinOnlyCtx.resolveEastAsianFont("major").family, "Georgia");
+    assert.equal(latinOnlyCtx.resolveEastAsianFont("minor").family, "Verdana");
+
+    // ThemeOverride overrides only minorEastAsian without clobbering minor
+    const overridden = ctx.withNativeOverrides({
+      fonts: { minorEastAsian: "Microsoft YaHei" },
+    });
+    assert.equal(overridden.resolveFont("minor").family, "Aptos");
+    assert.equal(
+      overridden.resolveEastAsianFont("minor").family,
+      "Microsoft YaHei",
+    );
+
+    // Reject reserved tokens in majorEastAsian / minorEastAsian
+    assert.throws(
+      () => defineTheme({ fonts: { majorEastAsian: "+mj-ea" } }),
+      CapabilityError,
+    );
+    assert.throws(() =>
+      themeOverrideSchema.parse({ fonts: { minorEastAsian: "minor" } }),
+    );
+
+    // eastAsianFontFamily accepted in textStyleSchema and validated
+    const parsedStyle = textStyleSchema.parse({
+      fontFamily: "Inter",
+      eastAsianFontFamily: "Noto Sans SC",
+    });
+    assert.equal(parsedStyle.eastAsianFontFamily, "Noto Sans SC");
+    assert.throws(
+      () => validateTextStyle({ eastAsianFontFamily: "   " }),
+      (err: unknown) =>
+        err instanceof CapabilityError && err.code === "invalid-font-family",
+    );
   });
 });

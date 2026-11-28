@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { createMorphScope } from "@pptxdk/core/capability";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   blockArc,
   deck,
@@ -16,7 +12,10 @@ import {
   shape,
   slide,
   span,
-} from "../../document.ts";
+} from "@pptxdk/capabilities/document";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { createMorphScope } from "@pptxdk/core/capability";
+import { describe, it } from "vitest";
 
 describe("shape capability codegen", () => {
   it("generates vanilla and react source for preset geometries, adjusts, custom paths, arrows, transforms, and text modes", () => {
@@ -114,19 +113,17 @@ describe("shape capability codegen", () => {
           },
         }),
         shape({
-          id: "arrow-line",
-          geometry: "line",
+          id: "flipped-rect",
+          geometry: "roundRect",
           style: {
             position: "absolute",
             left: 24,
             top: 160,
             width: 180,
-            height: 2,
+            height: 20,
             border: {
               color: "#DC2626",
               width: 3,
-              startArrow: "oval",
-              endArrow: "triangle",
             },
           },
         }),
@@ -166,8 +163,6 @@ describe("shape capability codegen", () => {
       /path\("M 10 80 C 10 15 90 15 90 80 Q 50 95 10 80 Z", \{/u,
     );
     assert.match(vanillaSource, /type: "custom"/u);
-    assert.match(vanillaSource, /startArrow: "oval"/u);
-    assert.match(vanillaSource, /endArrow: "triangle"/u);
     assert.match(vanillaSource, /flipH: true/u);
     assert.match(vanillaSource, /flipV: true/u);
     assert.match(vanillaSource, /linearGradient\(90,/u);

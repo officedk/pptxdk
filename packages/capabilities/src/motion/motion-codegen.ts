@@ -4,6 +4,7 @@ import {
   type CodegenContext,
   type CodegenExpr,
 } from "@pptxdk/codegen";
+import { readInternalDeclarationProps } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import {
@@ -12,7 +13,9 @@ import {
   effectOptionsSchema,
   emphasisEffectSchema,
   entranceEffectSchema,
+  exitEffectSchema,
   fillColorOptionsSchema,
+  instantEffectOptionsSchema,
   motionDirectionSchema,
   motionMomentOffsetSchema,
   motionMomentSchema,
@@ -53,20 +56,33 @@ function emitContainerChildren(
   ctx: CodegenContext,
   ownerLabel: string,
 ): readonly string[] {
+  const insideRichTextHost =
+    node.type === "motion-step" &&
+    /^.*\/(?:text|shape)(?:\[[^\]]*\])?\/motion-step(?:\[[^\]]*\])?$/u.test(
+      ctx.path,
+    );
   const children: string[] = [];
   let childIndex = 0;
   for (const child of node.children) {
     if (child instanceof CommonNode) {
+      if (insideRichTextHost && child.type !== "paragraph") {
+        ctx.fail(
+          "invalid-document",
+          "Step inside Text or Shape can only contain P paragraphs",
+        );
+      }
       children.push(ctx.emitChildNode(child, childIndex));
       childIndex += 1;
     } else if (
       "text" in child &&
       typeof child.text === "string" &&
-      child.text.trim() !== ""
+      (insideRichTextHost || child.text.trim() !== "")
     ) {
       ctx.fail(
         "invalid-document",
-        `${ownerLabel} cannot directly contain text content`,
+        insideRichTextHost
+          ? "Step inside Text or Shape can only contain P paragraphs"
+          : `${ownerLabel} cannot directly contain text content`,
       );
     }
   }
@@ -77,6 +93,7 @@ function serializeMotionMomentValue(
   value: unknown,
   ctx: CodegenContext,
   propSegment: string,
+  requireNamed = false,
 ): CodegenExpr {
   const parsed = motionMomentSchema.safeParse(value);
   if (!parsed.success) {
@@ -87,6 +104,13 @@ function serializeMotionMomentValue(
     );
   }
   const moment: MotionMoment = parsed.data;
+  if (requireNamed && moment.point !== "named") {
+    ctx.fail(
+      "unexpressible-value",
+      "publishStart and publishEnd require named moment handles",
+      subPropPath(ctx, propSegment),
+    );
+  }
   const scopeVar = ctx.allocateMotionScope(moment.scope);
   if (moment.point === "start") {
     return expr(`${scopeVar}.start`);
@@ -139,7 +163,8 @@ function collectStepProps(
   node: CommonNode,
   ctx: CodegenContext,
 ): readonly (readonly [string, unknown])[] {
-  for (const [key, value] of Object.entries(node.props)) {
+  const props = readInternalDeclarationProps(node);
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!stepAllowedPropKeys.has(key)) {
       ctx.fail(
@@ -149,7 +174,7 @@ function collectStepProps(
       );
     }
   }
-  const rawN = node.props["n"];
+  const rawN = props["n"];
   if (rawN === undefined) {
     return [];
   }
@@ -174,7 +199,8 @@ function collectScopeProps(
   readonly scopeVar: string;
   readonly optionEntries: readonly (readonly [string, unknown])[];
 } {
-  for (const [key, value] of Object.entries(node.props)) {
+  const props = readInternalDeclarationProps(node);
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!scopeAllowedPropKeys.has(key)) {
       ctx.fail(
@@ -185,7 +211,7 @@ function collectScopeProps(
     }
   }
 
-  const parsedScope = motionScopeHandleSchema.safeParse(node.props["scope"]);
+  const parsedScope = motionScopeHandleSchema.safeParse(props["scope"]);
   if (!parsedScope.success) {
     ctx.fail(
       "unexpressible-value",
@@ -196,7 +222,7 @@ function collectScopeProps(
   const scopeVar = ctx.allocateMotionScope(parsedScope.data.identity);
 
   const optionEntries: [string, unknown][] = [];
-  const rawMode = node.props["mode"];
+  const rawMode = props["mode"];
   if (rawMode !== undefined) {
     const parsedMode = motionScopeModeSchema.safeParse(rawMode);
     if (!parsedMode.success) {
@@ -209,7 +235,7 @@ function collectScopeProps(
     optionEntries.push(["mode", parsedMode.data]);
   }
 
-  const rawEach = node.props["each"];
+  const rawEach = props["each"];
   if (rawEach !== undefined) {
     if (typeof rawEach === "number" && !Number.isFinite(rawEach)) {
       ctx.fail(
@@ -232,7 +258,7 @@ function collectScopeProps(
     optionEntries.push(["each", rawEach]);
   }
 
-  const rawDelay = node.props["delay"];
+  const rawDelay = props["delay"];
   if (rawDelay !== undefined) {
     if (typeof rawDelay === "number" && !Number.isFinite(rawDelay)) {
       ctx.fail(
@@ -252,7 +278,7 @@ function collectScopeProps(
     optionEntries.push(["delay", parsedDelay.data]);
   }
 
-  const rawStartAt = node.props["startAt"];
+  const rawStartAt = props["startAt"];
   if (rawStartAt !== undefined) {
     optionEntries.push([
       "startAt",
@@ -260,7 +286,7 @@ function collectScopeProps(
     ]);
   }
 
-  const rawPublishStart = node.props["publishStart"];
+  const rawPublishStart = props["publishStart"];
   if (rawPublishStart !== undefined) {
     optionEntries.push([
       "publishStart",
@@ -268,7 +294,7 @@ function collectScopeProps(
     ]);
   }
 
-  const rawPublishEnd = node.props["publishEnd"];
+  const rawPublishEnd = props["publishEnd"];
   if (rawPublishEnd !== undefined) {
     optionEntries.push([
       "publishEnd",
@@ -276,7 +302,7 @@ function collectScopeProps(
     ]);
   }
 
-  const rawMotion = node.props["motion"];
+  const rawMotion = props["motion"];
   if (rawMotion !== undefined) {
     if (typeof rawMotion !== "boolean") {
       ctx.fail(
@@ -376,11 +402,23 @@ function serializeEffectCall(
       );
     }
     effect = parsed.data;
+  } else if (expectedKind === "exit") {
+    const parsed = exitEffectSchema.safeParse(rawEffect);
+    if (!parsed.success) {
+      failAtSubPath(
+        ctx,
+        parsed.error.issues[0]?.message ?? "Invalid exit animation effect",
+        effectPath,
+      );
+    }
+    effect = parsed.data;
   } else {
     const parsed =
       rawEffect["kind"] === "entrance"
         ? entranceEffectSchema.safeParse(rawEffect)
-        : emphasisEffectSchema.safeParse(rawEffect);
+        : rawEffect["kind"] === "exit"
+          ? exitEffectSchema.safeParse(rawEffect)
+          : emphasisEffectSchema.safeParse(rawEffect);
     if (!parsed.success) {
       failAtSubPath(
         ctx,
@@ -548,7 +586,55 @@ function serializeEffectCall(
     );
   }
 
-  // Remaining 8 entrance presets
+  if (effect.preset === "appear" || effect.preset === "disappear") {
+    if (
+      effect.duration !== 1 ||
+      effect.from !== undefined ||
+      effect.to !== undefined ||
+      easing !== undefined
+    ) {
+      failAtSubPath(
+        ctx,
+        `${effect.preset}() does not accept duration, direction, or easing`,
+        effectPath,
+      );
+    }
+    const candidate = {
+      ...(effect.delay === 0 ? {} : { delay: effect.delay }),
+      ...(effect.by === undefined ? {} : { by: effect.by }),
+      ...(effect.intervalMs === undefined
+        ? {}
+        : { intervalMs: effect.intervalMs }),
+    };
+    const parsedInstant = instantEffectOptionsSchema.safeParse(candidate);
+    if (!parsedInstant.success) {
+      failAtSubPath(
+        ctx,
+        parsedInstant.error.issues[0]?.message ??
+          `Invalid ${effect.preset}() options`,
+        effectPath,
+      );
+    }
+    const fn = ctx.useImport(effect.preset);
+    const entries: [string, unknown][] = [];
+    if (
+      parsedInstant.data.delay !== undefined &&
+      parsedInstant.data.delay !== 0
+    ) {
+      entries.push(["delay", parsedInstant.data.delay]);
+    }
+    if (parsedInstant.data.by !== undefined) {
+      entries.push(["by", parsedInstant.data.by]);
+    }
+    if (parsedInstant.data.intervalMs !== undefined) {
+      entries.push(["intervalMs", parsedInstant.data.intervalMs]);
+    }
+    return expr(
+      entries.length === 0 ? `${fn}()` : `${fn}(${ctx.formatProps(entries)})`,
+    );
+  }
+
+  // Remaining entrance & exit presets
   if (effect.to !== undefined) {
     failAtSubPath(
       ctx,
@@ -556,7 +642,11 @@ function serializeEffectCall(
       `${effectPath}.to`,
     );
   }
-  const acceptsDirection = effect.preset === "wipe" || effect.preset === "fly";
+  const acceptsDirection =
+    effect.preset === "wipe" ||
+    effect.preset === "wipeOut" ||
+    effect.preset === "fly" ||
+    effect.preset === "flyOut";
   if (!acceptsDirection && effect.from !== undefined) {
     failAtSubPath(
       ctx,
@@ -629,6 +719,51 @@ function serializeEffectDeclarationExpr(
   ctx: CodegenContext,
   declPath: string,
 ): CodegenExpr {
+  if (isRecord(rawDeclaration) && rawDeclaration["type"] === "stepped-effect") {
+    const unknownKey = Object.keys(rawDeclaration).find(
+      (key) => key !== "type" && key !== "step" && key !== "effect",
+    );
+    if (unknownKey !== undefined) {
+      failAtSubPath(
+        ctx,
+        `onStep() contains unsupported field ${JSON.stringify(unknownKey)}`,
+        `${declPath}.${unknownKey}`,
+      );
+    }
+    const rawStep = rawDeclaration["step"];
+    if (typeof rawStep === "number" && !Number.isFinite(rawStep)) {
+      failAtSubPath(
+        ctx,
+        `Non-finite number ${String(rawStep)} cannot be expressed in TypeScript`,
+        `${declPath}.step`,
+      );
+    }
+    const parsedStep = motionStepAuthorPropsSchema.safeParse({ n: rawStep });
+    if (!parsedStep.success || parsedStep.data.n === undefined) {
+      failAtSubPath(
+        ctx,
+        "onStep() click step number must be a positive integer",
+        `${declPath}.step`,
+      );
+    }
+    const nestedEffect = rawDeclaration["effect"];
+    if (isRecord(nestedEffect) && nestedEffect["type"] === "stepped-effect") {
+      failAtSubPath(ctx, "onStep() cannot be nested", `${declPath}.effect`);
+    }
+    const innerExpr = serializeEffectDeclarationExpr(
+      nestedEffect,
+      expectedKind,
+      ctx,
+      `${declPath}.effect`,
+    );
+    const onStepFn = ctx.useImport("onStep");
+    return expr(
+      ctx.formatVanillaCall(onStepFn, [
+        ctx.emitValueExpr(parsedStep.data.n, `${declPath}.step`),
+        innerExpr.code,
+      ]),
+    );
+  }
   if (
     isRecord(rawDeclaration) &&
     rawDeclaration["type"] === "repeated-effect"
@@ -746,7 +881,11 @@ function serializeMotionValue(
   if (type === "motion-offset") {
     return serializeMotionTimingValue(value, ctx, "timing");
   }
-  if (type === "effect" || type === "repeated-effect") {
+  if (
+    type === "effect" ||
+    type === "repeated-effect" ||
+    type === "stepped-effect"
+  ) {
     return serializeEffectDeclarationExpr(value, undefined, ctx, ctx.path);
   }
   return undefined;
@@ -813,7 +952,41 @@ export const motionCodegen = defineObjectCodegen({
       return serializeEffectDeclarationExpr(value, "entrance", ctx, ctx.path);
     },
     emphasis(value, ctx) {
+      if (Array.isArray(value)) {
+        const items = value.map((item, index) =>
+          serializeEffectDeclarationExpr(
+            item,
+            "emphasis",
+            ctx,
+            `${ctx.path}[${index}]`,
+          ),
+        );
+        return expr(ctx.emitValueExpr(items));
+      }
       return serializeEffectDeclarationExpr(value, "emphasis", ctx, ctx.path);
+    },
+    exit(value, ctx) {
+      if (Array.isArray(value)) {
+        const items = value.map((item, index) =>
+          serializeEffectDeclarationExpr(
+            item,
+            "exit",
+            ctx,
+            `${ctx.path}[${index}]`,
+          ),
+        );
+        return expr(ctx.emitValueExpr(items));
+      }
+      return serializeEffectDeclarationExpr(value, "exit", ctx, ctx.path);
+    },
+    startAt(value, ctx) {
+      return serializeMotionTimingValue(value, ctx, "startAt");
+    },
+    publishStart(value, ctx) {
+      return serializeMotionMomentValue(value, ctx, "publishStart", true);
+    },
+    publishEnd(value, ctx) {
+      return serializeMotionMomentValue(value, ctx, "publishEnd", true);
     },
     motion(value, ctx) {
       if (typeof value !== "boolean") {

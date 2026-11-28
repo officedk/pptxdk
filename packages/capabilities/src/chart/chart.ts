@@ -28,7 +28,7 @@ import {
   fontPresentationContributions,
   type FontEmbeddingUse,
 } from "../font/font-embedding.ts";
-import { motionAnnotations } from "../motion/motion-api.ts";
+import { motionAnnotations, pickMotionProps } from "../motion/motion-api.ts";
 import {
   parseLinkTarget,
   parseMorphKey,
@@ -815,8 +815,10 @@ function parsedAxes(
     second.crossAxisId ??= first.id!;
   }
 
-  const parsed: ParsedChartAxis[] = firstUse.map((axis) =>
-    axis.spec.kind === "category"
+  const parsed: ParsedChartAxis[] = firstUse.map((axis) => {
+    const titleRotationDegrees =
+      axis.direction === "vertical" ? (-90 as const) : undefined;
+    return axis.spec.kind === "category"
       ? {
           kind: "category",
           name: axis.name,
@@ -825,6 +827,9 @@ function parsedAxes(
           direction: axis.direction!,
           position: axis.position!,
           crossing: axis.crossing!,
+          ...(titleRotationDegrees === undefined
+            ? {}
+            : { titleRotationDegrees }),
           spec: axis.spec,
         }
       : {
@@ -835,9 +840,12 @@ function parsedAxes(
           direction: axis.direction!,
           position: axis.position!,
           crossing: axis.crossing!,
+          ...(titleRotationDegrees === undefined
+            ? {}
+            : { titleRotationDegrees }),
           spec: axis.spec,
-        },
-  );
+        };
+  });
 
   const parsedByDraft = new Map(
     firstUse.map((axis, index) => [axis, parsed[index]!]),
@@ -1306,17 +1314,9 @@ export const chartCapability: ObjectCapabilityModule<
 
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+    const motionProps: Readonly<Record<string, unknown>> = pickMotionProps(
+      input.props,
+    );
 
     const native: BoundObjectNativeCollaboration = {
       ...(morphKey === undefined ? {} : { morphKey }),
@@ -1924,7 +1924,7 @@ function chartResourceClaims(
     fontUsages.push(...output.fontUsages);
     missingGlyphErrors.push(...output.missingGlyphErrors);
   }
-  for (const { name, spec } of parsed.axes) {
+  for (const { name, spec, titleRotationDegrees } of parsed.axes) {
     if (spec.style !== undefined) {
       const output = writeChartTextProperties(
         mergeTextStyle(chartStyle, spec.style),
@@ -1956,6 +1956,7 @@ function chartResourceClaims(
         ),
         `Chart.axes.${name}.title`,
         theme,
+        titleRotationDegrees,
       );
       textStyles.axisTitles ??= new Map();
       textStyles.axisTitles.set(name, output.xml);

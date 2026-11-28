@@ -3,10 +3,14 @@ import {
   type CodegenContext,
   type CodegenExpr,
 } from "@pptxdk/codegen";
-import { CapabilityError } from "@pptxdk/core/capability";
+import {
+  CapabilityError,
+  readInternalDeclarationProps,
+} from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 import type { z } from "zod";
 
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import {
   chartAllowedPropKeys,
   chartAxesSchema,
@@ -19,7 +23,7 @@ import {
 } from "./chart-schemas.ts";
 
 const chartAllowedPropKeySet = new Set(chartAllowedPropKeys);
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -109,12 +113,12 @@ function collectChartProps(
     ctx.fail("invalid-document", "Chart declaration cannot have children");
   }
 
-  const extra: Readonly<Record<string, CodegenExpr>> = ctx.emitObjectExtraProps(
-    node.props,
-  );
+  const props = readInternalDeclarationProps(node);
+  const extra: Readonly<Record<string, CodegenExpr>> =
+    ctx.emitObjectExtraProps(props);
   const entries: [string, unknown][] = [];
 
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!chartAllowedPropKeySet.has(key)) {
       ctx.fail(
@@ -145,7 +149,7 @@ function emitChartVanilla(node: CommonNode, ctx: CodegenContext): string {
   const callee = ctx.useImport("chart");
   const propsEntries = collectChartProps(node, ctx);
   const formattedProps = ctx.formatProps(propsEntries);
-  validateChartStructure(node.props, ctx);
+  validateChartStructure(readInternalDeclarationProps(node), ctx);
   return ctx.formatVanillaCall(callee, [formattedProps]);
 }
 
@@ -153,7 +157,7 @@ function emitChartReact(node: CommonNode, ctx: CodegenContext): string {
   const tag = ctx.useImport("Chart");
   const propsEntries = collectChartProps(node, ctx);
   const jsx = ctx.formatJsxElement(tag, propsEntries, []);
-  validateChartStructure(node.props, ctx);
+  validateChartStructure(readInternalDeclarationProps(node), ctx);
   return jsx;
 }
 

@@ -57,6 +57,7 @@ export {
 export {
   readEmbeddedFontList,
   readPresentationThemeFontScheme,
+  readRunFontSlots,
   unpackEotFontData,
 } from "#/fonts.ts";
 export type {
@@ -76,6 +77,7 @@ export type {
   ImportMechanismHandler,
   OmittedSlideObjectInfo,
   PlaceholderVisualReader,
+  ScopeConnectorResolutionContext,
   ShapeTreeImportContext,
   ShapeTreeImportHandler,
   ShapeTreeImportOutcome,
@@ -91,6 +93,7 @@ export {
   CONTENT_TYPES_NS,
   C_NS,
   DIAGRAM_NS,
+  DSP_NS,
   EMU_PER_PX,
   MC_NS,
   OPC_REL_NS,
@@ -152,18 +155,41 @@ export type {
   ResolvedInternalResource,
 } from "#/resources.ts";
 export {
+  MAXIMUM_COORDINATE_PX,
+  MAXIMUM_LINE_WIDTH_EMU,
+  MAXIMUM_WRITABLE_EMU,
   extentEmuFragmentSchema,
   hexRgb6Schema,
+  nonNegativeExtentEmuFragmentSchema,
+  normalizeBulletCharacter,
   offsetEmuFragmentSchema,
+  ooxmlAutoNumStartAtSchema,
+  ooxmlBaselineShiftThousandthsSchema,
   ooxmlBoolSchema,
+  ooxmlFontSizeCentipointsSchema,
   ooxmlIntSchema,
+  ooxmlLetterSpacingCentipointsSchema,
+  ooxmlLineSpacingPercentSchema,
+  ooxmlLineSpacingPointsSchema,
+  ooxmlLineWidthEmuSchema,
+  ooxmlListLevelSchema,
   ooxmlNonNegativeIntSchema,
+  ooxmlParagraphSpacingPointsSchema,
   ooxmlPositiveIntSchema,
+  ooxmlPositiveLineWidthEmuSchema,
+  ooxmlWritableExtentEmuSchema,
+  ooxmlWritableInt32CoordEmuSchema,
+  ooxmlWritablePositiveExtentEmuSchema,
+  readOoxmlBoxInsets,
+  readOoxmlRunAttrStyles,
   transformAttributesFragmentSchema,
 } from "#/xml-fragments.ts";
 export type {
   ExtentEmuFragment,
+  NonNegativeExtentEmuFragment,
   OffsetEmuFragment,
+  OoxmlBoxInsetsResult,
+  OoxmlRunAttrStyleResult,
   TransformAttributesFragment,
 } from "#/xml-fragments.ts";
 export { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";

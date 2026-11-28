@@ -38,7 +38,7 @@ import {
   type ChartNode,
   type ChartProps,
 } from "./chart/chart-declaration.ts";
-import { font } from "./font/font.ts";
+import { font, fromFontCollection } from "./font/font.ts";
 import {
   createGroupNode,
   type GroupDeclarationProps,
@@ -47,6 +47,19 @@ import {
   createImageNode,
   type ImageDeclarationProps,
 } from "./image/image-declaration.ts";
+import {
+  createLineNode,
+  type LineAdjust,
+  type LineDeclarationProps,
+  type LineEndpoint,
+  type LineLayoutStyle,
+  type LinePort,
+  type LineRouting,
+  type LineStroke,
+  type LineStrokeValue,
+  type LineStyle,
+  type LineVisualStyle,
+} from "./line/line-declaration.ts";
 import {
   createMotionScopeNode,
   createMotionStepIdentity,
@@ -85,10 +98,14 @@ import {
   createParagraphNode,
   createSlideNumberNode,
   createSpanNode,
+  createSubNode,
+  createSupNode,
   createTextNode,
   type ParagraphDeclarationProps,
   type SlideNumberDeclarationProps,
   type SpanDeclarationProps,
+  type SubDeclarationProps,
+  type SupDeclarationProps,
   type TextDeclarationProps,
 } from "./text/text-declaration.ts";
 import {
@@ -152,8 +169,17 @@ export type ImperativeTextPlaceholderValue =
   | TextNode
   | ParagraphNode
   | SpanNode
+  | SupNode
+  | SubNode
   | SlideNumberNode
-  | readonly (string | ParagraphNode | SpanNode | SlideNumberNode)[];
+  | readonly (
+      | string
+      | ParagraphNode
+      | SpanNode
+      | SupNode
+      | SubNode
+      | SlideNumberNode
+    )[];
 
 export type ImperativePlaceholderFillForRole<
   Role extends ContentPlaceholderRole,
@@ -194,12 +220,16 @@ export type JsxTextPlaceholderValue =
   | TextNode
   | ParagraphNode
   | SpanNode
+  | SupNode
+  | SubNode
   | SlideNumberNode
   | readonly (
       | string
       | JsxElementLike
       | ParagraphNode
       | SpanNode
+      | SupNode
+      | SubNode
       | SlideNumberNode
     )[];
 
@@ -238,11 +268,14 @@ export type SectionAuthorProps = SectionProps;
 
 export type BoxAuthorProps = BoxDeclarationProps;
 export type ImageAuthorProps = ImageDeclarationProps;
+export type LineAuthorProps = LineDeclarationProps;
 export type GroupAuthorProps = GroupDeclarationProps;
 export type ShapeAuthorProps = ShapeDeclarationProps;
 export type TextAuthorProps = TextDeclarationProps;
 export type ParagraphAuthorProps = ParagraphDeclarationProps;
 export type SpanAuthorProps = SpanDeclarationProps;
+export type SupAuthorProps = SupDeclarationProps;
+export type SubAuthorProps = SubDeclarationProps;
 export type SlideNumberAuthorProps = SlideNumberDeclarationProps;
 export type ChartAuthorProps = ChartProps;
 export type TableAuthorProps = TableDeclarationProps;
@@ -278,6 +311,11 @@ export type ImageNode = CommonNode<
   ImageDeclarationProps,
   NonNullable<ImageDeclarationProps["style"]>
 >;
+export type LineNode = CommonNode<
+  "line",
+  LineDeclarationProps,
+  NonNullable<LineDeclarationProps["style"]>
+>;
 export type GroupNode = CommonContainer<
   "group",
   GroupDeclarationProps,
@@ -292,6 +330,16 @@ export type SpanNode = RichTextContainer<
   "span",
   SpanAuthorProps,
   NonNullable<SpanDeclarationProps["style"]>
+>;
+export type SupNode = RichTextContainer<
+  "sup",
+  SupAuthorProps,
+  NonNullable<SupDeclarationProps["style"]>
+>;
+export type SubNode = RichTextContainer<
+  "sub",
+  SubAuthorProps,
+  NonNullable<SubDeclarationProps["style"]>
 >;
 export type SlideNumberNode = CommonNode<
   "slide-number",
@@ -417,6 +465,8 @@ export function slide<
       if (
         value.type === "paragraph" ||
         value.type === "span" ||
+        value.type === "sup" ||
+        value.type === "sub" ||
         value.type === "slide-number"
       ) {
         node.append(text(value, { placeholder: key }));
@@ -466,6 +516,11 @@ export function placeholder(
 /** Creates a native image whose source bytes, crop, fit, and visuals remain editable after attachment. */
 export function image(props: ImageAuthorProps): ImageNode {
   return createImageNode(props);
+}
+
+/** Creates a 1D line or connector (`<p:cxnSp>`) with box-layout or anchored `from`/`to` positioning. */
+export function line(props: LineAuthorProps = {}): LineNode {
+  return createLineNode(props);
 }
 
 /** Creates a native group preserving member identity and layout children. */
@@ -557,6 +612,30 @@ export function span(
   return node;
 }
 
+/** Creates an inline superscript run (`baseline="30000"`). */
+export function sup(content?: SpanContent, props?: SupAuthorProps): SupNode;
+export function sup(...content: readonly SpanContent[]): SupNode;
+export function sup(
+  ...args: readonly (SpanContent | SupAuthorProps | undefined)[]
+): SupNode {
+  const { content, props } = splitContent(args);
+  const node = createSupNode(props ?? {});
+  node.content(...content);
+  return node;
+}
+
+/** Creates an inline subscript run (`baseline="-25000"`). */
+export function sub(content?: SpanContent, props?: SubAuthorProps): SubNode;
+export function sub(...content: readonly SpanContent[]): SubNode;
+export function sub(
+  ...args: readonly (SpanContent | SubAuthorProps | undefined)[]
+): SubNode {
+  const { content, props } = splitContent(args);
+  const node = createSubNode(props ?? {});
+  node.content(...content);
+  return node;
+}
+
 /** Emits the native slide number field, resolved by the presentation application. */
 export function slideNumber(
   props: SlideNumberAuthorProps = {},
@@ -583,23 +662,33 @@ export function step(props: MotionStepAuthorProps = {}): MotionStepNode {
 export {
   createMotionScopeHandle,
   after,
+  appear,
   breathe,
+  collapse,
+  disappear,
   fade,
+  fadeOut,
   fillColor,
   floatDown,
+  floatOut,
   floatUp,
   fly,
+  flyOut,
+  onStep,
   repeat,
   spin,
   spinIn,
+  spinOut,
   stretch,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "./motion/motion-api.ts";
 export { motionSchedule } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
-export { font, transitions };
+export { font, fromFontCollection, transitions };
 export type {
   ContentPlaceholderRole,
   EmptyPlaceholderMap,
@@ -620,7 +709,12 @@ export type {
   EmphasisEffectDeclaration,
   EntranceEffect,
   EntranceEffectDeclaration,
+  EntrancePreset,
+  ExitEffect,
+  ExitEffectDeclaration,
+  ExitPreset,
   FillColorOptions,
+  InstantEffectOptions,
   MotionCompletionState,
   MotionDirection,
   MotionGranularity,
@@ -645,6 +739,7 @@ export type {
   ResolvedMotionScope,
   ResolvedMotionStep,
   SpinOptions,
+  SteppedEffect,
 } from "./motion/motion-api.ts";
 export type {
   EffectInstance,
@@ -675,17 +770,25 @@ export type {
   PresetGeometry,
   PresetGeometryName,
 } from "./shared/geometry.ts";
+export type { ArrowType } from "./shared/visual.ts";
 export type {
-  ArrowType,
-  LineEndStyle,
-  ShapeVisualStyle,
-} from "./shared/visual.ts";
+  LineAdjust,
+  LineEndpoint,
+  LineLayoutStyle,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
+};
 export type {
   ImageSource,
   ImageVisualStyle,
 } from "./image/image-declaration.ts";
 export type {
   ParagraphStyle,
+  RunTextStyle,
   TextAlignment,
   TextList,
   TextStyle,

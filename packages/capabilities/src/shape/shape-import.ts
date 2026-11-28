@@ -1,18 +1,23 @@
 import {
-  assertValidLang,
   type LinkTarget,
   type TextAlignment,
   type TextStyle,
 } from "@pptxdk/core/capability";
 import {
   A_NS,
+  normalizeBulletCharacter,
+  ooxmlAutoNumStartAtSchema,
   ooxmlBoolSchema,
-  ooxmlIntSchema,
+  ooxmlLineSpacingPercentSchema,
+  ooxmlLineSpacingPointsSchema,
+  ooxmlListLevelSchema,
   ooxmlNonNegativeIntSchema,
-  ooxmlPositiveIntSchema,
+  ooxmlParagraphSpacingPointsSchema,
   P_NS,
+  readOoxmlBoxInsets,
+  readOoxmlRunAttrStyles,
+  readRunFontSlots,
   XML_NS,
-  emuToPx,
   type ImportDiagnostic,
   type ImportLocation,
   type ShapeTreeImportContext,
@@ -22,6 +27,7 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import { isLineNormalizedSpElement } from "../line/line-import.ts";
 import {
   attachDeferredSlideLink,
   consumeNonPlaceholderNvPr,
@@ -39,6 +45,8 @@ import {
   createParagraphNode,
   createSlideNumberNode,
   createSpanNode,
+  createSubNode,
+  createSupNode,
   type ParagraphDeclarationProps,
   type SpanDeclarationProps,
 } from "../text/text-declaration.ts";
@@ -55,47 +63,21 @@ const NonVisualIdAttrSchema = z.object({
 const BodyPrAttrSchema = z.object({
   wrap: z.enum(["square", "none"]).optional(),
   rtlCol: ooxmlBoolSchema.optional(),
-  lIns: ooxmlNonNegativeIntSchema.optional(),
-  tIns: ooxmlNonNegativeIntSchema.optional(),
-  rIns: ooxmlNonNegativeIntSchema.optional(),
-  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
 });
 
-const ParagraphPrAttrSchema = z.object({
-  algn: z.enum(["l", "ctr", "r", "just"]).optional(),
-  rtl: ooxmlBoolSchema.optional(),
-  lvl: ooxmlNonNegativeIntSchema.optional(),
-});
-
-const RunPrAttrSchema = z.object({
-  lang: z.string().min(1).optional(),
-  sz: ooxmlPositiveIntSchema.optional(),
-  b: ooxmlBoolSchema.optional(),
-  i: ooxmlBoolSchema.optional(),
-  u: z.enum(["none", "sng"]).optional(),
-  strike: z.enum(["noStrike", "sngStrike"]).optional(),
-  cap: z.enum(["none", "all"]).optional(),
-  spc: ooxmlIntSchema.optional(),
-  dirty: ooxmlBoolSchema.optional(),
-  smtClean: ooxmlBoolSchema.optional(),
-});
-
-const TypefaceAttrSchema = z.object({
-  typeface: z.string().min(1),
-});
-
-const BulletCharAttrSchema = z.object({
-  char: z.string().min(1),
-});
-
-const BulletAutoNumAttrSchema = z.object({
-  type: z.string().min(1),
-  startAt: ooxmlIntSchema.optional(),
-});
+const ParagraphAlignAttrSchema = z.enum(["l", "ctr", "r", "just"]);
 
 const SpacingValAttrSchema = z.object({
-  val: ooxmlNonNegativeIntSchema,
+  val: ooxmlParagraphSpacingPointsSchema,
+});
+
+const LineSpacingPtsAttrSchema = z.object({
+  val: ooxmlLineSpacingPointsSchema,
+});
+
+const LineSpacingPctAttrSchema = z.object({
+  val: ooxmlLineSpacingPercentSchema,
 });
 
 const anchorToVerticalAlign: Readonly<
@@ -154,12 +136,13 @@ function isCustomGeomSpElement(cursor: XmlElementCursor): boolean {
   return directElementChild(spPr, A_NS, "custGeom") !== undefined;
 }
 
-/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, or `<a:custGeom>`). */
+/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, `<a:custGeom>`, or normalized 1D lines). */
 export function isPresetShapeSpElement(cursor: XmlElementCursor): boolean {
   return (
     !isPlaceholderSpElement(cursor) &&
     !isTextBoxSpElement(cursor) &&
-    !isCustomGeomSpElement(cursor)
+    !isCustomGeomSpElement(cursor) &&
+    !isLineNormalizedSpElement(cursor)
   );
 }
 
@@ -234,76 +217,15 @@ function readShapeRunProperties(
   rPrCursor: XmlElementCursor,
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
-): ParsedRunStyle {
-  const raw = rPrCursor.attrsObject([
-    "lang",
-    "sz",
-    "b",
-    "i",
-    "u",
-    "strike",
-    "cap",
-    "spc",
-    "dirty",
-    "smtClean",
-  ]);
-  const parsed = RunPrAttrSchema.safeParse(raw);
-  let lang: string | undefined;
-  let fontSize: NonNullable<TextStyle["fontSize"]> | undefined;
-  let fontWeight: NonNullable<TextStyle["fontWeight"]> | undefined;
-  let fontStyle: NonNullable<TextStyle["fontStyle"]> | undefined;
-  let textDecoration: NonNullable<TextStyle["textDecoration"]> | undefined;
-  let textTransform: NonNullable<TextStyle["textTransform"]> | undefined;
-  let letterSpacing: number | undefined;
-
-  if (!parsed.success) {
-    diagnostics.push({
-      code: "invalid-xml-value",
-      category: "corrupt-input",
-      disposition: "recovered",
-      location: { ...location, xpath: rPrCursor.xpath },
-      attributeOrElement: "a:rPr",
-      rawValue: JSON.stringify(raw),
-    });
-  } else {
-    const data = parsed.data;
-    if (data.lang !== undefined) {
-      try {
-        lang = assertValidLang(data.lang);
-      } catch {
-        diagnostics.push({
-          code: "invalid-xml-value",
-          category: "corrupt-input",
-          disposition: "omitted",
-          location: { ...location, xpath: `${rPrCursor.xpath}/@lang` },
-          attributeOrElement: "@lang",
-          rawValue: data.lang,
-        });
-      }
-    }
-    if (data.sz !== undefined) {
-      fontSize = `${data.sz / 100}pt`;
-    }
-    if (data.b !== undefined) {
-      fontWeight = data.b ? "bold" : "normal";
-    }
-    if (data.i !== undefined) {
-      fontStyle = data.i ? "italic" : "normal";
-    }
-    if (data.u === "sng") {
-      textDecoration = "underline";
-    } else if (data.strike === "sngStrike") {
-      textDecoration = "line-through";
-    }
-    if (data.cap === "all") {
-      textTransform = "uppercase";
-    } else if (data.cap === "none") {
-      textTransform = "none";
-    }
-    if (data.spc !== undefined) {
-      letterSpacing = data.spc / 75;
-    }
-  }
+): { readonly style: ParsedRunStyle; readonly inlineKind?: "sup" | "sub" } {
+  const attrStyles = readOoxmlRunAttrStyles({
+    rPrCursor,
+    location,
+    diagnostics,
+    allowBaseline: true,
+    allowNoneTextDecoration: false,
+    diagnoseUnsupportedEnums: true,
+  });
 
   const solidFill = rPrCursor.child(A_NS, "solidFill");
   const color =
@@ -317,44 +239,48 @@ function readShapeRunProperties(
       ? {}
       : readEffectList(effectLst, location, diagnostics);
 
-  let fontFamily: NonNullable<TextStyle["fontFamily"]> | undefined;
-  const latin = rPrCursor.child(A_NS, "latin");
-  const ea = rPrCursor.child(A_NS, "ea");
-  const cs = rPrCursor.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  if (fontCursor !== undefined) {
-    const parsedFont = TypefaceAttrSchema.safeParse(
-      fontCursor.attrsObject(["typeface"]),
-    );
-    if (parsedFont.success) {
-      const tf = parsedFont.data.typeface;
-      if (tf.startsWith("+mj-")) fontFamily = "major";
-      else if (tf.startsWith("+mn-")) fontFamily = "minor";
-      else fontFamily = tf;
-    }
-  }
-  if (ea !== undefined && ea !== fontCursor) ea.consumeAttr("typeface");
-  if (cs !== undefined && cs !== fontCursor) cs.consumeAttr("typeface");
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
 
   return {
-    ...(fontFamily === undefined ? {} : { fontFamily }),
-    ...(fontSize === undefined ? {} : { fontSize }),
-    ...(fontWeight === undefined ? {} : { fontWeight }),
-    ...(fontStyle === undefined ? {} : { fontStyle }),
-    ...(color === undefined ? {} : { color }),
-    ...(letterSpacing === undefined ? {} : { letterSpacing }),
-    ...(textTransform === undefined ? {} : { textTransform }),
-    ...(textDecoration === undefined ? {} : { textDecoration }),
-    ...(effects.boxShadow === undefined
+    style: {
+      ...(fontFamily === undefined ? {} : { fontFamily }),
+      ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
+      ...(attrStyles.fontSize === undefined
+        ? {}
+        : { fontSize: attrStyles.fontSize }),
+      ...(attrStyles.fontWeight === undefined
+        ? {}
+        : { fontWeight: attrStyles.fontWeight }),
+      ...(attrStyles.fontStyle === undefined
+        ? {}
+        : { fontStyle: attrStyles.fontStyle }),
+      ...(color === undefined ? {} : { color }),
+      ...(attrStyles.letterSpacing === undefined
+        ? {}
+        : { letterSpacing: attrStyles.letterSpacing }),
+      ...(attrStyles.textTransform === undefined
+        ? {}
+        : { textTransform: attrStyles.textTransform }),
+      ...(attrStyles.textDecoration === undefined
+        ? {}
+        : { textDecoration: attrStyles.textDecoration }),
+      ...(effects.boxShadow === undefined
+        ? {}
+        : { textShadow: effects.boxShadow }),
+      ...(attrStyles.lang === undefined ? {} : { lang: attrStyles.lang }),
+      ...(attrStyles.baselineShift === undefined
+        ? {}
+        : { baselineShift: attrStyles.baselineShift }),
+    },
+    ...(attrStyles.inlineKind === undefined
       ? {}
-      : { textShadow: effects.boxShadow }),
-    ...(lang === undefined ? {} : { lang }),
+      : { inlineKind: attrStyles.inlineKind }),
   };
 }
 
 type ImportedShapeRun =
   | {
-      readonly kind: "text";
+      readonly kind: "text" | "sup" | "sub";
       readonly text: string;
       readonly style: ParsedRunStyle;
     }
@@ -363,32 +289,47 @@ type ImportedShapeRun =
 type ImportedShapeParagraph = {
   readonly runs: readonly ImportedShapeRun[];
   readonly style: ParagraphStyle;
-  readonly defRunStyle?: ParsedRunStyle;
+  readonly defRunStyle?: Omit<ParsedRunStyle, "baselineShift">;
 };
 
 function readLineSpacing(
   lnSpcCursor: XmlElementCursor,
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
-): number | undefined {
+): ParagraphStyle["lineHeight"] | undefined {
   const spcPts = lnSpcCursor.child(A_NS, "spcPts");
   if (spcPts !== undefined) {
-    const parsed = SpacingValAttrSchema.safeParse(spcPts.attrsObject(["val"]));
-    if (parsed.success && parsed.data.val > 0) {
+    const raw = spcPts.attrsObject(["val"]);
+    const parsed = LineSpacingPtsAttrSchema.safeParse(raw);
+    if (!parsed.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: spcPts.xpath },
+        attributeOrElement: "a:spcPts/@val",
+        rawValue: raw["val"] ?? "",
+      });
+    } else {
       return parsed.data.val / 75;
     }
   }
   const spcPct = lnSpcCursor.child(A_NS, "spcPct");
   if (spcPct !== undefined) {
-    spcPct.consumeAttr("val");
-    diagnostics.push({
-      code: "unsupported-mechanism",
-      category: "unsupported",
-      disposition: "omitted",
-      location: { ...location, xpath: spcPct.xpath },
-      namespaceUri: A_NS,
-      localName: "spcPct",
-    });
+    const raw = spcPct.attrsObject(["val"]);
+    const parsed = LineSpacingPctAttrSchema.safeParse(raw);
+    if (!parsed.success) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: spcPct.xpath },
+        attributeOrElement: "a:spcPct/@val",
+        rawValue: raw["val"] ?? "",
+      });
+    } else {
+      return `${parsed.data.val / 1000}%`;
+    }
   }
   return undefined;
 }
@@ -399,31 +340,43 @@ function readShapeParagraph(
   diagnostics: ImportDiagnostic[],
 ): ImportedShapeParagraph {
   let align: TextAlignment | undefined;
-  let lineHeight: number | undefined;
+  let lineHeight: ParagraphStyle["lineHeight"] | undefined;
   let spacingAfter: number | undefined;
   let list: TextList | undefined;
-  let defRunStyle: ParsedRunStyle | undefined;
+  let defRunStyle: Omit<ParsedRunStyle, "baselineShift"> | undefined;
   let level = 0;
 
   const pPr = pCursor.child(A_NS, "pPr");
   if (pPr !== undefined) {
-    const rawPPr = pPr.attrsObject(["algn", "rtl", "lvl"]);
-    const parsedPPr = ParagraphPrAttrSchema.safeParse(rawPPr);
-    if (!parsedPPr.success) {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "recovered",
-        location: { ...location, xpath: pPr.xpath },
-        attributeOrElement: "a:pPr",
-        rawValue: JSON.stringify(rawPPr),
-      });
-    } else {
-      if (parsedPPr.data.algn !== undefined) {
-        align = algnToTextAlign[parsedPPr.data.algn];
+    const rawPPr = pPr.attrsObject(["algn", "rtl", "lvl", "marL", "indent"]);
+    if (rawPPr["algn"] !== undefined) {
+      const parsedAlgn = ParagraphAlignAttrSchema.safeParse(rawPPr["algn"]);
+      if (parsedAlgn.success) {
+        align = algnToTextAlign[parsedAlgn.data];
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...location, xpath: `${pPr.xpath}/@algn` },
+          attributeOrElement: "@algn",
+          rawValue: rawPPr["algn"],
+        });
       }
-      if (parsedPPr.data.lvl !== undefined) {
-        level = parsedPPr.data.lvl;
+    }
+    if (rawPPr["lvl"] !== undefined) {
+      const parsedLvl = ooxmlListLevelSchema.safeParse(rawPPr["lvl"]);
+      if (parsedLvl.success) {
+        level = parsedLvl.data;
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...location, xpath: `${pPr.xpath}/@lvl` },
+          attributeOrElement: "@lvl",
+          rawValue: rawPPr["lvl"],
+        });
       }
     }
 
@@ -436,11 +389,19 @@ function readShapeParagraph(
     if (spcAft !== undefined) {
       const spcPts = spcAft.child(A_NS, "spcPts");
       if (spcPts !== undefined) {
-        const parsed = SpacingValAttrSchema.safeParse(
-          spcPts.attrsObject(["val"]),
-        );
+        const raw = spcPts.attrsObject(["val"]);
+        const parsed = SpacingValAttrSchema.safeParse(raw);
         if (parsed.success) {
           spacingAfter = parsed.data.val / 75;
+        } else {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: { ...location, xpath: spcPts.xpath },
+            attributeOrElement: "a:spcPts/@val",
+            rawValue: raw["val"] ?? "",
+          });
         }
       }
     }
@@ -448,29 +409,60 @@ function readShapeParagraph(
     pPr.ignoreEmptyChild(A_NS, "buNone");
     const buChar = pPr.child(A_NS, "buChar");
     if (buChar !== undefined) {
-      const parsedBu = BulletCharAttrSchema.safeParse(
-        buChar.attrsObject(["char"]),
-      );
-      if (parsedBu.success) {
-        list = {
-          type: "bullet",
-          character: parsedBu.data.char,
-          ...(level > 0 ? { level } : {}),
-        };
+      const rawBu = buChar.attrsObject(["char"]);
+      const normalized = normalizeBulletCharacter(rawBu["char"]);
+      if (normalized.recovered) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...location, xpath: buChar.xpath },
+          attributeOrElement: "a:buChar/@char",
+          rawValue: rawBu["char"] ?? "",
+        });
       }
+      list = {
+        type: "bullet",
+        character: normalized.character,
+        ...(level > 0 ? { level } : {}),
+      };
     } else {
       const buAutoNum = pPr.child(A_NS, "buAutoNum");
       if (buAutoNum !== undefined) {
-        const parsedAuto = BulletAutoNumAttrSchema.safeParse(
-          buAutoNum.attrsObject(["type", "startAt"]),
-        );
-        if (parsedAuto.success) {
+        const rawAuto = buAutoNum.attrsObject(["type", "startAt"]);
+        const rawType = rawAuto["type"];
+        if (rawType === undefined || rawType.length === 0) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: { ...location, xpath: buAutoNum.xpath },
+            attributeOrElement: "a:buAutoNum",
+            rawValue: JSON.stringify(rawAuto),
+          });
+        } else {
+          let startAt: number | undefined;
+          if (rawAuto["startAt"] !== undefined) {
+            const parsedStart = ooxmlAutoNumStartAtSchema.safeParse(
+              rawAuto["startAt"],
+            );
+            if (parsedStart.success) {
+              startAt = parsedStart.data;
+            } else {
+              diagnostics.push({
+                code: "invalid-xml-value",
+                category: "corrupt-input",
+                disposition: "omitted",
+                location: { ...location, xpath: `${buAutoNum.xpath}/@startAt` },
+                attributeOrElement: "a:buAutoNum/@startAt",
+                rawValue: rawAuto["startAt"],
+              });
+            }
+          }
           list = {
             type: "number",
             style: "arabicPeriod",
-            ...(parsedAuto.data.startAt === undefined
-              ? {}
-              : { startAt: parsedAuto.data.startAt }),
+            ...(startAt === undefined ? {} : { startAt }),
             ...(level > 0 ? { level } : {}),
           };
         }
@@ -479,7 +471,9 @@ function readShapeParagraph(
 
     const defRPr = pPr.child(A_NS, "defRPr");
     if (defRPr !== undefined) {
-      defRunStyle = readShapeRunProperties(defRPr, location, diagnostics);
+      const { baselineShift: _baselineShift, ...restDefRunStyle } =
+        readShapeRunProperties(defRPr, location, diagnostics).style;
+      defRunStyle = restDefRunStyle;
     }
   }
 
@@ -487,14 +481,18 @@ function readShapeParagraph(
   for (const child of pCursor.remainingElementChildren()) {
     if (child.namespaceUri === A_NS && child.localName === "r") {
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readShapeRunProperties(rPr, location, diagnostics);
       const t = child.child(A_NS, "t");
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
-        runs.push({ kind: "text", text: t.textContent, style: runStyle });
+        runs.push({
+          kind: parsedRPr.inlineKind ?? "text",
+          text: t.textContent,
+          style: parsedRPr.style,
+        });
       }
       continue;
     }
@@ -502,16 +500,23 @@ function readShapeParagraph(
       child.consumeAttr("id");
       const fieldType = child.attr("type");
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readShapeRunProperties(rPr, location, diagnostics);
       const t = child.child(A_NS, "t");
       if (t !== undefined) {
         t.consumeAttr("space", XML_NS);
       }
       if (fieldType === "slidenum") {
-        runs.push({ kind: "slidenum", style: runStyle });
+        const fieldStyle: ParsedRunStyle =
+          parsedRPr.inlineKind === undefined
+            ? parsedRPr.style
+            : {
+                ...parsedRPr.style,
+                baselineShift: parsedRPr.inlineKind === "sup" ? "30%" : "-25%",
+              };
+        runs.push({ kind: "slidenum", style: fieldStyle });
       } else {
         diagnostics.push({
           code: "unsupported-mechanism",
@@ -523,18 +528,26 @@ function readShapeParagraph(
           mechanismHint: `field:${fieldType ?? "unknown"}`,
         });
         if (t !== undefined) {
-          runs.push({ kind: "text", text: t.textContent, style: runStyle });
+          runs.push({
+            kind: parsedRPr.inlineKind ?? "text",
+            text: t.textContent,
+            style: parsedRPr.style,
+          });
         }
       }
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "br") {
       const rPr = child.child(A_NS, "rPr");
-      const runStyle =
+      const parsedRPr =
         rPr === undefined
-          ? {}
+          ? { style: {} }
           : readShapeRunProperties(rPr, location, diagnostics);
-      runs.push({ kind: "text", text: "\n", style: runStyle });
+      runs.push({
+        kind: parsedRPr.inlineKind ?? "text",
+        text: "\n",
+        style: parsedRPr.style,
+      });
       continue;
     }
     if (child.namespaceUri === A_NS && child.localName === "endParaRPr") {
@@ -614,11 +627,23 @@ function readShapeTxBody(
       if (b.anchor !== undefined) {
         verticalAlign = anchorToVerticalAlign[b.anchor];
       }
-      if (b.lIns !== undefined && b.lIns !== 0) paddingLeft = emuToPx(b.lIns);
-      if (b.tIns !== undefined && b.tIns !== 0) paddingTop = emuToPx(b.tIns);
-      if (b.rIns !== undefined && b.rIns !== 0) paddingRight = emuToPx(b.rIns);
-      if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
     }
+    const insets = readOoxmlBoxInsets({
+      rawAttrs: rawBodyPr,
+      attrNames: {
+        left: "lIns",
+        top: "tIns",
+        right: "rIns",
+        bottom: "bIns",
+      },
+      elementXpath: bodyPr.xpath,
+      location,
+      diagnostics,
+    });
+    paddingLeft = insets.paddingLeft;
+    paddingTop = insets.paddingTop;
+    paddingRight = insets.paddingRight;
+    paddingBottom = insets.paddingBottom;
     bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
     bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
   }
@@ -739,7 +764,8 @@ export function readShapeSp(
     singleParagraph !== undefined &&
     singleParagraph.style.list === undefined &&
     singleParagraph.runs.length === 1 &&
-    singleParagraph.runs[0]!.kind === "text"
+    singleParagraph.runs[0]!.kind === "text" &&
+    singleParagraph.runs[0]!.style.baselineShift === undefined
       ? singleParagraph.runs[0]!
       : undefined;
   const hasStyledEmptyParagraph =
@@ -763,6 +789,18 @@ export function readShapeSp(
       : undefined;
 
   const { border: rawBorder, ...restVisualStyle } = visuals.style;
+  if (visuals.borderArrows !== undefined) {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location,
+      namespaceUri: A_NS,
+      localName:
+        visuals.borderArrows.startArrow !== undefined ? "headEnd" : "tailEnd",
+      mechanismHint: "shape-line-arrow",
+    });
+  }
   const effectiveVisualStyle =
     rawBorder === "none" ? restVisualStyle : visuals.style;
 
@@ -772,9 +810,11 @@ export function readShapeSp(
     singleParagraph !== undefined
       ? (() => {
           const { list: _list, ...restPStyle } = singleParagraph.style;
+          const { baselineShift: _baselineShift, ...restRunStyle } =
+            singlePlainRun.style;
           return {
             ...restPStyle,
-            ...singlePlainRun.style,
+            ...restRunStyle,
           };
         })()
       : undefined;
@@ -843,6 +883,14 @@ export function readShapeSp(
               return createSlideNumberNode(
                 Object.keys(run.style).length === 0 ? {} : { style: run.style },
               );
+            }
+            const runProps =
+              Object.keys(run.style).length === 0 ? {} : { style: run.style };
+            if (run.kind === "sup") {
+              return createSupNode(runProps).content(run.text);
+            }
+            if (run.kind === "sub") {
+              return createSubNode(runProps).content(run.text);
             }
             return Object.keys(run.style).length === 0
               ? run.text

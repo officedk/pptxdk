@@ -20,6 +20,7 @@ import { xmlEscape } from "@pptxdk/emit";
 
 import {
   motionContainerAnnotations,
+  pickMotionProps,
   validateMotionFlag,
 } from "../motion/motion-api.ts";
 import {
@@ -116,14 +117,9 @@ export const boxCapability: ObjectCapabilityModule = {
 
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+    const motionProps: Readonly<Record<string, unknown>> = pickMotionProps(
+      input.props,
+    );
 
     const container: BoundContainerCollaboration = {
       children: input.children,

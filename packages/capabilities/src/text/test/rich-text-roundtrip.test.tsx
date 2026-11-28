@@ -294,7 +294,7 @@ describe("Rich text, font size units, and theme font roundtrip", () => {
     assert.match(slideXml, /typeface="\+mj-lt"/u);
   });
 
-  it("handles external <a:br/>, <a:lnSpc><a:spcPct/></a:lnSpc>, dirty/smtClean, omitted font slots, and unsupported baseline attribute", async () => {
+  it("imports external <a:br/>, proportional <a:spcPct/>, dirty/smtClean, omitted font slots, and baseline=30000 as Sup losslessly", async () => {
     const base = emit(
       resolveDocument(
         await expandDocument(
@@ -331,15 +331,7 @@ describe("Rich text, font size units, and theme font roundtrip", () => {
     );
 
     const imported = importDocument(zipSync(entries));
-    const baselineDiag = imported.report.diagnostics.find(
-      (d) =>
-        d.code === "unconsumed-xml" &&
-        d.kind === "attribute" &&
-        d.localName === "baseline",
-    );
-    assert.ok(baselineDiag !== undefined);
-    // Only @baseline should be unconsumed; spcPct, br, dirty, smtClean are cleanly handled.
-    assert.equal(imported.report.diagnostics.length, 1);
+    assert.deepEqual(imported.report.diagnostics, []);
 
     const textNode = imported.document.query
       .get("ext")
@@ -349,12 +341,19 @@ describe("Rich text, font size units, and theme font roundtrip", () => {
       );
     assert.ok(textNode !== undefined);
     const pNode = textNode.children[0] as ParagraphNode;
-    assert.equal(nodeStyle(pNode).lineHeight, "30pt");
+    assert.equal(nodeStyle(pNode).lineHeight, "150%");
     // Omitted <a:latin> on external runs remains omitted rather than forced.
     const firstSpan = pNode.children[0] as SpanNode;
     assert.equal(nodeStyle(firstSpan).fontFamily, undefined);
+    const supChild = pNode.children[2] as RichTextContainer;
+    assert.equal(supChild.type, "sup");
 
     const rebuilt = emit(resolveDocument(imported.document));
+    const rebuiltXml = strFromU8(
+      unzipSync(rebuilt.pptx)["ppt/slides/slide1.xml"]!,
+    );
+    assert.match(rebuiltXml, /<a:spcPct val="150000"\/>/u);
+    assert.match(rebuiltXml, /baseline="30000"/u);
     const validation = await validatePptx(rebuilt.pptx);
     assert.deepEqual(validation.errors, []);
     assert.equal(validation.slides[0]?.objects[0]?.text?.text, "Line A\nSup");

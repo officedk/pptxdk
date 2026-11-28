@@ -604,10 +604,10 @@ export const motionPositiveScenario: CapabilityScenario = {
           1,
           [
             ["hero-badge", "fade", 0, 240],
-            ["hero-badge", "breathe", 0, 1600],
-            ["hero-title", "fly", 1600, 1820],
-            ["follower-card", "wipe", 1900, 2100],
-            ["follower-card", "fillColor", 1900, 2200],
+            ["hero-badge", "breathe", 240, 1840],
+            ["hero-title", "fly", 1840, 2060],
+            ["follower-card", "wipe", 2140, 2340],
+            ["follower-card", "fillColor", 2340, 2640],
           ],
         ],
         [

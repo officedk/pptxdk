@@ -44,6 +44,7 @@
       "inputs": [
         "src/**",
         "test/**",
+        "scripts/**",
         "package.json",
         "vitest.config.ts",
         "tsconfig.node.json"
@@ -51,6 +52,18 @@
       "outputs": [],
       "cache": false,
       "tags": ["quality:heavy"]
+    },
+    "check:conditional": {
+      "dependsOn": ["build", "^build"],
+      "passThroughEnv": [
+        "PPTXDK_CONDITIONAL_INPUT",
+        "PPTXDK_CONDITIONAL_FONTS",
+        "PPTXDK_CONDITIONAL_REPORT",
+        "PPTXDK_CONDITIONAL_TIMEOUT_MS",
+        "PPTXDK_CONDITIONAL_CONCURRENCY"
+      ],
+      "cache": false,
+      "tags": ["quality:conditional"]
     }
   }
 }

@@ -21,8 +21,10 @@ import {
 import { Group } from "@pptxdk/capabilities/group-elements";
 import {
   after,
+  appear,
   breathe,
   fade,
+  fadeOut,
   fillColor,
   floatDown,
   floatUp,
@@ -349,6 +351,8 @@ export const motionRoundtripScenario: CapabilityScenario = {
           createElement(Shape, {
             id: "morph-card-1",
             morphKey: morphCardKey,
+            enter: appear(),
+            exit: fadeOut({ duration: 200 }),
             style: {
               position: "absolute",
               left: 530,
@@ -612,6 +616,8 @@ export const motionRoundtripScenario: CapabilityScenario = {
           shape({
             id: "morph-card-1",
             morphKey: morphCardKey,
+            enter: appear(),
+            exit: fadeOut({ duration: 200 }),
             style: {
               position: "absolute",
               left: 530,
@@ -654,6 +660,7 @@ export const motionRoundtripScenario: CapabilityScenario = {
 };
 
 type MotionMechanismKey =
+  | "motion-appear"
   | "motion-fade"
   | "motion-wipe"
   | "motion-zoom"
@@ -664,6 +671,7 @@ type MotionMechanismKey =
   | "motion-spin"
   | "motion-breathe"
   | "motion-fill-color"
+  | "motion-exit"
   | "motion-choreography";
 
 function allEffectsOfSlide(
@@ -676,6 +684,16 @@ export const motionMechanismVerifications: Pick<
   ExhaustiveMechanismVerificationMap,
   MotionMechanismKey
 > = {
+  "motion-appear": {
+    scenario: motionRoundtripScenario,
+    assertNative({ stage, validation }) {
+      assert.equal(validation.errors.length, 0, `${stage} errors`);
+      assert.ok(
+        allEffectsOfSlide(validation).some((e) => e.preset === "appear"),
+        `${stage} missing appear`,
+      );
+    },
+  },
   "motion-fade": {
     scenario: motionRoundtripScenario,
     assertNative({ stage, validation }) {
@@ -777,6 +795,18 @@ export const motionMechanismVerifications: Pick<
         allEffectsOfSlide(validation).some(
           (e) => e.preset === "fillColor" && e.toColor === "#10B981",
         ),
+      );
+    },
+  },
+  "motion-exit": {
+    scenario: motionRoundtripScenario,
+    assertNative({ stage, validation }) {
+      assert.equal(validation.errors.length, 0, `${stage} errors`);
+      assert.ok(
+        allEffectsOfSlide(validation).some(
+          (e) => e.kind === "exit" && e.preset === "fadeOut",
+        ),
+        `${stage} missing exit effect`,
       );
     },
   },

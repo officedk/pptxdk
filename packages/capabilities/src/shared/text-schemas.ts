@@ -42,9 +42,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const baselineShiftPattern = /^(-?\d+(?:\.\d+)?)%$/u;
+
+/** Parses a DrawingML ST_Percentage baseline shift string into non-zero integer thousandths of a percent. */
+export function parseBaselineShiftThousandths(
+  value: string,
+): number | undefined {
+  const match = baselineShiftPattern.exec(value);
+  if (match === null) return undefined;
+  const pct = Number(match[1]);
+  if (!Number.isFinite(pct)) return undefined;
+  const thousandths = Math.round(pct * 1000);
+  if (
+    thousandths === 0 ||
+    thousandths < -2_147_483_648 ||
+    thousandths > 2_147_483_647
+  ) {
+    return undefined;
+  }
+  return thousandths;
+}
+
+const baselineShiftStringSchema = z
+  .string()
+  .regex(baselineShiftPattern) as unknown as z.ZodType<`${number}%`>;
+
+export const baselineShiftSchema: z.ZodType<`${number}%`> =
+  baselineShiftStringSchema.refine(
+    (value) => parseBaselineShiftThousandths(value) !== undefined,
+    "baselineShift must be a non-zero finite percentage within DrawingML ST_Percentage range",
+  );
+
 export type RunTextStyle = Pick<
   TextStyle,
   | "fontFamily"
+  | "eastAsianFontFamily"
   | "fontSize"
   | "fontWeight"
   | "fontStyle"
@@ -54,10 +86,14 @@ export type RunTextStyle = Pick<
   | "textDecoration"
   | "textShadow"
   | "lang"
->;
+> & {
+  /** Non-zero baseline offset percentage (e.g. `"30%"` for superscript, `"-25%"` for subscript). */
+  readonly baselineShift?: `${number}%` | undefined;
+};
 
 const runStyleObjectSchema = z.strictObject({
   fontFamily: textStyleShape.fontFamily,
+  eastAsianFontFamily: textStyleShape.eastAsianFontFamily,
   fontSize: textStyleShape.fontSize,
   fontWeight: textStyleShape.fontWeight,
   fontStyle: textStyleShape.fontStyle,
@@ -67,10 +103,11 @@ const runStyleObjectSchema = z.strictObject({
   textDecoration: textStyleShape.textDecoration,
   textShadow: textStyleShape.textShadow,
   lang: textStyleShape.lang,
+  baselineShift: baselineShiftSchema.optional(),
 });
 
 const rawRunStyleSchema = runStyleObjectSchema.readonly();
-/** Run-level style schema shared by `Span` and `SlideNumber`. */
+/** Run-level style schema shared by `Span`, `Sup`, `Sub`, and `SlideNumber`. */
 export const runStyleSchema: z.ZodType<RunTextStyle> =
   rawRunStyleSchema satisfies z.ZodType<
     AssertExact<RunTextStyle, z.infer<typeof rawRunStyleSchema>> extends true
@@ -78,17 +115,19 @@ export const runStyleSchema: z.ZodType<RunTextStyle> =
       : never
   >;
 
-export type ParagraphStyle = RunTextStyle &
+export type ParagraphStyle = Omit<RunTextStyle, "baselineShift"> &
   Pick<TextStyle, "lineHeight" | "align" | "spacingAfter"> & {
     readonly list?: TextList | undefined;
   };
 
-const paragraphStyleObjectSchema = runStyleObjectSchema.extend({
-  lineHeight: textStyleShape.lineHeight,
-  align: textStyleShape.align,
-  spacingAfter: textStyleShape.spacingAfter,
-  list: textListSchema.optional(),
-});
+const paragraphStyleObjectSchema = runStyleObjectSchema
+  .omit({ baselineShift: true })
+  .extend({
+    lineHeight: textStyleShape.lineHeight,
+    align: textStyleShape.align,
+    spacingAfter: textStyleShape.spacingAfter,
+    list: textListSchema.optional(),
+  });
 
 const rawParagraphStyleSchema = paragraphStyleObjectSchema.readonly();
 /** Paragraph-level style schema shared by `P` across Text, Shape, Table Cell, and Notes. */
@@ -124,21 +163,29 @@ export const textPositiveSizeSchema = z
     return extent >= 1 && extent <= 2_147_483_647;
   }, "Converted value exceeds shape dimension range");
 
+const maximumWritableInsetEmu = 2_147_483_647;
+
+const isWritableInsetPx = (value: number): boolean => {
+  const converted = pxToEmu(value);
+  return (
+    Number.isSafeInteger(converted) &&
+    converted >= 0 &&
+    converted <= maximumWritableInsetEmu
+  );
+};
+
 const nonNegativeInsetSchema = z
   .number()
   .finite()
   .nonnegative()
-  .refine((value) => {
-    const converted = pxToEmu(value);
-    return Number.isSafeInteger(converted);
-  }, "Inset must be within DrawingML EMU range");
+  .refine(isWritableInsetPx, "Inset must be within DrawingML EMU range");
 
 const spacingValuesWithinEmuRange = (
   spacing: NonNegativeLayoutSpacing,
 ): boolean =>
   typeof spacing === "number"
-    ? Number.isSafeInteger(pxToEmu(spacing))
-    : spacing.every((entry) => Number.isSafeInteger(pxToEmu(entry)));
+    ? isWritableInsetPx(spacing)
+    : spacing.every(isWritableInsetPx);
 
 export const textPaddingValueSchema = nonNegativeLayoutSpacingSchema.refine(
   spacingValuesWithinEmuRange,
@@ -194,9 +241,7 @@ const textAuthorPropsObjectSchema = z.strictObject({
   morphKey: morphKeySchema.optional(),
   link: linkTargetSchema.optional(),
   style: rawTextBoxStyleSchema.optional(),
-  enter: motionPropsShape.enter,
-  emphasis: motionPropsShape.emphasis,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 export const textAuthorPropsKeys: readonly string[] = Object.keys(
@@ -218,7 +263,7 @@ export const textBoxAllowedParamKeys = new Set([
   "children",
 ]);
 
-export type ParagraphDeclarationProps = {
+export type ParagraphDeclarationProps = MotionProps & {
   readonly id?: AuthorId | undefined;
   readonly style?: ParagraphStyle | undefined;
 };
@@ -226,6 +271,7 @@ export type ParagraphDeclarationProps = {
 const paragraphAuthorPropsObjectSchema = z.strictObject({
   id: authorIdSchema.optional(),
   style: rawParagraphStyleSchema.optional(),
+  ...motionPropsShape,
 });
 export const paragraphAuthorPropsKeys: readonly string[] = Object.keys(
   paragraphAuthorPropsObjectSchema.shape,
@@ -268,6 +314,16 @@ export const spanAuthorPropsSchema: z.ZodType<SpanDeclarationProps> =
 export type SlideNumberDeclarationProps = SpanDeclarationProps;
 export const slideNumberAuthorPropsKeys = spanAuthorPropsKeys;
 export const slideNumberAuthorPropsSchema: z.ZodType<SlideNumberDeclarationProps> =
+  spanAuthorPropsSchema;
+
+export type SupDeclarationProps = SpanDeclarationProps;
+export const supAuthorPropsKeys = spanAuthorPropsKeys;
+export const supAuthorPropsSchema: z.ZodType<SupDeclarationProps> =
+  spanAuthorPropsSchema;
+
+export type SubDeclarationProps = SpanDeclarationProps;
+export const subAuthorPropsKeys = spanAuthorPropsKeys;
+export const subAuthorPropsSchema: z.ZodType<SubDeclarationProps> =
   spanAuthorPropsSchema;
 
 /** Parses and validates a paragraph list declaration, preserving DrawingML error codes. */
@@ -356,7 +412,24 @@ export function parseRunStyle(
   label = "Span.style",
 ): RunTextStyle {
   const props = checkedStyleObject(value, runStyleKeys, label);
-  return validateTextStyle(props);
+  const { baselineShift, ...textProps } = props;
+  validateTextStyle(textProps);
+  if (baselineShift !== undefined) {
+    const parsedShift = baselineShiftSchema.safeParse(baselineShift);
+    if (!parsedShift.success) {
+      throw new CapabilityError(
+        "invalid-baseline-shift",
+        "baselineShift must be a non-zero finite percentage string within DrawingML ST_Percentage range",
+        undefined,
+        { field: "style.baselineShift" },
+      );
+    }
+    return {
+      ...(textProps as Omit<RunTextStyle, "baselineShift">),
+      baselineShift: parsedShift.data,
+    };
+  }
+  return textProps as RunTextStyle;
 }
 
 /** Validates paragraph-level style declarations including `list`. */

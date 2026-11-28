@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CapabilityError } from "#/diagnostics.ts";
+import { isSealedFont } from "#/font-seal.ts";
 import { snapshotValue } from "#/input-values.ts";
 
 type AssertExact<A, B> =
@@ -87,7 +88,7 @@ export type Font = {
   readonly embeddable?: boolean | undefined;
 };
 
-const rawFontSchema = z
+const unsealedFontObjectSchema = z
   .strictObject({
     family: nonEmptyTrimmedStringSchema,
     faces: z.array(rawFontFaceSchema).readonly().optional(),
@@ -95,6 +96,15 @@ const rawFontSchema = z
     embeddable: z.boolean().optional(),
   })
   .readonly();
+const sealedFontSchema = z.custom<Font>(isSealedFont);
+const rawFontSchema = z.union([sealedFontSchema, unsealedFontObjectSchema]);
+/** Internal schema used by `font()` constructor to report exact per-field validation issues. */
+export const unsealedFontSchema: z.ZodType<Font> =
+  unsealedFontObjectSchema satisfies z.ZodType<
+    AssertExact<Font, z.infer<typeof unsealedFontObjectSchema>> extends true
+      ? Font
+      : never
+  >;
 /** Font family and explicit measurement resources referenceable across deck themes and components. */
 export const fontSchema: z.ZodType<Font> = rawFontSchema satisfies z.ZodType<
   AssertExact<Font, z.infer<typeof rawFontSchema>> extends true ? Font : never
@@ -137,9 +147,11 @@ export function isThemeFontSlot(value: unknown): value is ThemeFontSlot {
 
 export type FontReference = ThemeFontSlot | (string & {}) | Font;
 
+// Keep a flat 3-branch union so invalid unsealed faces preserve `path[0] === "faces"` in textStyleErrorForIssue.
 const rawFontReferenceSchema = z.union([
   nonEmptyTrimmedStringSchema,
-  rawFontSchema,
+  sealedFontSchema,
+  unsealedFontObjectSchema,
 ]) as unknown as z.ZodType<FontReference>;
 export const fontReferenceSchema: z.ZodType<FontReference> =
   rawFontReferenceSchema satisfies z.ZodType<
@@ -152,20 +164,29 @@ export const fontReferenceSchema: z.ZodType<FontReference> =
   >;
 
 const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
+const themeFontReservedSlotMessage =
+  "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'";
 
 function isAllowedThemeFontFamily(family: string): boolean {
   const trimmed = family.trim();
   return trimmed !== "" && !reservedThemeFontPattern.test(trimmed);
 }
 
+const allowedThemeSealedFontSchema = z.custom<Font>(
+  (value): value is Font =>
+    isSealedFont(value) && isAllowedThemeFontFamily(value.family),
+  { message: themeFontReservedSlotMessage },
+);
+
 const rawThemeFontValueSchema = z.union([
   nonEmptyTrimmedStringSchema.refine(
     isAllowedThemeFontFamily,
-    "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'",
+    themeFontReservedSlotMessage,
   ),
-  rawFontSchema.refine(
+  allowedThemeSealedFontSchema,
+  unsealedFontObjectSchema.refine(
     (fontValue) => isAllowedThemeFontFamily(fontValue.family),
-    "Theme font slot cannot use reserved placeholders 'major', 'minor', '+mj-*', or '+mn-*'",
+    themeFontReservedSlotMessage,
   ),
 ]);
 
@@ -219,10 +240,52 @@ const validatedFontSizeSchema = rawFontSizeSchema.refine((value) => {
   return serialized >= 100 && serialized <= 400_000;
 }, "fontSize converted value must be within DrawingML range of 1 to 4000pt");
 
-const validatedLineHeightSchema = rawFontSizeSchema.refine((value) => {
+const lineHeightPercentPattern = /^(\d+(?:\.\d+)?)%$/u;
+const lineHeightPercentStringSchema = z
+  .string()
+  .regex(lineHeightPercentPattern) as unknown as z.ZodType<`${number}%`>;
+
+function parseLineHeightPercentThousandths(value: string): number | undefined {
+  const match = lineHeightPercentPattern.exec(value);
+  if (match === null) return undefined;
+  const pct = Number(match[1]);
+  if (!Number.isFinite(pct)) return undefined;
+  const thousandths = Math.round(pct * 1000);
+  // DrawingML ST_TextSpacingPercent spans 0..13200000 (0%..13200%); proportional lineHeight requires a positive value.
+  if (thousandths < 1 || thousandths > 13_200_000) return undefined;
+  return thousandths;
+}
+
+/**
+ * Paragraph line height.
+ *
+ * Numeric values and `"px"` / `"pt"` strings emit fixed line spacing (`<a:spcPts>`), while positive
+ * `"${number}%"` percentage strings emit proportional line spacing (`<a:spcPct>`) scaled by the
+ * paragraph's native font single-line height (`0% < pct <= 13200%`).
+ */
+export type LineHeight = FontSize | `${number}%`;
+
+const rawLineHeightSchema = z.union([
+  rawFontSizeSchema,
+  lineHeightPercentStringSchema.refine(
+    (value) => parseLineHeightPercentThousandths(value) !== undefined,
+    "lineHeight percentage must be greater than 0% and within DrawingML ST_TextSpacingPercent range (up to 13200%)",
+  ),
+]);
+export const lineHeightSchema: z.ZodType<LineHeight> =
+  rawLineHeightSchema satisfies z.ZodType<
+    AssertExact<LineHeight, z.infer<typeof rawLineHeightSchema>> extends true
+      ? LineHeight
+      : never
+  >;
+
+const validatedLineHeightSchema = rawLineHeightSchema.refine((value) => {
+  if (typeof value === "string" && value.endsWith("%")) {
+    return parseLineHeightPercentThousandths(value) !== undefined;
+  }
   const centipoints = Math.round(textLengthToPixels(value) * 75);
   return centipoints >= 0 && centipoints <= 158_400;
-}, "lineHeight converted value must be within DrawingML range of 0 to 1584pt");
+}, "lineHeight must be a positive pixel value, px/pt length within 0 to 1584pt, or percentage within 0% to 13200%");
 
 export type TextAlignment = "left" | "center" | "right" | "justify";
 const rawTextAlignmentSchema = z.enum(["left", "center", "right", "justify"]);
@@ -885,11 +948,12 @@ export const bcp47LangSchema = z
 /** Inheritable text style fields shared across text objects and containers. */
 export type TextStyle = {
   readonly fontFamily?: FontReference | undefined;
+  readonly eastAsianFontFamily?: FontReference | undefined;
   readonly fontSize?: FontSize | undefined;
   readonly fontWeight?: "normal" | "bold" | number | undefined;
   readonly fontStyle?: FontFaceStyle | undefined;
   readonly color?: ColorValue | undefined;
-  readonly lineHeight?: FontSize | undefined;
+  readonly lineHeight?: LineHeight | undefined;
   readonly verticalAlign?: "top" | "middle" | "bottom" | undefined;
   /** Paragraph alignment when not explicitly overridden. */
   readonly align?: TextAlignment | undefined;
@@ -908,6 +972,7 @@ export type TextStyle = {
 
 const textStyleObjectSchema = z.strictObject({
   fontFamily: rawFontReferenceSchema.optional(),
+  eastAsianFontFamily: rawFontReferenceSchema.optional(),
   fontSize: validatedFontSizeSchema.optional(),
   fontWeight: fontWeightSchema.optional(),
   fontStyle: rawFontFaceStyleSchema.optional(),
@@ -1195,6 +1260,8 @@ export type ThemeInput = {
     | {
         readonly major?: Font | string | undefined;
         readonly minor?: Font | string | undefined;
+        readonly majorEastAsian?: Font | string | undefined;
+        readonly minorEastAsian?: Font | string | undefined;
       }
     | undefined;
   readonly formatScheme?: FormatScheme | undefined;
@@ -1224,6 +1291,8 @@ const rawThemeInputSchema = z
       .strictObject({
         major: rawThemeFontValueSchema.optional(),
         minor: rawThemeFontValueSchema.optional(),
+        majorEastAsian: rawThemeFontValueSchema.optional(),
+        minorEastAsian: rawThemeFontValueSchema.optional(),
       })
       .readonly()
       .optional(),
@@ -1260,6 +1329,8 @@ export type ThemeOverride = {
     | {
         readonly major?: Font | string | undefined;
         readonly minor?: Font | string | undefined;
+        readonly majorEastAsian?: Font | string | undefined;
+        readonly minorEastAsian?: Font | string | undefined;
       }
     | undefined;
   readonly formatScheme?: FormatScheme | undefined;
@@ -1288,6 +1359,8 @@ const rawThemeOverrideSchema = z
       .strictObject({
         major: rawThemeFontValueSchema.optional(),
         minor: rawThemeFontValueSchema.optional(),
+        majorEastAsian: rawThemeFontValueSchema.optional(),
+        minorEastAsian: rawThemeFontValueSchema.optional(),
       })
       .readonly()
       .optional(),
@@ -1324,6 +1397,8 @@ export type ThemeData = {
   readonly fonts: {
     readonly major: Font | string;
     readonly minor: Font | string;
+    readonly majorEastAsian?: Font | string | undefined;
+    readonly minorEastAsian?: Font | string | undefined;
   };
   readonly formatScheme?: FormatScheme | undefined;
 };
@@ -1351,6 +1426,8 @@ const rawThemeDataSchema = z
       .strictObject({
         major: rawThemeFontValueSchema,
         minor: rawThemeFontValueSchema,
+        majorEastAsian: rawThemeFontValueSchema.optional(),
+        minorEastAsian: rawThemeFontValueSchema.optional(),
       })
       .readonly(),
     formatScheme: rawFormatSchemeSchema.optional(),
@@ -1411,6 +1488,7 @@ export type ThemeContext = {
   ): ThemeContext;
   resolveColor(value: ColorValue): ResolvedColor;
   resolveFont(value: FontReference): ResolvedThemeFont;
+  resolveEastAsianFont(value: FontReference): ResolvedThemeFont;
 };
 
 const officeColors: Record<NativeColorSlot, HexColor> = {
@@ -1437,7 +1515,7 @@ function textStyleErrorForIssue(
   rawStyle: Readonly<Record<string, unknown>>,
 ): CapabilityError {
   const field = issue?.path[0];
-  if (field === "fontFamily") {
+  if (field === "fontFamily" || field === "eastAsianFontFamily") {
     const hasFacesIssue =
       issue?.path[1] === "faces" ||
       (issue?.code === "invalid_union" &&
@@ -1453,7 +1531,7 @@ function textStyleErrorForIssue(
     return new CapabilityError(
       "invalid-font-family",
       issue?.message ??
-        "fontFamily must be a font value or non-empty family string",
+        `${field} must be a font value or non-empty family string`,
     );
   }
   if (field === "fontSize") {
@@ -1493,7 +1571,7 @@ function textStyleErrorForIssue(
   if (field === "lineHeight") {
     return new CapabilityError(
       "invalid-text-length",
-      "lineHeight must be a positive pixel value or px/pt length within 0 to 1584pt",
+      "lineHeight must be a positive pixel value, px/pt length within 0 to 1584pt, or percentage within 0% to 13200%",
     );
   }
   if (field === "verticalAlign") {
@@ -1585,6 +1663,9 @@ export function validateTextStyle(
   if (theme !== undefined) {
     if (typeof validated.fontFamily === "string") {
       theme.resolveFont(validated.fontFamily);
+    }
+    if (typeof validated.eastAsianFontFamily === "string") {
+      theme.resolveEastAsianFont(validated.eastAsianFontFamily);
     }
     if (validated.color !== undefined) {
       theme.resolveColor(validated.color);
@@ -1754,10 +1835,13 @@ class NativeThemeRecord implements Theme {
       }) as ThemeData["colors"];
     }
     if (validPatch.fonts !== undefined) {
-      this.#fonts = snapshotValue({
-        ...this.#fonts,
-        ...validPatch.fonts,
-      }) as ThemeData["fonts"];
+      const mergedFonts: Record<string, unknown> = { ...this.#fonts };
+      for (const [key, value] of Object.entries(validPatch.fonts)) {
+        if (value !== undefined) {
+          mergedFonts[key] = value;
+        }
+      }
+      this.#fonts = snapshotValue(mergedFonts) as ThemeData["fonts"];
     }
     if (validPatch.formatScheme !== undefined) {
       const hadFormatScheme = Object.hasOwn(this, "formatScheme");
@@ -1797,9 +1881,14 @@ function parseThemeInputData(input: ThemeInput = {}): ThemeData {
     ...validInput.colors,
   }) as ThemeData["colors"];
   const fonts = snapshotValue({
-    ...validInput.fonts,
     major: validInput.fonts?.major ?? "Aptos Display",
     minor: validInput.fonts?.minor ?? "Aptos",
+    ...(validInput.fonts?.majorEastAsian === undefined
+      ? {}
+      : { majorEastAsian: validInput.fonts.majorEastAsian }),
+    ...(validInput.fonts?.minorEastAsian === undefined
+      ? {}
+      : { minorEastAsian: validInput.fonts.minorEastAsian }),
   }) as ThemeData["fonts"];
   const formatScheme =
     validInput.formatScheme === undefined
@@ -2165,6 +2254,37 @@ function createContext(
       }
       if (isThemeFontSlot(value)) {
         const slotFont = themeOverride?.fonts?.[value] ?? theme.fonts[value];
+        if (isFont(slotFont)) {
+          return {
+            family: slotFont.family,
+            font: slotFont,
+            themeFont: value,
+          };
+        }
+        return {
+          family: slotFont,
+          themeFont: value,
+        };
+      }
+      return {
+        family: value.trim(),
+      };
+    },
+    resolveEastAsianFont(value: FontReference) {
+      if (isFont(value)) return { family: value.family, font: value };
+      if (typeof value !== "string" || value.trim() === "") {
+        throw new CapabilityError(
+          "invalid-font-family",
+          "eastAsianFontFamily cannot be empty",
+        );
+      }
+      if (isThemeFontSlot(value)) {
+        const eaKey = value === "major" ? "majorEastAsian" : "minorEastAsian";
+        const slotFont =
+          themeOverride?.fonts?.[eaKey] ??
+          theme.fonts[eaKey] ??
+          themeOverride?.fonts?.[value] ??
+          theme.fonts[value];
         if (isFont(slotFont)) {
           return {
             family: slotFont.family,

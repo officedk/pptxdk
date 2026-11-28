@@ -238,6 +238,9 @@ export type CustomGeometry = {
   readonly width: number;
   readonly height: number;
   readonly paths: readonly GeometryPath[];
+  readonly connectionSites?:
+    | readonly { readonly x: number; readonly y: number }[]
+    | undefined;
 };
 
 export type Geometry = PresetGeometryName | PresetGeometry | CustomGeometry;
@@ -345,12 +348,23 @@ export const geometryPathSchema: z.ZodType<GeometryPath> =
       : never
   >;
 
+const rawCustomConnectionSiteSchema = z
+  .strictObject({
+    x: finiteCoordSchema,
+    y: finiteCoordSchema,
+  })
+  .readonly();
+
 const rawCustomGeometrySchema = z
   .strictObject({
     type: z.literal("custom"),
     width: z.number().finite().positive(),
     height: z.number().finite().positive(),
     paths: z.array(rawGeometryPathSchema).min(1).readonly(),
+    connectionSites: z
+      .array(rawCustomConnectionSiteSchema)
+      .readonly()
+      .optional(),
   })
   .readonly();
 export const customGeometrySchema: z.ZodType<CustomGeometry> =

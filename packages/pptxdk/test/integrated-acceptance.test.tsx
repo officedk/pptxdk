@@ -15,7 +15,6 @@ import {
   font,
   linearGradient,
   motionSchedule,
-  path,
   preset,
   radialGradient,
   resolve,
@@ -35,6 +34,7 @@ import {
   expandDocument,
   Group,
   Image,
+  Line,
   MotionScope,
   Notes,
   P,
@@ -1741,10 +1741,6 @@ describe("integrated acceptance", () => {
     });
     const morphScope = createMorphScope();
     const heroMorph = morphScope.handle("parity-hero");
-    const openBezierArrow = path(
-      "M 10 70 C 35 10 65 10 90 45 S 135 80 150 25",
-      { viewBox: [160, 90] },
-    );
 
     const expanded = await expandDocument(
       createElement(
@@ -1863,21 +1859,21 @@ describe("integrated acceptance", () => {
                   },
                   "Nested Rich Arrow",
                 ),
-                createElement(Shape, {
+                createElement(Line, {
                   id: "grouped-open-bezier",
-                  geometry: openBezierArrow,
+                  routing: "curved",
+                  stroke: {
+                    color: "#0F172A",
+                    width: 2,
+                    startArrow: "oval",
+                    endArrow: "stealth",
+                  },
                   style: {
                     position: "absolute",
                     left: 300,
                     top: 110,
                     width: 190,
                     height: 68,
-                    border: {
-                      color: "#0F172A",
-                      width: 2,
-                      startArrow: "oval",
-                      endArrow: "stealth",
-                    },
                   },
                 }),
               ),

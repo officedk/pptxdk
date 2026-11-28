@@ -23,7 +23,11 @@ import {
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
 
-import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
+import {
+  applyTransformToPoints,
+  evaluateGeometry,
+  type Geometry,
+} from "../shared/geometry.ts";
 export {
   blockArc,
   path,
@@ -52,13 +56,12 @@ import {
 } from "./shape-import.ts";
 import { shapeXml } from "./shape-xml.ts";
 export { linearGradient, radialGradient } from "../shared/visual.ts";
-export type {
-  ArrowType,
-  LineEndStyle,
-  ShapeVisualStyle,
-} from "../shared/visual.ts";
 export type { PaddingStyle, VisualStyle } from "@pptxdk/core/capability";
-import { motionAnnotations } from "../motion/motion-api.ts";
+import {
+  motionAnnotations,
+  motionParagraphAnnotations,
+  pickMotionProps,
+} from "../motion/motion-api.ts";
 import {
   computeTextMetrics,
   emitTextBody,
@@ -68,6 +71,7 @@ import {
   resolveTextBody,
   textInsets,
   type Paragraph,
+  type ParsedParagraphMotion,
   type ResolvedTextBody,
   type TextStyle,
 } from "../shared/text-service.ts";
@@ -390,16 +394,24 @@ export const shapeCapability: ObjectCapabilityModule<
       ...rawTextStyle,
       verticalAlign: rawTextStyle["verticalAlign"] ?? "middle",
     };
-    const { paragraphs, style: parsedTextStyle } = hasTextBody
+    const {
+      paragraphs,
+      paragraphMotions,
+      style: parsedTextStyle,
+    } = hasTextBody
       ? parseTextContent(
           input.children,
           effectiveTextStyle,
           context.theme,
           { slideNumber: context.slideNumber },
           "Shape.style",
+          undefined,
+          undefined,
+          { allowParagraphMotion: true },
         )
       : {
           paragraphs: [] as readonly Paragraph[],
+          paragraphMotions: [] as readonly ParsedParagraphMotion[],
           style: parseTextContent(
             [],
             {},
@@ -413,24 +425,15 @@ export const shapeCapability: ObjectCapabilityModule<
     const geometry = input.props["geometry"] as Geometry | undefined;
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+    const motionProps: Readonly<Record<string, unknown>> = pickMotionProps(
+      input.props,
+    );
 
     // Validate geometry and visual properties during bind before layout runs.
     resolveVisualModel({
       theme: context.theme,
       style: visualStyle,
       box: { x: 0, y: 0, width: 100, height: 100 },
-      allowBorderArrows: true,
       ...(geometry !== undefined ? { geometry } : {}),
     });
 
@@ -515,15 +518,25 @@ export const shapeCapability: ObjectCapabilityModule<
           theme: resolveContext.theme,
           style: visualStyle,
           box,
-          allowBorderArrows: true,
           ...(geometry === undefined ? {} : { geometry }),
         });
         const geometryName =
           visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
 
+        const evaluated = evaluateGeometry(visual.geometry, box);
+        const connectionSites = applyTransformToPoints(
+          evaluated.connectionSites,
+          box,
+          {
+            flipH: visual.flipH,
+            flipV: visual.flipV,
+            rotate: visual.rotate,
+          },
+        );
+
         let resolvedText: ResolvedTextBody | undefined;
         if (hasTextBody && paragraphs.length > 0) {
-          const { textRect } = evaluateGeometry(visual.geometry, box);
+          const { textRect } = evaluated;
           resolvedText = resolveTextBody(
             paragraphs,
             parsedTextStyle,
@@ -542,7 +555,7 @@ export const shapeCapability: ObjectCapabilityModule<
           resolveContext.morphName ??
           requestedName ??
           `Shape ${resolveContext.id - 1}`;
-        const annotations = motionAnnotations(motionProps, {
+        const target = {
           kind: "shape",
           name,
           ...(authorId === undefined ? {} : { authorId }),
@@ -556,7 +569,11 @@ export const shapeCapability: ObjectCapabilityModule<
           ...(resolvedText === undefined
             ? {}
             : { paragraphCount: resolvedText.paragraphCount }),
-        });
+        } as const;
+        const annotations = [
+          ...motionAnnotations(motionProps, target),
+          ...motionParagraphAnnotations(paragraphMotions, target, motionProps),
+        ];
         let escapedName: string;
         try {
           escapedName = xmlEscape(name);
@@ -604,6 +621,7 @@ export const shapeCapability: ObjectCapabilityModule<
                 }),
           },
           transform,
+          connectionSites,
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
           ...(resolvedText === undefined

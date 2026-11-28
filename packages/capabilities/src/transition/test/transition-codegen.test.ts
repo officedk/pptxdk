@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   deck,
   defineSlideLayout,
@@ -12,9 +9,11 @@ import {
   slide,
   slideLayout,
   slideMaster,
-} from "../../document.ts";
-import { shapeCapability } from "../../shape/shape.ts";
-import { transitions } from "../transition-api.ts";
+} from "@pptxdk/capabilities/document";
+import { shapeCapability } from "@pptxdk/capabilities/shape";
+import { transitions } from "@pptxdk/capabilities/transition";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { describe, it } from "vitest";
 
 describe("transition capability codegen", () => {
   it("emits transitions.<kind>(...) and advanceAfter across SlideMaster, SlideLayout, and Slide for vanilla and react while keeping inherited slides clean", () => {

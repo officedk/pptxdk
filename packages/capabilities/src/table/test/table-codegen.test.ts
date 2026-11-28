@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { CommonNode } from "@pptxdk/core/document";
-import { createImporter } from "@pptxdk/import";
-import { Deck, Slide, expandDocument } from "@pptxdk/react";
-import { createElement } from "react";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   cell,
   deck,
@@ -23,8 +16,14 @@ import {
   span,
   table,
   text,
-} from "../../document.ts";
-import { Row, Table } from "../table-elements.ts";
+} from "@pptxdk/capabilities/document";
+import { Row, Table } from "@pptxdk/capabilities/table-elements";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { CommonNode } from "@pptxdk/core/document";
+import { createImporter } from "@pptxdk/import";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { createElement } from "react";
+import { describe, it } from "vitest";
 
 describe("table capability codegen", () => {
   it("generates vanilla and react source for table, row, cell, track modes, merges, borders, rich text, slide numbers, and placeholder bindings", () => {
@@ -73,6 +72,10 @@ describe("table capability codegen", () => {
             fontFamily: "Aptos",
             fontSize: 14,
             color: "#0F172A",
+            align: "left",
+            border: "none",
+            borderTop: { color: "#0F172A", width: 2 },
+            borderBottom: { color: "#0F172A", width: 2 },
           },
         }).append(
           row({
@@ -81,6 +84,8 @@ describe("table capability codegen", () => {
               height: 44,
               background: "#1E293B",
               color: "#FFFFFF",
+              align: "center",
+              borderBottom: { color: "#64748B", width: 1 },
             },
           }).append(
             cell(paragraph("Overview", { style: { align: "center" } }), {
@@ -163,6 +168,9 @@ describe("table capability codegen", () => {
     assert.match(vanillaSource, /rowSpan: 2/u);
     assert.match(vanillaSource, /border:\s*\{[\s\S]*?style:\s*"dashed"/u);
     assert.match(vanillaSource, /border:\s*\{[\s\S]*?style:\s*"dotted"/u);
+    assert.match(vanillaSource, /align:\s*"left"/u);
+    assert.match(vanillaSource, /borderTop:\s*\{/u);
+    assert.match(vanillaSource, /borderBottom:\s*\{/u);
     assert.match(vanillaSource, /cell\(\s*"Tier\\nA",\s*\{/u);
     assert.match(vanillaSource, /cell\(\[\], \{/u);
     assert.match(vanillaSource, /slideNumber\(\)/u);
@@ -178,7 +186,13 @@ describe("table capability codegen", () => {
       /<Table[\s\S]*?columns=\{\[130, "auto", "1fr"\]\}/u,
     );
     assert.match(reactSource, /<Table[\s\S]*?placeholder="data"/u);
+    assert.match(reactSource, /<Table[\s\S]*?align:\s*"left"/u);
+    assert.match(reactSource, /<Table[\s\S]*?borderTop:\s*\{/u);
     assert.match(reactSource, /<Row[\s\S]*?id="hdr"/u);
+    assert.match(
+      reactSource,
+      /<Row[\s\S]*?align:\s*"center"[\s\S]*?borderBottom:\s*\{/u,
+    );
     assert.match(reactSource, /<Cell[\s\S]*?colSpan=\{2\}/u);
     assert.match(
       reactSource,

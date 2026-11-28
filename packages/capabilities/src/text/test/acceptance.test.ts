@@ -19,7 +19,9 @@ import { describe, expect, it } from "vitest";
 
 import { runCapabilityScenario } from "../../../test/acceptance-runner.ts";
 import {
+  textDualScriptScenario,
   textPositiveScenario,
+  textProportionalLineHeightAndSupSubScenario,
   textRejectionScenario,
   textRtlListsAndFillsScenario,
 } from "./scenarios.ts";
@@ -43,6 +45,8 @@ describe("Text capability acceptance", () => {
       for (const scenario of [
         textPositiveScenario,
         textRtlListsAndFillsScenario,
+        textDualScriptScenario,
+        textProportionalLineHeightAndSupSubScenario,
         textRejectionScenario,
       ]) {
         const { runs } = await runCapabilityScenario(scenario, {

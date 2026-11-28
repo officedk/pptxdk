@@ -76,6 +76,7 @@ export type {
   ImageBackgroundFit,
   ImageBackgroundPosition,
   ImageFillSource,
+  LineHeight,
   LinearGradient,
   NativeColorSlot,
   ResolvedColor,
@@ -656,6 +657,8 @@ export type CapabilityLayoutContract = {
   readonly preservesIntrinsicSize?: boolean;
   /** Enforces measured content/track dimensions as lower bounds and preserves explicit row sums over target dimensions (CSS table sizing). */
   readonly contentMinimumsEnforced?: boolean;
+  /** Excludes off-flow objects (such as endpoint-anchored connectors) from layout solver participation and defers resolve() until scope sibling targets exist. */
+  readonly excludedFromLayout?: boolean;
 };
 
 export type CapabilityParseContext = {
@@ -769,6 +772,14 @@ export type ResolvedObjectChildren = {
   readonly objects: readonly ResolvedObject[];
 };
 
+export type ScopeTargetObject = {
+  readonly spid: number;
+  readonly kind: string;
+  readonly box: Rect;
+  readonly transform?: PreviewTransform;
+  readonly connectionSites?: readonly ScreenPoint[];
+};
+
 export type ObjectResolveContext = {
   readonly id: number;
   readonly path: string;
@@ -784,6 +795,8 @@ export type ObjectResolveContext = {
   readonly morphName?: string;
   /** Link target already validated during resolve before relationship ID allocation in emit. */
   readonly link?: ResolvedLink;
+  /** Look up a resolved native object in the current naming scope by authorId (populated before excludedFromLayout resolve runs). */
+  resolveTargetObject?(authorId: string): ScopeTargetObject | undefined;
   /** Recursively resolve member child objects using the same registered modules. */
   resolveChildren(children: readonly CapabilityChild[]): ResolvedObjectChildren;
 };
@@ -832,6 +845,7 @@ export type ObjectResolution = {
     readonly path?: string;
   };
   readonly transform?: PreviewTransform;
+  readonly connectionSites?: readonly ScreenPoint[];
   readonly parts?: readonly CapabilitySubPart[];
   readonly extensions: readonly Extension[];
   readonly annotations?: readonly CapabilityAnnotation[];

@@ -1,7 +1,5 @@
 import {
   CapabilityError,
-  matchLayoutPlaceholderKey,
-  matchMasterPlaceholderSpec,
   nativePlaceholderRefSchema,
   parseCapabilityLayoutContract,
   type BoundObjectCapability,
@@ -43,6 +41,10 @@ import {
 import { z } from "zod";
 
 import {
+  createShapeNode,
+  shapeStyleSchema,
+} from "../shape/shape-declaration.ts";
+import {
   nativeLinkXml,
   parseLinkTarget,
   parseMorphKey,
@@ -52,8 +54,13 @@ import {
 } from "../shared/identity.ts";
 import {
   directElementChild,
+  emitPlaceholderUnbindDiagnostic,
   isPlaceholderSpElement,
+  materializeUnboundVisualStyle,
   readNvPrPlaceholder,
+  resolvePlaceholderImportClaim,
+  resolveUnboundPlaceholderBox,
+  stripPlaceholderClearSentinels,
 } from "../shared/placeholder-import.ts";
 import {
   hasLocalDeclaration,
@@ -133,7 +140,7 @@ function paintPlaceholderModel(): PaintOutput {
 export function readContentPlaceholderSp(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, layoutPlaceholders } = context;
+  const { cursor, part, slideIndex } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvSpPr = cursor.child(P_NS, "nvSpPr");
@@ -277,20 +284,24 @@ export function readContentPlaceholderSp(
           width: emuToPx(parsedExt.data.cx),
           height: emuToPx(parsedExt.data.cy),
         };
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...phLocation, xpath: xfrm.xpath },
+          attributeOrElement: "a:xfrm",
+        });
       }
     }
   }
 
-  const matchedKey = matchLayoutPlaceholderKey(layoutPlaceholders, {
-    type: nativeRef.type,
-    idx: nativeRef.idx,
+  const claim = resolvePlaceholderImportClaim({
+    context,
+    nativeRef,
   });
-  const layoutPlaceholder =
-    matchedKey === undefined ? undefined : layoutPlaceholders?.[matchedKey];
-  const masterPlaceholder = matchMasterPlaceholderSpec(
-    context.masterPlaceholders,
-    nativeRef.type,
-  );
+  const layoutPlaceholder = claim.layoutPlaceholder;
+  const masterPlaceholder = claim.masterPlaceholder;
   const inheritedWidth =
     (typeof layoutPlaceholder?.style?.width === "number"
       ? layoutPlaceholder.style.width
@@ -328,18 +339,7 @@ export function readContentPlaceholderSp(
 
   const { border: rawBorder, ...restVisualStyle } = appearance.style;
   const border: NonNullable<PlaceholderDeclarationProps["style"]>["border"] =
-    rawBorder === "none"
-      ? "none"
-      : rawBorder === undefined
-        ? undefined
-        : (() => {
-            const {
-              startArrow: _startArrow,
-              endArrow: _endArrow,
-              ...plainBorder
-            } = rawBorder;
-            return plainBorder;
-          })();
+    rawBorder;
   const boxSize = localBox ?? inheritedBox;
   let borderRadius: number | undefined;
   if (appearance.geometry === "roundRect") {
@@ -377,6 +377,88 @@ export function readContentPlaceholderSp(
     ...(flipV === undefined ? {} : { flipV }),
   };
 
+  if (!claim.bound) {
+    const resolvedBox = resolveUnboundPlaceholderBox({
+      inheritanceContext: claim.inheritanceContext,
+      ...(localBox === undefined ? {} : { localBox }),
+      requireHeight: true,
+    });
+    if (resolvedBox === undefined || resolvedBox.height === undefined) {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: phLocation,
+        namespaceUri: P_NS,
+        localName: "ph",
+        mechanismHint: "orphan-placeholder-without-box",
+      });
+      return { diagnostics };
+    }
+    const freeVisual = materializeUnboundVisualStyle({
+      inheritanceContext: claim.inheritanceContext,
+      localVisualStyle: {
+        ...restVisualStyle,
+        ...(border === undefined ? {} : { border }),
+        ...(borderRadius === undefined ? {} : { borderRadius }),
+        ...(rotate === undefined ? {} : { rotate }),
+        ...(flipH === undefined ? {} : { flipH }),
+        ...(flipV === undefined ? {} : { flipV }),
+      },
+      ...(appearance.geometry === undefined
+        ? {}
+        : { localGeometry: appearance.geometry }),
+      boxSize: { width: resolvedBox.width, height: resolvedBox.height },
+    });
+    const rawFreeStyle = stripPlaceholderClearSentinels({
+      ...freeVisual,
+      position: "absolute",
+      left: resolvedBox.x,
+      top: resolvedBox.y,
+      width: resolvedBox.width,
+      height: resolvedBox.height,
+    });
+    const parsedFreeStyle = shapeStyleSchema.safeParse(rawFreeStyle);
+    const effectiveGeom =
+      appearance.geometry ??
+      layoutPlaceholder?.geometry ??
+      masterPlaceholder?.geometry;
+    const freeShape = createShapeNode({
+      ...(objectName === undefined ? {} : { name: objectName }),
+      ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
+      ...(effectiveGeom === undefined ? {} : { geometry: effectiveGeom }),
+      style: parsedFreeStyle.success
+        ? parsedFreeStyle.data
+        : {
+            position: "absolute",
+            left: resolvedBox.x,
+            top: resolvedBox.y,
+            width: resolvedBox.width,
+            height: resolvedBox.height,
+          },
+    });
+    if (
+      clickResult?.deferredSlideLink !== undefined &&
+      context.registerDeferredSlideLink !== undefined
+    ) {
+      const deferred = clickResult.deferredSlideLink;
+      context.registerDeferredSlideLink({
+        ...deferred,
+        apply(targetSlideId: string) {
+          freeShape.set({ link: { id: targetSlideId } });
+        },
+      });
+    }
+    emitPlaceholderUnbindDiagnostic({
+      diagnostics,
+      location: phLocation,
+      retainedAs: "shape",
+    });
+    return { node: freeShape, diagnostics };
+  }
+
+  const matchedKey = claim.key!;
+
   let validatedStyle: PlaceholderDeclarationProps["style"] | undefined;
   if (Object.keys(combinedStyle).length > 0) {
     const parsedStyle = placeholderObjectStyleSchema.safeParse(combinedStyle);
@@ -387,7 +469,7 @@ export function readContentPlaceholderSp(
 
   const node = createPlaceholderNode({
     ...(objectName === undefined ? {} : { name: objectName }),
-    ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
+    placeholder: matchedKey,
     nativePlaceholder: nativeRef,
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
     ...(validatedStyle === undefined ? {} : { style: validatedStyle }),

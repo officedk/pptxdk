@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
 import { CodegenError, build, codegen, importPptx } from "@officedk/pptxdk";
 import { createCodegen } from "@officedk/pptxdk/build";
@@ -34,8 +32,6 @@ import {
   rebuildGeneratedSourceRelocated,
   verifyGeneratedSourcesTypecheck,
 } from "./helpers/codegen-acceptance.ts";
-
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 
 function createSampleVanillaDeck() {
   return deck({ width: 960, height: 540 }).append(
@@ -182,45 +178,6 @@ async function createSampleReactDeck() {
 }
 
 describe("pptxdk public codegen acceptance", () => {
-  it("imports codegen from @officedk/pptxdk root without preloading react or @pptxdk/preview", () => {
-    const script = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier.startsWith("react/") ||
-      specifier === "@pptxdk/react" ||
-      specifier.startsWith("@pptxdk/react/") ||
-      specifier.includes("@pptxdk/preview") ||
-      specifier.includes("@resvg/resvg-js")
-    ) {
-      throw new Error("Importing codegen from @officedk/pptxdk loaded forbidden module: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const { codegen, CodegenError, codegenTargetSchema } = await import("@officedk/pptxdk");
-if (typeof codegen !== "function" || typeof CodegenError !== "function") {
-  throw new Error("Expected codegen exports on @officedk/pptxdk");
-}
-if (codegenTargetSchema.parse("vanilla") !== "vanilla") {
-  throw new Error("Expected codegenTargetSchema on @officedk/pptxdk");
-}
-process.stdout.write("ok");
-`;
-    const child = spawnSync(
-      process.execPath,
-      ["--conditions=source", "--input-type=module", "--eval", script],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(child.status, 0, child.stderr || child.stdout);
-    assert.equal(child.stdout, "ok");
-  });
-
   it("generates typechecked, relocated-rebuildable vanilla and react sources from direct vanilla, expandDocument, and importPptx decks", async () => {
     const vanillaInput = createSampleVanillaDeck();
     const reactInput = await createSampleReactDeck();

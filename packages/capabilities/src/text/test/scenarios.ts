@@ -10,9 +10,19 @@ import {
   slide,
   slideNumber,
   span,
+  sub,
+  sup,
   text,
 } from "@pptxdk/capabilities/document";
-import { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
+import {
+  P,
+  SlideNumber,
+  Span,
+  Sub,
+  Sup,
+  Text,
+} from "@pptxdk/capabilities/text-elements";
+import { defineTheme } from "@pptxdk/core";
 import { Deck, Slide } from "@pptxdk/react";
 import { strFromU8, unzipSync } from "fflate";
 import { PNG } from "pngjs";
@@ -1484,5 +1494,276 @@ export const textRtlListsAndFillsScenario: CapabilityScenario = {
     const s1Xml = strFromU8(zip["ppt/slides/slide1.xml"]!);
     assert.ok(s1Xml.includes("<a:blipFill"), author);
     assert.ok(s1Xml.includes('lang="ar-SA"'), author);
+  },
+};
+
+export const textDualScriptScenario: CapabilityScenario = {
+  id: "text-dual-script-parity",
+  capability: "text",
+  description:
+    "Dual-author Text scenario verifying orthogonal dual-script theme slots, eastAsianFontFamily Span inheritance/override, and mixed-script SVG/PNG preview rendering.",
+  visualCheckpoints: [
+    "Page 1 (dual): Mixed Latin/CJK/Kana/Hangul run renders with non-empty SVG glyph paths and clean PNG rasterization.",
+  ],
+  nativeCheckpoints: [
+    "Verify theme1.xml <a:ea> typeface with OS/2 panose and pitchFamily.",
+  ],
+  jsx() {
+    const dualTheme = defineTheme({
+      name: "Dual Preview Theme",
+      fonts: {
+        major: jostFont,
+        minor: jostFont,
+        majorEastAsian: notoFont,
+        minorEastAsian: notoFont,
+      },
+    });
+    return createElement(
+      Deck,
+      { width: 640, height: 360, theme: dualTheme },
+      createElement(
+        Slide,
+        { id: "dual" },
+        createElement(
+          Text,
+          {
+            id: "mixed-preview",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 320,
+              height: "auto",
+              fontSize: 20,
+              color: "#0F172A",
+              background: "#F8FAFC",
+              padding: 12,
+            },
+          },
+          "Hello 中文 あいう 한국",
+          createElement(
+            Span,
+            { style: { fontFamily: jostFont, eastAsianFontFamily: notoFont } },
+            " Mix 混合",
+          ),
+        ),
+      ),
+    );
+  },
+  document() {
+    const dualTheme = defineTheme({
+      name: "Dual Preview Theme",
+      fonts: {
+        major: jostFont,
+        minor: jostFont,
+        majorEastAsian: notoFont,
+        minorEastAsian: notoFont,
+      },
+    });
+    return deck({ width: 640, height: 360, theme: dualTheme }).append(
+      slide({ id: "dual" }).append(
+        text(
+          [
+            "Hello 中文 あいう 한국",
+            span(" Mix 混合", {
+              style: { fontFamily: jostFont, eastAsianFontFamily: notoFont },
+            }),
+          ],
+          {
+            id: "mixed-preview",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 320,
+              height: "auto",
+              fontSize: 20,
+              color: "#0F172A",
+              background: "#F8FAFC",
+              padding: 12,
+            },
+          },
+        ),
+      ),
+    );
+  },
+  assert({ author, pptx, preview }) {
+    assert.equal(preview.pages.length, 1, author);
+    const page = preview.pages[0]!;
+    assert.deepEqual(page.errors, [], author);
+    assert.ok(page.png !== undefined && page.png.byteLength > 0, author);
+    assert.ok((page.svg ?? "").includes("<path "), author);
+    const zip = unzipSync(pptx);
+    const themeXml = strFromU8(zip["ppt/theme/theme1.xml"]!);
+    assert.match(
+      themeXml,
+      /<a:ea typeface="Noto Sans CJK SC" panose="020B0500000000000000" pitchFamily="34"/u,
+    );
+  },
+};
+
+export const textProportionalLineHeightAndSupSubScenario: CapabilityScenario = {
+  id: "text-proportional-line-height-sup-sub-and-list-indent",
+  capability: "text",
+  description:
+    "Dual-author scenario covering proportional percentage lineHeight (<a:spcPct>), inline Sup/Sub/baselineShift, and non-placeholder hanging list indents.",
+  visualCheckpoints: [
+    "Proportional 150% line spacing, superscript/subscript/baselineShift scaling & vertical offset, and aligned bullet list hanging indent render cleanly with zero PNG/SVG errors.",
+  ],
+  nativeCheckpoints: [
+    "Emitted PPTX retains <a:spcPct val='150000'/>, baseline='30000'/'-25000'/'15000', and materialized marL/indent on free Text lists.",
+  ],
+  jsx() {
+    return createElement(
+      Deck,
+      { width: 640, height: 360 },
+      createElement(
+        Slide,
+        { id: "rich-typographic", background: "#FFFFFF" },
+        createElement(
+          Text,
+          {
+            id: "formula-and-spacing",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 280,
+              height: "auto",
+              fontFamily: jostFont,
+              fontSize: 20,
+              color: "#0F172A",
+              padding: 8,
+            },
+          },
+          createElement(
+            P,
+            { style: { lineHeight: "150%" } },
+            "H",
+            createElement(Sub, null, "2"),
+            "O + E=mc",
+            createElement(Sup, null, "2"),
+            " ",
+            createElement(Span, { style: { baselineShift: "15%" } }, "note"),
+            " wrapped line",
+          ),
+        ),
+        createElement(
+          Text,
+          {
+            id: "free-bullet-list",
+            style: {
+              position: "absolute",
+              left: 330,
+              top: 24,
+              width: 280,
+              height: 160,
+              fontFamily: jostFont,
+              fontSize: 18,
+              color: "#1E293B",
+              padding: 10,
+            },
+          },
+          createElement(
+            P,
+            { style: { list: { type: "bullet", character: "•", level: 0 } } },
+            "First wrapped bullet item",
+          ),
+          createElement(
+            P,
+            {
+              style: {
+                list: {
+                  type: "number",
+                  style: "arabicPeriod",
+                  startAt: 2,
+                  level: 1,
+                },
+              },
+            },
+            "Nested numbered item",
+          ),
+        ),
+      ),
+    );
+  },
+  document() {
+    return deck({ width: 640, height: 360 }).append(
+      slide({ id: "rich-typographic", background: "#FFFFFF" }).append(
+        text(
+          [
+            paragraph(
+              [
+                "H",
+                sub("2"),
+                "O + E=mc",
+                sup("2"),
+                " ",
+                span("note", { style: { baselineShift: "15%" } }),
+                " wrapped line",
+              ],
+              { style: { lineHeight: "150%" } },
+            ),
+          ],
+          {
+            id: "formula-and-spacing",
+            style: {
+              position: "absolute",
+              left: 24,
+              top: 24,
+              width: 280,
+              height: "auto",
+              fontFamily: jostFont,
+              fontSize: 20,
+              color: "#0F172A",
+              padding: 8,
+            },
+          },
+        ),
+        text(
+          [
+            paragraph("First wrapped bullet item", {
+              style: { list: { type: "bullet", character: "•", level: 0 } },
+            }),
+            paragraph("Nested numbered item", {
+              style: {
+                list: {
+                  type: "number",
+                  style: "arabicPeriod",
+                  startAt: 2,
+                  level: 1,
+                },
+              },
+            }),
+          ],
+          {
+            id: "free-bullet-list",
+            style: {
+              position: "absolute",
+              left: 330,
+              top: 24,
+              width: 280,
+              height: 160,
+              fontFamily: jostFont,
+              fontSize: 18,
+              color: "#1E293B",
+              padding: 10,
+            },
+          },
+        ),
+      ),
+    );
+  },
+  assert({ author, pptx, preview }) {
+    assert.equal(preview.pages.length, 1, author);
+    const page = preview.pages[0]!;
+    assert.deepEqual(page.errors, [], author);
+    assert.ok(page.png !== undefined && page.png.byteLength > 0, author);
+    const slideXml = strFromU8(unzipSync(pptx)["ppt/slides/slide1.xml"]!);
+    assert.match(slideXml, /<a:spcPct val="150000"\/>/u);
+    assert.match(slideXml, /baseline="30000"/u);
+    assert.match(slideXml, /baseline="-25000"/u);
+    assert.match(slideXml, /baseline="15000"/u);
+    assert.match(slideXml, /marL="214313" indent="-214313"/u);
   },
 };

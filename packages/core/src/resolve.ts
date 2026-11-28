@@ -21,6 +21,7 @@ import {
   toBuildDiagnostic,
   zodIssueToBuildDiagnostic,
 } from "#/diagnostics.ts";
+import { readInternalDeclarationProps } from "#/document-internals.ts";
 import {
   LayoutPass,
   validateBoundObjectCapability,
@@ -111,6 +112,7 @@ import type {
   ResolvedObject,
   ResolvedObjectChildren,
   ResolvedSlide,
+  ScopeTargetObject,
   SlideCapabilityModule,
   SlideMasterInheritanceContext,
   SlideResolution,
@@ -251,10 +253,24 @@ type ResolvePassContext = {
 };
 
 type ResolvedLayerEntry = {
-  readonly layer: ResolvedObjectLayer;
-  readonly objects: readonly ResolvedObject[];
-  readonly reference: LayoutChildReference;
+  layer: ResolvedObjectLayer;
+  objects: readonly ResolvedObject[];
+  reference: LayoutChildReference;
 };
+
+type ScopeResolutionRegistry = {
+  readonly targetsByAuthorId: Map<string, ScopeTargetObject>;
+  readonly deferredTasks: (() => void)[];
+  readonly postFlushSyncs: (() => void)[];
+};
+
+function createScopeRegistry(): ScopeResolutionRegistry {
+  return {
+    targetsByAuthorId: new Map(),
+    deferredTasks: [],
+    postFlushSyncs: [],
+  };
+}
 
 type ResolvedChildrenResult = {
   readonly objects: readonly ResolvedObject[];
@@ -392,7 +408,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
   if (!isDeclarationNode(child)) return { type: "#text", text: child.text };
   return {
     type: child.type,
-    props: child.props,
+    props: readInternalDeclarationProps(child),
     children: child.children.map(capabilityChild),
     ...(child.pageAffiliated === true ? { pageAffiliated: true } : {}),
   };
@@ -400,7 +416,7 @@ function capabilityChild(child: DeclarationChild): CapabilityChild {
 
 function capabilityLabel(child: CapabilityChild, index: number): string {
   if (!("props" in child)) return `text[${index + 1}]`;
-  const identity = declarationIdentity(child.props);
+  const identity = declarationIdentity(readInternalDeclarationProps(child));
   const label =
     typeof identity === "string" && identity.trim() !== ""
       ? identity
@@ -409,7 +425,7 @@ function capabilityLabel(child: CapabilityChild, index: number): string {
 }
 
 function isHiddenByStyle(node: DeclarationNode): boolean {
-  const style = node.props["style"];
+  const style = readInternalDeclarationProps(node)["style"];
   return (
     typeof style === "object" &&
     style !== null &&
@@ -435,7 +451,7 @@ function collectExplicitObjectNamesFromChildren(
       collectExplicitObjectNamesFromChildren(child.children, modules, names);
       continue;
     }
-    const rawName = child.props["name"];
+    const rawName = readInternalDeclarationProps(child)["name"];
     if (typeof rawName === "string" && rawName.trim() !== "") {
       names.add(rawName);
     }
@@ -512,7 +528,7 @@ function validateResolveOptions(options: ResolveOptions): void {
   ]);
 }
 
-// Deck dimensions and props validated via parseDeckProps(deck.props).
+// Deck dimensions and props validated via parseDeckProps(readInternalDeclarationProps(deck)).
 
 function unknownPropertyKey(
   props: Readonly<Record<string, unknown>>,
@@ -597,11 +613,12 @@ function resolveSlides(
 
   for (const [masterIndex, masterNode] of masterNodes.entries()) {
     const rawMasterPath = `deck/slide-master[${masterIndex + 1}]`;
-    const masterAuthorId = readAuthorId(masterNode.props["id"], rawMasterPath);
+    const masterProps = readInternalDeclarationProps(masterNode);
+    const masterAuthorId = readAuthorId(masterProps["id"], rawMasterPath);
     const masterKey = `master-${masterIndex + 1}`;
     const masterId = masterAuthorId ?? masterKey;
     const masterPath = `deck/slide-master[${masterAuthorId ?? masterIndex + 1}]`;
-    const unknownMasterProp = unknownPropertyKey(masterNode.props, [
+    const unknownMasterProp = unknownPropertyKey(masterProps, [
       "id",
       "name",
       "preserve",
@@ -648,8 +665,8 @@ function resolveSlides(
       "placeholders",
       "textStyles",
     ] as const) {
-      if (Object.hasOwn(masterNode.props, key)) {
-        masterDataInput[key] = masterNode.props[key];
+      if (Object.hasOwn(masterProps, key)) {
+        masterDataInput[key] = masterProps[key];
       }
     }
     const parsedMaster = slideMasterDataPropsSchema.safeParse(masterDataInput);
@@ -665,7 +682,7 @@ function resolveSlides(
       ]);
     }
     let masterTheme: Theme;
-    const rawMasterTheme = masterNode.props["theme"];
+    const rawMasterTheme = masterProps["theme"];
     if (rawMasterTheme === undefined) {
       masterTheme = defaultDeckTheme;
     } else if (isTheme(rawMasterTheme)) {
@@ -772,7 +789,8 @@ function resolveSlides(
 
     for (const [layoutIndex, layoutNode] of layoutNodes.entries()) {
       const rawLayoutPath = `${masterPath}/slide-layout[${layoutIndex + 1}]`;
-      const rawLayoutDef = layoutNode.props["layout"];
+      const layoutProps = readInternalDeclarationProps(layoutNode);
+      const rawLayoutDef = layoutProps["layout"];
       let layoutDef: SlideLayoutDefinition | undefined;
       if (rawLayoutDef !== undefined) {
         if (!isSlideLayoutDefinition(rawLayoutDef)) {
@@ -789,7 +807,7 @@ function resolveSlides(
       const effectiveLayoutProps: Record<string, unknown> = {
         ...layoutDef?.props,
       };
-      for (const [key, value] of Object.entries(layoutNode.props)) {
+      for (const [key, value] of Object.entries(layoutProps)) {
         if (key === "layout" || value === undefined) continue;
         effectiveLayoutProps[key] = value;
       }
@@ -1045,7 +1063,7 @@ function resolveSlides(
       validateAuthorIdScopes(
         {
           type: "slide-master",
-          props: masterNode.props,
+          props: masterProps,
           children: masterCanvasNodes,
         },
         masterPath,
@@ -1059,11 +1077,11 @@ function resolveSlides(
         : { placeholders: parsedMaster.data.placeholders };
     for (const prop of slidePropertySet) {
       if (prop === "background") continue;
-      if (Object.hasOwn(masterNode.props, prop)) {
-        masterSlideProps[prop] = masterNode.props[prop];
+      if (Object.hasOwn(masterProps, prop)) {
+        masterSlideProps[prop] = masterProps[prop];
       }
     }
-    const masterStyleProp = masterNode.props["style"];
+    const masterStyleProp = masterProps["style"];
     const effectiveMasterBackground =
       parsedMaster.data.style?.background ?? parsedMaster.data.background;
     masters.push({
@@ -1127,7 +1145,10 @@ function resolveSlides(
           ),
         ]);
       }
-      const { name } = parseSectionProps(node.props, index);
+      const { name } = parseSectionProps(
+        readInternalDeclarationProps(node),
+        index,
+      );
       if (nonWhitespaceText(node.children)) {
         throw new BuildError([
           diagnostic(
@@ -1173,6 +1194,7 @@ function resolveSlides(
     ]);
   }
   const slides = candidates.map(({ node, section, sectionIndex }, index) => {
+    const slideProps = readInternalDeclarationProps(node);
     const {
       id,
       name,
@@ -1181,7 +1203,7 @@ function resolveSlides(
       showMasterShapes,
       colorMapOverride,
       themeOverride,
-    } = parseSlideCoreProps(node.props, index, slideProperties);
+    } = parseSlideCoreProps(slideProps, index, slideProperties);
     const authorId = id;
     if (authorIds.has(authorId)) {
       throw new BuildError([
@@ -1197,7 +1219,7 @@ function resolveSlides(
     validateAuthorIdScopes(node, `deck/slide[${id}]`, new Set());
 
     let layoutKey: string | undefined;
-    const rawLayout = node.props["layout"];
+    const rawLayout = slideProps["layout"];
     if (rawLayout === undefined) {
       if (masters.length > 0) {
         layoutKey = defaultBlankLayoutKey ?? firstLayoutKey;
@@ -1247,7 +1269,8 @@ function resolveSlides(
       }
       const matchedKey = layoutKeyByNode.get(rawLayout);
       if (matchedKey === undefined) {
-        const rawTarget = rawLayout.props["id"] ?? rawLayout.props["name"];
+        const rawLayoutProps = readInternalDeclarationProps(rawLayout);
+        const rawTarget = rawLayoutProps["id"] ?? rawLayoutProps["name"];
         const targetLabel =
           typeof rawTarget === "string" ? rawTarget : "<unnamed>";
         throw new BuildError([
@@ -1508,6 +1531,7 @@ function createObjectResolveContext(args: {
   readonly restrictsMemberContinuity: boolean;
   readonly morphName: string | undefined;
   readonly link: ResolvedLink | undefined;
+  readonly scope: ScopeResolutionRegistry;
   readonly onChildrenResolved?: (resolved: ResolvedChildrenResult) => void;
 }): ObjectResolveContext {
   const {
@@ -1522,6 +1546,7 @@ function createObjectResolveContext(args: {
     restrictsMemberContinuity,
     morphName,
     link,
+    scope,
     onChildrenResolved,
   } = args;
   return {
@@ -1535,6 +1560,9 @@ function createObjectResolveContext(args: {
     ...(placeholder === undefined ? {} : { placeholder }),
     ...(morphName === undefined ? {} : { morphName }),
     ...(link === undefined ? {} : { link }),
+    resolveTargetObject(targetAuthorId: string): ScopeTargetObject | undefined {
+      return scope.targetsByAuthorId.get(targetAuthorId);
+    },
     resolveChildren(nested): ResolvedObjectChildren {
       const resolved = resolveChildrenPass(
         nested,
@@ -1548,18 +1576,201 @@ function createObjectResolveContext(args: {
   };
 }
 
+function registerScopeTarget(
+  scope: ScopeResolutionRegistry,
+  authorId: string | undefined,
+  spid: number,
+  emitsObject: boolean,
+  resolvedObj: ReturnType<BoundObjectCapability["resolve"]>,
+): void {
+  if (
+    authorId === undefined ||
+    !emitsObject ||
+    resolvedObj.observation.box === undefined
+  ) {
+    return;
+  }
+  scope.targetsByAuthorId.set(authorId, {
+    spid,
+    kind: resolvedObj.observation.kind,
+    box: resolvedObj.observation.box,
+    ...(resolvedObj.transform === undefined
+      ? {}
+      : { transform: resolvedObj.transform }),
+    ...(resolvedObj.connectionSites === undefined
+      ? {}
+      : { connectionSites: resolvedObj.connectionSites }),
+  });
+}
+
+function commitLeafResolution(args: {
+  readonly context: ResolvePassContext;
+  readonly child: CapabilityElement;
+  readonly index: number;
+  readonly path: string;
+  readonly authorId: string | undefined;
+  readonly order: number;
+  readonly id: number;
+  readonly bound: BoundObjectCapability;
+  readonly layoutBox: Rect | undefined;
+  readonly theme: ThemeContext;
+  readonly placeholder: PlaceholderResolutionContext | undefined;
+  readonly emitsObject: boolean;
+  readonly morphKey: MorphKey | undefined;
+  readonly morphName: string | undefined;
+  readonly resolvedLink: ResolvedLink | undefined;
+  readonly resolvedObj: ReturnType<BoundObjectCapability["resolve"]>;
+}): {
+  readonly entry: ResolvedLayerEntry;
+  readonly contentNode: QueryContentNode;
+} {
+  const {
+    context,
+    child,
+    index,
+    path,
+    authorId,
+    order,
+    id,
+    bound,
+    layoutBox,
+    theme,
+    placeholder,
+    emitsObject,
+    morphKey,
+    morphName,
+    resolvedLink,
+    resolvedObj,
+  } = args;
+  recordObjectMorph({
+    morphKey,
+    morphName,
+    nativeKind: bound.contract.nativeKind,
+    observationName: resolvedObj.observation.name,
+    hasOutput: emitsObject,
+    slide: context.slide,
+    declarationType: child.type,
+    path,
+  });
+  for (const extension of resolvedObj.extensions) {
+    context.document.usedExtensions.add(extension);
+  }
+  recordResourceClaims(
+    resolvedObj.resourceClaims,
+    context.document,
+    context.slide.diagnostics,
+    path,
+  );
+  recordFontUsages(resolvedObj.fontUsages, context.document, path);
+  for (const annotation of resolvedObj.annotations ?? []) {
+    context.slide.contributions.push({
+      ...annotation,
+      path,
+      targetId: id,
+      order,
+      declaration: child,
+    });
+  }
+  const gridArea = context.layout.gridAreas.get(child);
+  const observation: ResolvedObject = {
+    ...resolvedObj.observation,
+    id,
+    path,
+    ...(authorId === undefined ? {} : { authorId }),
+    ...(gridArea === undefined ? {} : { gridArea }),
+    ...(placeholder?.key === undefined
+      ? {}
+      : resolvedObj.observation.placeholder === undefined
+        ? { placeholder: placeholder.key }
+        : {}),
+    ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
+  };
+  if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
+  if (resolvedObj.transform !== undefined) {
+    context.slide.transformsById.set(id, resolvedObj.transform);
+  }
+  const contentNode: QueryContentNode = {
+    ...(authorId === undefined ? {} : { authorId }),
+    path,
+    reference: { kind: "object", id: observation.id },
+    children: subPartContentNodes(resolvedObj.parts),
+  };
+  const layer: ResolvedObjectLayer = {
+    declarationType: child.type,
+    ...(authorId === undefined ? {} : { authorId }),
+    sourceOrder: [index],
+    zIndex: paintOrder(bound.contract),
+    path,
+    objectId: observation.id,
+    paintObjectId: observation.id,
+    theme,
+    ...(resolvedObj.observation.box === undefined
+      ? {}
+      : { box: resolvedObj.observation.box }),
+    ...(resolvedObj.transform === undefined
+      ? {}
+      : { transform: resolvedObj.transform }),
+    emitsObject,
+    hasObservation: true,
+    childComposition: "leaf",
+    ...(resolvedLink === undefined ? {} : { resolvedLink }),
+    ...(morphKey === undefined ? {} : { morphKey }),
+    extensions: resolvedObj.extensions,
+    memberLayers: [],
+    siblingLayers: [],
+    emit: (emitContext) => resolvedObj.emit(emitContext),
+    ...(resolvedObj.paint === undefined
+      ? {}
+      : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
+  };
+  return {
+    entry: {
+      layer,
+      objects: [observation],
+      reference: { kind: "object", id: observation.id },
+    },
+    contentNode,
+  };
+}
+
 function resolveChildrenPass(
   children: readonly CapabilityChild[],
   context: ResolvePassContext,
   parentPath: string,
   insideGroup = false,
+  inheritedScope?: ScopeResolutionRegistry,
 ): ResolvedChildrenResult {
-  const layers: {
-    readonly layer: ResolvedObjectLayer;
-    readonly objects: readonly ResolvedObject[];
-    readonly reference: LayoutChildReference;
-  }[] = [];
+  const isScopeRoot = inheritedScope === undefined;
+  const scope = inheritedScope ?? createScopeRegistry();
+  const deferredBeforePass = scope.deferredTasks.length;
+  const entries: ResolvedLayerEntry[] = [];
   const content: QueryContentNode[] = [];
+  const syncEntries = (
+    targetObjects: ResolvedObject[],
+    targetReferences: LayoutChildReference[],
+    targetLayers: ResolvedObjectLayer[],
+  ) => {
+    entries.sort(
+      (left, right) =>
+        left.layer.zIndex - right.layer.zIndex ||
+        compareSourceOrder(left.layer.sourceOrder, right.layer.sourceOrder),
+    );
+    targetObjects.splice(
+      0,
+      targetObjects.length,
+      ...entries.flatMap(({ objects }) => objects),
+    );
+    targetReferences.splice(
+      0,
+      targetReferences.length,
+      ...entries.map(({ reference }) => reference),
+    );
+    targetLayers.splice(
+      0,
+      targetLayers.length,
+      ...entries.map(({ layer }) => layer),
+    );
+  };
 
   children.forEach((child, index) => {
     if (!("props" in child)) {
@@ -1577,7 +1788,10 @@ function resolveChildrenPass(
 
     if (context.layout.hidden.has(child)) return;
     const path = `${parentPath}/${capabilityLabel(child, index)}`;
-    const authorId = readAuthorId(child.props["id"], path);
+    const authorId = readAuthorId(
+      readInternalDeclarationProps(child)["id"],
+      path,
+    );
     const order = context.slide.nextNodeOrder++;
     const module = context.modules.declarations.get(child.type);
     if (module === undefined) {
@@ -1624,20 +1838,45 @@ function resolveChildrenPass(
               ),
         );
       }
+      const deferredBefore = scope.deferredTasks.length;
       const childResolved = resolveChildrenPass(
         child.children,
         context,
         path,
         insideGroup,
+        scope,
       );
+      const childContentStart = content.length;
       content.push(...childResolved.content);
+      const wrappedEntries: ResolvedLayerEntry[] = [];
       for (const entry of childResolved.entries) {
-        layers.push({
+        const wrapped: ResolvedLayerEntry = {
           ...entry,
           layer: {
             ...entry.layer,
             sourceOrder: [index, ...entry.layer.sourceOrder],
           },
+        };
+        wrappedEntries.push(wrapped);
+        entries.push(wrapped);
+      }
+      if (scope.deferredTasks.length > deferredBefore) {
+        const childCount = childResolved.content.length;
+        const entryStart = entries.length - wrappedEntries.length;
+        scope.postFlushSyncs.push(() => {
+          content.splice(
+            childContentStart,
+            childCount,
+            ...childResolved.content,
+          );
+          const refreshed = childResolved.entries.map((entry) => ({
+            ...entry,
+            layer: {
+              ...entry.layer,
+              sourceOrder: [index, ...entry.layer.sourceOrder],
+            },
+          }));
+          entries.splice(entryStart, wrappedEntries.length, ...refreshed);
         });
       }
       return;
@@ -1683,8 +1922,9 @@ function resolveChildrenPass(
           theme,
           context,
           insideGroup,
-          layers,
+          layers: entries,
           content,
+          parentScope: scope,
         });
         return;
       }
@@ -1757,6 +1997,97 @@ function resolveChildrenPass(
               ),
               undefined);
 
+      if (bound.contract.excludedFromLayout === true) {
+        const contentSlot = content.length;
+        const placeholderContent: QueryContentNode = {
+          ...(authorId === undefined ? {} : { authorId }),
+          path,
+          reference: { kind: "object", id },
+          children: [],
+        };
+        content.push(placeholderContent);
+        const placeholderEntry: ResolvedLayerEntry = {
+          layer: {
+            declarationType: child.type,
+            ...(authorId === undefined ? {} : { authorId }),
+            sourceOrder: [index],
+            zIndex: paintOrder(bound.contract),
+            path,
+            objectId: id,
+            paintObjectId: id,
+            theme,
+            emitsObject,
+            hasObservation: false,
+            childComposition: "leaf",
+            extensions: [],
+            memberLayers: [],
+            siblingLayers: [],
+            emit: () => ({ xml: "" }),
+          },
+          objects: [],
+          reference: { kind: "object", id },
+        };
+        entries.push(placeholderEntry);
+        scope.deferredTasks.push(() => {
+          try {
+            const resolvedObj = bound.resolve(
+              createObjectResolveContext({
+                resolveContext: context,
+                id,
+                path,
+                layoutBox: undefined,
+                layoutSizedAxes: undefined,
+                theme,
+                placeholder,
+                insideGroup,
+                restrictsMemberContinuity:
+                  bound.contract.nativeKind === "grpSp",
+                morphName,
+                link: resolvedLink,
+                scope,
+              }),
+            );
+            const committed = commitLeafResolution({
+              context,
+              child,
+              index,
+              path,
+              authorId,
+              order,
+              id,
+              bound,
+              layoutBox: undefined,
+              theme,
+              placeholder,
+              emitsObject,
+              morphKey,
+              morphName,
+              resolvedLink,
+              resolvedObj,
+            });
+            placeholderEntry.layer = committed.entry.layer;
+            placeholderEntry.objects = committed.entry.objects;
+            placeholderEntry.reference = committed.entry.reference;
+            content[contentSlot] = committed.contentNode;
+          } catch (error) {
+            context.slide.diagnostics.push(
+              error instanceof CapabilityError
+                ? diagnostic(
+                    error.path === undefined ? path : `${path}/${error.path}`,
+                    error.code,
+                    error.message,
+                  )
+                : diagnostic(
+                    path,
+                    "capability-failure",
+                    error instanceof Error ? error.message : String(error),
+                  ),
+            );
+          }
+        });
+        return;
+      }
+
       const resolvedObj = bound.resolve(
         createObjectResolveContext({
           resolveContext: context,
@@ -1770,94 +2101,30 @@ function resolveChildrenPass(
           restrictsMemberContinuity: bound.contract.nativeKind === "grpSp",
           morphName,
           link: resolvedLink,
+          scope,
         }),
       );
-      recordObjectMorph({
+      registerScopeTarget(scope, authorId, id, emitsObject, resolvedObj);
+      const committed = commitLeafResolution({
+        context,
+        child,
+        index,
+        path,
+        authorId,
+        order,
+        id,
+        bound,
+        layoutBox,
+        theme,
+        placeholder,
+        emitsObject,
         morphKey,
         morphName,
-        nativeKind: bound.contract.nativeKind,
-        observationName: resolvedObj.observation.name,
-        hasOutput: emitsObject,
-        slide: context.slide,
-        declarationType: child.type,
-        path,
+        resolvedLink,
+        resolvedObj,
       });
-      for (const extension of resolvedObj.extensions) {
-        context.document.usedExtensions.add(extension);
-      }
-      recordResourceClaims(
-        resolvedObj.resourceClaims,
-        context.document,
-        context.slide.diagnostics,
-        path,
-      );
-      recordFontUsages(resolvedObj.fontUsages, context.document, path);
-      for (const annotation of resolvedObj.annotations ?? []) {
-        context.slide.contributions.push({
-          ...annotation,
-          path,
-          targetId: id,
-          order,
-          declaration: child,
-        });
-      }
-      const gridArea = context.layout.gridAreas.get(child);
-      const observation: ResolvedObject = {
-        ...resolvedObj.observation,
-        id,
-        path,
-        ...(authorId === undefined ? {} : { authorId }),
-        ...(gridArea === undefined ? {} : { gridArea }),
-        ...(placeholder?.key === undefined
-          ? {}
-          : resolvedObj.observation.placeholder === undefined
-            ? { placeholder: placeholder.key }
-            : {}),
-        ...(resolvedLink === undefined ? {} : { link: resolvedLink.summary }),
-      };
-      if (layoutBox !== undefined) context.slide.layoutDerivedObjectIds.add(id);
-      if (resolvedObj.transform !== undefined) {
-        context.slide.transformsById.set(id, resolvedObj.transform);
-      }
-      content.push({
-        ...(authorId === undefined ? {} : { authorId }),
-        path,
-        reference: { kind: "object", id: observation.id },
-        children: subPartContentNodes(resolvedObj.parts),
-      });
-      const layer: ResolvedObjectLayer = {
-        declarationType: child.type,
-        ...(authorId === undefined ? {} : { authorId }),
-        sourceOrder: [index],
-        zIndex: paintOrder(bound.contract),
-        path,
-        objectId: observation.id,
-        paintObjectId: observation.id,
-        theme,
-        ...(resolvedObj.observation.box === undefined
-          ? {}
-          : { box: resolvedObj.observation.box }),
-        ...(resolvedObj.transform === undefined
-          ? {}
-          : { transform: resolvedObj.transform }),
-        emitsObject,
-        hasObservation: true,
-        childComposition: "leaf",
-        ...(resolvedLink === undefined ? {} : { resolvedLink }),
-        ...(morphKey === undefined ? {} : { morphKey }),
-        extensions: resolvedObj.extensions,
-        memberLayers: [],
-        siblingLayers: [],
-        emit: (emitContext) => resolvedObj.emit(emitContext),
-        ...(resolvedObj.paint === undefined
-          ? {}
-          : { paint: (paintContext) => resolvedObj.paint!(paintContext) }),
-      };
-      layers.push({
-        layer,
-        objects: [observation],
-        reference: { kind: "object", id: observation.id },
-      });
+      content.push(committed.contentNode);
+      entries.push(committed.entry);
     } catch (error) {
       context.slide.diagnostics.push(
         error instanceof CapabilityError
@@ -1875,17 +2142,31 @@ function resolveChildrenPass(
     }
   });
 
-  layers.sort(
-    (left, right) =>
-      left.layer.zIndex - right.layer.zIndex ||
-      compareSourceOrder(left.layer.sourceOrder, right.layer.sourceOrder),
-  );
+  const objects: ResolvedObject[] = [];
+  const references: LayoutChildReference[] = [];
+  const sortedLayers: ResolvedObjectLayer[] = [];
+
+  if (isScopeRoot) {
+    for (const task of scope.deferredTasks) {
+      task();
+    }
+    // Inner child syncs are appended before their enclosing container syncs, so flush forward.
+    for (const sync of scope.postFlushSyncs) {
+      sync();
+    }
+  } else if (scope.deferredTasks.length > deferredBeforePass) {
+    scope.postFlushSyncs.push(() => {
+      syncEntries(objects, references, sortedLayers);
+    });
+  }
+
+  syncEntries(objects, references, sortedLayers);
   return {
-    objects: layers.flatMap(({ objects }) => objects),
-    references: layers.map(({ reference }) => reference),
+    objects,
+    references,
     content,
-    layers: layers.map(({ layer }) => layer),
-    entries: layers,
+    layers: sortedLayers,
+    entries,
   };
 }
 
@@ -1900,12 +2181,9 @@ function resolveBoundContainer(args: {
   readonly theme: ThemeContext;
   readonly context: ResolvePassContext;
   readonly insideGroup: boolean;
-  readonly layers: {
-    readonly layer: ResolvedObjectLayer;
-    readonly objects: readonly ResolvedObject[];
-    readonly reference: LayoutChildReference;
-  }[];
+  readonly layers: ResolvedLayerEntry[];
   readonly content: QueryContentNode[];
+  readonly parentScope: ScopeResolutionRegistry;
 }): void {
   const {
     child,
@@ -1920,6 +2198,7 @@ function resolveBoundContainer(args: {
     insideGroup,
     layers,
     content,
+    parentScope,
   } = args;
   const box = context.layout.boxes.get(child);
   const layoutSizedAxes = context.layout.sizedAxes.get(child);
@@ -2026,6 +2305,7 @@ function resolveBoundContainer(args: {
         restrictsMemberContinuity,
         morphName,
         link: containerLink,
+        scope: parentScope,
         onChildrenResolved: (resolved) => {
           memberResolved = resolved;
         },
@@ -2041,6 +2321,7 @@ function resolveBoundContainer(args: {
         ...(gridArea === undefined ? {} : { gridArea }),
         ...(containerLink === undefined ? {} : { link: containerLink.summary }),
       };
+      registerScopeTarget(parentScope, authorId, objectId, true, resolvedObj);
       if (box !== undefined) context.slide.layoutDerivedObjectIds.add(objectId);
       if (resolvedObj.transform !== undefined) {
         context.slide.transformsById.set(objectId, resolvedObj.transform);
@@ -2130,6 +2411,9 @@ function resolveBoundContainer(args: {
     );
   }
 
+  // Named sibling containers establish a new authorId naming scope for descendants; anonymous sibling containers stay transparent.
+  const childScope = authorId === undefined ? parentScope : undefined;
+  const deferredBeforeChildren = childScope?.deferredTasks.length ?? 0;
   const resolvedChildren = enclosesChildren
     ? (memberResolved ?? {
         objects: [],
@@ -2143,15 +2427,15 @@ function resolveBoundContainer(args: {
         context,
         path,
         insideGroup || restrictsMemberContinuity,
+        childScope,
       );
 
+  const siblingLayers = enclosesChildren ? [] : [...resolvedChildren.layers];
   const finalLayer: ResolvedObjectLayer =
     containerLayer !== undefined
       ? {
           ...containerLayer,
-          ...(!enclosesChildren
-            ? { siblingLayers: resolvedChildren.layers }
-            : {}),
+          ...(!enclosesChildren ? { siblingLayers } : {}),
         }
       : {
           declarationType: child.type,
@@ -2166,11 +2450,11 @@ function resolveBoundContainer(args: {
           childComposition: enclosesChildren ? "members" : "siblings",
           extensions: [],
           memberLayers: enclosesChildren ? resolvedChildren.layers : [],
-          siblingLayers: enclosesChildren ? [] : resolvedChildren.layers,
+          siblingLayers,
           emit: () => ({ xml: "" }),
         };
 
-  const layerObservedObjects = [
+  const layerObservedObjects: ResolvedObject[] = [
     ...(containerObservation === undefined ? [] : [containerObservation]),
     ...(enclosesChildren ? [] : resolvedChildren.objects),
   ];
@@ -2178,6 +2462,12 @@ function resolveBoundContainer(args: {
   if (layoutId !== undefined && box !== undefined) {
     const gridTracks = context.layout.gridTracks.get(child);
     const layoutGridArea = context.layout.gridAreas.get(child);
+    const layoutChildren: LayoutChildReference[] = [
+      ...(containerObservation === undefined
+        ? []
+        : [{ kind: "object" as const, id: containerObservation.id }]),
+      ...resolvedChildren.references,
+    ];
     context.slide.layouts.push({
       id: layoutId,
       ...(authorId === undefined ? {} : { authorId }),
@@ -2190,13 +2480,10 @@ function resolveBoundContainer(args: {
             columnWidths: gridTracks.columnWidths,
             rowHeights: gridTracks.rowHeights,
           }),
-      children: [
-        ...(containerObservation === undefined
-          ? []
-          : [{ kind: "object" as const, id: containerObservation.id }]),
-        ...resolvedChildren.references,
-      ],
+      children: layoutChildren,
     });
+    const contentStart = content.length;
+    const initialChildContentLen = resolvedChildren.content.length;
     content.push({
       ...(authorId === undefined ? {} : { authorId }),
       path,
@@ -2208,13 +2495,58 @@ function resolveBoundContainer(args: {
       },
       children: resolvedChildren.content,
     });
-    layers.push({
+    const containerEntry: ResolvedLayerEntry = {
       layer: finalLayer,
       objects: layerObservedObjects,
       reference: { kind: "layout", id: layoutId },
-    });
+    };
+    layers.push(containerEntry);
+    if (
+      !enclosesChildren &&
+      childScope !== undefined &&
+      childScope.deferredTasks.length > deferredBeforeChildren
+    ) {
+      childScope.postFlushSyncs.push(() => {
+        siblingLayers.splice(
+          0,
+          siblingLayers.length,
+          ...resolvedChildren.layers,
+        );
+        layerObservedObjects.splice(
+          0,
+          layerObservedObjects.length,
+          ...(containerObservation === undefined ? [] : [containerObservation]),
+          ...resolvedChildren.objects,
+        );
+        layoutChildren.splice(
+          0,
+          layoutChildren.length,
+          ...(containerObservation === undefined
+            ? []
+            : [{ kind: "object" as const, id: containerObservation.id }]),
+          ...resolvedChildren.references,
+        );
+        if (initialChildContentLen === resolvedChildren.content.length) {
+          content[contentStart] = {
+            ...(authorId === undefined ? {} : { authorId }),
+            path,
+            reference: {
+              kind: "layout",
+              id: layoutId,
+              objectIds:
+                containerObservation === undefined
+                  ? []
+                  : [containerObservation.id],
+            },
+            children: resolvedChildren.content,
+          };
+        }
+      });
+    }
     return;
   }
+  const contentStart = content.length;
+  const initialChildContentLen = resolvedChildren.content.length;
   if (containerObservation !== undefined) {
     content.push({
       ...(authorId === undefined ? {} : { authorId }),
@@ -2225,14 +2557,44 @@ function resolveBoundContainer(args: {
   } else {
     content.push(...resolvedChildren.content);
   }
-  layers.push({
+  const containerEntry: ResolvedLayerEntry = {
     layer: finalLayer,
     objects: layerObservedObjects,
     reference:
       containerObservation !== undefined
         ? { kind: "object", id: containerObservation.id }
         : { kind: "layout", id: objectId },
-  });
+  };
+  layers.push(containerEntry);
+  if (
+    !enclosesChildren &&
+    childScope !== undefined &&
+    childScope.deferredTasks.length > deferredBeforeChildren
+  ) {
+    childScope.postFlushSyncs.push(() => {
+      siblingLayers.splice(0, siblingLayers.length, ...resolvedChildren.layers);
+      layerObservedObjects.splice(
+        0,
+        layerObservedObjects.length,
+        ...(containerObservation === undefined ? [] : [containerObservation]),
+        ...resolvedChildren.objects,
+      );
+      if (containerObservation !== undefined) {
+        content[contentStart] = {
+          ...(authorId === undefined ? {} : { authorId }),
+          path,
+          reference: { kind: "object", id: containerObservation.id },
+          children: resolvedChildren.content,
+        };
+      } else {
+        content.splice(
+          contentStart,
+          initialChildContentLen,
+          ...resolvedChildren.content,
+        );
+      }
+    });
+  }
 }
 
 function compareSourceOrder(
@@ -2411,9 +2773,10 @@ function collectNestedPlaceholders(
       );
       return;
     }
+    const childProps = readInternalDeclarationProps(child);
     const hasPhProp =
-      child.props["placeholder"] !== undefined ||
-      child.props["nativePlaceholder"] !== undefined;
+      childProps["placeholder"] !== undefined ||
+      childProps["nativePlaceholder"] !== undefined;
     if (hasPhProp) {
       if (allowDirect) {
         onDirect?.(child, childPath);
@@ -2486,8 +2849,9 @@ function buildSlidePlaceholderContexts(args: {
     true,
     diagnostics,
     (child, childPath) => {
-      const rawKey = child.props["placeholder"];
-      const rawNativePh = child.props["nativePlaceholder"];
+      const childProps = readInternalDeclarationProps(child);
+      const rawKey = childProps["placeholder"];
+      const rawNativePh = childProps["nativePlaceholder"];
       let parsedNativePh:
         | ReturnType<typeof nativePlaceholderRefSchema.parse>
         | undefined;
@@ -2769,6 +3133,7 @@ function resolveSlideDeclaration(
     layoutSpec === undefined
       ? undefined
       : masterByKey.get(layoutSpec.masterKey);
+  const nodeProps = readInternalDeclarationProps(node);
   const placeholderContexts = buildSlidePlaceholderContexts({
     slideId: id,
     slidePath: path,
@@ -2778,7 +3143,7 @@ function resolveSlideDeclaration(
     masterSpec,
     placeholderTheme: documentTheme.withTextStyle({}),
     children,
-    rawPlaceholdersProp: node.props["placeholders"],
+    rawPlaceholdersProp: nodeProps["placeholders"],
     modules,
     diagnostics: slide.diagnostics,
   });
@@ -2787,7 +3152,7 @@ function resolveSlideDeclaration(
   }
   let theme: ThemeContext;
   try {
-    theme = documentTheme.with(textStyleFrom(node.props["style"]));
+    theme = documentTheme.with(textStyleFrom(nodeProps["style"]));
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
     throw new BuildError([diagnostic(path, error.code, error.message)]);
@@ -2797,7 +3162,7 @@ function resolveSlideDeclaration(
     dimensions,
     index,
     options,
-  ).run(children, path, theme, node.props["style"], (element) =>
+  ).run(children, path, theme, nodeProps["style"], (element) =>
     placeholderContexts.get(element),
   );
   const ownedOrder = { value: 0 };
@@ -2846,11 +3211,11 @@ function resolveSlideDeclaration(
   const slideCapabilities: ResolvedSlideCapabilityRecord[] = [];
   const input: CapabilityInput = {
     type: node.type,
-    props: node.props,
+    props: nodeProps,
     children: node.children.map(capabilityChild),
   };
 
-  const slideStyle = node.props["style"];
+  const slideStyle = nodeProps["style"];
   const hasSlideStyleBackground =
     typeof slideStyle === "object" &&
     slideStyle !== null &&
@@ -2881,7 +3246,7 @@ function resolveSlideDeclaration(
     const hasStyleBackground =
       module.consumesOwnerBackgroundStyle === true && hasSlideStyleBackground;
     const hasSlideProps =
-      slideProps.some((property) => Object.hasOwn(node.props, property)) ||
+      slideProps.some((property) => Object.hasOwn(nodeProps, property)) ||
       hasStyleBackground;
     if (!module.always && !hasSlideProps) {
       if (inheritedContinuity?.get(module.declaration) === true) {
@@ -2968,7 +3333,7 @@ function resolveSlideDeclaration(
         !(
           consumer.slideProps ??
           (consumer.slideProp === undefined ? [] : [consumer.slideProp])
-        ).some((property) => Object.hasOwn(node.props, property)))
+        ).some((property) => Object.hasOwn(nodeProps, property)))
     ) {
       slide.diagnostics.push(
         diagnostic(
@@ -3356,7 +3721,8 @@ function buildResolvedPlaceholders(
     for (const [styleKey, styleValue] of Object.entries(rawMerged)) {
       if (styleValue === undefined) continue;
       mergedStyle[styleKey] =
-        styleKey === "fontFamily" && isFont(styleValue)
+        (styleKey === "fontFamily" || styleKey === "eastAsianFontFamily") &&
+        isFont(styleValue)
           ? styleValue.family
           : styleValue;
     }
@@ -3430,13 +3796,14 @@ function resolveDocument(
     ]);
   }
   const deck = decks[0];
-  const { width, height, title } = parseDeckProps(deck.props);
+  const deckProps = readInternalDeclarationProps(deck);
+  const { width, height, title } = parseDeckProps(deckProps);
   const size: ResolutionDimensions = { width, height };
   let theme: ThemeContext;
   try {
     theme = createThemeContext(
-      deck.props["theme"] as ThemeInput | Theme | undefined,
-      deck.props["style"] as Record<string, unknown> | undefined,
+      deckProps["theme"] as ThemeInput | Theme | undefined,
+      deckProps["style"] as Record<string, unknown> | undefined,
     );
   } catch (error) {
     if (!(error instanceof CapabilityError)) throw error;
@@ -3550,7 +3917,7 @@ function resolveDocument(
     try {
       masterThemeBase = createThemeContext(
         parsedMaster.theme,
-        deck.props["style"] as Record<string, unknown> | undefined,
+        deckProps["style"] as Record<string, unknown> | undefined,
         { colorMap: parsedMaster.colorMap },
       );
       if (parsedMaster.style !== undefined) {
@@ -3637,7 +4004,7 @@ function resolveDocument(
     const masterShared = resolveSharedCanvasLayers({
       children: parsedMaster.canvasChildren.map(capabilityChild),
       path: parsedMaster.path,
-      style: parsedMaster.node.props["style"],
+      style: readInternalDeclarationProps(parsedMaster.node)["style"],
       modules,
       dimensions: size,
       options,
@@ -3890,7 +4257,7 @@ function resolveDocument(
     if (boundMaster !== undefined) {
       slideThemeBase = createThemeContext(
         boundMaster.theme,
-        deck.props["style"] as Record<string, unknown> | undefined,
+        deckProps["style"] as Record<string, unknown> | undefined,
         { colorMap: boundMaster.colorMap },
       );
       if (
@@ -3922,7 +4289,8 @@ function resolveDocument(
     const parsedMaster = parsedOwner?.master;
     const parsedLayout = parsedOwner?.layout;
 
-    const slideStyleObj = parsedSlide.node.props["style"];
+    const slideNodeProps = readInternalDeclarationProps(parsedSlide.node);
+    const slideStyleObj = slideNodeProps["style"];
     const hasSlideStyleBackground =
       typeof slideStyleObj === "object" &&
       slideStyleObj !== null &&
@@ -3932,7 +4300,7 @@ function resolveDocument(
         undefined;
     let inheritedBackground: ResolvedSlideCapabilityRecord | undefined;
     if (
-      !Object.hasOwn(parsedSlide.node.props, "background") &&
+      !Object.hasOwn(slideNodeProps, "background") &&
       !hasSlideStyleBackground &&
       parsedSlide.layoutKey !== undefined &&
       bgModule !== undefined

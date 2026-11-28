@@ -1,5 +1,6 @@
 export { authorIdSchema, readAuthorId } from "#/author-ids.ts";
 export type { AuthorId } from "#/author-ids.ts";
+export { readInternalDeclarationProps } from "#/document-internals.ts";
 export {
   backgroundRefSchema,
   deckPropsSchema,
@@ -75,6 +76,22 @@ export type {
   TargetName,
 } from "#/stage-options.ts";
 export {
+  bytesSha256,
+  computePitchFamilyFromPanose,
+  createSealedFontFace,
+  formatPanoseHex,
+  hasFontFaceBytes,
+  isImmutableBytes,
+  isSealedFont,
+  markImmutableBytes,
+  markSealedFont,
+  peekFontFaceClassification,
+  peekFontFaceResource,
+  resolveFontClassification,
+  type FontClassification,
+  type FontFaceResourceView,
+} from "#/font-seal.ts";
+export {
   applyFormatColorTransforms,
   assertValidLang,
   backgroundValueSchema,
@@ -117,6 +134,7 @@ export {
   isTheme,
   isThemeFontSlot,
   lighter,
+  lineHeightSchema,
   linearGradientSchema,
   nativeColorSlots,
   nativeColorSlotSchema,
@@ -140,6 +158,7 @@ export {
   themeOverrideSchema,
   themeSchema,
   themeShadeSchema,
+  unsealedFontSchema,
   validateTextStyle,
   visualStyleSchema,
   visualStyleShape,
@@ -227,6 +246,7 @@ export type {
   FormatScheme,
   GradientStop,
   HexColor,
+  LineHeight,
   LinearGradient,
   NativeColorSlot,
   RadialGradient,
@@ -325,6 +345,7 @@ export type {
   ResolvedTable,
   ResolvedTableCell,
   ResolvedTableRow,
+  ScopeTargetObject,
   ScreenPoint,
   BackgroundRef,
   FooterPlaceholderSpec,

@@ -6,25 +6,33 @@ import {
   type DeclarationCodegenHandler,
 } from "@pptxdk/codegen";
 import type { DeclarationText } from "@pptxdk/core/build";
-import { nativePlaceholderRefSchema } from "@pptxdk/core/capability";
+import {
+  nativePlaceholderRefSchema,
+  readInternalDeclarationProps,
+} from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import {
   paragraphAuthorPropsKeys,
   paragraphStyleSchema,
   runStyleSchema,
   slideNumberAuthorPropsKeys,
   spanAuthorPropsKeys,
+  subAuthorPropsKeys,
+  supAuthorPropsKeys,
   textAuthorPropsKeys,
   textBoxStyleSchema,
 } from "../shared/text-schemas.ts";
 
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 const textAllowedPropKeys = new Set(textAuthorPropsKeys);
 const paragraphAllowedPropKeys = new Set(paragraphAuthorPropsKeys);
 const spanAllowedPropKeys = new Set(spanAuthorPropsKeys);
+const supAllowedPropKeys = new Set(supAuthorPropsKeys);
+const subAllowedPropKeys = new Set(subAuthorPropsKeys);
 const slideNumberAllowedPropKeys = new Set(slideNumberAuthorPropsKeys);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -68,7 +76,10 @@ function serializeRichTextStyleProp(
       ? textBoxStyleSchema
       : nodeType === "paragraph"
         ? paragraphStyleSchema
-        : nodeType === "span" || nodeType === "slide-number"
+        : nodeType === "span" ||
+            nodeType === "sup" ||
+            nodeType === "sub" ||
+            nodeType === "slide-number"
           ? runStyleSchema
           : undefined;
   if (schema !== undefined) {
@@ -99,16 +110,26 @@ function serializeRichTextStyleProp(
   return expr(ctx.formatProps(entries));
 }
 
-/** Container-level rich-text child declaration types allowed directly inside `Text` and `Notes`. */
+/** Container-level rich-text child declaration types allowed directly inside `Notes` and `Cell`. */
 export const blockRichTextChildKinds: ReadonlySet<string> = new Set([
   "paragraph",
   "span",
+  "sup",
+  "sub",
   "slide-number",
+]);
+
+/** Container-level rich-text child declaration types allowed directly inside `Text`. */
+export const steppableRichTextChildKinds: ReadonlySet<string> = new Set([
+  ...blockRichTextChildKinds,
+  "motion-step",
 ]);
 
 /** Inline-level rich-text child declaration types allowed inside `P` and `Span`. */
 export const inlineRichTextChildKinds: ReadonlySet<string> = new Set([
   "span",
+  "sup",
+  "sub",
   "slide-number",
 ]);
 
@@ -127,11 +148,12 @@ export function collectRichTextNodeProps(
   allowedPropKeys: ReadonlySet<string>,
   supportObjectExtras: boolean,
 ): readonly (readonly [string, unknown])[] {
+  const props = readInternalDeclarationProps(node);
   const extra: Readonly<Record<string, CodegenExpr>> = supportObjectExtras
-    ? ctx.emitObjectExtraProps(node.props)
+    ? ctx.emitObjectExtraProps(props)
     : {};
   const entries: [string, unknown][] = [];
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!allowedPropKeys.has(key)) {
       ctx.fail(
@@ -150,6 +172,18 @@ export function collectRichTextNodeProps(
       continue;
     }
     if (supportObjectExtras && objectMotionPropKeys.has(key)) {
+      if (
+        node.type === "paragraph" &&
+        !/^deck\/slide(?:\[[^\]]*\])?(?:\/.*)?\/(?:text|shape)(?:\[[^\]]*\])?(?:\/motion-step(?:\[[^\]]*\])?)?\/paragraph(?:\[[^\]]*\])?(?:@.*)?$/u.test(
+          ctx.path,
+        )
+      ) {
+        ctx.fail(
+          "invalid-document",
+          "Paragraph motion properties are only supported inside page-level Text and Shape",
+          `@${key}`,
+        );
+      }
       if (Object.hasOwn(extra, key)) {
         entries.push([key, extra[key]]);
       } else {
@@ -274,7 +308,7 @@ export const textCodegen = defineObjectCodegen({
       vanillaFactory: "text",
       reactComponent: "Text",
       allowedPropKeys: textAllowedPropKeys,
-      allowedChildKinds: blockRichTextChildKinds,
+      allowedChildKinds: steppableRichTextChildKinds,
       supportObjectExtras: true,
     }),
     paragraph: createRichTextCodegenHandler({
@@ -282,12 +316,26 @@ export const textCodegen = defineObjectCodegen({
       reactComponent: "P",
       allowedPropKeys: paragraphAllowedPropKeys,
       allowedChildKinds: inlineRichTextChildKinds,
-      supportObjectExtras: false,
+      supportObjectExtras: true,
     }),
     span: createRichTextCodegenHandler({
       vanillaFactory: "span",
       reactComponent: "Span",
       allowedPropKeys: spanAllowedPropKeys,
+      allowedChildKinds: inlineRichTextChildKinds,
+      supportObjectExtras: false,
+    }),
+    sup: createRichTextCodegenHandler({
+      vanillaFactory: "sup",
+      reactComponent: "Sup",
+      allowedPropKeys: supAllowedPropKeys,
+      allowedChildKinds: inlineRichTextChildKinds,
+      supportObjectExtras: false,
+    }),
+    sub: createRichTextCodegenHandler({
+      vanillaFactory: "sub",
+      reactComponent: "Sub",
+      allowedPropKeys: subAllowedPropKeys,
       allowedChildKinds: inlineRichTextChildKinds,
       supportObjectExtras: false,
     }),

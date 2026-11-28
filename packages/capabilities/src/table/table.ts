@@ -32,7 +32,7 @@ import {
   fontPresentationContributions,
   type FontEmbeddingUse,
 } from "../font/font-embedding.ts";
-import { motionAnnotations } from "../motion/motion-api.ts";
+import { motionAnnotations, pickMotionProps } from "../motion/motion-api.ts";
 import {
   nativeLinkXml,
   parseLinkTarget,
@@ -65,17 +65,18 @@ import {
 import {
   assertAllowedTableKeys,
   assertTableEmuExtent,
+  assertTableTextAlignment,
   cellAllowedParameters,
   cellStyleKeys,
   parseOptionalTableId,
   parseTableCellPadding,
   parseTableColumns,
   parseTableCoordinate,
-  parseTableLayerBorder,
   parseTableMergeSpan,
   parseTablePositiveSize,
   parseTableVerticalAlign,
   resolveTableCellBorders,
+  resolveTableLayerBorders,
   rowAllowedParameters,
   rowStyleKeys,
   tableAllowedParameters,
@@ -136,7 +137,7 @@ type ParsedRow = {
   readonly textStyle: Record<string, unknown>;
   readonly verticalAlign?: TableVerticalAlign;
   readonly backgroundRaw?: unknown;
-  readonly border?: TableCellBorder;
+  readonly borders: TableCellBorders;
 };
 const maximumExtentEmu = 2_147_483_647;
 
@@ -193,6 +194,7 @@ function textStyle(
       throw error;
     }
   }
+  assertTableTextAlignment(style["align"], path);
   const textStyle: Record<string, unknown> = {};
   for (const key of tableTextStyleKeys) {
     const value = style[key];
@@ -297,7 +299,7 @@ function prepareRows(
   tableTextStyle: Record<string, unknown>,
   tableVerticalAlign: TableVerticalAlign,
   tableBackgroundRaw: unknown,
-  tableBorder: TableCellBorder | undefined,
+  tableBorders: TableCellBorders,
   theme: ThemeContext,
   slideNumber: number,
 ): {
@@ -340,15 +342,13 @@ function prepareRows(
     const rowBackgroundRaw = rowBgParsed.declared
       ? rowBgParsed.value
       : tableBackgroundRaw;
-    const rowBorderParsed = parseTableLayerBorder(
+    const rowBorders = resolveTableLayerBorders(
       rowStyle.style,
+      tableBorders,
       "Row",
       theme,
       rowPath,
     );
-    const rowBorder = rowBorderParsed.declared
-      ? rowBorderParsed.border
-      : tableBorder;
     const rowVerticalAlign =
       parseTableVerticalAlign(rowStyle.style["verticalAlign"], rowPath) ??
       tableVerticalAlign;
@@ -361,7 +361,7 @@ function prepareRows(
       ...(rowBackgroundRaw === undefined
         ? {}
         : { backgroundRaw: rowBackgroundRaw }),
-      ...(rowBorder === undefined ? {} : { border: rowBorder }),
+      borders: rowBorders,
     };
     rows.push(row);
     let column = 0;
@@ -452,7 +452,7 @@ function prepareRows(
         rowVerticalAlign;
       const borders = resolveTableCellBorders(
         cellStyle.style,
-        row.border,
+        row.borders,
         theme,
         cellPath,
       );
@@ -692,6 +692,16 @@ function paintTableModel(
   }[] = [];
   for (const entry of model.resolvedCells) {
     const { cell, box: cellBox, fill, body, hasText, hasOverflow } = entry;
+    if (
+      !Number.isFinite(cellBox.x) ||
+      !Number.isFinite(cellBox.y) ||
+      !Number.isFinite(cellBox.width) ||
+      !Number.isFinite(cellBox.height) ||
+      cellBox.width <= 1e-6 ||
+      cellBox.height <= 1e-6
+    ) {
+      continue;
+    }
     const idPrefix = `tbl-s${paintContext.slideNumber}-o${paintContext.objectId}-r${cell.row}-c${cell.column}`;
     if (fill.kind === "solid") {
       fills.push(
@@ -708,7 +718,7 @@ function paintTableModel(
       );
     } else if (fill.kind === "image") {
       const fillDefId = `${idPrefix}-fill`;
-      defs.push(paintImageFillSvg(fill, fillDefId, cellBox));
+      const patternSvg = paintImageFillSvg(fill, fillDefId, cellBox);
       if (fill.source.kind === "external") {
         placeholders.push({
           ...(cell.authorId === undefined ? {} : { id: cell.authorId }),
@@ -716,9 +726,12 @@ function paintTableModel(
           url: fill.source.externalUrl,
         });
       }
-      fills.push(
-        `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="url(#${fillDefId})" stroke="none"/>`,
-      );
+      if (patternSvg !== "") {
+        defs.push(patternSvg);
+        fills.push(
+          `<rect x="${roundSvgNumber(cellBox.x)}" y="${roundSvgNumber(cellBox.y)}" width="${roundSvgNumber(cellBox.width)}" height="${roundSvgNumber(cellBox.height)}" fill="url(#${fillDefId})" stroke="none"/>`,
+        );
+      }
     }
     if (hasText) {
       try {
@@ -1151,8 +1164,9 @@ export const tableCapability: ObjectCapabilityModule<
       context.theme,
       context.path,
     );
-    const tableBorderParsed = parseTableLayerBorder(
+    const tableBorders = resolveTableLayerBorders(
       tableStyle.style,
+      {},
       "Table",
       context.theme,
       context.path,
@@ -1165,7 +1179,7 @@ export const tableCapability: ObjectCapabilityModule<
       tableStyle.textStyle,
       tableVerticalAlign,
       tableBgParsed.value,
-      tableBorderParsed.border,
+      tableBorders,
       context.theme,
       context.slideNumber,
     );
@@ -1191,17 +1205,9 @@ export const tableCapability: ObjectCapabilityModule<
 
     const authorId =
       typeof input.props["id"] === "string" ? input.props["id"] : undefined;
-    const motionProps: Readonly<Record<string, unknown>> = {
-      ...(input.props["enter"] !== undefined
-        ? { enter: input.props["enter"] }
-        : {}),
-      ...(input.props["emphasis"] !== undefined
-        ? { emphasis: input.props["emphasis"] }
-        : {}),
-      ...(input.props["motion"] !== undefined
-        ? { motion: input.props["motion"] }
-        : {}),
-    };
+    const motionProps: Readonly<Record<string, unknown>> = pickMotionProps(
+      input.props,
+    );
 
     const native: BoundObjectNativeCollaboration = {
       ...(morphKey === undefined ? {} : { morphKey }),

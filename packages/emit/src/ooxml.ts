@@ -9,6 +9,7 @@ import type {
   PlaceholderListStyles,
 } from "@pptxdk/core";
 import {
+  resolveFontClassification,
   resolvePlaceholderBoxFromLayers,
   type EmittedSlideLayoutSpec,
   type EmittedSlideMasterSpec,
@@ -24,7 +25,10 @@ import {
   schemeColorSlots,
   type ColorMap,
   type ColorMapOverride,
+  type Font,
+  type FontFaceStyle,
   type FontSize,
+  type LineHeight,
   type FormatColorTransform,
   type FormatEffectStyle,
   type FormatFillStyle,
@@ -283,16 +287,52 @@ function colorSchemeXml(
     .join("")}</a:clrScheme>`;
 }
 
+function fontClassificationAttrs(
+  fontValue: Font | undefined,
+  weight?: number,
+  faceStyle?: FontFaceStyle,
+): string {
+  if (fontValue === undefined) return "";
+  const cls = resolveFontClassification(fontValue, weight, faceStyle);
+  if (cls === undefined) return "";
+  const panoseAttr = cls.panose === undefined ? "" : ` panose="${cls.panose}"`;
+  return `${panoseAttr} pitchFamily="${cls.pitchFamily}"`;
+}
+
 function fontSchemeXml(
   name: string,
   majorValue: Theme["fonts"]["major"],
   minorValue: Theme["fonts"]["minor"],
+  majorEastAsianValue?: Theme["fonts"]["majorEastAsian"],
+  minorEastAsianValue?: Theme["fonts"]["minorEastAsian"],
 ): string {
+  const effectiveMajorEa = majorEastAsianValue ?? majorValue;
+  const effectiveMinorEa = minorEastAsianValue ?? minorValue;
   const major = isFont(majorValue) ? majorValue.family : majorValue;
   const minor = isFont(minorValue) ? minorValue.family : minorValue;
+  const majorEa = isFont(effectiveMajorEa)
+    ? effectiveMajorEa.family
+    : effectiveMajorEa;
+  const minorEa = isFont(effectiveMinorEa)
+    ? effectiveMinorEa.family
+    : effectiveMinorEa;
   const majorEscaped = xmlEscape(major);
   const minorEscaped = xmlEscape(minor);
-  return `<a:fontScheme name="${xmlEscape(name)}"><a:majorFont><a:latin typeface="${majorEscaped}"/><a:ea typeface="${majorEscaped}"/><a:cs typeface="${majorEscaped}"/></a:majorFont><a:minorFont><a:latin typeface="${minorEscaped}"/><a:ea typeface="${minorEscaped}"/><a:cs typeface="${minorEscaped}"/></a:minorFont></a:fontScheme>`;
+  const majorEaEscaped = xmlEscape(majorEa);
+  const minorEaEscaped = xmlEscape(minorEa);
+  const majorAttrs = fontClassificationAttrs(
+    isFont(majorValue) ? majorValue : undefined,
+  );
+  const minorAttrs = fontClassificationAttrs(
+    isFont(minorValue) ? minorValue : undefined,
+  );
+  const majorEaAttrs = fontClassificationAttrs(
+    isFont(effectiveMajorEa) ? effectiveMajorEa : undefined,
+  );
+  const minorEaAttrs = fontClassificationAttrs(
+    isFont(effectiveMinorEa) ? effectiveMinorEa : undefined,
+  );
+  return `<a:fontScheme name="${xmlEscape(name)}"><a:majorFont><a:latin typeface="${majorEscaped}"${majorAttrs}/><a:ea typeface="${majorEaEscaped}"${majorEaAttrs}/><a:cs typeface="${majorEscaped}"/></a:majorFont><a:minorFont><a:latin typeface="${minorEscaped}"${minorAttrs}/><a:ea typeface="${minorEaEscaped}"${minorEaAttrs}/><a:cs typeface="${minorEscaped}"/></a:minorFont></a:fontScheme>`;
 }
 
 function formatColorTransformXml(transform: FormatColorTransform): string {
@@ -379,19 +419,34 @@ function formatLineStyleXml(line: FormatLineStyle): string {
   return `<a:ln${attrs}>${fill}${dash}</a:ln>`;
 }
 
+function positiveFixedAngleUnits(angleDegrees: number): number {
+  return Math.round((((angleDegrees % 360) + 360) % 360) * 60_000) % 21_600_000;
+}
+
 function formatEffectStyleXml(effect: FormatEffectStyle): string {
   if (effect.shadow === undefined) {
     return "<a:effectStyle><a:effectLst/></a:effectStyle>";
   }
   const blur = Math.round((effect.shadow.blur ?? 0) * 12_700);
   const dist = Math.round((effect.shadow.distance ?? 0) * 12_700);
-  const dir = Math.round((effect.shadow.angle ?? 0) * 60_000);
+  const dir = positiveFixedAngleUnits(effect.shadow.angle ?? 0);
   const color =
     typeof effect.shadow.color === "string" &&
     effect.shadow.color.startsWith("#")
       ? `<a:srgbClr val="${normalizedHex6(effect.shadow.color, "shadow.color")}"/>`
       : '<a:srgbClr val="000000"><a:alpha val="38000"/></a:srgbClr>';
   return `<a:effectStyle><a:effectLst><a:outerShdw blurRad="${blur}" dist="${dist}" dir="${dir}" rotWithShape="0">${color}</a:outerShdw></a:effectLst></a:effectStyle>`;
+}
+
+function padFormatStyleXmlList(
+  entries: readonly string[],
+  fallbackXml: string,
+): string {
+  const padded = [...entries];
+  while (padded.length < 3) {
+    padded.push(fallbackXml);
+  }
+  return padded.join("");
 }
 
 function formatSchemeXml(scheme?: FormatScheme): string {
@@ -401,22 +456,22 @@ function formatSchemeXml(scheme?: FormatScheme): string {
   if (scheme === undefined) {
     return `<a:fmtScheme name="Office"><a:fillStyleLst>${fill}${fill}${fill}</a:fillStyleLst><a:lnStyleLst>${line}${line}${line}</a:lnStyleLst><a:effectStyleLst>${effect}${effect}${effect}</a:effectStyleLst><a:bgFillStyleLst>${fill}${fill}${fill}</a:bgFillStyleLst></a:fmtScheme>`;
   }
-  const fillList =
-    scheme.fillStyles !== undefined && scheme.fillStyles.length > 0
-      ? scheme.fillStyles.map(formatFillStyleXml).join("")
-      : `${fill}${fill}${fill}`;
-  const lnList =
-    scheme.lineStyles !== undefined && scheme.lineStyles.length > 0
-      ? scheme.lineStyles.map(formatLineStyleXml).join("")
-      : `${line}${line}${line}`;
-  const effList =
-    scheme.effectStyles !== undefined && scheme.effectStyles.length > 0
-      ? scheme.effectStyles.map(formatEffectStyleXml).join("")
-      : `${effect}${effect}${effect}`;
-  const bgList =
-    scheme.bgFillStyles !== undefined && scheme.bgFillStyles.length > 0
-      ? scheme.bgFillStyles.map(formatFillStyleXml).join("")
-      : `${fill}${fill}${fill}`;
+  const fillList = padFormatStyleXmlList(
+    (scheme.fillStyles ?? []).map(formatFillStyleXml),
+    fill,
+  );
+  const lnList = padFormatStyleXmlList(
+    (scheme.lineStyles ?? []).map(formatLineStyleXml),
+    line,
+  );
+  const effList = padFormatStyleXmlList(
+    (scheme.effectStyles ?? []).map(formatEffectStyleXml),
+    effect,
+  );
+  const bgList = padFormatStyleXmlList(
+    (scheme.bgFillStyles ?? []).map(formatFillStyleXml),
+    fill,
+  );
   return `<a:fmtScheme name="${xmlEscape(scheme.name ?? "Office")}"><a:fillStyleLst>${fillList}</a:fillStyleLst><a:lnStyleLst>${lnList}</a:lnStyleLst><a:effectStyleLst>${effList}</a:effectStyleLst><a:bgFillStyleLst>${bgList}</a:bgFillStyleLst></a:fmtScheme>`;
 }
 
@@ -426,7 +481,13 @@ function formatSchemeXml(scheme?: FormatScheme): string {
 export function themeXml(value: Theme): string {
   const name = xmlEscape(value.name);
   const colors = colorSchemeXml(value.name, value.colors);
-  const fonts = fontSchemeXml(value.name, value.fonts.major, value.fonts.minor);
+  const fonts = fontSchemeXml(
+    value.name,
+    value.fonts.major,
+    value.fonts.minor,
+    value.fonts.majorEastAsian,
+    value.fonts.minorEastAsian,
+  );
   const format = formatSchemeXml(value.formatScheme);
   return xmlDocument(
     `<a:theme xmlns:a="${namespaces.a}" name="${name}"><a:themeElements>${colors}${fonts}${format}</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`,
@@ -518,36 +579,69 @@ function levelDefRPrXml(
   } else if (style.textShadow !== undefined) {
     const blur = pxToEmu(style.textShadow.blur ?? 4);
     const dist = pxToEmu(style.textShadow.distance ?? 0);
-    const dir = Math.round(
-      ((((style.textShadow.angle ?? 90) % 360) + 360) % 360) * 60_000,
-    );
+    const dir = positiveFixedAngleUnits(style.textShadow.angle ?? 90);
     const shadowColor = themeContext.resolveColor(
       style.textShadow.color ?? { color: "#000000", alpha: 0.35 },
     );
     effectXml = `<a:effectLst><a:outerShdw blurRad="${blur}" dist="${dist}" dir="${dir}" algn="ctr" rotWithShape="0">${resolvedColorXml(shadowColor)}</a:outerShdw></a:effectLst>`;
   }
   let fontXml = "";
-  if (style.fontFamily !== undefined) {
-    const resolved = themeContext.resolveFont(style.fontFamily);
-    const latin =
-      resolved.themeFont === "major"
-        ? "+mj-lt"
-        : resolved.themeFont === "minor"
-          ? "+mn-lt"
-          : resolved.family;
-    const ea =
-      resolved.themeFont === "major"
-        ? "+mj-ea"
-        : resolved.themeFont === "minor"
-          ? "+mn-ea"
-          : resolved.family;
-    const cs =
-      resolved.themeFont === "major"
-        ? "+mj-cs"
-        : resolved.themeFont === "minor"
-          ? "+mn-cs"
-          : resolved.family;
-    fontXml = `<a:latin typeface="${xmlEscape(latin)}"/><a:ea typeface="${xmlEscape(ea)}"/><a:cs typeface="${xmlEscape(cs)}"/>`;
+  if (
+    style.fontFamily !== undefined ||
+    style.eastAsianFontFamily !== undefined
+  ) {
+    const weight =
+      style.fontWeight === "bold"
+        ? 700
+        : style.fontWeight === "normal"
+          ? 400
+          : typeof style.fontWeight === "number"
+            ? style.fontWeight
+            : 400;
+    const latinPart = (() => {
+      if (style.fontFamily === undefined) return "";
+      const resolved = themeContext.resolveFont(style.fontFamily);
+      const clsAttrs =
+        resolved.themeFont === undefined
+          ? fontClassificationAttrs(resolved.font, weight, style.fontStyle)
+          : "";
+      const latin =
+        resolved.themeFont === "major"
+          ? "+mj-lt"
+          : resolved.themeFont === "minor"
+            ? "+mn-lt"
+            : resolved.family;
+      return `<a:latin typeface="${xmlEscape(latin)}"${clsAttrs}/>`;
+    })();
+    const eaPart = (() => {
+      if (style.eastAsianFontFamily === undefined) return "";
+      const resolvedEa = themeContext.resolveEastAsianFont(
+        style.eastAsianFontFamily,
+      );
+      const clsAttrs =
+        resolvedEa.themeFont === undefined
+          ? fontClassificationAttrs(resolvedEa.font, weight, style.fontStyle)
+          : "";
+      const ea =
+        resolvedEa.themeFont === "major"
+          ? "+mj-ea"
+          : resolvedEa.themeFont === "minor"
+            ? "+mn-ea"
+            : resolvedEa.family;
+      return `<a:ea typeface="${xmlEscape(ea)}"${clsAttrs}/>`;
+    })();
+    const csPart = (() => {
+      if (style.fontFamily === undefined) return "";
+      const resolved = themeContext.resolveFont(style.fontFamily);
+      const cs =
+        resolved.themeFont === "major"
+          ? "+mj-cs"
+          : resolved.themeFont === "minor"
+            ? "+mn-cs"
+            : resolved.family;
+      return `<a:cs typeface="${xmlEscape(cs)}"/>`;
+    })();
+    fontXml = `${latinPart}${eaPart}${csPart}`;
   }
   if (
     attrs.length === 0 &&
@@ -561,6 +655,15 @@ function levelDefRPrXml(
   return inner === ""
     ? `<a:defRPr${attrText}/>`
     : `<a:defRPr${attrText}>${inner}</a:defRPr>`;
+}
+
+function levelLineSpacingXml(value: LineHeight | undefined): string {
+  if (value === undefined) return "";
+  if (typeof value === "string" && value.endsWith("%")) {
+    const val = Math.round(Number(value.slice(0, -1)) * 1000);
+    return `<a:lnSpc><a:spcPct val="${val}"/></a:lnSpc>`;
+  }
+  return `<a:lnSpc><a:spcPts val="${lengthCentipoints(value as FontSize)}"/></a:lnSpc>`;
 }
 
 function levelParagraphPropertiesXml(
@@ -582,10 +685,7 @@ function levelParagraphPropertiesXml(
     level.spacingBefore === undefined
       ? ""
       : `<a:spcBef><a:spcPts val="${Math.round(level.spacingBefore * 75)}"/></a:spcBef>`;
-  const lnSpc =
-    level.lineHeight === undefined
-      ? ""
-      : `<a:lnSpc><a:spcPts val="${lengthCentipoints(level.lineHeight)}"/></a:lnSpc>`;
+  const lnSpc = levelLineSpacingXml(level.lineHeight);
   const spcAft =
     level.spacingAfter === undefined
       ? ""
@@ -633,6 +733,7 @@ function styleAsLevel1(
   const lvl: Record<string, unknown> = {};
   for (const key of [
     "fontFamily",
+    "eastAsianFontFamily",
     "fontSize",
     "fontWeight",
     "fontStyle",
@@ -809,6 +910,12 @@ function effectiveThemeWithOverride(
     ...(override.fonts?.minor === undefined
       ? {}
       : { minor: override.fonts.minor }),
+    ...(override.fonts?.majorEastAsian === undefined
+      ? {}
+      : { majorEastAsian: override.fonts.majorEastAsian }),
+    ...(override.fonts?.minorEastAsian === undefined
+      ? {}
+      : { minorEastAsian: override.fonts.minorEastAsian }),
   };
   return {
     ...baseTheme,
@@ -831,7 +938,9 @@ export function hasThemeOverrideContent(
       Object.keys(override.colors).length > 0) ||
     (override.fonts !== undefined &&
       (override.fonts.major !== undefined ||
-        override.fonts.minor !== undefined)) ||
+        override.fonts.minor !== undefined ||
+        override.fonts.majorEastAsian !== undefined ||
+        override.fonts.minorEastAsian !== undefined)) ||
     override.formatScheme !== undefined
   );
 }
@@ -855,6 +964,8 @@ export function themeOverrideXml(
           baseTheme.name,
           override.fonts.major ?? baseTheme.fonts.major,
           override.fonts.minor ?? baseTheme.fonts.minor,
+          override.fonts.majorEastAsian ?? baseTheme.fonts.majorEastAsian,
+          override.fonts.minorEastAsian ?? baseTheme.fonts.minorEastAsian,
         );
   const formatXml =
     override.formatScheme === undefined

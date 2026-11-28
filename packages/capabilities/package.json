@@ -34,6 +34,16 @@
       "types": "./dist/shape/shape-elements.d.ts",
       "default": "./dist/shape/shape-elements.js"
     },
+    "./line": {
+      "source": "./src/line/line.ts",
+      "types": "./dist/line/line.d.ts",
+      "default": "./dist/line/line.js"
+    },
+    "./line-elements": {
+      "source": "./src/line/line-elements.ts",
+      "types": "./dist/line/line-elements.d.ts",
+      "default": "./dist/line/line-elements.js"
+    },
     "./box": {
       "source": "./src/box/box.ts",
       "types": "./dist/box/box.d.ts",
@@ -172,7 +182,8 @@
     "lint:fix": "oxlint --format=unix . --fix",
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts"
   },
   "dependencies": {
     "@pptxdk/codegen": "workspace:*",

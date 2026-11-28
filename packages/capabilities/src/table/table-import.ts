@@ -1,13 +1,14 @@
 import {
-  matchLayoutPlaceholderKey,
   type ColorValue,
   type NativePlaceholderRef,
 } from "@pptxdk/core/capability";
 import {
   A_NS,
+  MAXIMUM_WRITABLE_EMU,
   P_NS,
   TABLE_NS_URI,
   emuToPx,
+  readOoxmlBoxInsets,
   type ImportDiagnostic,
   type ImportLocation,
   type ShapeTreeImportContext,
@@ -18,8 +19,10 @@ import {
 
 import { readClickLink, type ClickLinkReadResult } from "../shared/identity.ts";
 import {
+  emitPlaceholderUnbindDiagnostic,
   isPlaceholderGraphicFrameElement,
   readNvPrPlaceholder,
+  resolvePlaceholderImportClaim,
 } from "../shared/placeholder-import.ts";
 import {
   readDrawingColor,
@@ -164,10 +167,6 @@ function readCellProperties(
     "anchorCtr",
   ]);
   const parsedAttrs = tblCellPrXmlSchema.safeParse(rawAttrs);
-  let paddingTop: number | undefined;
-  let paddingRight: number | undefined;
-  let paddingBottom: number | undefined;
-  let paddingLeft: number | undefined;
   let verticalAlign: TableVerticalAlign | undefined;
 
   if (!parsedAttrs.success) {
@@ -181,18 +180,6 @@ function readCellProperties(
     });
   } else {
     const attrs = parsedAttrs.data;
-    if (attrs.marT !== undefined && attrs.marT !== 0) {
-      paddingTop = emuToPx(attrs.marT);
-    }
-    if (attrs.marR !== undefined && attrs.marR !== 0) {
-      paddingRight = emuToPx(attrs.marR);
-    }
-    if (attrs.marB !== undefined && attrs.marB !== 0) {
-      paddingBottom = emuToPx(attrs.marB);
-    }
-    if (attrs.marL !== undefined && attrs.marL !== 0) {
-      paddingLeft = emuToPx(attrs.marL);
-    }
     if (attrs.anchor !== undefined) {
       verticalAlign = anchorToVerticalAlign[attrs.anchor];
     }
@@ -208,6 +195,20 @@ function readCellProperties(
       });
     }
   }
+
+  const { paddingTop, paddingRight, paddingBottom, paddingLeft } =
+    readOoxmlBoxInsets({
+      rawAttrs,
+      attrNames: {
+        left: "marL",
+        top: "marT",
+        right: "marR",
+        bottom: "marB",
+      },
+      elementXpath: tcPr.xpath,
+      location: cellLocation,
+      diagnostics,
+    });
 
   const borderLeft = readCellBorderSide(tcPr, "lnL", cellLocation, diagnostics);
   const borderRight = readCellBorderSide(
@@ -301,14 +302,18 @@ function readAnchorCell(
     );
     const singleParagraph =
       importedParagraphs.length === 1 ? importedParagraphs[0] : undefined;
+    const singleParagraphExtraStyleKeys =
+      singleParagraph === undefined
+        ? []
+        : Object.keys(singleParagraph.style).filter((key) => key !== "align");
     const hasParagraphLevelStyle =
-      singleParagraph !== undefined &&
-      Object.keys(singleParagraph.style).length > 0;
+      singleParagraph !== undefined && singleParagraphExtraStyleKeys.length > 0;
     const singleTextRun =
       singleParagraph !== undefined &&
       !hasParagraphLevelStyle &&
       singleParagraph.runs.length === 1 &&
-      singleParagraph.runs[0]!.kind === "text"
+      singleParagraph.runs[0]!.kind === "text" &&
+      singleParagraph.runs[0]!.style.baselineShift === undefined
         ? singleParagraph.runs[0]
         : undefined;
     const isSingleEmptyParagraph =
@@ -318,7 +323,9 @@ function readAnchorCell(
 
     if (singleTextRun !== undefined) {
       const {
+        baselineShift: _baselineShift,
         fontFamily,
+        eastAsianFontFamily,
         fontSize,
         fontWeight,
         fontStyle,
@@ -329,8 +336,11 @@ function readAnchorCell(
         textShadow,
         lang,
       } = singleTextRun.style;
+      const hoistedAlign = singleParagraph?.style.align;
       hoistedRunStyle = {
+        ...(hoistedAlign === undefined ? {} : { align: hoistedAlign }),
         ...(fontFamily === undefined ? {} : { fontFamily }),
+        ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
         ...(fontSize === undefined ? {} : { fontSize }),
         ...(fontWeight === undefined ? {} : { fontWeight }),
         ...(fontStyle === undefined ? {} : { fontStyle }),
@@ -373,7 +383,7 @@ function readAnchorCell(
 export function readTableGraphicFrame(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, layoutPlaceholders } = context;
+  const { cursor, part, slideIndex } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvGraphicFramePr = cursor.child(P_NS, "nvGraphicFramePr");
@@ -454,13 +464,17 @@ export function readTableGraphicFrame(
   }
   const nativeRef: NativePlaceholderRef | undefined =
     phResult.kind === "ok" ? phResult.nativeRef : undefined;
-  const matchedKey =
+  const tableCompatiblePlaceholderRoles = new Set<string>(["tbl", "obj"]);
+  const claim =
     nativeRef === undefined
       ? undefined
-      : matchLayoutPlaceholderKey(layoutPlaceholders, {
-          type: nativeRef.type,
-          idx: nativeRef.idx,
+      : resolvePlaceholderImportClaim({
+          context,
+          nativeRef,
+          compatibleRoles: tableCompatiblePlaceholderRoles,
         });
+  const matchedKey = claim?.bound === true ? claim.key : undefined;
+  const unboundPlaceholder = claim !== undefined && !claim.bound;
 
   const xfrmCursor = cursor.child(P_NS, "xfrm") ?? cursor.child(A_NS, "xfrm");
   if (xfrmCursor === undefined) {
@@ -555,6 +569,7 @@ export function readTableGraphicFrame(
   }
 
   const columnWidths: number[] = [];
+  let totalWidthEmu = 0;
   for (const gridCol of gridCols) {
     const rawCol = gridCol.attrsObject(["w"]);
     const parsedCol = tblGridColXmlSchema.safeParse(rawCol);
@@ -569,7 +584,19 @@ export function readTableGraphicFrame(
       });
       return { diagnostics };
     }
+    totalWidthEmu += parsedCol.data.w;
     columnWidths.push(emuToPx(parsedCol.data.w));
+  }
+  if (totalWidthEmu > MAXIMUM_WRITABLE_EMU) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...tableLocation, xpath: tblGrid.xpath },
+      attributeOrElement: "a:tblGrid",
+      rawValue: String(totalWidthEmu),
+    });
+    return { diagnostics };
   }
 
   const trCursors = tbl.children(A_NS, "tr");
@@ -584,6 +611,7 @@ export function readTableGraphicFrame(
   }
 
   const rowHeights: number[] = [];
+  let totalHeightEmu = 0;
   const rawGrid: RawGridCell[][] = [];
   for (const trCursor of trCursors) {
     const rawRow = trCursor.attrsObject(["h"]);
@@ -599,7 +627,20 @@ export function readTableGraphicFrame(
       });
       return { diagnostics };
     }
+    totalHeightEmu += parsedRow.data.h;
     rowHeights.push(emuToPx(parsedRow.data.h));
+
+    if (totalHeightEmu > MAXIMUM_WRITABLE_EMU) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...tableLocation, xpath: tbl.xpath },
+        attributeOrElement: "a:tbl",
+        rawValue: String(totalHeightEmu),
+      });
+      return { diagnostics };
+    }
 
     const tcCursors = trCursor.children(A_NS, "tc");
     if (tcCursors.length !== columnWidths.length) {
@@ -747,11 +788,20 @@ export function readTableGraphicFrame(
   const tableProps: TableDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
-    ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
+    ...(matchedKey === undefined || nativeRef === undefined
+      ? {}
+      : { nativePlaceholder: nativeRef }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
     columns,
     style: tableStyle,
   };
+  if (unboundPlaceholder) {
+    emitPlaceholderUnbindDiagnostic({
+      diagnostics,
+      location: tableLocation,
+      retainedAs: "table",
+    });
+  }
   const tableNode = createTableNode(tableProps);
   tableNode.append(...rowNodes);
 

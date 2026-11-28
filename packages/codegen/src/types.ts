@@ -200,6 +200,7 @@ export type CodegenContext = {
     bytes: Uint8Array,
     family: string,
     ext?: "ttf" | "otf",
+    knownSha256?: string,
   ): string;
   allocateMotionScope(identity: string): string;
   emitValueExpr(value: unknown, propPath?: string): string;
@@ -275,9 +276,12 @@ export type ProductionDeclarationKind =
   | "text"
   | "paragraph"
   | "span"
+  | "sup"
+  | "sub"
   | "slide-number"
   | "notes"
   | "image"
+  | "line"
   | "shape"
   | "box"
   | "group"

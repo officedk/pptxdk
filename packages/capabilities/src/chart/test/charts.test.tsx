@@ -172,7 +172,10 @@ describe("native Cartesian charts", () => {
     assert.ok(chartPath);
     const chartXml = strFromU8(unzipSync(result.pptx)[chartPath]!);
     assert.ok(chartXml.includes("<c:valAx"));
-    assert.ok(chartXml.includes('<a:latin typeface="Collision Sans"/>'));
+    assert.match(
+      chartXml,
+      /<a:latin typeface="Collision Sans" panose="00000000000000000000" pitchFamily="2"\/>/u,
+    );
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
 
     await assert.rejects(
@@ -336,8 +339,8 @@ describe("native Cartesian charts", () => {
               durationMs: 250,
               delayMs: 0,
               from: 180,
-              startMs: 0,
-              endMs: 250,
+              startMs: 700,
+              endMs: 950,
             },
           ],
         },

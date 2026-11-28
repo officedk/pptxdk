@@ -1,7 +1,9 @@
-import { createHash } from "node:crypto";
-
 import {
+  bytesSha256,
   CapabilityError,
+  computePitchFamilyFromPanose,
+  formatPanoseHex,
+  peekFontFaceResource,
   type FontEmbeddingMode,
   type FontFaceStyle,
 } from "@pptxdk/core/capability";
@@ -14,11 +16,6 @@ import { subsetFont } from "./font-subset.ts";
 /** Normalizes a font family name for case-insensitive, whitespace-collapsed lookup. */
 export function fontFamilyKey(value: string): string {
   return value.trim().replace(/\s+/gu, " ").toLowerCase();
-}
-
-/** Computes the SHA-256 hex digest used to key parsed font caches and resource identities. */
-export function fontBytesIdentity(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 type FontBinaryFormat = "TTF" | "CFF" | "WOFF" | "WOFF2";
@@ -84,6 +81,7 @@ type ParsedFontBinary = {
   readonly underlinePosition: number;
   readonly yStrikeoutSize: number;
   readonly yStrikeoutPosition: number;
+  readonly panose?: string | undefined;
   readonly pitchFamily: number;
   readonly charset: number;
   hbEntry: CachedHarfBuzzFace | undefined;
@@ -129,6 +127,7 @@ export type CheckedEmbeddableTrueType = {
   readonly fsType: number;
   readonly os2Bold: boolean;
   readonly isItalic: boolean;
+  readonly panose?: string | undefined;
   readonly pitchFamily: number;
   readonly charset: number;
 };
@@ -180,11 +179,16 @@ function withHbBuffer<T>(fn: (buffer: hb.Buffer) => T): T {
   }
 }
 
-function readSfntDirectory(bytes: Uint8Array): SfntDirectory {
-  if (bytes.byteLength < 12) {
+function readSfntDirectoryAt(
+  bytes: Uint8Array,
+  headerOffset: number,
+): SfntDirectory {
+  if (headerOffset < 0 || headerOffset + 12 > bytes.byteLength) {
     throw new Error("Font data is shorter than the 12-byte SFNT header");
   }
-  const signature = String.fromCharCode(...bytes.subarray(0, 4));
+  const signature = String.fromCharCode(
+    ...bytes.subarray(headerOffset, headerOffset + 4),
+  );
   if (
     signature !== "\0\x01\0\0" &&
     signature !== "true" &&
@@ -193,13 +197,13 @@ function readSfntDirectory(bytes: Uint8Array): SfntDirectory {
     throw new Error("Font data is not a valid SFNT file");
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const count = view.getUint16(4);
-  if (12 + count * 16 > bytes.byteLength) {
+  const count = view.getUint16(headerOffset + 4);
+  if (headerOffset + 12 + count * 16 > bytes.byteLength) {
     throw new Error("Font SFNT table directory is incomplete");
   }
   const tables = new Map<string, SfntTableRecord>();
   for (let index = 0; index < count; index += 1) {
-    const record = 12 + index * 16;
+    const record = headerOffset + 12 + index * 16;
     const tag = String.fromCharCode(...bytes.subarray(record, record + 4));
     const offset = view.getUint32(record + 8);
     const length = view.getUint32(record + 12);
@@ -209,6 +213,10 @@ function readSfntDirectory(bytes: Uint8Array): SfntDirectory {
     tables.set(tag, { offset, length });
   }
   return { signature, tables };
+}
+
+function readSfntDirectory(bytes: Uint8Array): SfntDirectory {
+  return readSfntDirectoryAt(bytes, 0);
 }
 
 function tryReadSfntDirectory(bytes: Uint8Array): SfntDirectory | undefined {
@@ -430,26 +438,12 @@ function computeFontCategory(font: fontkit.Font): {
   readonly charset: number;
 } {
   const panose = font["OS/2"]?.panose ?? [];
-  const serifStyle = panose[1] ?? 0;
-  const proportion = panose[3] ?? 0;
-  const fixedPitch =
-    ((font as unknown as FontkitExtras).post?.isFixedPitch ?? 0) !== 0 ||
-    proportion === 9;
-  const sansSerifStyles = new Set([11, 12, 13, 14, 15]);
-  const family = fixedPitch
-    ? 0x30
-    : panose[0] === 2
-      ? sansSerifStyles.has(serifStyle)
-        ? 0x20
-        : serifStyle >= 2
-          ? 0x10
-          : 0
-      : panose[0] === 3
-        ? 0x40
-        : panose[0] === 4 || panose[0] === 5
-          ? 0x50
-          : 0;
-  return { pitchFamily: family | (fixedPitch ? 1 : 2), charset: 0 };
+  const isFixedPitch =
+    (font as unknown as FontkitExtras).post?.isFixedPitch ?? 0;
+  return {
+    pitchFamily: computePitchFamilyFromPanose(panose, isFixedPitch),
+    charset: 0,
+  };
 }
 
 function isValidWeightClass(value: unknown): value is number {
@@ -545,6 +539,14 @@ function parseFontBinaryUncached(
   const isItalic = isItalicFontkit(opened);
   const os2Bold = Boolean(os2?.fsSelection?.bold);
   const { pitchFamily, charset } = computeFontCategory(opened);
+  const panose =
+    rawOs2 !== undefined && rawOs2.length >= 42
+      ? formatPanoseHex(
+          safeBytes.subarray(rawOs2.offset + 32, rawOs2.offset + 42),
+        )
+      : Array.isArray(os2?.panose) && os2.panose.length === 10
+        ? formatPanoseHex(os2.panose)
+        : undefined;
   const names =
     sfnt !== undefined
       ? parseSfntUnicodeNames(safeBytes, sfnt.tables.get("name"))
@@ -574,6 +576,7 @@ function parseFontBinaryUncached(
     underlinePosition: opened.underlinePosition,
     yStrikeoutSize: os2?.yStrikeoutSize ?? 0,
     yStrikeoutPosition: os2?.yStrikeoutPosition ?? 0,
+    ...(panose === undefined ? {} : { panose }),
     pitchFamily,
     charset,
     hbEntry: undefined,
@@ -584,7 +587,7 @@ function getOrParseFontBinary(
   bytes: Uint8Array,
   knownIdentity?: string,
 ): ParsedFontBinary {
-  const identity = knownIdentity ?? fontBytesIdentity(bytes);
+  const identity = knownIdentity ?? bytesSha256(bytes);
   let parsed = parsedFontCache.get(identity);
   if (parsed === undefined) {
     parsed = parseFontBinaryUncached(bytes, identity);
@@ -679,13 +682,18 @@ function failFont(
  * Returns `undefined` for corrupt bytes, font collections, or variable (`fvar`) fonts
  * so `resolve`/`emit` can report a node-path-attributed `BuildError`.
  */
-export function tryInferStaticFontFaceMetadata(bytes: Uint8Array):
+export function tryInferStaticFontFaceMetadata(
+  bytes: Uint8Array,
+  knownIdentity?: string,
+):
   | {
       readonly weight: number;
       readonly style: FontFaceStyle;
+      readonly panose?: string | undefined;
+      readonly pitchFamily: number;
     }
   | undefined {
-  const parsed = tryGetOrParseFontBinary(bytes);
+  const parsed = tryGetOrParseFontBinary(bytes, knownIdentity);
   if (
     parsed === undefined ||
     parsed.hasFvar ||
@@ -696,6 +704,8 @@ export function tryInferStaticFontFaceMetadata(bytes: Uint8Array):
   return {
     weight: parsed.weightClass,
     style: parsed.style,
+    ...(parsed.panose === undefined ? {} : { panose: parsed.panose }),
+    pitchFamily: parsed.pitchFamily,
   };
 }
 
@@ -720,14 +730,15 @@ export function resolveDeclaredFaceSlot(face: {
       matchAnyWeightOnFvarOrCorrupt: false,
     };
   }
-  if (face.data === undefined) {
+  const resource = peekFontFaceResource(face);
+  if (resource === undefined) {
     return {
       weight: face.weight ?? 400,
       style: face.style ?? "normal",
       matchAnyWeightOnFvarOrCorrupt: false,
     };
   }
-  const parsed = tryGetOrParseFontBinary(face.data);
+  const parsed = tryGetOrParseFontBinary(resource.bytes, resource.sha256);
   if (parsed === undefined || parsed.hasFvar) {
     return {
       weight: face.weight ?? parsed?.weightClass ?? 400,
@@ -950,9 +961,10 @@ export function isTrueTypeFontEmbeddable(
   family: string,
   substitute: boolean,
   declaredEmbeddable: boolean,
+  knownIdentity?: string,
 ): boolean {
   if (substitute || !declaredEmbeddable) return false;
-  const parsed = tryGetOrParseFontBinary(bytes);
+  const parsed = tryGetOrParseFontBinary(bytes, knownIdentity);
   if (
     parsed === undefined ||
     !parsed.hasGlyf ||
@@ -1032,7 +1044,7 @@ export function validateEmbeddableTrueTypeFont(
     );
   }
 
-  const actualIdentity = fontBytesIdentity(input.bytes);
+  const actualIdentity = bytesSha256(input.bytes);
   if (actualIdentity !== input.identity) {
     return failFont(
       input,
@@ -1180,6 +1192,7 @@ export function validateEmbeddableTrueTypeFont(
     fsType,
     os2Bold: parsed.os2Bold,
     isItalic: parsed.isItalic,
+    ...(parsed.panose === undefined ? {} : { panose: parsed.panose }),
     pitchFamily: parsed.pitchFamily,
     charset: parsed.charset,
   };
@@ -1246,7 +1259,7 @@ function subsetTrueTypeAndVerify(
   try {
     subsetParsed = parseFontBinaryUncached(
       subsetBytes,
-      fontBytesIdentity(subsetBytes),
+      bytesSha256(subsetBytes),
     );
     if (
       subsetParsed.format !== "TTF" ||
@@ -1444,4 +1457,256 @@ export function inspectImportedEmbeddedFont(
     weight: parsed.weightClass,
     style: parsed.hasOs2 ? parsed.style : undefined,
   };
+}
+
+function sfntTableChecksum(bytes: Uint8Array): number {
+  const paddedLength = Math.ceil(bytes.byteLength / 4) * 4;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let sum = 0;
+  for (let offset = 0; offset < paddedLength; offset += 4) {
+    if (offset + 4 <= bytes.byteLength) {
+      sum = (sum + view.getUint32(offset)) >>> 0;
+    } else {
+      let word = 0;
+      for (let byte = 0; byte < 4; byte += 1) {
+        const value =
+          offset + byte < bytes.byteLength ? bytes[offset + byte]! : 0;
+        word = (word << 8) | value;
+      }
+      sum = (sum + (word >>> 0)) >>> 0;
+    }
+  }
+  return sum >>> 0;
+}
+
+function packStandaloneSfnt(
+  signature: string,
+  tables: ReadonlyMap<string, SfntTableRecord>,
+  sourceBytes: Uint8Array,
+): Uint8Array {
+  const sorted = [...tables.entries()].toSorted(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  const numTables = sorted.length;
+  const headerSize = 12 + numTables * 16;
+  let totalSize = headerSize;
+  for (const [, record] of sorted) {
+    totalSize += Math.ceil(record.length / 4) * 4;
+  }
+
+  const output = new Uint8Array(totalSize);
+  const view = new DataView(output.buffer);
+  for (let i = 0; i < 4; i += 1) {
+    output[i] = signature.charCodeAt(i);
+  }
+  view.setUint16(4, numTables);
+  const entrySelector = Math.floor(Math.log2(Math.max(1, numTables)));
+  const searchRange = (1 << entrySelector) * 16;
+  view.setUint16(6, searchRange);
+  view.setUint16(8, entrySelector);
+  view.setUint16(10, numTables * 16 - searchRange);
+
+  let dataOffset = headerSize;
+  let headOffset: number | undefined;
+  for (let index = 0; index < sorted.length; index += 1) {
+    const [tag, record] = sorted[index]!;
+    const slice = sourceBytes.subarray(
+      record.offset,
+      record.offset + record.length,
+    );
+    const tableBytes =
+      tag === "head" && slice.byteLength >= 12 ? new Uint8Array(slice) : slice;
+    if (tag === "head" && tableBytes.byteLength >= 12) {
+      new DataView(tableBytes.buffer).setUint32(8, 0);
+      headOffset = dataOffset;
+    }
+    output.set(tableBytes, dataOffset);
+    const recordOffset = 12 + index * 16;
+    for (let i = 0; i < 4; i += 1) {
+      output[recordOffset + i] = tag.charCodeAt(i);
+    }
+    view.setUint32(recordOffset + 4, sfntTableChecksum(tableBytes));
+    view.setUint32(recordOffset + 8, dataOffset);
+    view.setUint32(recordOffset + 12, tableBytes.byteLength);
+    dataOffset += Math.ceil(tableBytes.byteLength / 4) * 4;
+  }
+
+  if (headOffset !== undefined) {
+    const adjustment = (0xb1b0afba - sfntTableChecksum(output)) >>> 0;
+    view.setUint32(headOffset + 8, adjustment);
+  }
+  return output;
+}
+
+export type UnpackedCollectionFace = {
+  readonly bytes: Uint8Array;
+  readonly weight: number;
+  readonly style: FontFaceStyle;
+  readonly panose?: string | undefined;
+  readonly pitchFamily: number;
+};
+
+/**
+ * Parses a TrueType/OpenType Collection (`ttcf` v1/v2) binary buffer and reconstructs standalone
+ * static SFNT faces for members matching `family` (or the sole family when `substitute: true`).
+ */
+export function unpackFontCollectionFaces(
+  bytes: Uint8Array,
+  family: string,
+  options: { readonly substitute?: boolean | undefined } = {},
+): readonly UnpackedCollectionFace[] {
+  const failCollection = (code: string, message: string): never => {
+    throw new CapabilityError(code, message, undefined, {
+      font: { family },
+    });
+  };
+
+  if (bytes.byteLength < 12) {
+    return failCollection(
+      "unsupported-font-format",
+      "Font collection data is empty or truncated",
+    );
+  }
+  const tag = String.fromCharCode(...bytes.subarray(0, 4));
+  if (tag !== "ttcf") {
+    return failCollection(
+      "unsupported-font-format",
+      "Font collection data must begin with a valid 'ttcf' header",
+    );
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const majorVersion = view.getUint16(4);
+  const minorVersion = view.getUint16(6);
+  if ((majorVersion !== 1 && majorVersion !== 2) || minorVersion !== 0) {
+    return failCollection(
+      "unsupported-font-format",
+      `Unsupported font collection version ${majorVersion}.${minorVersion}`,
+    );
+  }
+  const numFonts = view.getUint32(8);
+  if (numFonts === 0 || (bytes.byteLength - 12) / 4 < numFonts) {
+    return failCollection(
+      "unsupported-font-format",
+      "Font collection header has invalid or truncated member offset table",
+    );
+  }
+
+  const members: {
+    readonly sfnt: SfntDirectory;
+    readonly names: UnicodeFontNames;
+    readonly allFamilyKeys: ReadonlySet<string>;
+    readonly displayFamily: string | undefined;
+  }[] = [];
+
+  for (let index = 0; index < numFonts; index += 1) {
+    const dirOffset = view.getUint32(12 + index * 4);
+    let sfnt: SfntDirectory;
+    try {
+      sfnt = readSfntDirectoryAt(bytes, dirOffset);
+    } catch (error) {
+      return failCollection(
+        "unsupported-font-format",
+        `Corrupt member font at index ${index} in font collection: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const names = parseSfntUnicodeNames(bytes, sfnt.tables.get("name"));
+    const allFamilyKeys = new Set([
+      ...names.legacyFamilyKeys,
+      ...names.preferredFamilyKeys,
+    ]);
+    const displayFamily =
+      names.primaryLegacyFamily ??
+      [...names.preferredFamilies][0] ??
+      [...names.legacyFamilies][0];
+    members.push({ sfnt, names, allFamilyKeys, displayFamily });
+  }
+
+  const targetKey = fontFamilyKey(family);
+  let matched = members.filter((member) => member.allFamilyKeys.has(targetKey));
+
+  if (matched.length === 0 && options.substitute === true) {
+    // Allow substitute aliases only when all collection members share one common family.
+    const commonKeys = new Set(members[0]!.allFamilyKeys);
+    for (let index = 1; index < members.length; index += 1) {
+      for (const key of commonKeys) {
+        if (!members[index]!.allFamilyKeys.has(key)) {
+          commonKeys.delete(key);
+        }
+      }
+    }
+    if (commonKeys.size > 0) {
+      matched = members;
+    }
+  }
+
+  if (matched.length === 0) {
+    const available = [
+      ...new Set(
+        members
+          .map((m) => m.displayFamily)
+          .filter((name): name is string => name !== undefined),
+      ),
+    ];
+    const availablePart =
+      available.length > 0
+        ? `; available families: ${available.join(", ")}`
+        : "";
+    return failCollection(
+      "font-family-mismatch",
+      `Font collection does not contain family "${family}"${availablePart}`,
+    );
+  }
+
+  const unpacked: UnpackedCollectionFace[] = [];
+  for (const member of matched) {
+    if (member.sfnt.tables.has("fvar")) {
+      return failCollection(
+        "unsupported-font-format",
+        `Variable font "${family}" inside font collection contains an OpenType "fvar" axis table and is not supported; supply static per-weight font files instead`,
+      );
+    }
+    if (
+      !member.sfnt.tables.has("OS/2") ||
+      !member.sfnt.tables.has("head") ||
+      !member.sfnt.tables.has("name")
+    ) {
+      return failCollection(
+        "unsupported-font-format",
+        `Member font for "${family}" in font collection is missing required SFNT tables`,
+      );
+    }
+    const standaloneBytes = packStandaloneSfnt(
+      member.sfnt.signature,
+      member.sfnt.tables,
+      bytes,
+    );
+    const sha256 = bytesSha256(standaloneBytes);
+    const parsed = tryGetOrParseFontBinary(standaloneBytes, sha256);
+    if (parsed === undefined) {
+      return failCollection(
+        "unsupported-font-format",
+        `Failed to parse reconstructed SFNT face for "${family}" from font collection`,
+      );
+    }
+    if (parsed.hasFvar) {
+      return failCollection(
+        "unsupported-font-format",
+        `Variable font "${family}" inside font collection contains an OpenType "fvar" axis table and is not supported; supply static per-weight font files instead`,
+      );
+    }
+    if (parsed.weightClass === undefined) {
+      return failCollection(
+        "unsupported-font-format",
+        `Member font for "${family}" in font collection is missing a valid OS/2 usWeightClass (1..1000)`,
+      );
+    }
+    unpacked.push({
+      bytes: standaloneBytes,
+      weight: parsed.weightClass,
+      style: parsed.style,
+      ...(parsed.panose === undefined ? {} : { panose: parsed.panose }),
+      pitchFamily: parsed.pitchFamily,
+    });
+  }
+  return unpacked;
 }

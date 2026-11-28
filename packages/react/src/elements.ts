@@ -55,6 +55,8 @@ function isInlineTextElement(value: unknown): boolean {
   return (
     value.type === "paragraph" ||
     value.type === "span" ||
+    value.type === "sup" ||
+    value.type === "sub" ||
     value.type === "slide-number"
   );
 }
@@ -63,6 +65,8 @@ function isInlineTextNode(node: CommonNode): boolean {
   return (
     node.type === "paragraph" ||
     node.type === "span" ||
+    node.type === "sup" ||
+    node.type === "sub" ||
     node.type === "slide-number"
   );
 }

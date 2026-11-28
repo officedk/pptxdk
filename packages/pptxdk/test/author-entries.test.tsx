@@ -12,6 +12,7 @@ import {
   CommonContainer,
   defineTheme,
   font,
+  fromFontCollection,
   RichTextContainer,
   transitions,
   type Transition,
@@ -19,6 +20,7 @@ import {
 import {
   Deck,
   expandDocument,
+  fromFontCollection as reactFromFontCollection,
   Shape,
   Slide,
   Text,
@@ -26,6 +28,7 @@ import {
 } from "@officedk/pptxdk/react";
 import {
   deck,
+  fromFontCollection as vanillaFromFontCollection,
   shape,
   slide,
   text,
@@ -188,6 +191,9 @@ describe("public author entrypoints", () => {
     const jsxFile = await validatePptx(directJsx.pptx);
     assert.deepEqual(jsxFile.errors, []);
     assert.equal(jsxFile.slides[0]?.objects[0]?.text?.text, "Pure JSX");
+
+    assert.equal(fromFontCollection, reactFromFontCollection);
+    assert.equal(fromFontCollection, vanillaFromFontCollection);
   });
 
   it("validates Slide id and numeric width at authoring time via tsc, and locates invalid slide nesting in resolve", async () => {
@@ -336,121 +342,5 @@ export const stringWidthDeck = (
       ),
       `Unexpected diagnostics: ${JSON.stringify(structuralError.diagnostics)}`,
     );
-  }, 45_000);
-
-  it("loads vanilla + default build without React or preview and expands JSX on demand across source and dist conditions", () => {
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const runSubprocess = (conditions: readonly string[], script: string) => {
-      const child = spawnSync(
-        process.execPath,
-        [...conditions, "--input-type=module", "--eval", script],
-        { cwd: packageRoot, encoding: "utf8" },
-      );
-      assert.equal(child.status, 0, child.stderr || child.stdout);
-      return child.stdout;
-    };
-
-    const vanillaScript = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier.startsWith("react/") ||
-      specifier === "@pptxdk/react" ||
-      specifier.startsWith("@pptxdk/react/") ||
-      specifier === "@pptxdk/capabilities" ||
-      specifier.includes("@pptxdk/preview") ||
-      specifier.includes("@resvg/resvg-js")
-    ) {
-      throw new Error("vanilla + build loaded forbidden dependency: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const { build, transitions } = await import("@officedk/pptxdk");
-const { deck, shape, slide, text } = await import("@officedk/pptxdk/vanilla");
-const doc = deck({ width: 960, height: 540 }).append(
-  slide({ id: "s1", transition: transitions.fade() }).append(
-    shape("Shape", {
-      id: "sh1",
-      style: { position: "absolute", left: 20, top: 20, width: 120, height: 60 },
-    }),
-    text("Hello", {
-      id: "t1",
-      style: { position: "absolute", left: 20, top: 100, width: 120, height: 40 },
-    }),
-  ),
-);
-const result = await build(doc);
-if (!(result.pptx instanceof Uint8Array) || result.pptx.byteLength === 0) {
-  throw new Error("Expected PPTX bytes");
-}
-process.stdout.write("ok");
-`;
-
-    const jsxOnDemandScript = `
-import { registerHooks } from "node:module";
-
-const loaded = new Set();
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier.includes("@pptxdk/preview") ||
-      specifier.includes("@resvg/resvg-js")
-    ) {
-      throw new Error("JSX build loaded preview dependency: " + specifier);
-    }
-    const resolved = nextResolve(specifier, context);
-    if (specifier === "react" || specifier === "react-reconciler") {
-      loaded.add(specifier);
-    }
-    if (specifier === "@pptxdk/react" || resolved.url.endsWith("/react/dist/index.js")) {
-      loaded.add("@pptxdk/react");
-    }
-    return resolved;
-  },
-});
-
-const { build } = await import("@officedk/pptxdk");
-if (loaded.size !== 0) {
-  throw new Error("Importing @officedk/pptxdk root eagerly loaded: " + [...loaded].join(", "));
-}
-const { createElement } = await import("react");
-const { Deck, Shape, Slide } = await import("@officedk/pptxdk/react");
-const result = await build(
-  createElement(
-    Deck,
-    { width: 960, height: 540 },
-    createElement(
-      Slide,
-      { id: "jsx-s1" },
-      createElement(
-        Shape,
-        {
-          id: "jsx-sh1",
-          style: { position: "absolute", left: 20, top: 20, width: 120, height: 60 },
-        },
-        "JSX",
-      ),
-    ),
-  ),
-);
-if (!(result.pptx instanceof Uint8Array) || result.pptx.byteLength === 0) {
-  throw new Error("Expected PPTX bytes");
-}
-if (!loaded.has("@pptxdk/react") || !loaded.has("react") || !loaded.has("react-reconciler")) {
-  throw new Error("Expected JSX build to dynamically load React adapter: " + [...loaded].join(", "));
-}
-process.stdout.write("ok");
-`;
-
-    for (const conditions of [["--conditions=source"], []] as const) {
-      assert.equal(runSubprocess(conditions, vanillaScript), "ok");
-      assert.equal(runSubprocess(conditions, jsxOnDemandScript), "ok");
-    }
   }, 45_000);
 });

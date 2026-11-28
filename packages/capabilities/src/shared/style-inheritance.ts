@@ -72,6 +72,7 @@ function spPrRule<T>(): StylePropertyRule<T> {
 export const sharedStyleRules: ExhaustiveStyleRuleMap = Object.freeze({
   // Text run & paragraph properties (inherited on free containers, level-cascaded on placeholders)
   fontFamily: levelRule<TextStyle["fontFamily"]>(),
+  eastAsianFontFamily: levelRule<TextStyle["eastAsianFontFamily"]>(),
   fontSize: levelRule<TextStyle["fontSize"]>(),
   fontWeight: levelRule<TextStyle["fontWeight"]>(),
   fontStyle: levelRule<TextStyle["fontStyle"]>(),
@@ -174,13 +175,18 @@ function applyLayer(
   }
 }
 
+export type PlaceholderInheritanceLayers = Omit<
+  PlaceholderResolutionContext,
+  "masterTheme"
+>;
+
 /**
  * Evaluates Path B placeholder container defaults (`bodyPr` + level-0 base text properties):
  * Master Theme -> Master txStyles -> Master Ph -> Layout Ph -> Slide local style.
  * Note: Deck.style and Slide.style are intentionally excluded.
  */
 export function resolvePlaceholderBaseTextStyle(
-  placeholder: PlaceholderResolutionContext,
+  placeholder: PlaceholderInheritanceLayers,
   slideLocalStyle: Readonly<Record<string, unknown>> | undefined,
 ): Readonly<Record<string, unknown>> {
   const result: Record<string, unknown> = {};
@@ -218,7 +224,7 @@ export function resolvePlaceholderBaseTextStyle(
  * cascading Master txStyles -> Master Ph -> Layout Ph -> Slide local style -> P/Span local style.
  */
 export function resolvePlaceholderLevelTextStyle(
-  placeholder: PlaceholderResolutionContext,
+  placeholder: PlaceholderInheritanceLayers,
   levelIndex0: number,
   slideLocalStyle: Readonly<Record<string, unknown>> | undefined,
 ): PlaceholderLevelStyle {
@@ -259,7 +265,7 @@ export function resolvePlaceholderLevelTextStyle(
  * without absorbing Deck.style or Slide.style.
  */
 export function resolvePlaceholderVisualStyle(
-  placeholder: PlaceholderResolutionContext,
+  placeholder: PlaceholderInheritanceLayers,
   slideLocalStyle: Readonly<Record<string, unknown>> | undefined,
 ): Readonly<Record<string, unknown>> {
   const result: Record<string, unknown> = {};

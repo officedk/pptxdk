@@ -61,16 +61,25 @@ export type ValidationIssue = {
   readonly xpath?: string;
 };
 
+export type FileConnectorEndpoint = {
+  readonly id: number;
+  readonly idx: number;
+};
+
 export type FileObject = {
   readonly id: number;
   readonly name: string;
-  readonly kind: "shape" | "image" | "chart" | "group" | "table";
+  readonly kind: "shape" | "line" | "image" | "chart" | "group" | "table";
   readonly placeholder?: {
     readonly type: string;
     readonly idx?: number;
   };
   readonly hasLocalTransform?: boolean;
   readonly geometry?: string;
+  readonly connection?: {
+    readonly start?: FileConnectorEndpoint;
+    readonly end?: FileConnectorEndpoint;
+  };
   readonly boxEmu: {
     readonly x: number;
     readonly y: number;
@@ -608,8 +617,9 @@ export type FileAnimationEffect = {
   readonly nativeBuildGroupId?: number;
   readonly nativeBuildAnimBg?: boolean;
   readonly nativeBehaviors?: readonly FileAnimationBehavior[];
-  readonly kind: "entrance" | "emphasis";
+  readonly kind: "entrance" | "emphasis" | "exit";
   readonly preset:
+    | "appear"
     | "fade"
     | "wipe"
     | "zoom"
@@ -620,7 +630,15 @@ export type FileAnimationEffect = {
     | "stretch"
     | "spin"
     | "breathe"
-    | "fillColor";
+    | "fillColor"
+    | "disappear"
+    | "fadeOut"
+    | "wipeOut"
+    | "flyOut"
+    | "zoomOut"
+    | "floatOut"
+    | "spinOut"
+    | "collapse";
   readonly durationMs: number;
   readonly delayMs: number;
   readonly repeatCount?: number | "forever";
@@ -640,6 +658,7 @@ export type FileAnimationEffect = {
 const textProjectionParagraphRoles: Partial<
   Record<FileAnimationEffect["preset"], readonly string[]>
 > = {
+  appear: [],
   fade: ["animEffect:fade"],
   wipe: ["wipe"],
   zoom: [
@@ -662,11 +681,33 @@ const textProjectionParagraphRoles: Partial<
   ],
   stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
   spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
+  disappear: [],
+  fadeOut: ["animEffect:fade"],
+  wipeOut: ["wipe"],
+  zoomOut: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animEffect:fade",
+  ],
+  flyOut: ["anim:ppt_x", "anim:ppt_y"],
+  floatOut: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinOut: [
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "anim:style.rotation",
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "animEffect:fade",
+  ],
+  collapse: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
 };
 
 const textProjectionBackgroundRoles: Partial<
   Record<FileAnimationEffect["preset"], readonly string[]>
 > = {
+  appear: [],
   fade: ["animEffect:fade"],
   zoom: [
     "anim:ppt_x",
@@ -688,6 +729,26 @@ const textProjectionBackgroundRoles: Partial<
   ],
   stretch: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
   spin: ["animRot:r", "anim:ppt_x", "anim:ppt_y"],
+  disappear: [],
+  fadeOut: ["animEffect:fade"],
+  zoomOut: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animEffect:fade",
+  ],
+  flyOut: ["anim:ppt_x", "anim:ppt_y"],
+  floatOut: ["animEffect:fade", "anim:ppt_x", "anim:ppt_y"],
+  spinOut: [
+    "anim:ppt_x",
+    "anim:ppt_y",
+    "anim:ppt_w",
+    "anim:ppt_h",
+    "animRot:r",
+    "animEffect:fade",
+  ],
+  collapse: ["anim:ppt_x", "anim:ppt_w", "anim:ppt_h"],
 };
 
 // Shapes keep whole-object visibility and fill geometry while paragraph-targeted effects split text
@@ -1521,16 +1582,17 @@ function validWholeTextProjection(
         ? "background"
         : "invalid",
   );
-  const expectedVisibilityRoles =
-    kind === "entrance"
-      ? [
-          ...Array.from(
-            { length: paragraphCount },
-            (_, index) => `paragraph:${index}`,
-          ),
-          ...(animBg ? ["background"] : []),
-        ]
-      : [];
+  const hasVisibilityLifecycle = kind === "entrance" || kind === "exit";
+  const expectedVisibilityRoles = hasVisibilityLifecycle
+    ? [
+        ...Array.from(
+          { length: paragraphCount },
+          (_, index) => `paragraph:${index}`,
+        ),
+        ...(animBg ? ["background"] : []),
+      ]
+    : [];
+  const expectedVisibilityValue = kind === "exit" ? "hidden" : "visible";
   if (
     behaviors.some(({ targetType }) => targetType === "object") ||
     !hasRoles(visibilityRoles, expectedVisibilityRoles) ||
@@ -1539,9 +1601,9 @@ function validWholeTextProjection(
         attributeNames.length !== 1 ||
         attributeNames[0] !== "style.visibility" ||
         durationMs !== 1 ||
-        to !== "visible",
+        to !== expectedVisibilityValue,
     ) ||
-    (kind === "entrance" && build !== "p")
+    (hasVisibilityLifecycle && build !== "p")
   ) {
     return false;
   }
@@ -1556,7 +1618,7 @@ function validWholeTextProjection(
         targetRange.end === index,
     );
     const actualRoles = paragraphBehaviors.map(animationBehaviorRole);
-    if (preset === "wipe") {
+    if (preset === "wipe" || preset === "wipeOut") {
       if (
         actualRoles.length !== 1 ||
         !actualRoles[0]?.startsWith("animEffect:wipe(")
@@ -1572,8 +1634,11 @@ function validWholeTextProjection(
     ({ behavior, targetType }) =>
       behavior !== "set" && targetType === "background",
   );
+  if (expectedParagraphRoles.length === 0) {
+    return backgroundBehaviors.length === 0;
+  }
   if (backgroundBehaviors.length === 0) return !animBg;
-  if (preset === "wipe") {
+  if (preset === "wipe" || preset === "wipeOut") {
     const paragraphFilter = behaviors.find(
       ({ behavior, targetType }) =>
         behavior === "animEffect" && targetType === "paragraph",
@@ -1848,8 +1913,14 @@ function readFontSchemeMap(
       fontSet === undefined
         ? undefined
         : first(fontSet, drawingNamespace, "latin");
+    const ea =
+      fontSet === undefined
+        ? undefined
+        : first(fontSet, drawingNamespace, "ea");
     const family = latin === undefined ? "" : attribute(latin, "typeface");
     if (family !== "") fonts.set(token, family);
+    const eaFamily = ea === undefined ? "" : attribute(ea, "typeface");
+    if (eaFamily !== "") fonts.set(`${token}EastAsian`, eaFamily);
   }
   return fonts;
 }
@@ -2020,14 +2091,13 @@ function validateFontSchemeSlots(
       latinTypeface === "" ||
       eaTypeface === "" ||
       csTypeface === "" ||
-      latinTypeface !== eaTypeface ||
       latinTypeface !== csTypeface
     ) {
       issue(
         errors,
         part,
         "invalid-theme-font-slots",
-        `Theme ${name} must define matching non-empty latin, ea, and cs font slots`,
+        `Theme ${name} must define non-empty latin, ea, and cs font slots with matching latin and cs`,
       );
     }
   }
@@ -2219,29 +2289,23 @@ function readTextRun(
   const fill = first(properties, drawingNamespace, "solidFill");
   const rawFontFamily = latin === undefined ? "" : attribute(latin, "typeface");
   if (latin !== undefined) {
-    if (ea === undefined || cs === undefined) {
+    if (ea !== undefined && attribute(ea, "typeface") === "") {
       issue(
         errors,
         part,
-        "missing-font-slot",
-        "Text run is missing East Asian or Complex Script font slot",
+        "mismatched-font-slots",
+        "Text run East Asian font slot cannot be empty",
       );
-    } else {
-      const eaTypeface = attribute(ea, "typeface");
+    }
+    if (cs !== undefined) {
       const csTypeface = attribute(cs, "typeface");
-      const expectedEa =
-        rawFontFamily === "+mj-lt"
-          ? "+mj-ea"
-          : rawFontFamily === "+mn-lt"
-            ? "+mn-ea"
-            : rawFontFamily;
       const expectedCs =
         rawFontFamily === "+mj-lt"
           ? "+mj-cs"
           : rawFontFamily === "+mn-lt"
             ? "+mn-cs"
             : rawFontFamily;
-      if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+      if (csTypeface !== expectedCs) {
         issue(
           errors,
           part,
@@ -2766,54 +2830,149 @@ function readMasterOrLayoutAnimationObjects(root: XmlElement): FileObject[] {
       ? undefined
       : first(cSld, presentationNamespace, "spTree");
   if (spTree === undefined) return [];
-  const objects: FileObject[] = [];
-  for (const sp of elements(spTree, presentationNamespace, "sp")) {
-    const nvSpPr = first(sp, presentationNamespace, "nvSpPr");
-    const cNvPr =
-      nvSpPr === undefined
-        ? undefined
-        : first(nvSpPr, presentationNamespace, "cNvPr");
-    const id = positiveIntegerValue(
-      cNvPr === undefined ? "" : attribute(cNvPr, "id"),
-    );
-    if (id === undefined) continue;
-    const name = cNvPr === undefined ? "" : attribute(cNvPr, "name");
-    const spPr = first(sp, presentationNamespace, "spPr");
+
+  const readTransformBoxEmu = (
+    container: XmlElement | undefined,
+  ): {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  } => {
     const xfrm =
-      spPr === undefined ? undefined : first(spPr, drawingNamespace, "xfrm");
+      container === undefined
+        ? undefined
+        : (first(container, drawingNamespace, "xfrm") ??
+          first(container, presentationNamespace, "xfrm"));
     const off =
       xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "off");
     const ext =
       xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "ext");
-    const x = off === undefined ? 0 : (integerAttribute(off, "x") ?? 0);
-    const y = off === undefined ? 0 : (integerAttribute(off, "y") ?? 0);
-    const cx = ext === undefined ? 0 : (integerAttribute(ext, "cx") ?? 0);
-    const cy = ext === undefined ? 0 : (integerAttribute(ext, "cy") ?? 0);
-    const txBody = first(sp, presentationNamespace, "txBody");
-    const paragraphEls =
-      txBody === undefined ? [] : elements(txBody, drawingNamespace, "p");
-    const paragraphs = paragraphEls.map((p) => {
-      const runs = elements(p, drawingNamespace, "r").map((r) => ({
-        text: first(r, drawingNamespace, "t")?.textContent ?? "",
-      }));
-      return { text: runs.map((r) => r.text).join(""), runs };
-    });
-    objects.push({
-      id,
-      name,
-      kind: "shape",
-      boxEmu: { x, y, width: cx, height: cy },
-      ...(paragraphs.length > 0
-        ? {
-            text: {
-              text: paragraphs.map((p) => p.text).join("\n"),
-              paragraphs,
-            },
-          }
-        : {}),
-    });
-  }
-  return objects;
+    return {
+      x: off === undefined ? 0 : (integerAttribute(off, "x") ?? 0),
+      y: off === undefined ? 0 : (integerAttribute(off, "y") ?? 0),
+      width: ext === undefined ? 0 : (integerAttribute(ext, "cx") ?? 0),
+      height: ext === undefined ? 0 : (integerAttribute(ext, "cy") ?? 0),
+    };
+  };
+
+  const collectFromTree = (container: XmlElement): FileObject[] => {
+    const objects: FileObject[] = [];
+    for (
+      let child = container.firstChild;
+      child !== null;
+      child = child.nextSibling
+    ) {
+      if (child.nodeType !== 1 || child.namespaceURI !== presentationNamespace)
+        continue;
+      const el = child as XmlElement;
+      const tag = el.localName;
+      if (
+        tag !== "sp" &&
+        tag !== "cxnSp" &&
+        tag !== "pic" &&
+        tag !== "graphicFrame" &&
+        tag !== "grpSp"
+      ) {
+        continue;
+      }
+      const nvWrapperName =
+        tag === "sp"
+          ? "nvSpPr"
+          : tag === "cxnSp"
+            ? "nvCxnSpPr"
+            : tag === "pic"
+              ? "nvPicPr"
+              : tag === "graphicFrame"
+                ? "nvGraphicFramePr"
+                : "nvGrpSpPr";
+      const nvWrapper = first(el, presentationNamespace, nvWrapperName);
+      const cNvPr =
+        nvWrapper === undefined
+          ? undefined
+          : first(nvWrapper, presentationNamespace, "cNvPr");
+      const id = positiveIntegerValue(
+        cNvPr === undefined ? "" : attribute(cNvPr, "id"),
+      );
+      if (id === undefined) continue;
+      const name = cNvPr === undefined ? "" : attribute(cNvPr, "name");
+
+      if (tag === "sp") {
+        const spPr = first(el, presentationNamespace, "spPr");
+        const txBody = first(el, presentationNamespace, "txBody");
+        const paragraphEls =
+          txBody === undefined ? [] : elements(txBody, drawingNamespace, "p");
+        const paragraphs = paragraphEls.map((p) => {
+          const runs = elements(p, drawingNamespace, "r").map((r) => ({
+            text: first(r, drawingNamespace, "t")?.textContent ?? "",
+          }));
+          return { text: runs.map((r) => r.text).join(""), runs };
+        });
+        objects.push({
+          id,
+          name,
+          kind: "shape",
+          boxEmu: readTransformBoxEmu(spPr),
+          ...(paragraphs.length > 0
+            ? {
+                text: {
+                  text: paragraphs.map((p) => p.text).join("\n"),
+                  paragraphs,
+                },
+              }
+            : {}),
+        });
+      } else if (tag === "cxnSp") {
+        const spPr = first(el, presentationNamespace, "spPr");
+        objects.push({
+          id,
+          name,
+          kind: "line",
+          boxEmu: readTransformBoxEmu(spPr),
+        });
+      } else if (tag === "pic") {
+        const spPr = first(el, presentationNamespace, "spPr");
+        objects.push({
+          id,
+          name,
+          kind: "image",
+          boxEmu: readTransformBoxEmu(spPr),
+        });
+      } else if (tag === "graphicFrame") {
+        const graphic = first(el, drawingNamespace, "graphic");
+        const graphicData =
+          graphic === undefined
+            ? undefined
+            : first(graphic, drawingNamespace, "graphicData");
+        const uri =
+          graphicData === undefined ? undefined : attribute(graphicData, "uri");
+        objects.push({
+          id,
+          name,
+          kind:
+            uri === chartNamespace
+              ? "chart"
+              : uri === tableUri
+                ? "table"
+                : "shape",
+          boxEmu: readTransformBoxEmu(el),
+        });
+      } else {
+        const grpSpPr = first(el, presentationNamespace, "grpSpPr");
+        const members = collectFromTree(el);
+        objects.push({
+          id,
+          name,
+          kind: "group",
+          boxEmu: readTransformBoxEmu(grpSpPr),
+          members,
+        });
+      }
+    }
+    return objects;
+  };
+
+  return collectFromTree(spTree);
 }
 
 function readMastersAndLayouts(
@@ -3694,6 +3853,128 @@ function validateShape(
     boxEmu: { x, y, width, height },
     ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(text === undefined ? {} : { text }),
+  };
+}
+
+function readConnectorEndpoint(
+  container: XmlElement | undefined,
+  tagName: "stCxn" | "endCxn",
+  connectorName: string,
+  part: string,
+  errors: ValidationIssue[],
+): FileConnectorEndpoint | undefined {
+  if (container === undefined) return undefined;
+  const endpoint = first(container, drawingNamespace, tagName);
+  if (endpoint === undefined) return undefined;
+  const targetId = integerAttribute(endpoint, "id");
+  const idx = integerAttribute(endpoint, "idx");
+  if (targetId === undefined || targetId < 1 || idx === undefined || idx < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-connector-endpoint",
+      `Connector ${connectorName} has invalid ${tagName} attributes`,
+    );
+    return undefined;
+  }
+  return { id: targetId, idx };
+}
+
+function validateConnector(
+  connector: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): FileObject | undefined {
+  const identity = objectIdentity(
+    connector,
+    "nvCxnSpPr",
+    part,
+    "connector",
+    errors,
+  );
+  if (identity === undefined) return undefined;
+  const nvCxnSpPr = first(connector, presentationNamespace, "nvCxnSpPr");
+  const cNvCxnSpPr =
+    nvCxnSpPr === undefined
+      ? undefined
+      : first(nvCxnSpPr, presentationNamespace, "cNvCxnSpPr");
+  const start = readConnectorEndpoint(
+    cNvCxnSpPr,
+    "stCxn",
+    identity.name,
+    part,
+    errors,
+  );
+  const end = readConnectorEndpoint(
+    cNvCxnSpPr,
+    "endCxn",
+    identity.name,
+    part,
+    errors,
+  );
+  const properties = first(connector, presentationNamespace, "spPr");
+  const geometryName = readGeometryName(properties);
+  if (geometryName === "") {
+    issue(
+      errors,
+      part,
+      "missing-connector-geometry",
+      `Connector ${identity.name} missing preset geometry`,
+    );
+    return undefined;
+  }
+  const transform =
+    properties === undefined
+      ? undefined
+      : first(properties, drawingNamespace, "xfrm");
+  const rotation = readRotationDegrees(transform);
+  const offset =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "off");
+  const extent =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "ext");
+  const x = integerAttribute(offset, "x");
+  const y = integerAttribute(offset, "y");
+  const width = integerAttribute(extent, "cx");
+  const height = integerAttribute(extent, "cy");
+  if (
+    x === undefined ||
+    y === undefined ||
+    width === undefined ||
+    height === undefined ||
+    width < 0 ||
+    width > maximumShapeExtentEmu ||
+    height < 0 ||
+    height > maximumShapeExtentEmu ||
+    (width === 0 && height === 0)
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-connector-transform",
+      `Connector ${identity.name} coordinates or dimensions are invalid`,
+    );
+    return undefined;
+  }
+  validateLineProperties(properties, part, errors);
+  const connection =
+    start === undefined && end === undefined
+      ? undefined
+      : {
+          ...(start === undefined ? {} : { start }),
+          ...(end === undefined ? {} : { end }),
+        };
+  return {
+    id: identity.id,
+    name: identity.name,
+    kind: "line",
+    geometry: geometryName,
+    boxEmu: { x, y, width, height },
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
+    ...(connection === undefined ? {} : { connection }),
   };
 }
 
@@ -5727,29 +6008,23 @@ function validateChart(
     const cs = first(defRPr, drawingNamespace, "cs");
     if (latin !== undefined) {
       const rawFamily = attribute(latin, "typeface");
-      if (ea === undefined || cs === undefined) {
+      if (ea !== undefined && attribute(ea, "typeface") === "") {
         issue(
           errors,
           chartPart,
-          "missing-font-slot",
-          "Chart defRPr is missing East Asian or Complex Script font slot",
+          "mismatched-font-slots",
+          "Chart defRPr East Asian font slot cannot be empty",
         );
-      } else {
-        const eaTypeface = attribute(ea, "typeface");
+      }
+      if (cs !== undefined) {
         const csTypeface = attribute(cs, "typeface");
-        const expectedEa =
-          rawFamily === "+mj-lt"
-            ? "+mj-ea"
-            : rawFamily === "+mn-lt"
-              ? "+mn-ea"
-              : rawFamily;
         const expectedCs =
           rawFamily === "+mj-lt"
             ? "+mj-cs"
             : rawFamily === "+mn-lt"
               ? "+mn-cs"
               : rawFamily;
-        if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+        if (csTypeface !== expectedCs) {
           issue(
             errors,
             chartPart,
@@ -7706,6 +7981,9 @@ function readObjects(
         object = validateShape(spEl, part, errors, theme, placeholderLookup);
         break;
       }
+      case "cxnSp":
+        object = validateConnector(child as XmlElement, part, errors);
+        break;
       case "pic":
         object = validatePicture(
           child as XmlElement,
@@ -7765,6 +8043,21 @@ function readObjects(
         errors,
       );
       objects.push({ ...object, ...(link === undefined ? {} : { link }) });
+    }
+  }
+  const siblingIds = new Set(objects.map((entry) => entry.id));
+  for (const obj of objects) {
+    if (obj.connection === undefined) continue;
+    for (const endpoint of [obj.connection.start, obj.connection.end]) {
+      if (endpoint === undefined) continue;
+      if (endpoint.id === obj.id || !siblingIds.has(endpoint.id)) {
+        issue(
+          errors,
+          part,
+          "invalid-connector-target",
+          `Connector ${obj.name} references missing or invalid target object ${endpoint.id}`,
+        );
+      }
     }
   }
   return objects;
@@ -9482,12 +9775,11 @@ function readSlideAnimations(
         presentationNamespace,
         "animClr",
       );
-      const presetById: Readonly<
+      const entrancePresetById: Readonly<
         Record<number, FileAnimationEffect["preset"]>
       > = {
+        1: "appear",
         2: "fly",
-        8: "spin",
-        9: "fillColor",
         10: "fade",
         17: "stretch",
         22: "wipe",
@@ -9496,18 +9788,45 @@ function readSlideAnimations(
         49: "spinIn",
         53: "zoom",
       };
-      const preset =
-        presetById[presetId] ??
-        (presetId === 0 && colorAnimationNodes.length === 1
-          ? "breathe"
-          : undefined);
+      const emphasisPresetById: Readonly<
+        Record<number, FileAnimationEffect["preset"]>
+      > = {
+        8: "spin",
+        9: "fillColor",
+      };
+      const exitPresetById: Readonly<
+        Record<number, FileAnimationEffect["preset"]>
+      > = {
+        1: "disappear",
+        2: "flyOut",
+        10: "fadeOut",
+        17: "collapse",
+        22: "wipeOut",
+        42: "floatOut",
+        47: "floatOut",
+        49: "spinOut",
+        53: "zoomOut",
+      };
       const kind =
         presetClass === "entr"
           ? "entrance"
           : presetClass === "emph"
             ? "emphasis"
-            : undefined;
-      if (preset === undefined || kind === undefined) {
+            : presetClass === "exit"
+              ? "exit"
+              : undefined;
+      const preset =
+        kind === "entrance"
+          ? entrancePresetById[presetId]
+          : kind === "emphasis"
+            ? (emphasisPresetById[presetId] ??
+              (presetId === 0 && colorAnimationNodes.length === 1
+                ? "breathe"
+                : undefined))
+            : kind === "exit"
+              ? exitPresetById[presetId]
+              : undefined;
+      if (kind === undefined) {
         issue(
           errors,
           part,
@@ -9516,17 +9835,32 @@ function readSlideAnimations(
         );
         continue;
       }
-      const expectedKind =
-        preset === "spin" || preset === "breathe" || preset === "fillColor"
-          ? "emphasis"
-          : "entrance";
-      if (kind !== expectedKind) {
-        issue(
-          errors,
-          part,
-          "invalid-animation-kind",
-          `presetClass for ${preset} must be ${expectedKind === "emphasis" ? "emph" : "entr"}`,
-        );
+      if (preset === undefined) {
+        const expectedClass =
+          emphasisPresetById[presetId] !== undefined || presetId === 0
+            ? "emph"
+            : entrancePresetById[presetId] !== undefined
+              ? "entr"
+              : undefined;
+        if (expectedClass !== undefined) {
+          const matchingPreset =
+            emphasisPresetById[presetId] ??
+            entrancePresetById[presetId] ??
+            "breathe";
+          issue(
+            errors,
+            part,
+            "invalid-animation-kind",
+            `presetClass for ${matchingPreset} must be ${expectedClass}`,
+          );
+        } else {
+          issue(
+            errors,
+            part,
+            "unsupported-animation",
+            `Unsupported animation preset ${presetClass}#${presetId}`,
+          );
+        }
         continue;
       }
       const effectConditionList = first(
@@ -10168,12 +10502,21 @@ function readSlideAnimations(
         "presetSubtype",
       );
       const direction =
-        preset === "wipe" || preset === "fly"
+        preset === "wipe" ||
+        preset === "wipeOut" ||
+        preset === "fly" ||
+        preset === "flyOut"
           ? ({ 1: "top", 2: "right", 4: "bottom", 8: "left" } as const)[
               directionSubtype ?? -1
             ]
           : undefined;
-      if ((preset === "wipe" || preset === "fly") && direction === undefined) {
+      if (
+        (preset === "wipe" ||
+          preset === "wipeOut" ||
+          preset === "fly" ||
+          preset === "flyOut") &&
+        direction === undefined
+      ) {
         issue(
           errors,
           part,

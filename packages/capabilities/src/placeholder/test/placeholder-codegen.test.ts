@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import {
+  deck,
+  defineSlideLayout,
+  placeholder,
+  slide,
+  slideLayout,
+  slideMaster,
+} from "@pptxdk/capabilities/document";
+import { Placeholder } from "@pptxdk/capabilities/placeholder-elements";
 import { CodegenError, createCodegen } from "@pptxdk/codegen";
 import { CommonContainer, CommonNode } from "@pptxdk/core/document";
 import {
@@ -11,17 +21,6 @@ import {
 } from "@pptxdk/react";
 import { createElement } from "react";
 import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
-import {
-  deck,
-  defineSlideLayout,
-  placeholder,
-  slide,
-  slideLayout,
-  slideMaster,
-} from "../../document.ts";
-import { Placeholder } from "../placeholder-elements.ts";
 
 describe("placeholder capability codegen", () => {
   it("generates vanilla and react source for bound placeholders and omits redundant nativePlaceholder", async () => {

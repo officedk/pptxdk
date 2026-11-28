@@ -7,14 +7,15 @@ import {
   deck,
   font,
   group,
+  line,
   shape,
   slide,
   text,
 } from "@pptxdk/capabilities/document";
 import { Group } from "@pptxdk/capabilities/group-elements";
+import { Line } from "@pptxdk/capabilities/line-elements";
 import {
   linearGradient,
-  preset,
   radialGradient,
   type CustomGeometry,
 } from "@pptxdk/capabilities/shape";
@@ -181,10 +182,15 @@ export const shapeAndGroupRoundtripScenario: CapabilityScenario = {
             border: { color: "#0F172A", width: 2 },
           },
         }),
-        createElement(Shape, {
+        createElement(Line, {
           id: "arrow-connector",
           name: "Arrow Connector",
-          geometry: preset("line"),
+          stroke: {
+            color: "#DC2626",
+            width: 2,
+            startArrow: "oval",
+            endArrow: "triangle",
+          },
           style: {
             position: "absolute",
             left: 488,
@@ -192,12 +198,6 @@ export const shapeAndGroupRoundtripScenario: CapabilityScenario = {
             width: 120,
             height: 2,
             flipH: true,
-            border: {
-              color: "#DC2626",
-              width: 2,
-              startArrow: "oval",
-              endArrow: "triangle",
-            },
           },
         }),
         createElement(Shape, {
@@ -447,10 +447,15 @@ export const shapeAndGroupRoundtripScenario: CapabilityScenario = {
             border: { color: "#0F172A", width: 2 },
           },
         }),
-        shape({
+        line({
           id: "arrow-connector",
           name: "Arrow Connector",
-          geometry: preset("line"),
+          stroke: {
+            color: "#DC2626",
+            width: 2,
+            startArrow: "oval",
+            endArrow: "triangle",
+          },
           style: {
             position: "absolute",
             left: 488,
@@ -458,12 +463,6 @@ export const shapeAndGroupRoundtripScenario: CapabilityScenario = {
             width: 120,
             height: 2,
             flipH: true,
-            border: {
-              color: "#DC2626",
-              width: 2,
-              startArrow: "oval",
-              endArrow: "triangle",
-            },
           },
         }),
         shape({
@@ -665,7 +664,8 @@ export const shapeMechanismVerifications: Pick<
       const presetImage = s1.objects.find((o) => o.name === "Preset ImageFill");
       assert.equal(presetImage?.geometry, "rect");
       const arrow = s1.objects.find((o) => o.name === "Arrow Connector");
-      assert.equal(arrow?.geometry, "line");
+      assert.equal(arrow?.kind, "line");
+      assert.equal(arrow?.geometry, "straightConnector1");
       // Verify zIndex ordering in PPTX shape tree: Back Slate precedes Front Amber.
       const backIdx = s1.objects.findIndex((o) => o.name === "Back Slate");
       const frontIdx = s1.objects.findIndex((o) => o.name === "Front Amber");

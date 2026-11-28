@@ -1,14 +1,22 @@
 import {
+  bytesSha256,
+  createSealedFontFace,
   fontFaceSchema,
   fontFaceStyleSchema,
   fontOptionsSchema,
   fontSchema,
+  markImmutableBytes,
+  markSealedFont,
+  unsealedFontSchema,
   type Font,
   type FontFace,
   type FontOptions,
 } from "@pptxdk/core/capability";
 
-import { tryInferStaticFontFaceMetadata } from "./font-engine.ts";
+import {
+  tryInferStaticFontFaceMetadata,
+  unpackFontCollectionFaces,
+} from "./font-engine.ts";
 
 export { fontFaceSchema, fontFaceStyleSchema, fontOptionsSchema, fontSchema };
 export type {
@@ -35,31 +43,82 @@ export function font(
     ...(validOptions.substitute === true ? { substitute: true } : {}),
     ...(validOptions.embeddable === false ? { embeddable: false } : {}),
   };
-  const parsedFont = fontSchema.safeParse(candidate);
+  const parsedFont = unsealedFontSchema.safeParse(candidate);
   if (!parsedFont.success) {
     throw new TypeError(
       parsedFont.error.issues[0]?.message ?? "Invalid Font declaration",
     );
   }
-  return Object.freeze({
-    ...parsedFont.data,
-    faces: Object.freeze(
-      (parsedFont.data.faces ?? []).map((face) => {
-        const copiedData =
-          face.data === undefined ? undefined : new Uint8Array(face.data);
-        const inferred =
-          copiedData !== undefined &&
-          (face.weight === undefined || face.style === undefined)
-            ? tryInferStaticFontFaceMetadata(copiedData)
-            : undefined;
-        const resolvedWeight = face.weight ?? inferred?.weight;
-        const resolvedStyle = face.style ?? inferred?.style;
-        return Object.freeze({
-          ...(resolvedWeight === undefined ? {} : { weight: resolvedWeight }),
-          ...(resolvedStyle === undefined ? {} : { style: resolvedStyle }),
-          ...(copiedData === undefined ? {} : { data: copiedData }),
+  const sealedFaces = Object.freeze(
+    (parsedFont.data.faces ?? []).map((face) => {
+      if (face.data === undefined) {
+        return createSealedFontFace({
+          weight: face.weight,
+          style: face.style,
         });
-      }),
-    ),
+      }
+      // Perform the single isolating copy of caller bytes and compute its SHA-256 once.
+      const copiedData = markImmutableBytes(new Uint8Array(face.data));
+      const sha256 = bytesSha256(copiedData);
+      const inferred = tryInferStaticFontFaceMetadata(copiedData, sha256);
+      return createSealedFontFace({
+        weight: face.weight ?? inferred?.weight,
+        style: face.style ?? inferred?.style,
+        bytes: copiedData,
+        sha256,
+        panose: inferred?.panose,
+        pitchFamily: inferred?.pitchFamily,
+      });
+    }),
+  );
+  return markSealedFont({
+    ...parsedFont.data,
+    faces: sealedFaces,
+  });
+}
+
+/**
+ * Unpacks a TrueType/OpenType Collection (`.ttc` / `.otc`) buffer by extracting all static
+ * faces matching `family` (or the sole family when `options.substitute` is `true`) and returns
+ * a sealed `Font` value with isolated face byte buffers.
+ */
+export function fromFontCollection(
+  bytes: Uint8Array,
+  family: string,
+  options: FontOptions = {},
+): Font {
+  if (!(bytes instanceof Uint8Array)) {
+    throw new TypeError("Font collection bytes must be a Uint8Array");
+  }
+  if (typeof family !== "string" || family.trim() === "") {
+    throw new TypeError("Font family must be a non-empty string");
+  }
+  const parsedOptions = fontOptionsSchema.safeParse(options);
+  if (!parsedOptions.success) {
+    throw new TypeError("Font options.substitute must be a boolean");
+  }
+  const validOptions = parsedOptions.data;
+  const unpacked = unpackFontCollectionFaces(bytes, family, {
+    substitute: validOptions.substitute,
+  });
+  const sealedFaces = Object.freeze(
+    unpacked.map((face) => {
+      const ownedBytes = markImmutableBytes(face.bytes);
+      const sha256 = bytesSha256(ownedBytes);
+      return createSealedFontFace({
+        weight: face.weight,
+        style: face.style,
+        bytes: ownedBytes,
+        sha256,
+        panose: face.panose,
+        pitchFamily: face.pitchFamily,
+      });
+    }),
+  );
+  return markSealedFont({
+    family,
+    faces: sealedFaces,
+    ...(validOptions.substitute === true ? { substitute: true } : {}),
+    ...(validOptions.embeddable === false ? { embeddable: false } : {}),
   });
 }

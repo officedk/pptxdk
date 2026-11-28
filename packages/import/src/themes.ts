@@ -27,7 +27,10 @@ import {
   hexRgb6Schema,
   ooxmlBoolSchema,
   ooxmlIntSchema,
+  ooxmlLineWidthEmuSchema,
   ooxmlNonNegativeIntSchema,
+  ooxmlPositiveFixedAngleSchema,
+  ooxmlWritableExtentEmuSchema,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
@@ -47,7 +50,7 @@ const sysClrAttrSchema = z.object({
 const colorMapXmlAttrSchema = colorMapSchema;
 
 const lineAttrSchema = z.object({
-  w: ooxmlNonNegativeIntSchema.optional(),
+  w: ooxmlLineWidthEmuSchema.optional(),
   cap: z.enum(["rnd", "sq", "flat"]).optional(),
   cmpd: z.enum(["sng", "dbl", "thickThin", "thinThick", "tri"]).optional(),
   algn: z.enum(["ctr", "in"]).optional(),
@@ -70,9 +73,8 @@ const fillToRectAttrSchema = z.object({
 });
 
 const outerShdwAttrSchema = z.object({
-  blurRad: ooxmlNonNegativeIntSchema.optional(),
-  dist: ooxmlNonNegativeIntSchema.optional(),
-  dir: ooxmlIntSchema.optional(),
+  blurRad: ooxmlWritableExtentEmuSchema.optional(),
+  dist: ooxmlWritableExtentEmuSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: ooxmlBoolSchema.optional(),
 });
@@ -295,39 +297,66 @@ function readClrScheme(
 
 const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
 
+function readThemeFontSlotTypeface(
+  child: XmlElementCursor,
+  elementTag: "a:latin" | "a:ea",
+  partPath: string,
+  slideIndex: number | undefined,
+  diagnostics: ImportDiagnostic[],
+): string | undefined {
+  let result: string | undefined;
+  const typeface = child.attr("typeface");
+  if (typeface !== undefined && typeface.trim() !== "") {
+    if (reservedThemeFontPattern.test(typeface.trim())) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: {
+          part: partPath,
+          xpath: `${child.xpath}/@typeface`,
+          ...(slideIndex === undefined ? {} : { slideIndex }),
+        },
+        attributeOrElement: `${elementTag}/@typeface`,
+        rawValue: typeface,
+      });
+    } else {
+      result = typeface;
+    }
+  }
+  child.consumeAttr("panose");
+  child.consumeAttr("pitchFamily");
+  child.consumeAttr("charset");
+  return result;
+}
+
 function readFontCollection(
   fontCollectionCursor: XmlElementCursor,
   partPath: string,
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
-): string | undefined {
+): { readonly latin?: string; readonly ea?: string } {
   let latinTypeface: string | undefined;
+  let eaTypeface: string | undefined;
   for (const child of fontCollectionCursor.remainingElementChildren()) {
     if (child.namespaceUri !== A_NS) continue;
     if (child.localName === "latin") {
-      const typeface = child.attr("typeface");
-      if (typeface !== undefined && typeface.trim() !== "") {
-        if (reservedThemeFontPattern.test(typeface.trim())) {
-          diagnostics.push({
-            code: "invalid-xml-value",
-            category: "corrupt-input",
-            disposition: "omitted",
-            location: {
-              part: partPath,
-              xpath: `${child.xpath}/@typeface`,
-              ...(slideIndex === undefined ? {} : { slideIndex }),
-            },
-            attributeOrElement: "a:latin/@typeface",
-            rawValue: typeface,
-          });
-        } else {
-          latinTypeface = typeface;
-        }
-      }
-      child.consumeAttr("panose");
-      child.consumeAttr("pitchFamily");
-      child.consumeAttr("charset");
-    } else if (child.localName === "ea" || child.localName === "cs") {
+      latinTypeface = readThemeFontSlotTypeface(
+        child,
+        "a:latin",
+        partPath,
+        slideIndex,
+        diagnostics,
+      );
+    } else if (child.localName === "ea") {
+      eaTypeface = readThemeFontSlotTypeface(
+        child,
+        "a:ea",
+        partPath,
+        slideIndex,
+        diagnostics,
+      );
+    } else if (child.localName === "cs") {
       child.consumeAttr("typeface");
       child.consumeAttr("panose");
       child.consumeAttr("pitchFamily");
@@ -337,7 +366,10 @@ function readFontCollection(
       child.consumeAttr("typeface");
     }
   }
-  return latinTypeface;
+  return {
+    ...(latinTypeface === undefined ? {} : { latin: latinTypeface }),
+    ...(eaTypeface === undefined ? {} : { ea: eaTypeface }),
+  };
 }
 
 function readFontScheme(
@@ -349,25 +381,45 @@ function readFontScheme(
   | {
       readonly major?: string;
       readonly minor?: string;
+      readonly majorEastAsian?: string;
+      readonly minorEastAsian?: string;
     }
   | undefined {
   fontSchemeCursor.consumeAttr("name");
   const majorCursor = fontSchemeCursor.child(A_NS, "majorFont");
   const minorCursor = fontSchemeCursor.child(A_NS, "minorFont");
-  const major =
+  const majorInfo =
     majorCursor === undefined
       ? undefined
       : readFontCollection(majorCursor, partPath, slideIndex, diagnostics);
-  const minor =
+  const minorInfo =
     minorCursor === undefined
       ? undefined
       : readFontCollection(minorCursor, partPath, slideIndex, diagnostics);
-  if (major === undefined && minor === undefined) {
+  const major = majorInfo?.latin;
+  const minor = minorInfo?.latin;
+  // Preserve single-script idempotency: only restore EA slot when it diverges from the Latin slot.
+  const majorEastAsian =
+    majorInfo?.ea !== undefined && majorInfo.ea !== major
+      ? majorInfo.ea
+      : undefined;
+  const minorEastAsian =
+    minorInfo?.ea !== undefined && minorInfo.ea !== minor
+      ? minorInfo.ea
+      : undefined;
+  if (
+    major === undefined &&
+    minor === undefined &&
+    majorEastAsian === undefined &&
+    minorEastAsian === undefined
+  ) {
     return undefined;
   }
   return {
     ...(major === undefined ? {} : { major }),
     ...(minor === undefined ? {} : { minor }),
+    ...(majorEastAsian === undefined ? {} : { majorEastAsian }),
+    ...(minorEastAsian === undefined ? {} : { minorEastAsian }),
   };
 }
 
@@ -624,9 +676,28 @@ function readFormatLineStyle(
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
 ): FormatLineStyle {
-  const parsed = lineAttrSchema.safeParse(
-    lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]),
-  );
+  const rawAttrs = lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]);
+  let widthEmu: number | undefined;
+  if (rawAttrs["w"] !== undefined) {
+    const parsedW = ooxmlLineWidthEmuSchema.safeParse(rawAttrs["w"]);
+    if (parsedW.success) {
+      widthEmu = parsedW.data;
+    } else {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: {
+          part: partPath,
+          xpath: `${lnCursor.xpath}/@w`,
+          ...(slideIndex === undefined ? {} : { slideIndex }),
+        },
+        attributeOrElement: "a:ln/@w",
+        rawValue: rawAttrs["w"],
+      });
+    }
+  }
+  const parsed = lineAttrSchema.omit({ w: true }).safeParse(rawAttrs);
   let fill: FormatFillStyle | undefined;
   let dash: string | undefined;
   for (const child of lnCursor.remainingElementChildren()) {
@@ -665,9 +736,7 @@ function readFormatLineStyle(
     }
   }
   return {
-    ...(parsed.success && parsed.data.w !== undefined
-      ? { widthEmu: parsed.data.w }
-      : {}),
+    ...(widthEmu === undefined ? {} : { widthEmu }),
     ...(parsed.success && parsed.data.cap !== undefined
       ? { cap: parsed.data.cap }
       : {}),
@@ -694,15 +763,52 @@ function readFormatEffectStyle(
     if (child.localName === "effectLst") {
       const outerShdw = child.child(A_NS, "outerShdw");
       if (outerShdw !== undefined) {
-        const parsed = outerShdwAttrSchema.safeParse(
-          outerShdw.attrsObject([
-            "blurRad",
-            "dist",
-            "dir",
-            "algn",
-            "rotWithShape",
-          ]),
-        );
+        const rawShdw = outerShdw.attrsObject([
+          "blurRad",
+          "dist",
+          "dir",
+          "algn",
+          "rotWithShape",
+        ]);
+        const parsed = outerShdwAttrSchema.safeParse(rawShdw);
+        if (!parsed.success) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: {
+              part: partPath,
+              xpath: outerShdw.xpath,
+              ...(slideIndex === undefined ? {} : { slideIndex }),
+            },
+            attributeOrElement: "a:outerShdw",
+            rawValue: JSON.stringify(rawShdw),
+          });
+          outerShdw.suppressUnconsumed();
+          continue;
+        }
+        let dir: number | undefined;
+        if (rawShdw["dir"] !== undefined) {
+          const parsedDir = ooxmlPositiveFixedAngleSchema.safeParse(
+            rawShdw["dir"],
+          );
+          if (parsedDir.success) {
+            dir = parsedDir.data;
+          } else {
+            diagnostics.push({
+              code: "invalid-xml-value",
+              category: "corrupt-input",
+              disposition: "recovered",
+              location: {
+                part: partPath,
+                xpath: `${outerShdw.xpath}/@dir`,
+                ...(slideIndex === undefined ? {} : { slideIndex }),
+              },
+              attributeOrElement: "a:outerShdw/@dir",
+              rawValue: rawShdw["dir"],
+            });
+          }
+        }
         const colorHex = resolveSimpleThemeHex(
           outerShdw,
           partPath,
@@ -711,15 +817,13 @@ function readFormatEffectStyle(
         );
         shadow = {
           ...(colorHex === undefined ? {} : { color: colorHex }),
-          ...(parsed.success && parsed.data.blurRad !== undefined
+          ...(parsed.data.blurRad !== undefined
             ? { blur: parsed.data.blurRad / 12_700 }
             : {}),
-          ...(parsed.success && parsed.data.dist !== undefined
+          ...(parsed.data.dist !== undefined
             ? { distance: parsed.data.dist / 12_700 }
             : {}),
-          ...(parsed.success && parsed.data.dir !== undefined
-            ? { angle: parsed.data.dir / 60_000 }
-            : {}),
+          ...(dir !== undefined ? { angle: dir / 60_000 } : {}),
         };
       }
     } else {
@@ -740,6 +844,22 @@ function readFormatEffectStyle(
     }
   }
   return shadow === undefined ? {} : { shadow };
+}
+
+const defaultFormatFill: FormatFillStyle = {
+  kind: "solid",
+  color: { color: "phClr" },
+};
+const defaultFormatLine: FormatLineStyle = {
+  widthEmu: 6350,
+  fill: defaultFormatFill,
+};
+const defaultFormatEffect: FormatEffectStyle = {};
+
+function padFormatList<T>(list: T[], fallback: T, minimum = 3): void {
+  while (list.length < minimum) {
+    list.push(fallback);
+  }
 }
 
 function readFmtScheme(
@@ -765,6 +885,7 @@ function readFmtScheme(
       );
       if (parsed !== undefined) fillStyles.push(parsed);
     }
+    padFormatList(fillStyles, defaultFormatFill);
   }
   const lnStyleLst = fmtSchemeCursor.child(A_NS, "lnStyleLst");
   if (lnStyleLst !== undefined) {
@@ -773,6 +894,7 @@ function readFmtScheme(
         readFormatLineStyle(child, partPath, slideIndex, diagnostics),
       );
     }
+    padFormatList(lineStyles, defaultFormatLine);
   }
   const effectStyleLst = fmtSchemeCursor.child(A_NS, "effectStyleLst");
   if (effectStyleLst !== undefined) {
@@ -781,6 +903,7 @@ function readFmtScheme(
         readFormatEffectStyle(child, partPath, slideIndex, diagnostics),
       );
     }
+    padFormatList(effectStyles, defaultFormatEffect);
   }
   const bgFillStyleLst = fmtSchemeCursor.child(A_NS, "bgFillStyleLst");
   if (bgFillStyleLst !== undefined) {
@@ -793,6 +916,7 @@ function readFmtScheme(
       );
       if (parsed !== undefined) bgFillStyles.push(parsed);
     }
+    padFormatList(bgFillStyles, defaultFormatFill);
   }
 
   return {
@@ -858,7 +982,12 @@ export function readThemePart(
 
   const themeElements = themeCursor.child(A_NS, "themeElements");
   let colors: Record<NativeColorSlot, HexColor> = { ...officeFallbackColors };
-  let fonts: { readonly major?: string; readonly minor?: string } = {};
+  let fonts: {
+    readonly major?: string;
+    readonly minor?: string;
+    readonly majorEastAsian?: string;
+    readonly minorEastAsian?: string;
+  } = {};
   let formatScheme: FormatScheme | undefined;
 
   if (themeElements !== undefined) {

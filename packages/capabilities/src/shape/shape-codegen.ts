@@ -5,23 +5,28 @@ import {
   type CodegenExpr,
 } from "@pptxdk/codegen";
 import type { DeclarationText } from "@pptxdk/core/build";
+import { readInternalDeclarationProps } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import {
   shapeAllowedPropKeyList,
   shapeStyleSchema,
 } from "./shape-declaration.ts";
 
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 const shapeAllowedPropKeys = new Set(shapeAllowedPropKeyList);
 
 const shapeAllowedChildKinds = new Set([
   "paragraph",
   "span",
+  "sup",
+  "sub",
   "slide-number",
   "br",
+  "motion-step",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,6 +141,9 @@ function trySerializeCustomAsPath(
   value: Record<string, unknown>,
   ctx: CodegenContext,
 ): CodegenExpr | undefined {
+  if (value["connectionSites"] !== undefined) {
+    return undefined;
+  }
   const width = value["width"];
   const height = value["height"];
   const paths = value["paths"];
@@ -297,9 +305,10 @@ function collectShapeProps(
   node: CommonNode,
   ctx: CodegenContext,
 ): readonly (readonly [string, unknown])[] {
-  const extra = ctx.emitObjectExtraProps(node.props);
+  const props = readInternalDeclarationProps(node);
+  const extra = ctx.emitObjectExtraProps(props);
   const entries: [string, unknown][] = [];
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!shapeAllowedPropKeys.has(key)) {
       ctx.fail(

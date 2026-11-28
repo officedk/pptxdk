@@ -13,6 +13,7 @@ import type { PreviewResult } from "@pptxdk/preview";
 import { chartMechanismVerifications } from "../src/chart/test/mechanisms.ts";
 import { groupMechanismVerifications } from "../src/group/test/mechanisms.ts";
 import { imageMechanismVerifications } from "../src/image/test/mechanisms.ts";
+import { lineMechanismVerifications } from "../src/line/test/mechanisms.ts";
 import { footerPlaceholderMechanismVerifications } from "../src/masters/test/footer-mechanisms.ts";
 import { masterOwnershipVerifications } from "../src/masters/test/master-layout-mechanisms.ts";
 import { masterSharedCanvasMechanismVerifications } from "../src/masters/test/shared-canvas-mechanisms.ts";
@@ -32,6 +33,10 @@ import {
   type ScenarioExecutionResult,
   type StageCounters,
 } from "./acceptance-runner.ts";
+import {
+  verifyBatchGeneratedSourcesAndRelocatedRebuilds,
+  type BatchCodegenCase,
+} from "./codegen-batch-acceptance.ts";
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
@@ -77,6 +82,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...groupMechanismVerifications,
     ...textMechanismVerifications,
     ...imageMechanismVerifications,
+    ...lineMechanismVerifications,
     ...tableMechanismVerifications,
     ...chartMechanismVerifications,
     ...masterOwnershipVerifications,
@@ -182,6 +188,7 @@ const vanillaCalleeByKind: Readonly<Record<string, RegExp>> = {
   chart: /\bchart\(/gu,
   group: /\bgroup\(/gu,
   image: /\bimage\(/gu,
+  line: /\bline\(/gu,
   "motion-scope": /\bmotionScope\(/gu,
   "motion-step": /\bstep\(/gu,
   notes: /\bnotes\(/gu,
@@ -191,6 +198,8 @@ const vanillaCalleeByKind: Readonly<Record<string, RegExp>> = {
   shape: /\bshape\(/gu,
   "slide-number": /\bslideNumber\(/gu,
   span: /\bspan\(/gu,
+  sub: /\bsub\(/gu,
+  sup: /\bsup\(/gu,
   table: /\btable\(/gu,
   text: /\btext\(/gu,
 };
@@ -201,6 +210,7 @@ const reactTagByKind: Readonly<Record<string, RegExp>> = {
   chart: /<Chart[\s>]/gu,
   group: /<Group[\s>]/gu,
   image: /<Image[\s>]/gu,
+  line: /<Line[\s/>]/gu,
   "motion-scope": /<MotionScope[\s>]/gu,
   "motion-step": /<Step[\s>]/gu,
   notes: /<Notes[\s>]/gu,
@@ -210,6 +220,8 @@ const reactTagByKind: Readonly<Record<string, RegExp>> = {
   shape: /<Shape[\s/>]/gu,
   "slide-number": /<SlideNumber[\s/>]/gu,
   span: /<Span[\s>]/gu,
+  sub: /<Sub[\s>]/gu,
+  sup: /<Sup[\s>]/gu,
   table: /<Table[\s>]/gu,
   text: /<Text[\s>]/gu,
 };
@@ -327,7 +339,11 @@ function assertGeneratedSourceNonEmptyAndComplete(
  */
 export async function runProductionMechanismVerifications(
   options: { readonly counters?: StageCounters } = {},
-): Promise<{ readonly codegenScenarioCount: number }> {
+): Promise<{
+  readonly codegenScenarioCount: number;
+  readonly typecheckedCaseCount: number;
+  readonly relocatedRebuildCount: number;
+}> {
   const entries = Object.entries(productionMechanismVerifications) as [
     ProductionMechanismKey,
     MechanismVerificationEntry<ProductionMechanism>,
@@ -337,6 +353,7 @@ export async function runProductionMechanismVerifications(
     Promise<ScenarioExecutionResult>
   >();
   const checkedCodegenScenarios = new Set<CapabilityScenario>();
+  const batchCases: BatchCodegenCase[] = [];
 
   for (const [, entry] of entries) {
     let executionPromise = cachedExecutions.get(entry.scenario);
@@ -385,10 +402,32 @@ export async function runProductionMechanismVerifications(
             doc,
             generated,
           );
+          batchCases.push({
+            scenarioId: entry.scenario.id,
+            originLabel,
+            result: generated,
+          });
         }
       }
     }
   }
 
-  return { codegenScenarioCount: checkedCodegenScenarios.size };
+  const batchSummary = await verifyBatchGeneratedSourcesAndRelocatedRebuilds(
+    batchCases,
+    [
+      "mechanism-image-roundtrip",
+      "mechanism-embedded-font-roundtrip",
+      "mechanism-master-layout-ownership",
+      "mechanism-motion-roundtrip",
+      "mechanism-chart-combo-roundtrip",
+      "mechanism-table-roundtrip",
+      "mechanism-slide-background-variants",
+    ],
+  );
+
+  return {
+    codegenScenarioCount: checkedCodegenScenarios.size,
+    typecheckedCaseCount: batchSummary.typecheckedCaseCount,
+    relocatedRebuildCount: batchSummary.relocatedRebuildCount,
+  };
 }

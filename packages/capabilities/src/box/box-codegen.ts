@@ -4,12 +4,14 @@ import {
   type CodegenContext,
   type CodegenExpr,
 } from "@pptxdk/codegen";
+import { readInternalDeclarationProps } from "@pptxdk/core/capability";
 import { CommonNode } from "@pptxdk/core/document";
 
 import { serializeImageDescriptorValue } from "../image/image-codegen.ts";
+import { motionPropKeySet } from "../motion/motion-schemas.ts";
 import { boxDeclarationPropsKeys, boxStyleSchema } from "./box-declaration.ts";
 
-const objectMotionPropKeys = new Set(["enter", "emphasis", "motion"]);
+const objectMotionPropKeys = motionPropKeySet;
 
 const boxAllowedPropKeys = new Set<string>(boxDeclarationPropsKeys);
 
@@ -62,9 +64,10 @@ function collectBoxProps(
   node: CommonNode,
   ctx: CodegenContext,
 ): readonly (readonly [string, unknown])[] {
-  const extra = ctx.emitObjectExtraProps(node.props);
+  const props = readInternalDeclarationProps(node);
+  const extra = ctx.emitObjectExtraProps(props);
   const entries: [string, unknown][] = [];
-  for (const [key, value] of Object.entries(node.props)) {
+  for (const [key, value] of Object.entries(props)) {
     if (value === undefined) continue;
     if (!boxAllowedPropKeys.has(key)) {
       ctx.fail(

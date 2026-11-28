@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   boxCapability,
@@ -6,12 +7,14 @@ import {
   groupCapability,
   imageCapability,
   motionCapability,
+  notesCapability,
   shapeCapability,
   slideBackgroundCapability,
   tableCapability,
   textCapability,
   transitionCapability,
 } from "@pptxdk/capabilities";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { Box } from "@pptxdk/capabilities/box-elements";
 import { Chart } from "@pptxdk/capabilities/chart-elements";
 import {
@@ -20,22 +23,31 @@ import {
   chart,
   createMotionScopeHandle,
   deck,
+  defineSlideLayout,
+  font,
   group,
   image,
   motionScope,
+  notes,
+  paragraph,
+  placeholder,
   row,
   shape,
   slide,
+  slideLayout,
+  slideMaster,
+  slideNumber,
+  span,
   step,
   table,
   text,
   transitions,
 } from "@pptxdk/capabilities/document";
-import { font } from "@pptxdk/capabilities/font";
 import { Group } from "@pptxdk/capabilities/group-elements";
 import { Image } from "@pptxdk/capabilities/image-elements";
 import { breathe, fade, spin } from "@pptxdk/capabilities/motion";
 import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
+import { placeholderCapability } from "@pptxdk/capabilities/placeholder";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
 import { Cell, Row, Table } from "@pptxdk/capabilities/table-elements";
 import { Text } from "@pptxdk/capabilities/text-elements";
@@ -61,170 +73,154 @@ import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
-import {
-  boxDeclarationPropsSchema,
-  boxStyleSchema,
-  type BoxStyle,
-} from "../src/box/box-declaration.ts";
-import { chartPropsSchema } from "../src/chart/chart-schemas.ts";
-import {
-  groupDeclarationPropsSchema,
-  groupStyleSchema,
-} from "../src/group/group-declaration.ts";
-import { imageDeclarationPropsSchema } from "../src/image/image-schemas.ts";
-import { spinOptionsSchema } from "../src/motion/motion-schemas.ts";
-import { notesDeclarationPropsSchema } from "../src/notes/notes-schemas.ts";
-import {
-  placeholderDeclarationPropsSchema,
-  placeholderObjectStyleSchema,
-} from "../src/placeholder/placeholder-schemas.ts";
-import {
-  shapeDeclarationPropsSchema,
-  shapeStyleSchema,
-  type ShapeStyle,
-} from "../src/shape/shape-declaration.ts";
-import {
-  paragraphAuthorPropsSchema,
-  slideNumberAuthorPropsSchema,
-  spanAuthorPropsSchema,
-  textAuthorPropsSchema,
-  textBoxStyleSchema,
-  type TextBoxStyle,
-} from "../src/shared/text-schemas.ts";
-import {
-  shapeBorderObjectSchema,
-  shapeBorderValueSchema,
-} from "../src/shared/visual.ts";
-import {
-  tableCellStyleSchema,
-  tableDeclarationPropsSchema,
-  type TableCellStyle,
-} from "../src/table/table-schemas.ts";
-import {
-  transitionKindSchema,
-  transitionSchema,
-} from "../src/transition/transition-api.ts";
+const png1x1 = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+);
+const jostRegular = new Uint8Array(
+  readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
+);
+const jostFont = font("Jost*", [{ weight: 400, data: jostRegular }]);
+
+const resolveAll = createResolver(documentCapabilities);
 
 describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
-  it("enforces complete pure-data contracts on boxDeclarationPropsSchema, groupDeclarationPropsSchema, and shapeDeclarationPropsSchema", () => {
+  it("resolves valid Box, Group, and Shape contracts and rejects invalid props and styles identically", async () => {
     const morphScope = createMorphScope();
     const heroKey = morphScope.handle("hero");
 
-    assert.equal(
-      boxDeclarationPropsSchema.safeParse({
-        id: "b1",
-        morphKey: heroKey,
-        style: {
-          display: "flex",
-          padding: 12,
-          fontSize: 18,
-          background: "#F8FAFC",
-          border: { color: "#CBD5E1", width: 1, style: "solid" },
-        },
-        enter: fade(),
-        motion: true,
-      }).success,
-      true,
-    );
-    // Rejects unknown/invalid style fields, invalid id, invalid enter, and invalid motion.
-    assert.equal(
-      boxDeclarationPropsSchema.safeParse({ id: "  " }).success,
-      false,
-    );
-    assert.equal(
-      boxStyleSchema.safeParse({ unknownStyleProp: 1 }).success,
-      false,
-    );
-    assert.equal(
-      boxStyleSchema.safeParse({ startArrow: "triangle" }).success,
-      false,
-    );
-    assert.equal(
-      boxDeclarationPropsSchema.safeParse({ enter: spin() }).success,
-      false,
-    );
-    assert.equal(
-      boxDeclarationPropsSchema.safeParse({ motion: "yes" }).success,
-      false,
-    );
-
-    assert.equal(
-      groupDeclarationPropsSchema.safeParse({
-        id: "g1",
-        name: "HeaderGroup",
-        morphKey: heroKey,
-        style: { display: "flex", fontSize: 16, rotate: 15 },
-        enter: fade(),
-        emphasis: spin(),
-        motion: true,
-      }).success,
-      true,
-    );
-    // Group supports rotate/flipH/flipV but not background or blank name.
-    assert.equal(
-      groupDeclarationPropsSchema.safeParse({ name: "   " }).success,
-      false,
-    );
-    assert.equal(
-      groupStyleSchema.safeParse({ background: "#FFFFFF" }).success,
-      false,
-    );
-    assert.equal(
-      groupDeclarationPropsSchema.safeParse({ emphasis: fade() }).success,
-      false,
-    );
-
-    assert.equal(
-      shapeDeclarationPropsSchema.safeParse({
-        id: "sh1",
-        name: "Callout",
-        morphKey: heroKey,
-        geometry: "roundRect",
-        style: {
-          position: "absolute",
-          left: 10,
-          top: 20,
-          width: 120,
-          height: 60,
-          background: "#2563EB",
-          border: {
-            color: "#1D4ED8",
-            width: 2,
-            startArrow: "none",
-            endArrow: "triangle",
+    const validDoc = deck({
+      width: 960,
+      height: 540,
+      theme: { fonts: { major: jostFont, minor: jostFont } },
+    }).append(
+      slide({ id: "s1" }).append(
+        box({
+          id: "b1",
+          morphKey: heroKey,
+          style: {
+            display: "flex",
+            width: 300,
+            padding: 12,
+            fontSize: 18,
+            background: "#F8FAFC",
+            border: { color: "#CBD5E1", width: 1, style: "solid" },
           },
-          fontSize: "16pt",
-          fontWeight: "bold",
-        },
-        enter: fade(),
-        emphasis: spin(),
-        motion: true,
-      }).success,
-      true,
+          enter: fade(),
+          motion: true,
+        }),
+        group({
+          id: "g1",
+          name: "HeaderGroup",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 100,
+            height: 60,
+            display: "flex",
+            fontSize: 16,
+            rotate: 15,
+          },
+          enter: fade(),
+          emphasis: spin(),
+          motion: true,
+        }).append(
+          shape({
+            id: "sh1",
+            name: "Callout",
+            geometry: "roundRect",
+            style: {
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: 120,
+              height: 60,
+              background: "#2563EB",
+              border: {
+                color: "#1D4ED8",
+                width: 2,
+                style: "solid",
+              },
+              fontSize: "16pt",
+              fontWeight: "bold",
+            },
+            enter: fade(),
+            emphasis: spin(),
+            motion: true,
+          }),
+        ),
+      ),
     );
-    assert.equal(
-      shapeDeclarationPropsSchema.safeParse({ name: "  " }).success,
-      false,
-    );
-    assert.equal(
-      shapeStyleSchema.safeParse({ unknownProp: true }).success,
-      false,
-    );
-    assert.equal(
-      shapeDeclarationPropsSchema.safeParse({ enter: "fade" }).success,
-      false,
-    );
-  });
+    assert.equal(resolveAll(validDoc).slides.length, 1);
 
-  it("rejects invalid Shape style.width, invalid Box border, and Group background identically across JSX and imperative entries", async () => {
-    const resolve = createResolver([
+    const resolveSubset = createResolver([
       slideBackgroundCapability,
       boxCapability,
       groupCapability,
       shapeCapability,
+      motionCapability,
     ]);
 
     const invalidCases = [
+      {
+        label: "blank Box id",
+        expectedCode: "invalid-prop",
+        jsx: () =>
+          createElement(
+            Deck,
+            { width: 480, height: 270 },
+            createElement(
+              Slide,
+              { id: "s1" },
+              createElement(Box, { id: "  " }),
+            ),
+          ),
+        vanilla: () =>
+          deck({ width: 480, height: 270 }).append(
+            slide({ id: "s1" }).append(box({ id: "  " })),
+          ),
+      },
+      {
+        label: "unknown style prop on Box",
+        expectedCode: "unknown-prop",
+        jsx: () =>
+          createElement(
+            Deck,
+            { width: 480, height: 270 },
+            createElement(
+              Slide,
+              { id: "s1" },
+              createElement(Box, { style: { unknownStyleProp: 1 } as never }),
+            ),
+          ),
+        vanilla: () =>
+          deck({ width: 480, height: 270 }).append(
+            slide({ id: "s1" }).append(
+              box({ style: { unknownStyleProp: 1 } as never }),
+            ),
+          ),
+      },
+      {
+        label: "emphasis effect passed to Box.enter",
+        expectedCode: "invalid-prop",
+        jsx: () =>
+          createElement(
+            Deck,
+            { width: 480, height: 270 },
+            createElement(
+              Slide,
+              { id: "s1" },
+              createElement(Box, { enter: spin() as never }),
+            ),
+          ),
+        vanilla: () =>
+          deck({ width: 480, height: 270 }).append(
+            slide({ id: "s1" }).append(box({ enter: spin() as never })),
+          ),
+      },
       {
         label: "invalid width type on Shape style inside Box",
         expectedCode: "invalid-style",
@@ -362,7 +358,7 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
         ["vanilla", vanillaDoc],
       ] as const) {
         assert.throws(
-          () => resolve(doc),
+          () => resolveSubset(doc),
           (error: unknown) =>
             error instanceof BuildError &&
             error.diagnostics.some((d) => d.code === item.expectedCode),
@@ -373,153 +369,11 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
   });
 });
 
-const png1x1 = new Uint8Array(
-  Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-    "base64",
-  ),
-);
-
 describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes, and Font", () => {
-  it("enforces complete pure-data contracts on Text, Image, Table, Chart, and Notes declaration schemas", () => {
+  it("enforces public contracts on Text, Image, Table, Chart, Notes, and Font across JSX and imperative entries", async () => {
     const morphScope = createMorphScope();
     const heroKey = morphScope.handle("hero");
 
-    assert.equal(
-      textAuthorPropsSchema.safeParse({
-        id: "t1",
-        name: "Headline",
-        morphKey: heroKey,
-        style: {
-          position: "absolute",
-          left: 20,
-          top: 30,
-          width: 300,
-          height: "auto",
-          fontSize: "24pt",
-          color: "#0F172A",
-          padding: 8,
-        },
-        enter: fade(),
-        emphasis: spin(),
-        motion: true,
-      }).success,
-      true,
-    );
-    assert.equal(textAuthorPropsSchema.safeParse({ id: "" }).success, false);
-    assert.equal(
-      textAuthorPropsSchema.safeParse({ name: "   " }).success,
-      false,
-    );
-    assert.equal(
-      textAuthorPropsSchema.safeParse({ morphKey: "not-a-key" }).success,
-      false,
-    );
-    assert.equal(
-      textBoxStyleSchema.safeParse({ startArrow: "triangle" }).success,
-      false,
-    );
-    assert.equal(
-      textAuthorPropsSchema.safeParse({ enter: spin() }).success,
-      false,
-    );
-    assert.equal(
-      textAuthorPropsSchema.safeParse({ emphasis: fade() }).success,
-      false,
-    );
-    assert.equal(
-      textAuthorPropsSchema.safeParse({ motion: "yes" }).success,
-      false,
-    );
-    assert.equal(
-      paragraphAuthorPropsSchema.safeParse({ id: "  " }).success,
-      false,
-    );
-    assert.equal(spanAuthorPropsSchema.safeParse({ id: "  " }).success, false);
-    assert.equal(
-      slideNumberAuthorPropsSchema.safeParse({ id: "  " }).success,
-      false,
-    );
-
-    assert.equal(
-      imageDeclarationPropsSchema.safeParse({
-        id: "img1",
-        src: png1x1,
-        geometry: "roundRect",
-        enter: fade(),
-      }).success,
-      true,
-    );
-    assert.equal(
-      imageDeclarationPropsSchema.safeParse({ id: "" }).success,
-      false,
-    );
-    assert.equal(
-      imageDeclarationPropsSchema.safeParse({
-        src: png1x1,
-        geometry: "not-a-preset",
-      }).success,
-      false,
-    );
-    assert.equal(
-      imageDeclarationPropsSchema.safeParse({
-        src: png1x1,
-        enter: spin(),
-      }).success,
-      false,
-    );
-
-    assert.equal(
-      tableDeclarationPropsSchema.safeParse({
-        columns: [120, "1fr"],
-        enter: fade(),
-        emphasis: spin(),
-        motion: true,
-      }).success,
-      true,
-    );
-    assert.equal(
-      tableDeclarationPropsSchema.safeParse({
-        columns: [120],
-        enter: "bad",
-      }).success,
-      false,
-    );
-
-    const chartBase = {
-      groups: [
-        {
-          kind: "column" as const,
-          data: { kind: "shared-categories" as const, categories: ["A"] },
-          series: [{ name: "S1", values: [1] }],
-        },
-      ],
-    };
-    assert.equal(
-      chartPropsSchema.safeParse({
-        ...chartBase,
-        id: "ch1",
-        enter: fade(),
-        emphasis: spin(),
-      }).success,
-      true,
-    );
-    assert.equal(
-      chartPropsSchema.safeParse({ ...chartBase, id: "  " }).success,
-      false,
-    );
-    assert.equal(
-      chartPropsSchema.safeParse({ ...chartBase, enter: spin() }).success,
-      false,
-    );
-
-    assert.equal(
-      notesDeclarationPropsSchema.safeParse({ id: "  " }).success,
-      false,
-    );
-  });
-
-  it("enforces Table.style schema constraints, Text.width type constraints, and Font constructor validation across public entries", async () => {
     assert.throws(() => font("   "), TypeError);
     assert.equal(
       font("Jost*", [{ weight: 450, data: png1x1 }]).faces?.[0]?.weight,
@@ -542,6 +396,74 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       TypeError,
     );
 
+    const validDoc = deck({
+      width: 960,
+      height: 540,
+      theme: { fonts: { major: jostFont, minor: jostFont } },
+    }).append(
+      slide({ id: "s1" }).append(
+        text("Headline", {
+          id: "t1",
+          morphKey: heroKey,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 30,
+            width: 300,
+            height: "auto",
+            fontFamily: jostFont,
+            fontSize: "24pt",
+            color: "#0F172A",
+            padding: 8,
+          },
+          enter: fade(),
+          emphasis: spin(),
+          motion: true,
+        }),
+        image({
+          id: "img1",
+          src: png1x1,
+          geometry: "roundRect",
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 100,
+            width: 40,
+            height: 40,
+          },
+          enter: fade(),
+        }),
+        table({
+          columns: [120, "1fr"],
+          style: { position: "absolute", left: 20, top: 160, width: 240 },
+          enter: fade(),
+          emphasis: spin(),
+          motion: true,
+        }).append(row().append(cell("A"), cell("B"))),
+        chart({
+          id: "ch1",
+          style: {
+            position: "absolute",
+            left: 340,
+            top: 40,
+            width: 320,
+            height: 200,
+          },
+          groups: [
+            {
+              kind: "column",
+              data: { kind: "shared-categories", categories: ["A"] },
+              series: [{ name: "S1", values: [1] }],
+            },
+          ],
+          enter: fade(),
+          emphasis: spin(),
+        }),
+        notes("Valid note", { id: "n1" }),
+      ),
+    );
+    assert.equal(resolveAll(validDoc).slides.length, 1);
+
     const resolve = createResolver([
       slideBackgroundCapability,
       boxCapability,
@@ -549,7 +471,110 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
       imageCapability,
       tableCapability,
       chartCapability,
+      notesCapability,
+      motionCapability,
     ]);
+
+    for (const [label, invalidDoc, expectedCode] of [
+      [
+        "empty Text id",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(text("Hi", { id: "" })),
+        ),
+        "invalid-prop",
+      ],
+      [
+        "blank Text name",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(text("Hi", { name: "   " })),
+        ),
+        "invalid-prop",
+      ],
+      [
+        "invalid morphKey on Text",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(
+            text("Hi", { morphKey: "not-a-key" as never }),
+          ),
+        ),
+        "invalid-prop",
+      ],
+      [
+        "blank P id",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(
+            text([paragraph("Hi", { id: "  " })], {
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 40,
+              },
+            }),
+          ),
+        ),
+        "invalid-prop",
+      ],
+      [
+        "blank Span id",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(
+            text([paragraph([span("Hi", { id: "  " })])], {
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 40,
+              },
+            }),
+          ),
+        ),
+        "invalid-prop",
+      ],
+      [
+        "blank SlideNumber id",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(
+            text([paragraph([slideNumber({ id: "  " })])], {
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 100,
+                height: 40,
+              },
+            }),
+          ),
+        ),
+        "invalid-prop",
+      ],
+      [
+        "invalid Image preset geometry",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(
+            image({ src: png1x1, geometry: "not-a-preset" as never }),
+          ),
+        ),
+        "invalid-prop",
+      ],
+      [
+        "blank Notes id",
+        deck({ width: 480, height: 270 }).append(
+          slide({ id: "s1" }).append(notes("Body", { id: "  " })),
+        ),
+        "invalid-prop",
+      ],
+    ] as const) {
+      assert.throws(
+        () => resolve(invalidDoc),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some((d) => d.code === expectedCode),
+        `${label} should fail with ${expectedCode}`,
+      );
+    }
 
     const invalidCases = [
       {
@@ -589,7 +614,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
           ),
       },
       {
-        label: "unsupported align on Table.style",
+        label: "unsupported spacingAfter on Table.style",
         expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
@@ -603,7 +628,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
                 {
                   id: "bad-tbl",
                   columns: [120],
-                  style: { align: "center" } as never,
+                  style: { spacingAfter: 8 } as never,
                 },
                 createElement(Row, null, createElement(Cell, null, "A")),
               ),
@@ -615,7 +640,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
               table({
                 id: "bad-tbl",
                 columns: [120],
-                style: { align: "center" } as never,
+                style: { spacingAfter: 8 } as never,
               }).append(row().append(cell("A"))),
             ),
           ),
@@ -657,7 +682,7 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
           ),
       },
       {
-        label: "unknown prop on Image and Chart",
+        label: "unknown prop on Image",
         expectedCode: "unknown-prop",
         jsx: () =>
           createElement(
@@ -747,23 +772,14 @@ describe("Capability pure-data schema closure: Text, Image, Table, Chart, Notes,
 });
 
 describe("Capability pure-data schema closure: Transition and Motion", () => {
-  it("validates Transition, MotionScope, Step, and Breathe options consistently across JSX and imperative entries", async () => {
-    assert.equal(transitionKindSchema.safeParse("morph").success, true);
-    assert.equal(transitionKindSchema.safeParse("blinds").success, false);
-    assert.equal(
-      transitionSchema.safeParse(
-        transitions.morph({ by: "word", fallback: transitions.fade() }),
-      ).success,
-      true,
-    );
-    assert.equal(
-      transitionSchema.safeParse({
-        type: "transition",
-        kind: "morph",
-        by: "word",
-      }).success,
-      false,
-    );
+  it("validates Transition, MotionScope, Step, Spin, and Breathe options consistently across JSX and imperative entries", async () => {
+    const morphTransition = transitions.morph({
+      by: "word",
+      fallback: transitions.fade(),
+    });
+    assert.equal(morphTransition.kind, "morph");
+    assert.equal(spin({ by: 180 }).preset, "spin");
+    assert.equal(spin({ from: 0, to: 90 }).preset, "spin");
 
     const resolve = createResolver([
       slideBackgroundCapability,
@@ -771,6 +787,47 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
       motionCapability,
       transitionCapability,
     ]);
+    assert.throws(
+      () =>
+        resolve(
+          deck({ width: 480, height: 270 }).append(
+            slide({
+              id: "s1",
+              transition: {
+                type: "transition",
+                kind: "morph",
+                by: "word",
+              } as never,
+            }),
+          ),
+        ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((d) => d.code === "invalid-prop"),
+    );
+    assert.throws(
+      () =>
+        resolve(
+          deck({ width: 480, height: 270 }).append(
+            slide({ id: "s1" }).append(
+              shape({
+                id: "bad-spin",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 60,
+                  height: 40,
+                },
+                emphasis: spin({ by: 90, from: 0 } as never),
+              }),
+            ),
+          ),
+        ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((d) => d.code === "invalid-prop"),
+    );
     const scopeHandle = createMotionScopeHandle();
 
     const invalidCases = [
@@ -998,7 +1055,7 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
     }
   });
 
-  it("enforces updated visual, layout, placeholderSize, spinOptions, and stage error Zod schemas", () => {
+  it("enforces exported core and codegen visual, layout, placeholderSize, and diagnostic Zod schemas", () => {
     assert.equal(backgroundValueSchema.safeParse("none").success, true);
     assert.equal(backgroundValueSchema.safeParse("#2563EB").success, true);
     assert.equal(
@@ -1028,16 +1085,6 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
         .success,
       false,
     );
-    assert.equal(
-      shapeBorderObjectSchema.safeParse({
-        color: "#1E293B",
-        width: 2,
-        startArrow: "none",
-        endArrow: "triangle",
-      }).success,
-      true,
-    );
-    assert.equal(shapeBorderValueSchema.safeParse("none").success, true);
 
     assert.equal(
       visualStyleSchema.safeParse({
@@ -1063,16 +1110,6 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
     assert.equal(placeholderSizeSchema.safeParse("half").success, true);
     assert.equal(placeholderSizeSchema.safeParse("quarter").success, true);
     assert.equal(placeholderSizeSchema.safeParse("third").success, false);
-
-    assert.equal(spinOptionsSchema.safeParse({ by: 180 }).success, true);
-    assert.equal(
-      spinOptionsSchema.safeParse({ from: 0, to: 90 }).success,
-      true,
-    );
-    assert.equal(
-      spinOptionsSchema.safeParse({ by: 90, from: 0 }).success,
-      false,
-    );
 
     assert.equal(
       buildDiagnosticSchema.safeParse({
@@ -1121,39 +1158,74 @@ describe("Capability pure-data schema closure: Transition and Motion", () => {
   it("shares readonly non-negative padding tuples across Box, Text, Shape, Table Cell, and validates Placeholder schemas", () => {
     const pad2 = [9, 12] as const;
     const pad4 = [9, 12, 9, 12] as const;
+    const layoutDef = defineSlideLayout({
+      id: "l1",
+      name: "L1",
+      placeholders: {
+        body: {
+          type: "body",
+          style: { left: 10, top: 20, width: 200, height: 100 },
+        },
+      },
+    });
 
-    const boxStyle: BoxStyle = { padding: pad4 };
-    const textStyle: TextBoxStyle = { padding: pad2 };
-    const shapeStyle: ShapeStyle = { padding: pad4 };
-    const cellStyle: TableCellStyle = { padding: pad4 };
-    const cellStyle2: TableCellStyle = { padding: pad2 };
+    const validDoc = deck({
+      width: 960,
+      height: 540,
+      theme: { fonts: { major: jostFont, minor: jostFont } },
+    }).append(
+      slideMaster({ id: "m1" }).append(slideLayout(layoutDef)),
+      slide({ id: "s1", layout: layoutDef }).append(
+        box({ style: { padding: pad4 } }),
+        text("T", { style: { padding: pad2 } }),
+        shape("S", { style: { padding: pad4 } }),
+        table({ columns: [120, 120] }).append(
+          row().append(
+            cell("C1", { style: { padding: pad4 } }),
+            cell("C2", { style: { padding: pad2 } }),
+          ),
+        ),
+        placeholder({
+          placeholder: "body",
+          style: { position: "absolute", left: 10, top: 20 },
+        }),
+      ),
+    );
+    assert.equal(resolveAll(validDoc).slides.length, 1);
 
-    assert.equal(boxStyleSchema.safeParse(boxStyle).success, true);
-    assert.equal(textBoxStyleSchema.safeParse(textStyle).success, true);
-    assert.equal(shapeStyleSchema.safeParse(shapeStyle).success, true);
-    assert.equal(tableCellStyleSchema.safeParse(cellStyle).success, true);
-    assert.equal(tableCellStyleSchema.safeParse(cellStyle2).success, true);
-    assert.equal(
-      tableCellStyleSchema.safeParse({ padding: [9, -1] }).success,
-      false,
+    const resolveTable = createResolver([tableCapability]);
+    assert.throws(
+      () =>
+        resolveTable(
+          deck({ width: 960, height: 540 }).append(
+            slide({ id: "s1" }).append(
+              table({ columns: [120, 120] }).append(
+                row().append(cell("Bad", { style: { padding: [9, -1] } })),
+              ),
+            ),
+          ),
+        ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((d) => d.code === "invalid-style"),
     );
 
-    assert.equal(
-      placeholderObjectStyleSchema.safeParse({ width: 200, height: 100 })
-        .success,
-      true,
-    );
-    assert.equal(
-      placeholderDeclarationPropsSchema.safeParse({
-        placeholder: "body",
-        style: { left: 10, top: 20 },
-      }).success,
-      true,
-    );
-    assert.equal(
-      placeholderDeclarationPropsSchema.safeParse({ unknownProp: true })
-        .success,
-      false,
+    const resolvePlaceholder = createResolver([
+      slideBackgroundCapability,
+      placeholderCapability,
+    ]);
+    assert.throws(
+      () =>
+        resolvePlaceholder(
+          deck({ width: 960, height: 540 }).append(
+            slide({ id: "s1" }).append(
+              placeholder({ unknownProp: true } as never),
+            ),
+          ),
+        ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        error.diagnostics.some((d) => d.code === "unknown-prop"),
     );
   });
 });

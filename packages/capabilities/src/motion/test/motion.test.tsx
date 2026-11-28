@@ -2,13 +2,20 @@ import assert from "node:assert/strict";
 
 import {
   after,
+  appear,
   Box,
   Chart,
   breathe,
+  collapse,
+  createMotionScopeHandle,
+  disappear,
   fade,
-  fly,
+  fadeOut,
   floatDown,
+  floatOut,
   floatUp,
+  fly,
+  flyOut,
   Group,
   Image,
   MotionScope,
@@ -17,24 +24,35 @@ import {
   shapeCapability,
   spin,
   spinIn,
+  spinOut,
   stretch,
   Step,
   Text,
   motionCapability,
   motionSchedule,
+  onStep,
   repeat,
   transitionCapability,
   transitions,
   useMotionScope,
   wipe,
+  wipeOut,
   zoom,
+  zoomOut,
 } from "@pptxdk/capabilities";
 import {
+  cell as documentCell,
   deck as documentDeck,
+  notes as documentNotes,
   paragraph as documentParagraph,
+  row as documentRow,
   shape as documentShape,
   slide as documentSlide,
+  slideLayout as documentSlideLayout,
+  slideMaster as documentSlideMaster,
   step as documentStep,
+  table as documentTable,
+  text as documentText,
 } from "@pptxdk/capabilities/document";
 import {
   fade as documentFade,
@@ -5011,7 +5029,7 @@ describe("object motion", () => {
     );
     assert.ok(flyEffects.every(({ durationMs }) => durationMs === 4000));
     const spinEffect = effects.find(({ preset }) => preset === "spin");
-    assert.deepEqual([spinEffect?.repeatCount, spinEffect?.delayMs], [2, 220]);
+    assert.deepEqual([spinEffect?.repeatCount, spinEffect?.delayMs], [2, 4320]);
     const followerObject = result.report.slides[0]?.objects.find(
       ({ authorId }) => authorId === "schedule-follower",
     );
@@ -5024,7 +5042,7 @@ describe("object motion", () => {
     assert.ok(wholeFly !== undefined);
     assert.equal(
       followerEffect?.delayMs,
-      wholeFly.delayMs + wholeFly.durationMs + 20,
+      spinEffect!.delayMs + spinEffect!.durationMs * 2 + 20,
     );
   });
 
@@ -7841,5 +7859,962 @@ describe("object motion", () => {
       slideXml.indexOf("<p:transition") < slideXml.indexOf("<p:timing>"),
     );
     assert.deepEqual((await validatePptx(result.pptx)).errors, []);
+  });
+
+  it("emits and validates appear() and all 8 ExitEffect presets with visibility hidden at completion and strict 3-slot isolation", async () => {
+    const built = await build(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "appear-and-exit" },
+          createElement(Shape, {
+            id: "instant-shape",
+            enter: appear(),
+            exit: disappear(),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 60,
+              height: 40,
+              background: "#2563EB",
+            },
+          }),
+          createElement(Shape, {
+            id: "fade-out-shape",
+            exit: fadeOut({ duration: 300 }),
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 20,
+              width: 60,
+              height: 40,
+              background: "#0284C7",
+            },
+          }),
+          createElement(Shape, {
+            id: "wipe-out-shape",
+            exit: wipeOut({ from: "left", duration: 280 }),
+            style: {
+              position: "absolute",
+              left: 180,
+              top: 20,
+              width: 60,
+              height: 40,
+              background: "#059669",
+            },
+          }),
+          createElement(Shape, {
+            id: "fly-out-shape",
+            exit: flyOut({ from: "right", duration: 320 }),
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 20,
+              width: 60,
+              height: 40,
+              background: "#D97706",
+            },
+          }),
+          createElement(Shape, {
+            id: "zoom-out-shape",
+            exit: zoomOut({ duration: 260 }),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 80,
+              width: 60,
+              height: 40,
+              background: "#7C3AED",
+            },
+          }),
+          createElement(Shape, {
+            id: "float-out-shape",
+            exit: floatOut({ duration: 240 }),
+            style: {
+              position: "absolute",
+              left: 100,
+              top: 80,
+              width: 60,
+              height: 40,
+              background: "#9333EA",
+            },
+          }),
+          createElement(Shape, {
+            id: "spin-out-shape",
+            exit: spinOut({ duration: 340 }),
+            style: {
+              position: "absolute",
+              left: 180,
+              top: 80,
+              width: 60,
+              height: 40,
+              background: "#DB2777",
+            },
+          }),
+          createElement(Shape, {
+            id: "collapse-shape",
+            exit: collapse({ duration: 220 }),
+            style: {
+              position: "absolute",
+              left: 260,
+              top: 80,
+              width: 60,
+              height: 40,
+              background: "#16A34A",
+            },
+          }),
+          createElement(
+            Text,
+            {
+              id: "text-appear-fadeout",
+              enter: appear({ delay: 10 }),
+              exit: fadeOut({ duration: 200 }),
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 140,
+                width: 200,
+                height: 60,
+                background: "#F8FAFC",
+              },
+            },
+            "Line one",
+          ),
+        ),
+      ),
+    );
+    const validated = await validatePptx(built.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const slideXml = strFromU8(unzipSync(built.pptx)["ppt/slides/slide1.xml"]!);
+    assert.match(slideXml, /presetID="1" presetClass="entr"/u);
+    assert.match(slideXml, /presetID="1" presetClass="exit"/u);
+    assert.match(slideXml, /presetID="10" presetClass="exit"/u);
+    assert.match(slideXml, /presetID="22" presetClass="exit"/u);
+    assert.match(slideXml, /presetID="2" presetClass="exit"/u);
+    assert.match(slideXml, /presetID="53" presetClass="exit"/u);
+    assert.match(slideXml, /presetID="42" presetClass="exit"/u);
+    assert.match(slideXml, /presetID="49" presetClass="exit"/u);
+    assert.match(slideXml, /presetID="17" presetClass="exit"/u);
+    assert.match(
+      slideXml,
+      /style\.visibility<\/p:attrName><\/p:attrNameLst><\/p:cBhvr><p:to><p:strVal val="hidden"/u,
+    );
+
+    const effects = validated.slides[0]?.animations?.[0]?.effects ?? [];
+    assert.ok(
+      effects.some((e) => e.kind === "entrance" && e.preset === "appear"),
+    );
+    assert.ok(
+      effects.some((e) => e.kind === "exit" && e.preset === "disappear"),
+    );
+    assert.ok(effects.some((e) => e.kind === "exit" && e.preset === "fadeOut"));
+    assert.ok(
+      effects.some((e) => e.kind === "exit" && e.preset === "collapse"),
+    );
+
+    // Verify 3-slot isolation at runtime
+    for (const invalidProps of [
+      { exit: fade() as never },
+      { exit: spin() as never },
+      { enter: fadeOut() as never },
+      { emphasis: fadeOut() as never },
+    ]) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            {},
+            createElement(
+              Slide,
+              { id: "slot-isolation" },
+              createElement(Shape, {
+                id: "bad-slot",
+                ...invalidProps,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 20,
+                  height: 20,
+                },
+              } as never),
+            ),
+          ),
+        ),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics[0]?.code === "invalid-prop",
+      );
+    }
+  });
+
+  it("routes effects via onStep(n, effect) and chains same-step enter -> emphasis -> exit automatically", async () => {
+    const built = await build(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "onstep-and-autochain" },
+          createElement(
+            Step,
+            { n: 1 },
+            createElement(Shape, {
+              id: "chained-same-step",
+              enter: fade({ duration: 200, delay: 20 }),
+              emphasis: spin({ duration: 300, delay: 30 }),
+              exit: fadeOut({ duration: 150, delay: 10 }),
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 20,
+                width: 80,
+                height: 40,
+                background: "#2563EB",
+              },
+            }),
+            createElement(Shape, {
+              id: "cross-step-card",
+              enter: zoom({ duration: 180 }),
+              emphasis: onStep(2, spin({ duration: 240 })),
+              exit: onStep(3, fadeOut({ duration: 160 })),
+              style: {
+                position: "absolute",
+                left: 140,
+                top: 20,
+                width: 80,
+                height: 40,
+                background: "#059669",
+              },
+            }),
+          ),
+          createElement(
+            Text,
+            {
+              id: "unknown-then-exit",
+              enter: onStep(
+                1,
+                fade({ by: "word", duration: 120, intervalMs: 40 }),
+              ),
+              exit: onStep(1, fadeOut({ duration: 200 })),
+              style: {
+                position: "absolute",
+                left: 20,
+                top: 90,
+                width: 200,
+                height: 40,
+              },
+            },
+            "Hello world",
+          ),
+        ),
+      ),
+    );
+
+    const validated = await validatePptx(built.pptx);
+    assert.deepEqual(validated.errors, []);
+
+    const schedule = motionSchedule(built.slide("onstep-and-autochain"));
+    assert.ok(schedule);
+    assert.equal(schedule.steps.length, 3);
+    assert.deepEqual(
+      schedule.steps.map((s) => [s.trigger, s.number]),
+      [
+        ["click", 1],
+        ["click", 2],
+        ["click", 3],
+      ],
+    );
+
+    const step1 = schedule.steps[0]!;
+    const chainedSameStep = step1.effects.filter(
+      (e) => e.target.authorId === "chained-same-step",
+    );
+    assert.deepEqual(
+      chainedSameStep.map((e) => [
+        e.kind,
+        e.preset,
+        e.start.state === "known" ? e.start.ms : undefined,
+        e.end.state === "known" ? e.end.ms : undefined,
+      ]),
+      [
+        ["entrance", "fade", 20, 220],
+        ["emphasis", "spin", 250, 550],
+        ["exit", "fadeOut", 560, 710],
+      ],
+    );
+
+    const unknownChain = step1.effects.filter(
+      (e) => e.target.authorId === "unknown-then-exit",
+    );
+    assert.equal(unknownChain.length, 2);
+    assert.equal(unknownChain[0]?.kind, "entrance");
+    assert.equal(unknownChain[1]?.kind, "exit");
+    assert.equal(unknownChain[1]?.start.state, "unknown");
+    assert.ok(unknownChain[1]?.startAfter !== undefined);
+
+    assert.equal(
+      schedule.steps[1]?.effects.some(
+        (e) =>
+          e.target.authorId === "cross-step-card" &&
+          e.kind === "emphasis" &&
+          e.preset === "spin",
+      ),
+      true,
+    );
+    assert.equal(
+      schedule.steps[2]?.effects.some(
+        (e) =>
+          e.target.authorId === "cross-step-card" &&
+          e.kind === "exit" &&
+          e.preset === "fadeOut",
+      ),
+      true,
+    );
+
+    for (const invalidOnStep of [
+      { enter: onStep(0, fade()) },
+      { enter: onStep(-2, fade()) },
+      { enter: onStep(1.5, fade()) },
+      { enter: onStep(Number.NaN, fade()) },
+      { enter: onStep(1, onStep(2, fade()) as never) },
+      { emphasis: repeat(onStep(1, spin()) as never, 2) },
+    ]) {
+      await assert.rejects(
+        build(
+          createElement(
+            Deck,
+            {},
+            createElement(
+              Slide,
+              { id: "bad-onstep" },
+              createElement(Shape, {
+                id: "bad-step-target",
+                ...invalidOnStep,
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 20,
+                  height: 20,
+                },
+              } as never),
+            ),
+          ),
+        ),
+        (error: unknown) => error instanceof BuildError,
+      );
+    }
+  });
+
+  it("supports startAt, publishStart, and publishEnd directly on leaf objects and Box without leaking implicit scopes", async () => {
+    const cues = createMotionScopeHandle();
+    const boxCues = createMotionScopeHandle();
+    const step2Cues = createMotionScopeHandle();
+    const slideNode = createElement(
+      Slide,
+      { id: "leaf-cue-slide" },
+      createElement(
+        Step,
+        { n: 1 },
+        createElement(Shape, {
+          id: "publisher-leaf",
+          enter: fade({ duration: 200 }),
+          publishStart: cues.cue("leadStart"),
+          publishEnd: cues.cue("leadEnd"),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 100,
+            height: 50,
+            background: "#2563EB",
+          },
+        }),
+        createElement(Shape, {
+          id: "consumer-leaf",
+          enter: wipe({ duration: 150 }),
+          emphasis: spin({ duration: 100 }),
+          startAt: after(cues.cue("leadEnd"), 40),
+          style: {
+            position: "absolute",
+            left: 140,
+            top: 20,
+            width: 100,
+            height: 50,
+            background: "#10B981",
+          },
+        }),
+        createElement(
+          Text,
+          {
+            id: "unknown-publisher",
+            enter: fade({ by: "word", duration: 120 }),
+            publishEnd: cues.cue("wordsDone"),
+            startAt: cues.cue("leadStart"),
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 90,
+              width: 200,
+              height: 40,
+            },
+          },
+          "one two",
+        ),
+        createElement(Shape, {
+          id: "unknown-consumer",
+          enter: fade({ duration: 100 }),
+          startAt: after(cues.cue("wordsDone"), 30),
+          style: {
+            position: "absolute",
+            left: 240,
+            top: 90,
+            width: 80,
+            height: 40,
+            background: "#F59E0B",
+          },
+        }),
+        createElement(
+          Box,
+          {
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 150,
+              width: 180,
+              height: 60,
+              background: "#E2E8F0",
+            },
+            enter: fade({ duration: 110 }),
+            publishEnd: boxCues.cue("boxDone"),
+          },
+          createElement(Shape, {
+            id: "box-child",
+            enter: fade({ duration: 160 }),
+            style: { width: 80, height: 30, background: "#0F172A" },
+          }),
+        ),
+        createElement(Shape, {
+          id: "after-box-child",
+          enter: fade({ duration: 90 }),
+          startAt: after(boxCues.cue("boxDone"), 20),
+          style: {
+            position: "absolute",
+            left: 220,
+            top: 150,
+            width: 80,
+            height: 40,
+            background: "#8B5CF6",
+          },
+        }),
+      ),
+      createElement(
+        Step,
+        { n: 2 },
+        createElement(Shape, {
+          id: "step2-same-leaf",
+          enter: onStep(2, appear()),
+          publishEnd: step2Cues.cue("s2"),
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 230,
+            width: 80,
+            height: 40,
+            background: "#EF4444",
+          },
+        }),
+        createElement(Shape, {
+          id: "step2-consumer",
+          enter: fade({ duration: 100 }),
+          startAt: after(step2Cues.cue("s2"), 15),
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 230,
+            width: 80,
+            height: 40,
+            background: "#06B6D4",
+          },
+        }),
+      ),
+    );
+
+    const result = await build(createElement(Deck, {}, slideNode));
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+
+    const schedule = motionSchedule(result.report.slides[0]!);
+    assert.ok(schedule !== undefined);
+    assert.equal(schedule.steps[0]?.scopes.length ?? 0, 0);
+
+    const s1 = schedule.steps[0]!;
+    const consumerEffects = s1.effects.filter(
+      (e) => e.target.authorId === "consumer-leaf",
+    );
+    assert.deepEqual(
+      consumerEffects.map((e) => [
+        e.preset,
+        e.start.state === "known" ? e.start.ms : undefined,
+        e.end.state === "known" ? e.end.ms : undefined,
+      ]),
+      [
+        ["wipe", 240, 390],
+        ["spin", 390, 490],
+      ],
+    );
+
+    const unknownPub = s1.effects.find(
+      (e) => e.target.authorId === "unknown-publisher",
+    );
+    const unknownCons = s1.effects.find(
+      (e) => e.target.authorId === "unknown-consumer",
+    );
+    assert.ok(unknownPub !== undefined && unknownCons !== undefined);
+    assert.equal(unknownCons.start.state, "unknown");
+    assert.deepEqual(unknownCons.startAfter, {
+      targetId: unknownPub.target.id,
+      effectIndex: 0,
+      point: "end",
+      offsetMs: 30,
+    });
+
+    const afterBox = s1.effects.find(
+      (e) => e.target.authorId === "after-box-child",
+    );
+    assert.equal(afterBox?.start.state, "known");
+    assert.equal(
+      afterBox?.start.state === "known" ? afterBox.start.ms : -1,
+      180,
+    );
+
+    const s2Cons = schedule.steps[1]!.effects.find(
+      (e) => e.target.authorId === "step2-consumer",
+    );
+    assert.equal(s2Cons?.start.state, "known");
+    assert.equal(s2Cons?.start.state === "known" ? s2Cons.start.ms : -1, 16);
+
+    // Cross-step cue wait from leaf must fail with cross-step-motion
+    const crossCue = createMotionScopeHandle();
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { id: "cross-step-leaf-cue" },
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(Shape, {
+                id: "s1-leaf",
+                enter: fade({ duration: 100 }),
+                publishEnd: crossCue.cue("done"),
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 20,
+                  height: 20,
+                },
+              }),
+            ),
+            createElement(
+              Step,
+              { n: 2 },
+              createElement(Shape, {
+                id: "s2-leaf",
+                enter: fade({ duration: 100 }),
+                startAt: after(crossCue.cue("done"), 10),
+                style: {
+                  position: "absolute",
+                  left: 30,
+                  top: 0,
+                  width: 20,
+                  height: 20,
+                },
+              }),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        /Named moment dependencies cannot cross different click steps/u.test(
+          error.message,
+        ),
+    );
+
+    // Leaf spanning steps via onStep cannot declare startAt or publishEnd
+    const spanCue = createMotionScopeHandle();
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { id: "cross-step-onstep-cue" },
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(Shape, {
+                id: "spanning-leaf",
+                enter: fade({ duration: 100 }),
+                exit: onStep(2, fadeOut({ duration: 100 })),
+                publishEnd: spanCue.cue("done"),
+                style: {
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 20,
+                  height: 20,
+                },
+              }),
+            ),
+          ),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        /Scope spanning multiple click steps cannot publish a single moment/u.test(
+          error.message,
+        ),
+    );
+
+    // Non-named moment in publishStart / publishEnd is rejected
+    await assert.rejects(
+      build(
+        createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { id: "bad-publisher" },
+            createElement(Shape, {
+              id: "bad-pub",
+              enter: fade({ duration: 100 }),
+              publishEnd: spanCue.end,
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 20,
+                height: 20,
+              },
+            }),
+          ),
+        ),
+      ),
+      (error: unknown) =>
+        error instanceof BuildError &&
+        /publishStart and publishEnd require named moment handles/u.test(
+          error.message,
+        ),
+    );
+  });
+
+  it("supports P paragraph choreography, internal Step wrappers, cues, and multi-effect auto-chaining inside Text and Shape while rejecting unsupported hosts", async () => {
+    const pCues = createMotionScopeHandle();
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 720, height: 405 },
+        createElement(
+          Slide,
+          { id: "p-motion-slide" },
+          createElement(
+            Text,
+            {
+              id: "stepped-text",
+              style: {
+                position: "absolute",
+                left: 30,
+                top: 30,
+                width: 300,
+                height: 180,
+              },
+            },
+            createElement(
+              P,
+              {
+                enter: fade({ duration: 200 }),
+                publishEnd: pCues.cue("p0Done"),
+              },
+              "Paragraph 0",
+            ),
+            createElement(
+              Step,
+              { n: 2 },
+              createElement(
+                P,
+                {
+                  enter: wipe({ from: "left", duration: 160 }),
+                  emphasis: spin({ duration: 120 }),
+                },
+                "Paragraph 1",
+              ),
+              createElement(
+                P,
+                {
+                  enter: appear({ delay: 30 }),
+                  exit: onStep(3, fadeOut({ duration: 150 })),
+                },
+                "Paragraph 2",
+              ),
+            ),
+            createElement(
+              P,
+              {
+                enter: fade({ duration: 100 }),
+                startAt: after(pCues.cue("p0Done"), 40),
+              },
+              "Paragraph 3",
+            ),
+          ),
+          createElement(
+            Shape,
+            {
+              id: "stepped-shape",
+              style: {
+                position: "absolute",
+                left: 360,
+                top: 30,
+                width: 300,
+                height: 180,
+                background: "#1E293B",
+                color: "#FFFFFF",
+              },
+            },
+            createElement(
+              Step,
+              { n: 1 },
+              createElement(
+                P,
+                {
+                  enter: fade({ duration: 180 }),
+                  exit: fadeOut({ duration: 140 }),
+                },
+                "Shape line 0",
+              ),
+            ),
+            createElement(
+              Step,
+              { n: 2 },
+              createElement(
+                P,
+                {
+                  enter: fly({ from: "left", duration: 220 }),
+                },
+                "Shape line 1",
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const result = await build(doc);
+    const file = await validatePptx(result.pptx);
+    assert.deepEqual(file.errors, []);
+
+    const slideReport = result.report.slides[0]!;
+    // Text and Shape must each remain a single native object (no text box splitting)
+    assert.equal(slideReport.objects.length, 2);
+    const textObj = slideReport.objects.find(
+      (o) => o.authorId === "stepped-text",
+    )!;
+    const shapeObj = slideReport.objects.find(
+      (o) => o.authorId === "stepped-shape",
+    )!;
+
+    const parts = unzipSync(result.pptx);
+    const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
+    for (const [id, st] of [
+      [textObj.id, 0],
+      [textObj.id, 1],
+      [textObj.id, 2],
+      [textObj.id, 3],
+      [shapeObj.id, 0],
+      [shapeObj.id, 1],
+    ] as const) {
+      assert.match(
+        slideXml,
+        new RegExp(
+          `<p:spTgt spid="${id}">\\s*<p:txEl>\\s*<p:pRg st="${st}" end="${st}"(?:\\/>|><\\/p:pRg>)\\s*<\\/p:txEl>\\s*<\\/p:spTgt>`,
+          "u",
+        ),
+      );
+    }
+
+    const schedule = motionSchedule(slideReport);
+    assert.ok(schedule !== undefined);
+    assert.equal(schedule.steps.length, 4); // auto (p0+p3) + step1 (shape p0) + step2 (text p1,p2 + shape p1) + step3 (text p2 exit)
+    const autoStep = schedule.steps[0]!;
+    assert.equal(autoStep.trigger, "auto");
+    const p3Effect = autoStep.effects.find(
+      (e) =>
+        e.target.id === textObj.id &&
+        e.target.range?.type === "paragraph" &&
+        e.target.range.start === 3,
+    );
+    assert.equal(p3Effect?.start.state, "known");
+    assert.equal(
+      p3Effect?.start.state === "known" ? p3Effect.start.ms : -1,
+      240,
+    );
+
+    const step1 = schedule.steps[1]!;
+    assert.equal(step1.number, 1);
+    const shapeP0Effects = step1.effects.filter(
+      (e) => e.target.id === shapeObj.id,
+    );
+    assert.deepEqual(
+      shapeP0Effects.map((e) => [
+        e.kind,
+        e.target.range?.type === "paragraph" ? e.target.range.start : -1,
+        e.start.state === "known" ? e.start.ms : -1,
+        e.end.state === "known" ? e.end.ms : -1,
+      ]),
+      [
+        ["entrance", 0, 0, 180],
+        ["exit", 0, 180, 320],
+      ],
+    );
+
+    const step2 = schedule.steps[2]!;
+    assert.equal(step2.number, 2);
+    const textP1Effects = step2.effects.filter(
+      (e) =>
+        e.target.id === textObj.id &&
+        e.target.range?.type === "paragraph" &&
+        e.target.range.start === 1,
+    );
+    assert.deepEqual(
+      textP1Effects.map((e) => [
+        e.kind,
+        e.start.state === "known" ? e.start.ms : -1,
+        e.end.state === "known" ? e.end.ms : -1,
+      ]),
+      [
+        ["entrance", 0, 160],
+        ["emphasis", 160, 280],
+      ],
+    );
+
+    // Unsupported hosts must throw typed BuildError: Notes, Table Cell, SlideLayout/Master, bare text in Step
+    const invalidDocs = [
+      documentDeck().append(
+        documentSlide({ id: "notes-p-motion" }).append(
+          documentNotes([documentParagraph("Cue", { enter: fade() as never })]),
+        ),
+      ),
+      documentDeck().append(
+        documentSlide({ id: "notes-step" }).append(
+          documentNotes([
+            documentStep({ n: 1 }).append(documentParagraph("Cue")),
+          ]),
+        ),
+      ),
+      documentDeck().append(
+        documentSlide({ id: "cell-p-motion" }).append(
+          documentTable({
+            columns: [120],
+            style: { position: "absolute", left: 10, top: 10 },
+          }).append(
+            documentRow().append(
+              documentCell(
+                documentParagraph("Cell", { enter: fade() as never }),
+              ),
+            ),
+          ),
+        ),
+      ),
+      documentDeck().append(
+        documentSlide({ id: "cell-step" }).append(
+          documentTable({
+            columns: [120],
+            style: { position: "absolute", left: 10, top: 10 },
+          }).append(
+            documentRow().append(
+              documentCell(
+                documentStep({ n: 1 }).append(documentParagraph("Cell")),
+              ),
+            ),
+          ),
+        ),
+      ),
+      documentDeck().append(
+        documentSlideMaster().append(
+          documentSlideLayout().append(
+            documentText([documentParagraph("Master P", { enter: fade() })], {
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 120,
+                height: 40,
+              },
+            }),
+          ),
+        ),
+      ),
+      documentDeck().append(
+        documentSlide({ id: "step-shape-inside-text" }).append(
+          documentText(
+            [
+              documentStep({ n: 1 }).append(
+                documentShape({ style: { width: 10, height: 10 } }),
+              ),
+            ],
+            {
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 120,
+                height: 40,
+              },
+            },
+          ),
+        ),
+      ),
+      await expandDocument(
+        createElement(
+          Deck,
+          {},
+          createElement(
+            Slide,
+            { id: "step-bare-text" },
+            createElement(
+              Text,
+              {
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 120,
+                  height: 40,
+                },
+              },
+              createElement(Step, { n: 1 }, "plain text"),
+            ),
+          ),
+        ),
+      ),
+    ];
+
+    for (const badDoc of invalidDocs) {
+      await assert.rejects(
+        build(badDoc),
+        (error: unknown) => error instanceof BuildError,
+      );
+    }
   });
 });

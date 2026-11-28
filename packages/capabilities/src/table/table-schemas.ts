@@ -6,6 +6,7 @@ import {
   linkTargetSchema,
   nativePlaceholderRefSchema,
   textStyleShape,
+  validateTextStyle,
   type BackgroundValue,
   type BorderValue,
   type ColorValue,
@@ -22,6 +23,7 @@ import {
   ooxmlBoolSchema,
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
+  ooxmlWritablePositiveExtentEmuSchema,
 } from "@pptxdk/import";
 import { z } from "zod";
 
@@ -97,11 +99,13 @@ export const tableSpacingSchema: z.ZodType<TableSpacing> =
 export type TableTextStyle = Pick<
   TextStyle,
   | "fontFamily"
+  | "eastAsianFontFamily"
   | "fontSize"
   | "fontWeight"
   | "fontStyle"
   | "color"
   | "lineHeight"
+  | "align"
   | "verticalAlign"
   | "letterSpacing"
   | "textTransform"
@@ -112,11 +116,13 @@ export type TableTextStyle = Pick<
 
 const tableTextStyleObjectSchema = z.strictObject({
   fontFamily: textStyleShape.fontFamily,
+  eastAsianFontFamily: textStyleShape.eastAsianFontFamily,
   fontSize: textStyleShape.fontSize,
   fontWeight: textStyleShape.fontWeight,
   fontStyle: textStyleShape.fontStyle,
   color: textStyleShape.color,
   lineHeight: textStyleShape.lineHeight,
+  align: textStyleShape.align,
   verticalAlign: textStyleShape.verticalAlign,
   letterSpacing: textStyleShape.letterSpacing,
   textTransform: textStyleShape.textTransform,
@@ -140,6 +146,10 @@ export type TableStyle = TableTextStyle &
   LayoutStyle & {
     readonly background?: BackgroundValue | undefined;
     readonly border?: BorderValue | undefined;
+    readonly borderTop?: BorderValue | undefined;
+    readonly borderRight?: BorderValue | undefined;
+    readonly borderBottom?: BorderValue | undefined;
+    readonly borderLeft?: BorderValue | undefined;
   };
 
 const tableStyleObjectSchema = z.strictObject({
@@ -147,6 +157,10 @@ const tableStyleObjectSchema = z.strictObject({
   ...layoutStyleShape,
   background: backgroundValueSchema.optional(),
   border: borderValueSchema.optional(),
+  borderTop: borderValueSchema.optional(),
+  borderRight: borderValueSchema.optional(),
+  borderBottom: borderValueSchema.optional(),
+  borderLeft: borderValueSchema.optional(),
 });
 const rawTableStyleSchema = tableStyleObjectSchema.readonly();
 export const tableStyleSchema: z.ZodType<TableStyle> =
@@ -161,6 +175,10 @@ export type TableRowStyle = TableTextStyle & {
   readonly height?: number | undefined;
   readonly background?: BackgroundValue | undefined;
   readonly border?: BorderValue | undefined;
+  readonly borderTop?: BorderValue | undefined;
+  readonly borderRight?: BorderValue | undefined;
+  readonly borderBottom?: BorderValue | undefined;
+  readonly borderLeft?: BorderValue | undefined;
 };
 
 const tableRowOwnStyleObjectSchema = z.strictObject({
@@ -168,6 +186,10 @@ const tableRowOwnStyleObjectSchema = z.strictObject({
   height: textPositiveSizeSchema.optional(),
   background: backgroundValueSchema.optional(),
   border: borderValueSchema.optional(),
+  borderTop: borderValueSchema.optional(),
+  borderRight: borderValueSchema.optional(),
+  borderBottom: borderValueSchema.optional(),
+  borderLeft: borderValueSchema.optional(),
 });
 
 const rawTableRowStyleSchema = z
@@ -251,9 +273,7 @@ const tableDeclarationPropsObjectSchema = z.strictObject({
   link: linkTargetSchema.optional(),
   columns: z.array(rawTableColumnSchema).nonempty().readonly(),
   style: rawTableStyleSchema.optional(),
-  enter: motionPropsShape.enter,
-  emphasis: motionPropsShape.emphasis,
-  motion: motionPropsShape.motion,
+  ...motionPropsShape,
 });
 
 const rawTableDeclarationPropsSchema =
@@ -369,14 +389,14 @@ export const tblPrXmlSchema = z.object({
   rtl: ooxmlBoolSchema.optional(),
 });
 
-/** OOXML `<a:gridCol w="..."/>` fragment schema. */
+/** OOXML `<a:gridCol w="..."/>` fragment schema bounded to `1 .. 2_147_483_647` EMU. */
 export const tblGridColXmlSchema = z.object({
-  w: ooxmlPositiveIntSchema,
+  w: ooxmlWritablePositiveExtentEmuSchema,
 });
 
-/** OOXML `<a:tr h="..."/>` fragment schema. */
+/** OOXML `<a:tr h="..."/>` fragment schema bounded to `1 .. 2_147_483_647` EMU. */
 export const tblRowXmlSchema = z.object({
-  h: ooxmlPositiveIntSchema,
+  h: ooxmlWritablePositiveExtentEmuSchema,
 });
 
 /** OOXML `<a:tc gridSpan="..." rowSpan="..." hMerge="..." vMerge="..."/>` fragment schema. */
@@ -387,12 +407,8 @@ export const tblCellXmlSchema = z.object({
   vMerge: ooxmlBoolSchema.optional(),
 });
 
-/** OOXML `<a:tcPr .../>` attribute fragment schema. */
+/** OOXML `<a:tcPr .../>` non-margin attribute fragment schema. */
 export const tblCellPrXmlSchema = z.object({
-  marL: ooxmlNonNegativeIntSchema.optional(),
-  marR: ooxmlNonNegativeIntSchema.optional(),
-  marT: ooxmlNonNegativeIntSchema.optional(),
-  marB: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
   vert: z.string().optional(),
   horzOverflow: z.string().optional(),
@@ -653,67 +669,85 @@ export function parseTableBorderValue(
   };
 }
 
-/** Parses optional `border` declaration on a Table or Row layer. */
-export function parseTableLayerBorder(
-  style: Readonly<Record<string, unknown>>,
-  label: "Table" | "Row",
-  theme: ThemeContext,
-  path?: string,
-): { readonly declared: boolean; readonly border?: TableCellBorder } {
-  if (!Object.hasOwn(style, "border") || style["border"] === undefined) {
-    return { declared: false };
+/** Validates optional `align` on Table, Row, or Cell using shared core text style validation. */
+export function assertTableTextAlignment(align: unknown, path?: string): void {
+  if (align === undefined) return;
+  try {
+    validateTextStyle({ align });
+  } catch (error) {
+    if (error instanceof CapabilityError) {
+      throw new CapabilityError(error.code, error.message, path);
+    }
+    throw error;
   }
-  const border = parseTableBorderValue(
-    style["border"],
-    `${label}.style.border`,
-    theme,
-    path,
-  );
-  return {
-    declared: true,
-    ...(border === undefined ? {} : { border }),
-  };
 }
 
-/** Resolves final 4-side borders for a Cell by cascading Table -> Row -> Cell.border -> Cell.border{Side}. */
-export function resolveTableCellBorders(
+const tableBorderSideEntries = [
+  ["borderTop", "top"],
+  ["borderRight", "right"],
+  ["borderBottom", "bottom"],
+  ["borderLeft", "left"],
+] as const;
+
+/**
+ * Resolves 4-side borders for a Table, Row, or Cell layer by applying `border` shorthand
+ * then individual `borderTop`/`borderRight`/`borderBottom`/`borderLeft` overrides over inherited borders.
+ */
+export function resolveTableLayerBorders(
   style: Readonly<Record<string, unknown>>,
-  inheritedBorder: TableCellBorder | undefined,
+  inherited: TableCellBorders,
+  label: "Table" | "Row" | "Cell",
   theme: ThemeContext,
-  path: string,
+  path?: string,
 ): TableCellBorders {
-  let baseBorder = inheritedBorder;
+  let top = inherited.top;
+  let right = inherited.right;
+  let bottom = inherited.bottom;
+  let left = inherited.left;
+
   if (Object.hasOwn(style, "border") && style["border"] !== undefined) {
-    baseBorder = parseTableBorderValue(
+    const baseBorder = parseTableBorderValue(
       style["border"],
-      "Cell.style.border",
+      `${label}.style.border`,
       theme,
       path,
     );
+    top = baseBorder;
+    right = baseBorder;
+    bottom = baseBorder;
+    left = baseBorder;
   }
 
-  const sideBorder = (
-    sideKey: "borderTop" | "borderRight" | "borderBottom" | "borderLeft",
-  ): TableCellBorder | undefined => {
-    if (Object.hasOwn(style, sideKey) && style[sideKey] !== undefined) {
-      return parseTableBorderValue(
-        style[sideKey],
-        `Cell.style.${sideKey}`,
-        theme,
-        path,
-      );
+  for (const [sideKey, sideName] of tableBorderSideEntries) {
+    if (!Object.hasOwn(style, sideKey) || style[sideKey] === undefined) {
+      continue;
     }
-    return baseBorder;
-  };
+    const sideValue = parseTableBorderValue(
+      style[sideKey],
+      `${label}.style.${sideKey}`,
+      theme,
+      path,
+    );
+    if (sideName === "top") top = sideValue;
+    else if (sideName === "right") right = sideValue;
+    else if (sideName === "bottom") bottom = sideValue;
+    else left = sideValue;
+  }
 
-  const top = sideBorder("borderTop");
-  const right = sideBorder("borderRight");
-  const bottom = sideBorder("borderBottom");
-  const left = sideBorder("borderLeft");
   return {
     ...(top === undefined ? {} : { top }),
     ...(right === undefined ? {} : { right }),
     ...(bottom === undefined ? {} : { bottom }),
     ...(left === undefined ? {} : { left }),
   };
+}
+
+/** Resolves final 4-side borders for a Cell by cascading Table -> Row -> Cell.border -> Cell.border{Side}. */
+export function resolveTableCellBorders(
+  style: Readonly<Record<string, unknown>>,
+  inheritedBorders: TableCellBorders,
+  theme: ThemeContext,
+  path: string,
+): TableCellBorders {
+  return resolveTableLayerBorders(style, inheritedBorders, "Cell", theme, path);
 }

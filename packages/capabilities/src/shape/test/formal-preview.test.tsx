@@ -5,6 +5,7 @@ import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   deck,
   font,
+  line,
   paragraph,
   shape,
   slide,
@@ -304,7 +305,6 @@ describe("Slice 2: Shape static preview", () => {
     const previewDoc = runDocPreview(documentCapabilities);
     const { PNG } = await import("pngjs");
     const { arrowTypes } = await import("@pptxdk/capabilities");
-    const { path } = await import("@pptxdk/capabilities/shape");
 
     const samplePng = new PNG({ width: 4, height: 4 });
     for (let i = 0; i < samplePng.data.length; i += 4) {
@@ -366,27 +366,21 @@ describe("Slice 2: Shape static preview", () => {
           },
         }),
         ...arrowTypes.map((arrowType, idx) =>
-          shape({
+          line({
             id: `arrow-${arrowType}`,
-            geometry:
-              idx % 2 === 0
-                ? "line"
-                : path("M 0 12 Q 50 -6 100 12", {
-                    viewBox: [100, 18],
-                    fill: false,
-                  }),
+            routing: idx % 2 === 0 ? "straight" : "curved",
+            stroke: {
+              color: "#0F172A",
+              width: 2.5,
+              startArrow: arrowType,
+              endArrow: arrowType,
+            },
             style: {
               position: "absolute",
               left: 15 + idx * 75,
               top: 100,
               width: 60,
               height: 16,
-              border: {
-                color: "#0F172A",
-                width: 2.5,
-                startArrow: arrowType,
-                endArrow: arrowType,
-              },
             },
           }),
         ),

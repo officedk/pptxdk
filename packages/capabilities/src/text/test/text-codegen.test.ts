@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { CommonContainer } from "@pptxdk/core/document";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   deck,
   paragraph,
@@ -12,8 +8,13 @@ import {
   slide,
   slideNumber,
   span,
+  sub,
+  sup,
   text,
-} from "../../document.ts";
+} from "@pptxdk/capabilities/document";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { CommonContainer } from "@pptxdk/core/document";
+import { describe, it } from "vitest";
 
 describe("text capability codegen", () => {
   it("generates vanilla and react source for text, paragraph, span, and slide-number including lists, links, empty paragraphs, and whitespace", () => {
@@ -43,6 +44,9 @@ describe("text capability codegen", () => {
                     style: { fontStyle: "italic", color: "#DC2626" },
                   }),
                   span(" end"),
+                  sup("2", { style: { fontWeight: "bold" } }),
+                  sub("i"),
+                  span("shift", { style: { baselineShift: "15%" } }),
                 ],
                 { style: { align: "left" } },
               ),
@@ -124,10 +128,28 @@ describe("text capability codegen", () => {
     assert.match(vanillaSource, /slideNumber\(\)/u);
     assert.match(vanillaSource, /startAt: 5/u);
     assert.match(vanillaSource, /character: "\+"/u);
+    assert.match(
+      vanillaSource,
+      /sup\("2", \{ style: \{ fontWeight: "bold" \} \}\)/u,
+    );
+    assert.match(vanillaSource, /sub\("i"\)/u);
+    assert.match(
+      vanillaSource,
+      /span\("shift", \{ style: \{ baselineShift: "15%" \} \}\)/u,
+    );
 
     const react = generate(doc, { target: "react" });
     const reactSource = react.files[react.entry] as string;
     assert.match(reactSource, /<Text[\s\S]*?>\s*Simple heading\s*<\/Text>/u);
+    assert.match(
+      reactSource,
+      /<Sup style=\{\{ fontWeight: "bold" \}\}>2<\/Sup>/u,
+    );
+    assert.match(reactSource, /<Sub>i<\/Sub>/u);
+    assert.match(
+      reactSource,
+      /<Span style=\{\{ baselineShift: "15%" \}\}>shift<\/Span>/u,
+    );
     assert.match(
       reactSource,
       /<Span style=\{\{ fontWeight: "bold" \}\}>\{"Bold "\}<\/Span>/u,

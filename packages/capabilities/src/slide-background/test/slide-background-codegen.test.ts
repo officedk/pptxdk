@@ -4,21 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { darker, defineTheme, lighter } from "@pptxdk/core";
-import { PNG } from "pngjs";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   deck,
   defineSlideLayout,
+  linearGradient,
+  radialGradient,
   slide,
   slideLayout,
   slideMaster,
   text,
-} from "../../document.ts";
-import { linearGradient, radialGradient } from "../../shared/visual.ts";
+} from "@pptxdk/capabilities/document";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { darker, defineTheme, lighter } from "@pptxdk/core";
+import { PNG } from "pngjs";
+import { describe, it } from "vitest";
 
 function createSolidPng(r: number, g: number, b: number): Uint8Array {
   const png = new PNG({ width: 4, height: 4 });

@@ -271,6 +271,7 @@ export function parseCapabilityLayoutContract(options: {
   readonly allowedStyleKeys: ReadonlySet<string>;
   readonly allowPadding?: boolean;
   readonly isContainer?: boolean;
+  readonly excludedFromLayout?: boolean;
   readonly path?: string;
 }): CapabilityLayoutContract {
   const {
@@ -279,6 +280,7 @@ export function parseCapabilityLayoutContract(options: {
     allowedStyleKeys,
     allowPadding = false,
     isContainer = false,
+    excludedFromLayout = false,
   } = options;
   const path = options.path ?? "style";
   const rawStyle = props["style"];
@@ -367,6 +369,7 @@ export function parseCapabilityLayoutContract(options: {
     positioned,
     ...(padding === undefined ? {} : { padding }),
     ...(isIntrinsicWidthObject ? { preservesIntrinsicSize: true } : {}),
+    ...(excludedFromLayout ? { excludedFromLayout: true } : {}),
   };
 }
 
@@ -581,6 +584,10 @@ export class LayoutPass {
           // Bound native placeholders resolve position/style from master+layout+local overrides
           // outside Yoga flow containers.
           this.#themes.set(child, elementTheme);
+          return;
+        }
+        if (contract.excludedFromLayout === true) {
+          this.#themes.set(child, themeContext);
           return;
         }
         for (const mode of customContainerModes) {

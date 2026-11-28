@@ -6,12 +6,14 @@ import {
   box,
   deck,
   font,
+  line,
   paragraph,
   shape,
   slide,
   slideNumber,
   span,
 } from "@pptxdk/capabilities/document";
+import { Line } from "@pptxdk/capabilities/line-elements";
 import {
   blockArc,
   linearGradient,
@@ -633,16 +635,17 @@ export const shapePresetCatalogScenario: CapabilityScenario = {
           border: { color: "#4C1D95", width: 2 },
         },
       }),
-      createElement(Shape, {
+      createElement(Line, {
         id: "adj-connector",
-        geometry: preset("bentConnector3", { adj1: 25000 }),
+        routing: "elbow",
+        adjust: { adj1: 25000 },
+        stroke: { color: "#DC2626", width: 3 },
         style: {
           position: "absolute",
           left: 630,
           top: 35,
           width: 120,
           height: 80,
-          border: { color: "#DC2626", width: 3 },
         },
       }),
       createElement(Shape, {
@@ -856,16 +859,17 @@ export const shapePresetCatalogScenario: CapabilityScenario = {
           border: { color: "#4C1D95", width: 2 },
         },
       }),
-      shape({
+      line({
         id: "adj-connector",
-        geometry: preset("bentConnector3", { adj1: 25000 }),
+        routing: "elbow",
+        adjust: { adj1: 25000 },
+        stroke: { color: "#DC2626", width: 3 },
         style: {
           position: "absolute",
           left: 630,
           top: 35,
           width: 120,
           height: 80,
-          border: { color: "#DC2626", width: 3 },
         },
       }),
       shape({
@@ -1927,8 +1931,6 @@ export const shapeShadedFillsAndPathsScenario: CapabilityScenario = {
             border: {
               color: "#1E293B",
               width: 2,
-              startArrow: "triangle",
-              endArrow: "stealth",
             },
           },
         }),
@@ -1945,8 +1947,6 @@ export const shapeShadedFillsAndPathsScenario: CapabilityScenario = {
             border: {
               color: "#166534",
               width: 2,
-              startArrow: "oval",
-              endArrow: "diamond",
             },
           },
         }),
@@ -2100,8 +2100,6 @@ export const shapeShadedFillsAndPathsScenario: CapabilityScenario = {
             border: {
               color: "#1E293B",
               width: 2,
-              startArrow: "triangle",
-              endArrow: "stealth",
             },
           },
         }),
@@ -2118,8 +2116,6 @@ export const shapeShadedFillsAndPathsScenario: CapabilityScenario = {
             border: {
               color: "#166534",
               width: 2,
-              startArrow: "oval",
-              endArrow: "diamond",
             },
           },
         }),

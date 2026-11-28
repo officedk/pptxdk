@@ -8,15 +8,13 @@ import {
   box,
   deck,
   font,
+  line,
   shape,
   slide,
   text,
 } from "@pptxdk/capabilities/document";
-import {
-  linearGradient,
-  path,
-  radialGradient,
-} from "@pptxdk/capabilities/shape";
+import { Line } from "@pptxdk/capabilities/line-elements";
+import { linearGradient, radialGradient } from "@pptxdk/capabilities/shape";
 import { Shape } from "@pptxdk/capabilities/shape-elements";
 import { Text } from "@pptxdk/capabilities/text-elements";
 import { Deck, Slide } from "@pptxdk/react";
@@ -436,37 +434,33 @@ export const boxPositiveScenario: CapabilityScenario = {
                   alignItems: "center",
                 },
               },
-              createElement(Shape, {
+              createElement(Line, {
                 id: `line-${arrowType}`,
-                geometry: "line",
+                stroke: {
+                  color: "#0F172A",
+                  width: 3,
+                  style: arrowType === "arrow" ? "dashed" : "solid",
+                  startArrow: arrowType,
+                  endArrow: arrowType,
+                },
                 style: {
                   width: 240,
                   height: 2,
                   flipH: idx % 2 === 1,
-                  border: {
-                    color: "#0F172A",
-                    width: 3,
-                    style: arrowType === "arrow" ? "dashed" : "solid",
-                    startArrow: arrowType,
-                    endArrow: arrowType,
-                  },
                 },
               }),
-              createElement(Shape, {
+              createElement(Line, {
                 id: `curve-${arrowType}`,
-                geometry: path("M 0 18 Q 90 -8 180 18", {
-                  viewBox: [180, 22],
-                  fill: false,
-                }),
+                routing: "curved",
+                stroke: {
+                  color: "#2563EB",
+                  width: 2.5,
+                  startArrow: arrowType,
+                  endArrow: arrowType,
+                },
                 style: {
                   width: 180,
                   height: 22,
-                  border: {
-                    color: "#2563EB",
-                    width: 2.5,
-                    startArrow: arrowType,
-                    endArrow: arrowType,
-                  },
                 },
               }),
             ),
@@ -749,37 +743,33 @@ export const boxPositiveScenario: CapabilityScenario = {
                 alignItems: "center",
               },
             }).append(
-              shape({
+              line({
                 id: `line-${arrowType}`,
-                geometry: "line",
+                stroke: {
+                  color: "#0F172A",
+                  width: 3,
+                  style: arrowType === "arrow" ? "dashed" : "solid",
+                  startArrow: arrowType,
+                  endArrow: arrowType,
+                },
                 style: {
                   width: 240,
                   height: 2,
                   flipH: idx % 2 === 1,
-                  border: {
-                    color: "#0F172A",
-                    width: 3,
-                    style: arrowType === "arrow" ? "dashed" : "solid",
-                    startArrow: arrowType,
-                    endArrow: arrowType,
-                  },
                 },
               }),
-              shape({
+              line({
                 id: `curve-${arrowType}`,
-                geometry: path("M 0 18 Q 90 -8 180 18", {
-                  viewBox: [180, 22],
-                  fill: false,
-                }),
+                routing: "curved",
+                stroke: {
+                  color: "#2563EB",
+                  width: 2.5,
+                  startArrow: arrowType,
+                  endArrow: arrowType,
+                },
                 style: {
                   width: 180,
                   height: 22,
-                  border: {
-                    color: "#2563EB",
-                    width: 2.5,
-                    startArrow: arrowType,
-                    endArrow: arrowType,
-                  },
                 },
               }),
             ),

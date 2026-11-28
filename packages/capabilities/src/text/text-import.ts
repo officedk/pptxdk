@@ -12,6 +12,7 @@ import {
   type Shadow,
   type TextAlignment,
   type TextStyle,
+  type VisualStyle,
 } from "@pptxdk/core/capability";
 import type { CommonNode } from "@pptxdk/core/document";
 import {
@@ -56,7 +57,7 @@ import type { ParagraphStyle, TextList } from "../shared/text-schemas.ts";
 import {
   readSpPrAppearance,
   readSpPrVisuals,
-  type ShapeVisualStyle,
+  type LineEndStyle,
 } from "../shared/visual.ts";
 import {
   createParagraphNode,
@@ -1023,7 +1024,8 @@ export function populateRichTextNode(
 }
 
 function textBoxVisualStyle(
-  appearanceStyle: ShapeVisualStyle,
+  appearanceStyle: VisualStyle,
+  borderArrows: LineEndStyle | undefined,
   geometry: Geometry | undefined,
   boxSize: { readonly width: number; readonly height: number } | undefined,
   rotate: number | undefined,
@@ -1031,21 +1033,10 @@ function textBoxVisualStyle(
   diagnostics: ImportDiagnostic[],
 ): NonNullable<TextDeclarationProps["style"]> {
   const { border: rawBorder, ...restVisualStyle } = appearanceStyle;
-  let border: NonNullable<TextDeclarationProps["style"]>["border"];
-  let hasHeadArrow = false;
-  let hasTailArrow = false;
-  if (rawBorder === "none") {
-    border = "none";
-  } else if (rawBorder !== undefined) {
-    const {
-      startArrow: borderStartArrow,
-      endArrow: borderEndArrow,
-      ...plainBorder
-    } = rawBorder;
-    if (borderStartArrow !== undefined) hasHeadArrow = true;
-    if (borderEndArrow !== undefined) hasTailArrow = true;
-    border = plainBorder;
-  }
+  const border: NonNullable<TextDeclarationProps["style"]>["border"] =
+    rawBorder;
+  const hasHeadArrow = borderArrows?.startArrow !== undefined;
+  const hasTailArrow = borderArrows?.endArrow !== undefined;
   if (hasHeadArrow || hasTailArrow) {
     diagnostics.push({
       code: "unsupported-mechanism",
@@ -1219,6 +1210,7 @@ export function readTextBoxSp(
 
   const rawVisualStyle = textBoxVisualStyle(
     visuals.style,
+    visuals.borderArrows,
     visuals.geometry,
     { width: visuals.transform.width, height: visuals.transform.height },
     visuals.transform.rotate,
@@ -1459,6 +1451,7 @@ export function readTextPlaceholderSp(
   );
   const visualStyle = textBoxVisualStyle(
     appearance.style,
+    appearance.borderArrows,
     appearance.geometry,
     localBox ?? inheritedPlaceholderBox,
     rotate,

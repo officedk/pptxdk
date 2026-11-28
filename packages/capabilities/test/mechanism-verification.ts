@@ -13,6 +13,7 @@ import type { PreviewResult } from "@pptxdk/preview";
 import { chartMechanismVerifications } from "../src/chart/test/mechanisms.ts";
 import { groupMechanismVerifications } from "../src/group/test/mechanisms.ts";
 import { imageMechanismVerifications } from "../src/image/test/mechanisms.ts";
+import { lineMechanismVerifications } from "../src/line/test/mechanisms.ts";
 import { footerPlaceholderMechanismVerifications } from "../src/masters/test/footer-mechanisms.ts";
 import { masterOwnershipVerifications } from "../src/masters/test/master-layout-mechanisms.ts";
 import { masterSharedCanvasMechanismVerifications } from "../src/masters/test/shared-canvas-mechanisms.ts";
@@ -81,6 +82,7 @@ export const productionMechanismVerifications: ExhaustiveMechanismVerificationMa
     ...groupMechanismVerifications,
     ...textMechanismVerifications,
     ...imageMechanismVerifications,
+    ...lineMechanismVerifications,
     ...tableMechanismVerifications,
     ...chartMechanismVerifications,
     ...masterOwnershipVerifications,
@@ -186,6 +188,7 @@ const vanillaCalleeByKind: Readonly<Record<string, RegExp>> = {
   chart: /\bchart\(/gu,
   group: /\bgroup\(/gu,
   image: /\bimage\(/gu,
+  line: /\bline\(/gu,
   "motion-scope": /\bmotionScope\(/gu,
   "motion-step": /\bstep\(/gu,
   notes: /\bnotes\(/gu,
@@ -205,6 +208,7 @@ const reactTagByKind: Readonly<Record<string, RegExp>> = {
   chart: /<Chart[\s>]/gu,
   group: /<Group[\s>]/gu,
   image: /<Image[\s>]/gu,
+  line: /<Line[\s/>]/gu,
   "motion-scope": /<MotionScope[\s>]/gu,
   "motion-step": /<Step[\s>]/gu,
   notes: /<Notes[\s>]/gu,

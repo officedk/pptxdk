@@ -142,8 +142,7 @@ describe("Capability pure-data schema closure: Box, Group, and Shape", () => {
               border: {
                 color: "#1D4ED8",
                 width: 2,
-                startArrow: "none",
-                endArrow: "triangle",
+                style: "solid",
               },
               fontSize: "16pt",
               fontWeight: "bold",

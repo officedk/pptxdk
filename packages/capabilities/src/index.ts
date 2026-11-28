@@ -20,15 +20,27 @@ export type {
 } from "#/shape/shape.ts";
 export { Shape } from "#/shape/shape-elements.ts";
 export type { ShapeProps } from "#/shape/shape-elements.ts";
+export { lineCapability } from "#/line/line.ts";
+export type {
+  LineAdjust,
+  LineDeclarationProps,
+  LineEndpoint,
+  LineLayoutStyle,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
+} from "#/line/line.ts";
+export { Line } from "#/line/line-elements.ts";
+export type { LineProps } from "#/line/line-elements.ts";
 export { boxCapability } from "#/box/box.ts";
 export { Box, type BoxProps } from "#/box/box-elements.ts";
 export {
   arrowTypes,
   hasVisibleBoxStyle,
-  lineEndStyleKeys,
   type ArrowType,
-  type LineEndStyle,
-  type ShapeVisualStyle,
 } from "#/shared/visual.ts";
 export type {
   GradientStop,

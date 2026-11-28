@@ -22,6 +22,7 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import { isLineNormalizedSpElement } from "../line/line-import.ts";
 import {
   attachDeferredSlideLink,
   consumeNonPlaceholderNvPr,
@@ -154,12 +155,13 @@ function isCustomGeomSpElement(cursor: XmlElementCursor): boolean {
   return directElementChild(spPr, A_NS, "custGeom") !== undefined;
 }
 
-/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, or `<a:custGeom>`). */
+/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, `<a:custGeom>`, or normalized 1D lines). */
 export function isPresetShapeSpElement(cursor: XmlElementCursor): boolean {
   return (
     !isPlaceholderSpElement(cursor) &&
     !isTextBoxSpElement(cursor) &&
-    !isCustomGeomSpElement(cursor)
+    !isCustomGeomSpElement(cursor) &&
+    !isLineNormalizedSpElement(cursor)
   );
 }
 
@@ -763,6 +765,18 @@ export function readShapeSp(
       : undefined;
 
   const { border: rawBorder, ...restVisualStyle } = visuals.style;
+  if (visuals.borderArrows !== undefined) {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location,
+      namespaceUri: A_NS,
+      localName:
+        visuals.borderArrows.startArrow !== undefined ? "headEnd" : "tailEnd",
+      mechanismHint: "shape-line-arrow",
+    });
+  }
   const effectiveVisualStyle =
     rawBorder === "none" ? restVisualStyle : visuals.style;
 

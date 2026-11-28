@@ -76,6 +76,7 @@ export type {
   ImportMechanismHandler,
   OmittedSlideObjectInfo,
   PlaceholderVisualReader,
+  ScopeConnectorResolutionContext,
   ShapeTreeImportContext,
   ShapeTreeImportHandler,
   ShapeTreeImportOutcome,

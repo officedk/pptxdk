@@ -734,137 +734,24 @@ describe("geometry, object visuals, and text visuals", () => {
     }
   });
 
-  it("writes valid DrawingML headEnd and tailEnd line arrows on preset and custom path shapes", async () => {
-    const result = await build(
-      deck([
-        createElement(Shape, {
-          id: "arrow-line",
-          geometry: preset("line"),
-          style: {
-            position: "absolute",
-            left: 10,
-            top: 20,
-            width: 100,
-            height: 1,
-            border: {
-              color: "accent1",
-              width: 2,
-              startArrow: "oval",
-              endArrow: "triangle",
-            },
-          },
-        }),
-        createElement(Shape, {
-          id: "arrow-path",
-          geometry: path("M 0 0 L 150 80", {
-            viewBox: [150, 80],
-            fill: false,
-          }),
-          style: {
-            position: "absolute",
-            left: 20,
-            top: 40,
-            width: 150,
-            height: 80,
-            border: {
-              color: "accent2",
-              width: 1.5,
-              style: "dashed",
-              startArrow: "stealth",
-              endArrow: "diamond",
-            },
-          },
-        }),
-        createElement(Shape, {
-          id: "arrow-none-arrow",
-          geometry: preset("line"),
-          style: {
-            position: "absolute",
-            left: 30,
-            top: 60,
-            width: 80,
-            height: 1,
-            border: {
-              color: "accent3",
-              width: 1,
-              startArrow: "none",
-              endArrow: "arrow",
-            },
-          },
-        }),
-      ]),
-    );
-
-    const file = await validatePptx(result.pptx);
-    assert.deepEqual(file.errors, []);
-
-    const parts = unzipSync(result.pptx);
-    const slideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
-
-    // Verify headEnd and tailEnd elements exist
-    assert.ok(slideXml.includes('<a:headEnd type="oval"/>'));
-    assert.ok(slideXml.includes('<a:tailEnd type="triangle"/>'));
-    assert.ok(slideXml.includes('<a:headEnd type="stealth"/>'));
-    assert.ok(slideXml.includes('<a:tailEnd type="diamond"/>'));
-    assert.ok(slideXml.includes('<a:headEnd type="none"/>'));
-    assert.ok(slideXml.includes('<a:tailEnd type="arrow"/>'));
-
-    // Verify DrawingML schema child element order: solidFill -> prstDash -> headEnd -> tailEnd
-    const dashedLineMatch = slideXml.match(
-      /<a:ln [^>]*>(.*?)<a:prstDash val="dash"\/>(.*?)<a:headEnd type="stealth"\/>(.*?)<a:tailEnd type="diamond"\/>.*?<\/a:ln>/s,
-    );
-    assert.ok(
-      dashedLineMatch,
-      "Dashed line elements must appear in DrawingML schema sequence",
-    );
-    assert.ok(dashedLineMatch[1]?.includes("<a:solidFill>"));
-  });
-
-  it("rejects invalid line arrow types on Shape style", async () => {
-    for (const invalidType of ["circle", "bar", "unknown", 123] as const) {
+  it("rejects startArrow and endArrow on Shape border with invalid-style", async () => {
+    for (const badBorder of [
+      { color: "accent1", width: 2, startArrow: "oval" },
+      { color: "accent1", width: 2, endArrow: "triangle" },
+    ]) {
       await assert.rejects(
         build(
           deck([
             createElement(Shape, {
-              id: "bad-start-arrow",
+              id: "shape-arrow-rejected",
               geometry: preset("line"),
               style: {
                 position: "absolute",
                 left: 10,
                 top: 20,
                 width: 100,
-                height: 1,
-                border: {
-                  color: "accent1",
-                  width: 2,
-                  startArrow: invalidType as any,
-                },
-              },
-            }),
-          ]),
-        ),
-        (error: unknown) =>
-          error instanceof BuildError &&
-          error.diagnostics.some((diag) => diag.code === "invalid-style"),
-      );
-
-      await assert.rejects(
-        build(
-          deck([
-            createElement(Shape, {
-              id: "bad-end-arrow",
-              geometry: preset("line"),
-              style: {
-                position: "absolute",
-                left: 10,
-                top: 20,
-                width: 100,
-                height: 1,
-                border: {
-                  color: "accent1",
-                  width: 2,
-                  endArrow: invalidType as any,
-                },
+                height: 10,
+                border: badBorder as never,
               },
             }),
           ]),
@@ -874,48 +761,6 @@ describe("geometry, object visuals, and text visuals", () => {
           error.diagnostics.some((diag) => diag.code === "invalid-style"),
       );
     }
-  });
-
-  it("validates line end type attributes during validatePptx", async () => {
-    const valid = await build(
-      deck([
-        createElement(Shape, {
-          id: "arrow-sample",
-          geometry: preset("line"),
-          style: {
-            position: "absolute",
-            left: 10,
-            top: 20,
-            width: 100,
-            height: 1,
-            border: {
-              color: "accent1",
-              width: 2,
-              endArrow: "triangle",
-            },
-          },
-        }),
-      ]),
-    );
-
-    const parts = unzipSync(valid.pptx);
-    const originalSlideXml = strFromU8(parts["ppt/slides/slide1.xml"]!);
-    // Corrupt the tailEnd type attribute
-    const corruptedSlideXml = originalSlideXml.replace(
-      'type="triangle"',
-      'type="curly"',
-    );
-    parts["ppt/slides/slide1.xml"] = new TextEncoder().encode(
-      corruptedSlideXml,
-    );
-
-    const { zipSync } = await import("fflate");
-    const corruptedPptx = zipSync(parts);
-    const file = await validatePptx(corruptedPptx);
-    assert.ok(
-      file.errors.some((err) => err.code === "invalid-line-end-type"),
-      "Expected invalid-line-end-type error on corrupted line end type",
-    );
   });
 
   it("rejects startArrow and endArrow on Box and Text with invalid-style", async () => {

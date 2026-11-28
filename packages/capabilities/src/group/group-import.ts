@@ -10,12 +10,18 @@ import {
   peekShapeTreeObjectIdentity,
   type ImportDiagnostic,
   type ImportLocation,
+  type ScopeConnectorResolutionContext,
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
   type ShapeTreeImportOutcome,
 } from "@pptxdk/import";
 
 import { imageImportHandler } from "../image/image-import.ts";
+import {
+  isLineNormalizedSpElement,
+  readLineCxnSp,
+  readLineSp,
+} from "../line/line-import.ts";
 import {
   readNonVisualCommonProperties,
   readShapeSp,
@@ -303,6 +309,26 @@ function readGroupSpSlideSpace(
     });
 
   const members: CommonNode[] = [];
+  const groupObjectsBySpid = new Map<number, CommonNode>();
+  const groupUsedAuthorIds = new Set<string>();
+  const groupDeferredConnectors: Array<
+    (ctx: ScopeConnectorResolutionContext) => void
+  > = [];
+  const recordGroupMember = (
+    spid: number | undefined,
+    memberNode: CommonNode,
+  ): void => {
+    if (spid !== undefined) {
+      context.registerImportedObject?.(spid, memberNode);
+      groupObjectsBySpid.set(spid, memberNode);
+    }
+    const authorId = memberNode.props["id"];
+    if (typeof authorId === "string" && authorId.length > 0) {
+      groupUsedAuthorIds.add(authorId);
+    }
+    members.push(memberNode);
+  };
+
   for (const childCursor of cursor.remainingElementChildren()) {
     if (childCursor.namespaceUri !== P_NS) {
       diagnostics.push({
@@ -319,6 +345,9 @@ function readGroupSpSlideSpace(
     const childContext: ShapeTreeImportContext = {
       ...context,
       cursor: childCursor,
+      registerDeferredConnector: (resolve) => {
+        groupDeferredConnectors.push(resolve);
+      },
     };
 
     if (childCursor.localName === "grpSp") {
@@ -328,10 +357,7 @@ function readGroupSpSlideSpace(
       }
       if (outcome.node !== undefined) {
         const identity = peekShapeTreeObjectIdentity(childCursor.element);
-        if (identity.objectId !== undefined) {
-          context.registerImportedObject?.(identity.objectId, outcome.node);
-        }
-        members.push(outcome.node);
+        recordGroupMember(identity.objectId, outcome.node);
       }
       continue;
     }
@@ -345,10 +371,19 @@ function readGroupSpSlideSpace(
         if (outcome.node !== undefined) {
           applyMemberMapper(outcome.node, memberMapper);
           const identity = peekShapeTreeObjectIdentity(childCursor.element);
-          if (identity.objectId !== undefined) {
-            context.registerImportedObject?.(identity.objectId, outcome.node);
-          }
-          members.push(outcome.node);
+          recordGroupMember(identity.objectId, outcome.node);
+        }
+        continue;
+      }
+
+      if (isLineNormalizedSpElement(childCursor)) {
+        const outcome = readLineSp(childContext, memberMapper);
+        if (outcome.diagnostics !== undefined) {
+          diagnostics.push(...outcome.diagnostics);
+        }
+        if (outcome.node !== undefined) {
+          const identity = peekShapeTreeObjectIdentity(childCursor.element);
+          recordGroupMember(identity.objectId, outcome.node);
         }
         continue;
       }
@@ -359,10 +394,19 @@ function readGroupSpSlideSpace(
       }
       if (outcome.node !== undefined) {
         const identity = peekShapeTreeObjectIdentity(childCursor.element);
-        if (identity.objectId !== undefined) {
-          context.registerImportedObject?.(identity.objectId, outcome.node);
-        }
-        members.push(outcome.node);
+        recordGroupMember(identity.objectId, outcome.node);
+      }
+      continue;
+    }
+
+    if (childCursor.localName === "cxnSp") {
+      const outcome = readLineCxnSp(childContext, memberMapper);
+      if (outcome.diagnostics !== undefined) {
+        diagnostics.push(...outcome.diagnostics);
+      }
+      if (outcome.node !== undefined) {
+        const identity = peekShapeTreeObjectIdentity(childCursor.element);
+        recordGroupMember(identity.objectId, outcome.node);
       }
       continue;
     }
@@ -375,10 +419,7 @@ function readGroupSpSlideSpace(
       if (outcome.node !== undefined) {
         applyMemberMapper(outcome.node, memberMapper);
         const identity = peekShapeTreeObjectIdentity(childCursor.element);
-        if (identity.objectId !== undefined) {
-          context.registerImportedObject?.(identity.objectId, outcome.node);
-        }
-        members.push(outcome.node);
+        recordGroupMember(identity.objectId, outcome.node);
       }
       continue;
     }
@@ -422,6 +463,20 @@ function readGroupSpSlideSpace(
     pxToEmu(mappedGroupBox.width) > 0 &&
     pxToEmu(mappedGroupBox.height) > 0 &&
     !matchesMemberUnion;
+
+  // Resolve anchored connectors inside this group after member unionPx is computed so
+  // removing left/top/width/height from connected Line nodes does not skew group bounds.
+  if (groupDeferredConnectors.length > 0) {
+    const scopeContext: ScopeConnectorResolutionContext = {
+      scopeObjectsBySpid: groupObjectsBySpid,
+      omittedSpids: new Map(),
+      usedAuthorIds: groupUsedAuthorIds,
+      diagnostics,
+    };
+    for (const resolveConnector of groupDeferredConnectors) {
+      resolveConnector(scopeContext);
+    }
+  }
 
   const groupStyle: GroupStyle = {
     ...(isPositionedGroup

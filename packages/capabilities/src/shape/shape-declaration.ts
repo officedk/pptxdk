@@ -8,6 +8,7 @@ import {
   type LayoutStyle,
   type LinkTarget,
   type TextStyle,
+  type VisualStyle,
 } from "@pptxdk/core/capability";
 import { RichTextContainer } from "@pptxdk/core/document";
 import { pxToEmu } from "@pptxdk/emit";
@@ -20,10 +21,6 @@ import {
 import { geometrySchema, type Geometry } from "../shared/geometry.ts";
 import { optionalNameSchema } from "../shared/identity.ts";
 import { morphKeySchema, type MorphKey } from "../shared/morph-api.ts";
-import {
-  shapeBorderValueSchema,
-  type ShapeVisualStyle,
-} from "../shared/visual.ts";
 
 type AssertExact<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
@@ -45,13 +42,12 @@ export const shapeSizeSchema = z
     return extentEmu >= 1 && extentEmu <= 2_147_483_647;
   });
 
-export type ShapeStyle = LayoutStyle & ShapeVisualStyle & TextStyle;
+export type ShapeStyle = LayoutStyle & VisualStyle & TextStyle;
 
 const shapeStyleObjectSchema = z.strictObject({
   ...layoutStyleShape,
   ...visualStyleShape,
   ...textStyleShape,
-  border: shapeBorderValueSchema.optional(),
 });
 export const shapeStyleKeyList: readonly string[] = Object.keys(
   shapeStyleObjectSchema.shape,

@@ -44,10 +44,12 @@ import { z } from "zod";
 
 import { readAlternateContent } from "#/alternate-content.ts";
 import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
+import { readRunFontSlots } from "#/fonts.ts";
 import type {
   DeferredSlideLink,
   OmittedSlideObjectInfo,
   PlaceholderVisualReader,
+  ScopeConnectorResolutionContext,
   ShapeTreeImportHandler,
   SlideImportHandler,
 } from "#/mechanism.ts";
@@ -305,44 +307,10 @@ function readDefRPr(
     }
   }
 
-  const latin = rPr.child(A_NS, "latin");
-  const ea = rPr.child(A_NS, "ea");
-  const cs = rPr.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  let fontFamily: string | undefined;
-  if (fontCursor !== undefined) {
-    const typeface = fontCursor.attr("typeface");
-    fontCursor.consumeAttr("pitchFamily");
-    fontCursor.consumeAttr("charset");
-    fontCursor.consumeAttr("panose");
-    if (typeface !== undefined && typeface.trim() !== "") {
-      if (
-        typeface === "+mj-lt" ||
-        typeface === "+mj-ea" ||
-        typeface === "+mj-cs"
-      ) {
-        fontFamily = "major";
-      } else if (
-        typeface === "+mn-lt" ||
-        typeface === "+mn-ea" ||
-        typeface === "+mn-cs"
-      ) {
-        fontFamily = "minor";
-      } else {
-        fontFamily = typeface;
-      }
-    }
-  }
-  for (const extra of [ea, cs]) {
-    if (extra !== undefined && extra !== fontCursor) {
-      extra.consumeAttr("typeface");
-      extra.consumeAttr("pitchFamily");
-      extra.consumeAttr("charset");
-      extra.consumeAttr("panose");
-    }
-  }
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPr);
   return {
     ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
     ...(fontSize === undefined ? {} : { fontSize }),
     ...(fontWeight === undefined ? {} : { fontWeight }),
     ...(fontStyle === undefined ? {} : { fontStyle }),
@@ -922,6 +890,11 @@ function readSingleShapeTreeItem(
   registerImportedObject?: (spid: number, node: CommonNode) => void,
   omittedSpids?: Map<number, OmittedSlideObjectInfo>,
   masterPlaceholders?: MasterPlaceholderMap,
+  registerDeferredConnector?: (
+    resolve: (ctx: ScopeConnectorResolutionContext) => void,
+  ) => void,
+  scopeObjectsBySpid?: Map<number, CommonNode>,
+  usedAuthorIds?: Set<string>,
 ): CommonNode | undefined {
   const identity = peekShapeTreeObjectIdentity(itemCursor.element);
   const match = shapeTreeHandlers.find(
@@ -980,6 +953,9 @@ function readSingleShapeTreeItem(
     relationships: relIndex.byId,
     registerDeferredSlideLink,
     ...(registerImportedObject === undefined ? {} : { registerImportedObject }),
+    ...(registerDeferredConnector === undefined
+      ? {}
+      : { registerDeferredConnector }),
     ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
     ...(masterPlaceholders === undefined ? {} : { masterPlaceholders }),
     ...(clrMap === undefined ? {} : { clrMap }),
@@ -1003,8 +979,13 @@ function readSingleShapeTreeItem(
     itemCursor.suppressUnconsumed();
     return undefined;
   }
-  if (registerImportedObject !== undefined && identity.objectId !== undefined) {
-    registerImportedObject(identity.objectId, outcome.node);
+  if (identity.objectId !== undefined) {
+    registerImportedObject?.(identity.objectId, outcome.node);
+    scopeObjectsBySpid?.set(identity.objectId, outcome.node);
+  }
+  const authorId = outcome.node.props["id"];
+  if (typeof authorId === "string" && authorId.length > 0) {
+    usedAuthorIds?.add(authorId);
   }
   return outcome.node;
 }
@@ -1045,6 +1026,16 @@ export function readShapeTreeItems(args: {
     omittedSpids,
   } = args;
   consumeIdentityShapeTreeBoilerplate(spTree);
+  const scopeObjectsBySpid = new Map<number, CommonNode>();
+  const usedAuthorIds = new Set<string>();
+  const deferredConnectors: Array<
+    (ctx: ScopeConnectorResolutionContext) => void
+  > = [];
+  const registerDeferredConnector = (
+    resolve: (ctx: ScopeConnectorResolutionContext) => void,
+  ): void => {
+    deferredConnectors.push(resolve);
+  };
   for (const itemCursor of spTree.remainingElementChildren()) {
     if (
       itemCursor.namespaceUri === MC_NS_IMPORT_PLACEHOLDER &&
@@ -1070,6 +1061,9 @@ export function readShapeTreeItems(args: {
             registerImportedObject,
             omittedSpids,
             masterPlaceholders,
+            registerDeferredConnector,
+            scopeObjectsBySpid,
+            usedAuthorIds,
           );
           if (node !== undefined) appendNode(node);
         }
@@ -1092,6 +1086,9 @@ export function readShapeTreeItems(args: {
             registerImportedObject,
             omittedSpids,
             masterPlaceholders,
+            registerDeferredConnector,
+            scopeObjectsBySpid,
+            usedAuthorIds,
           );
           if (node !== undefined) {
             adoptedFallback = true;
@@ -1152,8 +1149,22 @@ export function readShapeTreeItems(args: {
       registerImportedObject,
       omittedSpids,
       masterPlaceholders,
+      registerDeferredConnector,
+      scopeObjectsBySpid,
+      usedAuthorIds,
     );
     if (node !== undefined) appendNode(node);
+  }
+  if (deferredConnectors.length > 0) {
+    const scopeContext: ScopeConnectorResolutionContext = {
+      scopeObjectsBySpid,
+      omittedSpids: omittedSpids ?? new Map(),
+      usedAuthorIds,
+      diagnostics,
+    };
+    for (const resolveConnector of deferredConnectors) {
+      resolveConnector(scopeContext);
+    }
   }
 }
 

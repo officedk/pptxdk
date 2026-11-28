@@ -70,6 +70,7 @@ export const officialCapabilityNames = Object.freeze([
   "footer-placeholder",
   "group",
   "image",
+  "line",
   "masters",
   "motion",
   "notes",
@@ -88,6 +89,7 @@ export type OfficialCapabilityName =
   | "footer-placeholder"
   | "group"
   | "image"
+  | "line"
   | "masters"
   | "motion"
   | "notes"
@@ -126,6 +128,7 @@ const capabilityLoaders: Readonly<
     (await import("@pptxdk/capabilities/group")).groupCapability,
   image: async () =>
     (await import("@pptxdk/capabilities/image")).imageCapability,
+  line: async () => (await import("@pptxdk/capabilities/line")).lineCapability,
   masters: async () =>
     (await import("@pptxdk/capabilities/masters")).mastersCapability,
   motion: async () =>

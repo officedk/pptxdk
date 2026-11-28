@@ -58,7 +58,12 @@ function buildFontPackage(options: {
   readonly embeddedFontLstXml: string;
   readonly presRelsExtraXml?: string;
   readonly fontParts?: Readonly<Record<string, Uint8Array>>;
-  readonly themeFonts?: { readonly major: string; readonly minor: string };
+  readonly themeFonts?: {
+    readonly major: string;
+    readonly minor: string;
+    readonly majorEastAsian?: string;
+    readonly minorEastAsian?: string;
+  };
 }): Uint8Array {
   const entries: Record<string, Uint8Array> = {
     "_rels/.rels": strToU8(
@@ -100,8 +105,8 @@ function buildFontPackage(options: {
   <a:themeElements>
     <a:clrScheme name="Custom"/>
     <a:fontScheme name="Custom">
-      <a:majorFont><a:latin typeface="${options.themeFonts?.major ?? "Aptos Display"}"/></a:majorFont>
-      <a:minorFont><a:latin typeface="${options.themeFonts?.minor ?? "Aptos"}"/></a:minorFont>
+      <a:majorFont><a:latin typeface="${options.themeFonts?.major ?? "Aptos Display"}"/><a:ea typeface="${options.themeFonts?.majorEastAsian ?? options.themeFonts?.major ?? "Aptos Display"}"/></a:majorFont>
+      <a:minorFont><a:latin typeface="${options.themeFonts?.minor ?? "Aptos"}"/><a:ea typeface="${options.themeFonts?.minorEastAsian ?? options.themeFonts?.minor ?? "Aptos"}"/></a:minorFont>
     </a:fontScheme>
   </a:themeElements>
 </a:theme>`,
@@ -199,5 +204,20 @@ describe("@pptxdk/import embedded fonts and EOT unpacking", () => {
     assert.equal(scheme?.themeName, "Custom");
     assert.equal(scheme?.majorTypeface, "Jost*");
     assert.equal(scheme?.minorTypeface, "Jost*");
+
+    const dualZip = buildFontPackage({
+      embeddedFontLstXml: "",
+      themeFonts: {
+        major: "Jost*",
+        minor: "Jost*",
+        majorEastAsian: "PingFang SC",
+        minorEastAsian: "Noto Sans CJK SC",
+      },
+    });
+    const dualPkg = openPptxPackage(dualZip);
+    dualZip.fill(0);
+    const dualScheme = readPresentationThemeFontScheme(dualPkg);
+    assert.equal(dualScheme?.majorEastAsianTypeface, "PingFang SC");
+    assert.equal(dualScheme?.minorEastAsianTypeface, "Noto Sans CJK SC");
   });
 });

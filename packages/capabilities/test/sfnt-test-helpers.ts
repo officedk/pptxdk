@@ -615,3 +615,80 @@ export function createMinimalCffOtf(
     ]),
   );
 }
+
+/**
+ * Packs standalone SFNT binaries into a TrueType Collection (`ttcf` v1 or v2) container.
+ */
+export function buildTestTtc(
+  sfnts: readonly Uint8Array[],
+  version: 1 | 2 = 1,
+): Uint8Array {
+  const parsed = sfnts.map((bytes) => {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const sfntVersion = view.getUint32(0);
+    const numTables = view.getUint16(4);
+    const tables: { tag: Uint8Array; checksum: number; data: Uint8Array }[] =
+      [];
+    for (let i = 0; i < numTables; i += 1) {
+      const rec = 12 + i * 16;
+      const offset = view.getUint32(rec + 8);
+      const length = view.getUint32(rec + 12);
+      tables.push({
+        tag: bytes.slice(rec, rec + 4),
+        checksum: view.getUint32(rec + 4),
+        data: bytes.slice(offset, offset + length),
+      });
+    }
+    return { sfntVersion, tables };
+  });
+
+  const ttcHeaderSize = (version === 2 ? 24 : 12) + parsed.length * 4;
+  let cursor = ttcHeaderSize;
+  const dirOffsets: number[] = [];
+  for (const fontEntry of parsed) {
+    dirOffsets.push(cursor);
+    cursor += 12 + fontEntry.tables.length * 16;
+  }
+  const tableOffsets: number[][] = [];
+  for (const fontEntry of parsed) {
+    const offsets: number[] = [];
+    for (const tbl of fontEntry.tables) {
+      offsets.push(cursor);
+      cursor += Math.ceil(tbl.data.byteLength / 4) * 4;
+    }
+    tableOffsets.push(offsets);
+  }
+
+  const out = new Uint8Array(cursor);
+  const view = new DataView(out.buffer);
+  out.set([0x74, 0x74, 0x63, 0x66], 0);
+  view.setUint16(4, version);
+  view.setUint16(6, 0);
+  view.setUint32(8, parsed.length);
+  for (let i = 0; i < parsed.length; i += 1) {
+    view.setUint32(12 + i * 4, dirOffsets[i]!);
+  }
+  for (let f = 0; f < parsed.length; f += 1) {
+    const fontEntry = parsed[f]!;
+    const dirOff = dirOffsets[f]!;
+    const numTables = fontEntry.tables.length;
+    view.setUint32(dirOff, fontEntry.sfntVersion);
+    view.setUint16(dirOff + 4, numTables);
+    const entrySelector = Math.floor(Math.log2(Math.max(1, numTables)));
+    const searchRange = (1 << entrySelector) * 16;
+    view.setUint16(dirOff + 6, searchRange);
+    view.setUint16(dirOff + 8, entrySelector);
+    view.setUint16(dirOff + 10, numTables * 16 - searchRange);
+    for (let t = 0; t < numTables; t += 1) {
+      const tbl = fontEntry.tables[t]!;
+      const recOff = dirOff + 12 + t * 16;
+      const dataOff = tableOffsets[f]![t]!;
+      out.set(tbl.tag, recOff);
+      view.setUint32(recOff + 4, tbl.checksum);
+      view.setUint32(recOff + 8, dataOff);
+      view.setUint32(recOff + 12, tbl.data.byteLength);
+      out.set(tbl.data, dataOff);
+    }
+  }
+  return out;
+}

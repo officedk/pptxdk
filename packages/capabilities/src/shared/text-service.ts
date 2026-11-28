@@ -1,8 +1,10 @@
 import {
   CapabilityError,
   hasFontFaceBytes,
+  isFont,
   paddingStyleKeys,
   peekFontFaceResource,
+  resolveFontClassification,
   textStyleKeys,
   validateTextStyle,
   type CapabilityFontUsageClaim,
@@ -146,11 +148,13 @@ type HostElement = {
 type TextChild = HostText | HostElement;
 type RunStyle = {
   readonly fontFamily?: FontReference | undefined;
+  readonly eastAsianFontFamily?: FontReference | undefined;
   readonly fontSize?: FontSize | undefined;
   readonly fontWeight?: TextStyle["fontWeight"] | undefined;
   readonly fontStyle?: FontFaceStyle | undefined;
   readonly color?: ColorValue | ResolvedColor | undefined;
   readonly themeFont?: "major" | "minor" | undefined;
+  readonly eastAsianThemeFont?: "major" | "minor" | undefined;
   readonly letterSpacing?: number | undefined;
   readonly textTransform?: TextStyle["textTransform"] | undefined;
   readonly textDecoration?: TextStyle["textDecoration"] | undefined;
@@ -321,6 +325,7 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 const defaultTextStyle: TextStyle = Object.freeze({
   fontFamily: "minor",
+  eastAsianFontFamily: "minor",
   fontSize: 24,
   fontWeight: "normal",
   fontStyle: "normal",
@@ -473,10 +478,14 @@ function fontFamilyValue(value: FontReference | undefined): Font {
   return typeof value === "string" ? { family: value } : value;
 }
 
-function normalizedFonts(style: RunStyle): NormalizedFont[] {
-  const family = fontFamilyValue(style.fontFamily);
-  const weight = weightValue(style.fontWeight);
-  const faceStyle = style.fontStyle ?? "normal";
+function normalizedFontsForReference(
+  fontRef: FontReference | undefined,
+  fontWeight: TextStyle["fontWeight"],
+  fontStyle: FontFaceStyle | undefined,
+): NormalizedFont[] {
+  const family = fontFamilyValue(fontRef);
+  const weight = weightValue(fontWeight);
+  const faceStyle = fontStyle ?? "normal";
   const faces = family.faces ?? [];
   const matchingFaces = faces.filter((candidate) => {
     const slot = resolveDeclaredFaceSlot(candidate);
@@ -521,8 +530,157 @@ function normalizedFonts(style: RunStyle): NormalizedFont[] {
   });
 }
 
+function normalizedFonts(style: RunStyle): NormalizedFont[] {
+  return normalizedFontsForReference(
+    style.fontFamily,
+    style.fontWeight,
+    style.fontStyle,
+  );
+}
+
+function isEastAsianCodePoint(cp: number): boolean {
+  return (
+    (cp >= 0x2e80 && cp <= 0x2eff) ||
+    (cp >= 0x2f00 && cp <= 0x2fdf) ||
+    (cp >= 0x2ff0 && cp <= 0x303f) ||
+    (cp >= 0x3040 && cp <= 0x30ff) ||
+    (cp >= 0x3100 && cp <= 0x312f) ||
+    (cp >= 0x3130 && cp <= 0x318f) ||
+    (cp >= 0x31a0 && cp <= 0x31bf) ||
+    (cp >= 0x31f0 && cp <= 0x31ff) ||
+    (cp >= 0x3200 && cp <= 0x33ff) ||
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0x1100 && cp <= 0x11ff) ||
+    (cp >= 0xa960 && cp <= 0xa97f) ||
+    (cp >= 0xac00 && cp <= 0xd7ff) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe10 && cp <= 0xfe1f) ||
+    (cp >= 0xfe30 && cp <= 0xfe6f) ||
+    (cp >= 0xff01 && cp <= 0xff60) ||
+    (cp >= 0xff61 && cp <= 0xffdf) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1b000 && cp <= 0x1b16f) ||
+    (cp >= 0x20000 && cp <= 0x323af)
+  );
+}
+
+function isNeutralScriptChar(ch: string, cp: number): boolean {
+  return (
+    cp !== 0x3000 &&
+    /^[\p{White_Space}\p{Cc}\p{Default_Ignorable_Code_Point}]$/u.test(ch)
+  );
+}
+
+function sameFontReference(
+  left: FontReference | undefined,
+  right: FontReference | undefined,
+): boolean {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  if (typeof left === "string" && typeof right === "string") {
+    return left === right;
+  }
+  return false;
+}
+
+function effectiveEastAsianRunStyle(style: RunStyle): RunStyle {
+  if (
+    style.eastAsianFontFamily === undefined ||
+    sameFontReference(style.eastAsianFontFamily, style.fontFamily)
+  ) {
+    return style;
+  }
+  return {
+    ...style,
+    fontFamily: style.eastAsianFontFamily,
+    themeFont: style.eastAsianThemeFont,
+  };
+}
+
+function splitRunForEffectiveScripts(
+  text: string,
+  style: RunStyle,
+): readonly {
+  readonly script: "latin" | "ea";
+  readonly text: string;
+  readonly style: RunStyle;
+}[] {
+  if (text === "") {
+    return [{ script: "latin", text: "", style }];
+  }
+  const eaStyle = effectiveEastAsianRunStyle(style);
+  if (eaStyle === style) {
+    return [{ script: "latin", text, style }];
+  }
+
+  const segments: {
+    readonly script: "latin" | "ea";
+    readonly text: string;
+    readonly style: RunStyle;
+  }[] = [];
+  let activeScript: "latin" | "ea" | undefined;
+  let buffer = "";
+  let leadingNeutral = "";
+
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    if (cp === undefined) continue;
+    if (isNeutralScriptChar(ch, cp)) {
+      if (activeScript === undefined) {
+        leadingNeutral += ch;
+      } else {
+        buffer += ch;
+      }
+      continue;
+    }
+    const nextScript: "latin" | "ea" = isEastAsianCodePoint(cp)
+      ? "ea"
+      : "latin";
+    if (activeScript === undefined) {
+      activeScript = nextScript;
+      buffer = leadingNeutral + ch;
+      leadingNeutral = "";
+    } else if (nextScript === activeScript) {
+      buffer += ch;
+    } else {
+      segments.push({
+        script: activeScript,
+        text: buffer,
+        style: activeScript === "ea" ? eaStyle : style,
+      });
+      activeScript = nextScript;
+      buffer = ch;
+    }
+  }
+
+  if (activeScript === undefined) {
+    return [{ script: "latin", text: leadingNeutral, style }];
+  }
+  if (buffer !== "") {
+    segments.push({
+      script: activeScript,
+      text: buffer,
+      style: activeScript === "ea" ? eaStyle : style,
+    });
+  }
+  return segments;
+}
+
+function hasIndependentThemeMinorEa(theme: ThemeContext): boolean {
+  if (theme.theme.fonts.minorEastAsian !== undefined) return true;
+  const ea = theme.resolveEastAsianFont("minor");
+  const lt = theme.resolveFont("minor");
+  return (ea.font ?? ea.family) !== (lt.font ?? lt.family);
+}
+
 function validateRunStyle(style: RunStyle): RunStyle {
-  const { themeFont: _themeFont, color, ...rest } = style;
+  const {
+    themeFont: _themeFont,
+    eastAsianThemeFont: _eastAsianThemeFont,
+    color,
+    ...rest
+  } = style;
   validateTextStyle({
     ...rest,
     ...(color !== undefined && !isResolvedColor(color) ? { color } : {}),
@@ -551,6 +709,19 @@ function mergeRunStyle(
       declared["themeFont"] = child.themeFont ?? font.themeFont;
     }
   }
+  if (child.eastAsianFontFamily !== undefined) {
+    const eaFont = theme.resolveEastAsianFont(child.eastAsianFontFamily);
+    declared["eastAsianFontFamily"] = eaFont.font ?? eaFont.family;
+    if (
+      child.eastAsianThemeFont === undefined &&
+      eaFont.themeFont === undefined
+    ) {
+      delete declared["eastAsianThemeFont"];
+    } else {
+      declared["eastAsianThemeFont"] =
+        child.eastAsianThemeFont ?? eaFont.themeFont;
+    }
+  }
   if (child.color !== undefined && !isResolvedColor(child.color)) {
     declared["color"] = theme.resolveColor(child.color);
   }
@@ -562,8 +733,14 @@ function mergeRunStyle(
   if (child.textShadow === "none")
     delete (merged as { textShadow?: Shadow | "none" }).textShadow;
   if (child.fontFamily !== undefined && declared["themeFont"] === undefined) {
-    const { themeFont: _themeFont, ...withoutThemeFont } = merged;
-    return validateRunStyle(withoutThemeFont);
+    delete (merged as { themeFont?: "major" | "minor" }).themeFont;
+  }
+  if (
+    child.eastAsianFontFamily !== undefined &&
+    declared["eastAsianThemeFont"] === undefined
+  ) {
+    delete (merged as { eastAsianThemeFont?: "major" | "minor" })
+      .eastAsianThemeFont;
   }
   return validateRunStyle(merged);
 }
@@ -594,6 +771,7 @@ function outputBold(font: NormalizedFont): boolean {
 
 export type ResolvedTextStyle = TextStyle & {
   readonly themeFont?: "major" | "minor";
+  readonly eastAsianThemeFont?: "major" | "minor";
 };
 
 function mergeLocalRunDeclared(
@@ -612,6 +790,17 @@ function mergeLocalRunDeclared(
     if (resolved.themeFont === undefined) delete declared["themeFont"];
     else declared["themeFont"] = resolved.themeFont;
   }
+  if (hasLocalDeclaration(child, "eastAsianFontFamily")) {
+    const resolvedEa = theme.resolveEastAsianFont(
+      child["eastAsianFontFamily"] as FontReference,
+    );
+    declared["eastAsianFontFamily"] = resolvedEa.font ?? resolvedEa.family;
+    if (resolvedEa.themeFont === undefined) {
+      delete declared["eastAsianThemeFont"];
+    } else {
+      declared["eastAsianThemeFont"] = resolvedEa.themeFont;
+    }
+  }
   if (hasLocalDeclaration(child, "color") && !isResolvedColor(child["color"])) {
     declared["color"] = theme.resolveColor(child["color"] as ColorValue);
   }
@@ -626,6 +815,20 @@ function resolveRunStyleFromRecord(
     (style["fontFamily"] as FontReference | undefined) ??
       defaultTextStyle.fontFamily!,
   );
+  const rawEa = style["eastAsianFontFamily"] as FontReference | undefined;
+  const eaFont =
+    rawEa !== undefined
+      ? theme.resolveEastAsianFont(rawEa)
+      : hasIndependentThemeMinorEa(theme)
+        ? theme.resolveEastAsianFont("minor")
+        : font.themeFont !== undefined
+          ? theme.resolveEastAsianFont(font.themeFont)
+          : undefined;
+  const includeEa =
+    rawEa !== undefined ||
+    hasIndependentThemeMinorEa(theme) ||
+    (eaFont !== undefined &&
+      (eaFont.font ?? eaFont.family) !== (font.font ?? font.family));
   const rawColor = style["color"] as ColorValue | ResolvedColor | undefined;
   const color =
     rawColor === undefined
@@ -635,6 +838,14 @@ function resolveRunStyleFromRecord(
         : theme.resolveColor(rawColor);
   const resolved: RunStyle = {
     fontFamily: font.font ?? font.family,
+    ...(includeEa && eaFont !== undefined
+      ? {
+          eastAsianFontFamily: eaFont.font ?? eaFont.family,
+          ...(eaFont.themeFont === undefined
+            ? {}
+            : { eastAsianThemeFont: eaFont.themeFont }),
+        }
+      : {}),
     fontSize:
       (style["fontSize"] as FontSize | undefined) ?? defaultTextStyle.fontSize,
     fontWeight:
@@ -689,6 +900,7 @@ function readPlaceholderTextStyle(
     localDeclaredStyle,
   );
   const masterTheme = placeholder.masterTheme;
+  const eaDeclared = effectiveBase["eastAsianFontFamily"] !== undefined;
   const merged = {
     ...defaultTextStyle,
     ...effectiveBase,
@@ -696,17 +908,42 @@ function readPlaceholderTextStyle(
   const font = masterTheme.resolveFont(
     merged.fontFamily ?? defaultTextStyle.fontFamily!,
   );
+  const eaFont = eaDeclared
+    ? masterTheme.resolveEastAsianFont(
+        effectiveBase["eastAsianFontFamily"] as FontReference,
+      )
+    : hasIndependentThemeMinorEa(masterTheme)
+      ? masterTheme.resolveEastAsianFont("minor")
+      : font.themeFont !== undefined
+        ? masterTheme.resolveEastAsianFont(font.themeFont)
+        : undefined;
+  const includeEa =
+    eaDeclared ||
+    hasIndependentThemeMinorEa(masterTheme) ||
+    (eaFont !== undefined &&
+      (eaFont.font ?? eaFont.family) !== (font.font ?? font.family));
   if (merged.color !== undefined && !isResolvedColor(merged.color)) {
     masterTheme.resolveColor(merged.color);
   }
   validateTextStyle({
     ...merged,
     fontFamily: font.font ?? font.family,
+    ...(includeEa && eaFont !== undefined
+      ? { eastAsianFontFamily: eaFont.font ?? eaFont.family }
+      : { eastAsianFontFamily: undefined }),
     ...(isResolvedColor(merged.color) ? { color: undefined } : {}),
   });
-  const result = {
+  const result: ResolvedTextStyle = {
     ...merged,
     fontFamily: font.font ?? font.family,
+    ...(includeEa && eaFont !== undefined
+      ? {
+          eastAsianFontFamily: eaFont.font ?? eaFont.family,
+          ...(eaFont.themeFont === undefined
+            ? {}
+            : { eastAsianThemeFont: eaFont.themeFont }),
+        }
+      : { eastAsianFontFamily: undefined }),
     ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
   };
   if (result.textShadow === "none") {
@@ -722,38 +959,55 @@ function readTextStyle(
 ): ResolvedTextStyle {
   const props = styleRecord(value, label);
   onlyKnownKeys(props, [...textStyleKeys], label);
+  const rawCombined: Record<string, unknown> = {
+    ...theme.textStyle,
+    ...props,
+  };
+  const eaDeclared = rawCombined["eastAsianFontFamily"] !== undefined;
   const style = {
     ...defaultTextStyle,
     ...theme.textStyle,
     ...props,
   } as TextStyle;
-  const runStyle: RunStyle = {
-    fontFamily: style.fontFamily,
-    fontSize: style.fontSize,
-    fontWeight: style.fontWeight,
-    fontStyle: style.fontStyle,
-    color: style.color,
-    themeFont: (style as ResolvedTextStyle).themeFont,
-    letterSpacing: style.letterSpacing,
-    textTransform: style.textTransform,
-    textDecoration: style.textDecoration,
-    textShadow: style.textShadow,
-    lang: style.lang,
-  };
   const font = theme.resolveFont(
-    runStyle.fontFamily ?? defaultTextStyle.fontFamily!,
+    style.fontFamily ?? defaultTextStyle.fontFamily!,
   );
-  if (runStyle.color !== undefined && !isResolvedColor(runStyle.color)) {
-    theme.resolveColor(runStyle.color);
+  const eaFont = eaDeclared
+    ? theme.resolveEastAsianFont(
+        rawCombined["eastAsianFontFamily"] as FontReference,
+      )
+    : hasIndependentThemeMinorEa(theme)
+      ? theme.resolveEastAsianFont("minor")
+      : font.themeFont !== undefined
+        ? theme.resolveEastAsianFont(font.themeFont)
+        : undefined;
+  const includeEa =
+    eaDeclared ||
+    hasIndependentThemeMinorEa(theme) ||
+    (eaFont !== undefined &&
+      (eaFont.font ?? eaFont.family) !== (font.font ?? font.family));
+  if (style.color !== undefined && !isResolvedColor(style.color)) {
+    theme.resolveColor(style.color);
   }
   validateTextStyle({
     ...style,
     fontFamily: font.font ?? font.family,
+    ...(includeEa && eaFont !== undefined
+      ? { eastAsianFontFamily: eaFont.font ?? eaFont.family }
+      : { eastAsianFontFamily: undefined }),
     ...(isResolvedColor(style.color) ? { color: undefined } : {}),
   });
-  const result = {
+  const result: ResolvedTextStyle = {
     ...style,
     fontFamily: font.font ?? font.family,
+    ...(includeEa && eaFont !== undefined
+      ? {
+          eastAsianFontFamily: eaFont.font ?? eaFont.family,
+          ...(eaFont.themeFont === undefined
+            ? {}
+            : { eastAsianThemeFont: eaFont.themeFont }),
+        }
+      : { eastAsianFontFamily: undefined }),
     ...(font.themeFont === undefined ? {} : { themeFont: font.themeFont }),
   };
   if (result.textShadow === "none") {
@@ -937,27 +1191,81 @@ function transformAttribute(transform: ResolvedTextTransform): string[] {
   }
 }
 
-function runFontSlotsXml(style: RunStyle): string {
-  const font = normalizedFonts(style)[0]!;
-  const latinTypeface =
-    style.themeFont === "major"
-      ? "+mj-lt"
-      : style.themeFont === "minor"
-        ? "+mn-lt"
-        : font.family;
-  const eaTypeface =
-    style.themeFont === "major"
-      ? "+mj-ea"
-      : style.themeFont === "minor"
-        ? "+mn-ea"
-        : font.family;
-  const csTypeface =
-    style.themeFont === "major"
-      ? "+mj-cs"
-      : style.themeFont === "minor"
-        ? "+mn-cs"
-        : font.family;
-  return `<a:latin typeface="${escapedXml(latinTypeface)}"/><a:ea typeface="${escapedXml(eaTypeface)}"/><a:cs typeface="${escapedXml(csTypeface)}"/>`;
+function fontClassificationAttrsForRun(
+  fontRef: FontReference | undefined,
+  themeFont: "major" | "minor" | undefined,
+  weight: TextStyle["fontWeight"],
+  faceStyle: FontFaceStyle | undefined,
+): string {
+  if (themeFont !== undefined || !isFont(fontRef)) return "";
+  const cls = resolveFontClassification(
+    fontRef,
+    weightValue(weight),
+    faceStyle ?? "normal",
+  );
+  if (cls === undefined) return "";
+  const panoseAttr = cls.panose === undefined ? "" : ` panose="${cls.panose}"`;
+  return `${panoseAttr} pitchFamily="${cls.pitchFamily}"`;
+}
+
+function runFontSlotsXml(style: RunStyle, differential = false): string {
+  const hasLatin =
+    style.fontFamily !== undefined || style.themeFont !== undefined;
+  const hasEa =
+    style.eastAsianFontFamily !== undefined ||
+    style.eastAsianThemeFont !== undefined;
+
+  let latinXml = "";
+  let csXml = "";
+  if (!differential || hasLatin) {
+    const latinFont = normalizedFonts(style)[0]!;
+    const latinClsAttrs = fontClassificationAttrsForRun(
+      style.fontFamily,
+      style.themeFont,
+      style.fontWeight,
+      style.fontStyle,
+    );
+    const latinTypeface =
+      style.themeFont === "major"
+        ? "+mj-lt"
+        : style.themeFont === "minor"
+          ? "+mn-lt"
+          : latinFont.family;
+    const csTypeface =
+      style.themeFont === "major"
+        ? "+mj-cs"
+        : style.themeFont === "minor"
+          ? "+mn-cs"
+          : latinFont.family;
+    latinXml = `<a:latin typeface="${escapedXml(latinTypeface)}"${latinClsAttrs}/>`;
+    csXml = `<a:cs typeface="${escapedXml(csTypeface)}"/>`;
+  }
+
+  let eaXml = "";
+  if (!differential || hasEa) {
+    const eaRef = hasEa ? style.eastAsianFontFamily : style.fontFamily;
+    const eaTheme = hasEa ? style.eastAsianThemeFont : style.themeFont;
+    const eaFont = normalizedFontsForReference(
+      eaRef,
+      style.fontWeight,
+      style.fontStyle,
+    )[0]!;
+    const eaClsAttrs = fontClassificationAttrsForRun(
+      eaRef,
+      eaTheme,
+      style.fontWeight,
+      style.fontStyle,
+    );
+    const eaTypeface =
+      eaTheme === "major"
+        ? "+mj-ea"
+        : eaTheme === "minor"
+          ? "+mn-ea"
+          : eaFont.family;
+    eaXml = `<a:ea typeface="${escapedXml(eaTypeface)}"${eaClsAttrs}/>`;
+  }
+
+  return `${latinXml}${eaXml}${csXml}`;
 }
 
 function runPropertiesXml(
@@ -1008,10 +1316,12 @@ function runPropertiesXml(
         : style.textShadow === "none"
           ? "<a:effectLst/>"
           : textShadowXml(theme, style.textShadow);
-    const fontXml =
-      style.fontFamily === undefined && style.themeFont === undefined
-        ? ""
-        : runFontSlotsXml(style);
+    const hasFontDecl =
+      style.fontFamily !== undefined ||
+      style.themeFont !== undefined ||
+      style.eastAsianFontFamily !== undefined ||
+      style.eastAsianThemeFont !== undefined;
+    const fontXml = hasFontDecl ? runFontSlotsXml(style, true) : "";
     const attrText = attributes.length === 0 ? "" : ` ${attributes.join(" ")}`;
     const childrenXml = `${fillXml}${shadowXml}${fontXml}`;
     return childrenXml === ""
@@ -1096,24 +1406,26 @@ function textResourceClaims(runs: readonly Run[]): {
     }
   >();
   for (const run of runs) {
-    for (const font of normalizedFonts(run.style)) {
-      const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
-      const entry = used.get(key) ?? {
-        fonts: [],
-        fontPolicies: new Map<string, NormalizedFont>(),
-        text: [],
-      };
-      if (!entry.fonts.some(({ identity }) => identity === font.identity)) {
-        entry.fonts.push(font);
+    const shown =
+      displayedText(run) + (run.field?.type === "slidenum" ? "0123456789" : "");
+    const scriptSegments = splitRunForEffectiveScripts(shown, run.style);
+    for (const seg of scriptSegments) {
+      for (const font of normalizedFonts(seg.style)) {
+        const key = `${font.family.toLocaleLowerCase("en-US")}\u0000${font.weight}\u0000${font.style}`;
+        const entry = used.get(key) ?? {
+          fonts: [],
+          fontPolicies: new Map<string, NormalizedFont>(),
+          text: [],
+        };
+        if (!entry.fonts.some(({ identity }) => identity === font.identity)) {
+          entry.fonts.push(font);
+        }
+        // Byte resources can be merged, but each actually used embedding policy must be independently validated.
+        const policyKey = `${font.identity}\u0000${font.substitute ? 1 : 0}\u0000${font.embeddable ? 1 : 0}`;
+        entry.fontPolicies.set(policyKey, font);
+        entry.text.push(seg.text);
+        used.set(key, entry);
       }
-      // Byte resources can be merged, but each actually used embedding policy must be independently validated.
-      const policyKey = `${font.identity}\u0000${font.substitute ? 1 : 0}\u0000${font.embeddable ? 1 : 0}`;
-      entry.fontPolicies.set(policyKey, font);
-      entry.text.push(
-        displayedText(run),
-        ...(run.field?.type === "slidenum" ? ["0123456789"] : []),
-      );
-      used.set(key, entry);
     }
   }
   const resourceClaims: TextResourceClaim[] = [];
@@ -1359,11 +1671,17 @@ function normalizeParagraphs(
 } {
   const baseRunStyle: RunStyle = {
     fontFamily: textStyle.fontFamily,
+    ...(textStyle.eastAsianFontFamily === undefined
+      ? {}
+      : { eastAsianFontFamily: textStyle.eastAsianFontFamily }),
     fontSize: textStyle.fontSize,
     fontWeight: textStyle.fontWeight,
     fontStyle: textStyle.fontStyle,
     color: textStyle.color,
     themeFont: textStyle.themeFont,
+    ...(textStyle.eastAsianThemeFont === undefined
+      ? {}
+      : { eastAsianThemeFont: textStyle.eastAsianThemeFont }),
     letterSpacing: textStyle.letterSpacing,
     textTransform: textStyle.textTransform,
     textDecoration: textStyle.textDecoration,
@@ -1511,6 +1829,7 @@ function normalizeParagraphs(
       levelRunBase,
       {
         fontFamily: style.fontFamily,
+        eastAsianFontFamily: style.eastAsianFontFamily,
         fontSize: style.fontSize,
         fontWeight: style.fontWeight,
         fontStyle: style.fontStyle,
@@ -1933,7 +2252,13 @@ function paragraphLineHeight(paragraph: Paragraph): number {
   }
   const styles =
     paragraph.runs.length > 0
-      ? paragraph.runs.map((run) => run.style)
+      ? paragraph.runs.flatMap((run) =>
+          run.text === ""
+            ? [run.style]
+            : splitRunForEffectiveScripts(displayedText(run), run.style).map(
+                (seg) => seg.style,
+              ),
+        )
       : [paragraph.endStyle];
   let maximum = 0;
   for (const style of styles) {
@@ -1971,7 +2296,12 @@ function paragraphBaseline(paragraph: Paragraph): number | undefined {
   if (paragraph.runs.length !== 1 || paragraph.runs[0]!.text === "") {
     return undefined;
   }
-  const style = paragraph.runs[0]!.style;
+  const run = paragraph.runs[0]!;
+  const segments = splitRunForEffectiveScripts(displayedText(run), run.style);
+  if (segments.length !== 1) {
+    return undefined;
+  }
+  const style = segments[0]!.style;
   const face = measureRunFace(style);
   const fontSize = fontSizePoints(style.fontSize) * (4 / 3);
   const naturalLineHeight =
@@ -1992,22 +2322,27 @@ function paragraphPieces(paragraph: Paragraph): {
   const pieces: MeasurePiece[] = [];
   let start = 0;
   for (const run of sourceRuns) {
-    const face = measureRunFace(run.style);
     const shown = displayedText(run);
-    const letterSpacing =
-      run.style.letterSpacing === undefined
-        ? undefined
-        : letterSpacingCentipoints(run.style.letterSpacing) / 75;
-    const measureStyle =
-      letterSpacing === undefined ? run.style : { ...run.style, letterSpacing };
-    pieces.push({
-      text: shown,
-      style: measureStyle,
-      start,
-      end: start + shown.length,
-      face,
-    });
-    start += shown.length;
+    const segments = splitRunForEffectiveScripts(shown, run.style);
+    for (const seg of segments) {
+      const face = measureRunFace(seg.style);
+      const letterSpacing =
+        seg.style.letterSpacing === undefined
+          ? undefined
+          : letterSpacingCentipoints(seg.style.letterSpacing) / 75;
+      const measureStyle =
+        letterSpacing === undefined
+          ? seg.style
+          : { ...seg.style, letterSpacing };
+      pieces.push({
+        text: seg.text,
+        style: measureStyle,
+        start,
+        end: start + seg.text.length,
+        face,
+      });
+      start += seg.text.length;
+    }
   }
   const text = pieces.map((piece) => piece.text).join("");
   return { text, pieces };
@@ -2100,21 +2435,24 @@ function assertParagraphsHaveVisibleGlyphs(
         displayedText(run) +
         (run.field?.type === "slidenum" ? "0123456789" : "");
       if (!Array.from(textToCheck).some(requiresVisibleFontGlyph)) continue;
-      const face = measureRunFace(run.style);
-      const missing = missingCharacters(face, textToCheck);
-      if (missing.length > 0) {
-        const font = fontDetailsFromRunStyle(run.style);
-        const shown = missing.slice(0, 10).join(" ");
-        const extra = missing.length - 10;
-        throw new CapabilityError(
-          "font-missing-glyph",
-          `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
-          undefined,
-          {
-            font,
-            characters: missing,
-          },
-        );
+      for (const seg of splitRunForEffectiveScripts(textToCheck, run.style)) {
+        if (!Array.from(seg.text).some(requiresVisibleFontGlyph)) continue;
+        const face = measureRunFace(seg.style);
+        const missing = missingCharacters(face, seg.text);
+        if (missing.length > 0) {
+          const font = fontDetailsFromRunStyle(seg.style);
+          const shown = missing.slice(0, 10).join(" ");
+          const extra = missing.length - 10;
+          throw new CapabilityError(
+            "font-missing-glyph",
+            `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+            undefined,
+            {
+              font,
+              characters: missing,
+            },
+          );
+        }
       }
     }
     const list = paragraph.style.list;
@@ -2122,21 +2460,23 @@ function assertParagraphsHaveVisibleGlyphs(
       const markerText =
         list.type === "bullet" ? (list.character ?? "•") : "0123456789.";
       const markerStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
-      const face = measureRunFace(markerStyle);
-      const missing = missingCharacters(face, markerText);
-      if (missing.length > 0) {
-        const font = fontDetailsFromRunStyle(markerStyle);
-        const shown = missing.slice(0, 10).join(" ");
-        const extra = missing.length - 10;
-        throw new CapabilityError(
-          "font-missing-glyph",
-          `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
-          undefined,
-          {
-            font,
-            characters: missing,
-          },
-        );
+      for (const seg of splitRunForEffectiveScripts(markerText, markerStyle)) {
+        const face = measureRunFace(seg.style);
+        const missing = missingCharacters(face, seg.text);
+        if (missing.length > 0) {
+          const font = fontDetailsFromRunStyle(seg.style);
+          const shown = missing.slice(0, 10).join(" ");
+          const extra = missing.length - 10;
+          throw new CapabilityError(
+            "font-missing-glyph",
+            `${font.family} is missing glyphs for characters ${shown}${extra > 0 ? `, and ${extra} more characters` : ""}`,
+            undefined,
+            {
+              font,
+              characters: missing,
+            },
+          );
+        }
       }
     }
   }
@@ -2813,56 +3153,59 @@ function shapeListPrefix(
   prefixText: string,
 ): { readonly glyphs: readonly PreviewGlyph[]; readonly advance: number } {
   const prefixStyle = paragraph.runs[0]?.style ?? paragraph.endStyle;
-  const prefixFace = withPreviewFontBoundary(() => {
-    const face = measureRunFace(prefixStyle);
-    if (face.hasColorOrBitmapTable) {
+  const segments = splitRunForEffectiveScripts(prefixText, prefixStyle);
+  let cursor = 0;
+  const glyphs: PreviewGlyph[] = [];
+  for (const seg of segments) {
+    const prefixFace = withPreviewFontBoundary(() => {
+      const face = measureRunFace(seg.style);
+      if (face.hasColorOrBitmapTable) {
+        throw new CapabilityError(
+          "preview-unsupported-font",
+          "Preview requires monochrome outline fonts",
+          undefined,
+          {
+            font: fontDetailsFromRunStyle(seg.style),
+            reason: "color-or-bitmap-font",
+          },
+        );
+      }
+      return face;
+    });
+    const missingPrefix = missingCharacters(prefixFace, seg.text);
+    if (missingPrefix.length > 0) {
       throw new CapabilityError(
-        "preview-unsupported-font",
-        "Preview requires monochrome outline fonts",
+        "preview-missing-glyph",
+        "Preview requires every visible glyph in the supplied font",
         undefined,
         {
-          font: fontDetailsFromRunStyle(prefixStyle),
-          reason: "color-or-bitmap-font",
+          font: fontDetailsFromRunStyle(seg.style),
+          characters: missingPrefix,
         },
       );
     }
-    return face;
-  });
-  const missingPrefix = missingCharacters(prefixFace, prefixText);
-  if (missingPrefix.length > 0) {
-    throw new CapabilityError(
-      "preview-missing-glyph",
-      "Preview requires every visible glyph in the supplied font",
-      undefined,
-      {
-        font: fontDetailsFromRunStyle(prefixStyle),
-        characters: missingPrefix,
-      },
+    const shaped = shapeSegmentOutlines(
+      prefixFace,
+      seg.text,
+      false,
+      seg.style.lang,
     );
+    const scale =
+      (fontSizePoints(seg.style.fontSize) * 4) / (3 * prefixFace.unitsPerEm);
+    for (const item of shaped) {
+      glyphs.push({
+        path: item.path,
+        x: cursor + item.xOffset * scale,
+        y: -item.yOffset * scale,
+        scale,
+        color: seg.style.color,
+        ...(seg.style.textShadow === undefined
+          ? {}
+          : { textShadow: seg.style.textShadow }),
+      });
+      cursor += item.xAdvance * scale;
+    }
   }
-  const shaped = shapeSegmentOutlines(
-    prefixFace,
-    prefixText,
-    false,
-    prefixStyle.lang,
-  );
-  const scale =
-    (fontSizePoints(prefixStyle.fontSize) * 4) / (3 * prefixFace.unitsPerEm);
-  let cursor = 0;
-  const glyphs: PreviewGlyph[] = shaped.map((item) => {
-    const glyph: PreviewGlyph = {
-      path: item.path,
-      x: cursor + item.xOffset * scale,
-      y: -item.yOffset * scale,
-      scale,
-      color: prefixStyle.color,
-      ...(prefixStyle.textShadow === undefined
-        ? {}
-        : { textShadow: prefixStyle.textShadow }),
-    };
-    cursor += item.xAdvance * scale;
-    return glyph;
-  });
   return { glyphs, advance: cursor };
 }
 
@@ -3346,6 +3689,15 @@ function validateEmittableParagraphs(
       for (const font of normalizedFonts(paragraph.endStyle)) {
         escapedXml(font.family);
       }
+      if (paragraph.endStyle.eastAsianFontFamily !== undefined) {
+        for (const eaFont of normalizedFontsForReference(
+          paragraph.endStyle.eastAsianFontFamily,
+          paragraph.endStyle.fontWeight,
+          paragraph.endStyle.fontStyle,
+        )) {
+          escapedXml(eaFont.family);
+        }
+      }
       if (paragraph.endStyle.lang !== undefined) {
         escapedXml(paragraph.endStyle.lang);
       }
@@ -3362,6 +3714,15 @@ function validateEmittableParagraphs(
       escapedXml(run.text);
       for (const font of normalizedFonts(run.style)) {
         escapedXml(font.family);
+      }
+      if (run.style.eastAsianFontFamily !== undefined) {
+        for (const eaFont of normalizedFontsForReference(
+          run.style.eastAsianFontFamily,
+          run.style.fontWeight,
+          run.style.fontStyle,
+        )) {
+          escapedXml(eaFont.family);
+        }
       }
       if (run.style.lang !== undefined) {
         escapedXml(run.style.lang);
@@ -3664,11 +4025,17 @@ export function writeChartTextProperties(
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
     fontFamily: style.fontFamily,
+    ...(style.eastAsianFontFamily === undefined
+      ? {}
+      : { eastAsianFontFamily: style.eastAsianFontFamily }),
     fontSize: style.fontSize,
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
     color: style.color,
     themeFont: style.themeFont,
+    ...(style.eastAsianThemeFont === undefined
+      ? {}
+      : { eastAsianThemeFont: style.eastAsianThemeFont }),
     letterSpacing: style.letterSpacing,
     textTransform: style.textTransform,
     textDecoration: style.textDecoration,
@@ -3711,15 +4078,22 @@ export function writeChartTitle(
   styleValue: unknown,
   label: string,
   theme: ThemeContext,
+  rotationDegrees?: number,
 ): ChartTextResult {
   const style = readTextStyle(styleValue, label, theme);
   const runStyle: RunStyle = {
     fontFamily: style.fontFamily,
+    ...(style.eastAsianFontFamily === undefined
+      ? {}
+      : { eastAsianFontFamily: style.eastAsianFontFamily }),
     fontSize: style.fontSize,
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
     color: style.color,
     themeFont: style.themeFont,
+    ...(style.eastAsianThemeFont === undefined
+      ? {}
+      : { eastAsianThemeFont: style.eastAsianThemeFont }),
     letterSpacing: style.letterSpacing,
     textTransform: style.textTransform,
     textDecoration: style.textDecoration,
@@ -3745,7 +4119,11 @@ export function writeChartTitle(
       : `<a:spcAft><a:spcPts val="${spacingCentipoints(style.spacingAfter, "spacingAfter")}"/></a:spcAft>`;
   const endParaLang =
     runStyle.lang !== undefined ? ` lang="${escapedXml(runStyle.lang)}"` : "";
-  const bodyProperties = `<a:bodyPr anchor="${bodyAnchor(style.verticalAlign)}"/>`;
+  const rotationAttr =
+    rotationDegrees !== undefined && rotationDegrees !== 0
+      ? ` rot="${Math.round(rotationDegrees * 60000)}"`
+      : "";
+  const bodyProperties = `<a:bodyPr${rotationAttr} anchor="${bodyAnchor(style.verticalAlign)}"/>`;
   return {
     xml: `<c:title><c:tx><c:rich>${bodyProperties}<a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:r>${runProperties}<a:t>${escapedText}</a:t></a:r><a:endParaRPr${endParaLang}/></a:p></c:rich></c:tx><c:overlay val="0"/><c:txPr>${bodyProperties}<a:lstStyle/><a:p><a:pPr${paragraphAlignment}>${lineSpacing}${spacingAfter}${defaultProperties}</a:pPr><a:endParaRPr${endParaLang}/></a:p></c:txPr></c:title>`,
     text,

@@ -221,6 +221,41 @@ function paintImageModel(
 ): PaintOutput {
   const { image, placement, visual } = model;
   const { box, sourceCrop } = placement;
+  const hasFinitePositiveBox =
+    Number.isFinite(box.x) &&
+    Number.isFinite(box.y) &&
+    Number.isFinite(box.width) &&
+    Number.isFinite(box.height) &&
+    box.width > 1e-6 &&
+    box.height > 1e-6;
+  const externalPlaceholders = [
+    ...(image.kind === "external"
+      ? [
+          {
+            ...(model.authorId === undefined ? {} : { id: model.authorId }),
+            path: paintContext.path,
+            url: image.externalUrl,
+          },
+        ]
+      : []),
+    ...(visual.fill.kind === "image" && visual.fill.source.kind === "external"
+      ? [
+          {
+            ...(model.authorId === undefined ? {} : { id: model.authorId }),
+            path: paintContext.path,
+            url: visual.fill.source.externalUrl,
+          },
+        ]
+      : []),
+  ];
+  if (!hasFinitePositiveBox) {
+    return {
+      svg: "",
+      ...(externalPlaceholders.length === 0
+        ? {}
+        : { placeholders: externalPlaceholders }),
+    };
+  }
 
   if (image.kind === "external") {
     const evaluated = evaluateGeometry(visual.geometry, box);
@@ -304,8 +339,11 @@ function paintImageModel(
       fillAttr = `fill="url(#${bgDefId})"`;
     } else if (visual.fill.kind === "image") {
       const bgDefId = `${prefix}-bg`;
-      defs.push(paintImageFillSvg(visual.fill, bgDefId, box));
-      fillAttr = `fill="url(#${bgDefId})"`;
+      const patternSvg = paintImageFillSvg(visual.fill, bgDefId, box);
+      if (patternSvg !== "") {
+        defs.push(patternSvg);
+        fillAttr = `fill="url(#${bgDefId})"`;
+      }
     }
     backgroundElements = fillablePaths
       .map(
@@ -317,49 +355,58 @@ function paintImageModel(
 
   const opacity = visual.opacity ?? 1;
   let imageElement = "";
-  if (widthFactor > 0 && heightFactor > 0 && fillablePaths.length > 0) {
+  if (widthFactor > 1e-6 && heightFactor > 1e-6 && fillablePaths.length > 0) {
     const imgWidth = box.width / widthFactor;
     const imgHeight = box.height / heightFactor;
     const imgX = box.x - leftCrop * imgWidth;
     const imgY = box.y - topCrop * imgHeight;
-    const clipId = `${prefix}-clip`;
-    const clipMarkup = fillablePaths
-      .map((pathItem) => `<path d="${pathItem.d}"/>`)
-      .join("");
-    defs.push(
-      `<clipPath id="${clipId}" clipPathUnits="userSpaceOnUse">${clipMarkup}</clipPath>`,
-    );
-    const opacityAttr =
-      opacity === 1 ? "" : ` opacity="${roundSvgNumber(opacity)}"`;
-    imageElement = `<image clip-path="url(#${clipId})" x="${roundSvgNumber(imgX)}" y="${roundSvgNumber(imgY)}" width="${roundSvgNumber(imgWidth)}" height="${roundSvgNumber(imgHeight)}" preserveAspectRatio="none"${opacityAttr} href="data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}"/>`;
-
-    if (visual.softEdge !== undefined && visual.softEdge > 0) {
-      const r = visual.softEdge;
-      const minSide = Math.min(box.width, box.height);
-      const borderPad = visual.border === undefined ? 0 : visual.border.width;
-      const pad = Math.ceil(r * 2 + borderPad + 8);
-      const maskX = roundSvgNumber(box.x - pad);
-      const maskY = roundSvgNumber(box.y - pad);
-      const maskW = roundSvgNumber(box.width + pad * 2);
-      const maskH = roundSvgNumber(box.height + pad * 2);
-      const blurId = `${prefix}-soft-blur`;
-      const maskId = `${prefix}-soft-mask`;
-      const innerStrokeWidth =
-        r >= minSide / 2 ? 0 : Math.min(r, minSide * 0.45);
-      const maskAttrs =
-        innerStrokeWidth > 0
-          ? `fill="white" stroke="black" stroke-width="${roundSvgNumber(innerStrokeWidth)}" filter="url(#${blurId})"`
-          : `fill="white" stroke="none" filter="url(#${blurId})"`;
-      const maskShapes = fillablePaths
-        .map((pathItem) => `<path d="${pathItem.d}" ${maskAttrs}/>`)
+    if (
+      Number.isFinite(imgX) &&
+      Number.isFinite(imgY) &&
+      Number.isFinite(imgWidth) &&
+      Number.isFinite(imgHeight) &&
+      imgWidth > 1e-6 &&
+      imgHeight > 1e-6
+    ) {
+      const clipId = `${prefix}-clip`;
+      const clipMarkup = fillablePaths
+        .map((pathItem) => `<path d="${pathItem.d}"/>`)
         .join("");
       defs.push(
-        `<filter id="${blurId}" filterUnits="userSpaceOnUse" x="${maskX}" y="${maskY}" width="${maskW}" height="${maskH}"><feGaussianBlur stdDeviation="${roundSvgNumber(r / 2)}"/></filter>`,
+        `<clipPath id="${clipId}" clipPathUnits="userSpaceOnUse">${clipMarkup}</clipPath>`,
       );
-      defs.push(
-        `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="${maskX}" y="${maskY}" width="${maskW}" height="${maskH}">${maskShapes}</mask>`,
-      );
-      imageElement = `<g mask="url(#${maskId})">${imageElement}</g>`;
+      const opacityAttr =
+        opacity === 1 ? "" : ` opacity="${roundSvgNumber(opacity)}"`;
+      imageElement = `<image clip-path="url(#${clipId})" x="${roundSvgNumber(imgX)}" y="${roundSvgNumber(imgY)}" width="${roundSvgNumber(imgWidth)}" height="${roundSvgNumber(imgHeight)}" preserveAspectRatio="none"${opacityAttr} href="data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}"/>`;
+
+      if (visual.softEdge !== undefined && visual.softEdge > 0) {
+        const r = visual.softEdge;
+        const minSide = Math.min(box.width, box.height);
+        const borderPad = visual.border === undefined ? 0 : visual.border.width;
+        const pad = Math.ceil(r * 2 + borderPad + 8);
+        const maskX = roundSvgNumber(box.x - pad);
+        const maskY = roundSvgNumber(box.y - pad);
+        const maskW = roundSvgNumber(box.width + pad * 2);
+        const maskH = roundSvgNumber(box.height + pad * 2);
+        const blurId = `${prefix}-soft-blur`;
+        const maskId = `${prefix}-soft-mask`;
+        const innerStrokeWidth =
+          r >= minSide / 2 ? 0 : Math.min(r, minSide * 0.45);
+        const maskAttrs =
+          innerStrokeWidth > 0
+            ? `fill="white" stroke="black" stroke-width="${roundSvgNumber(innerStrokeWidth)}" filter="url(#${blurId})"`
+            : `fill="white" stroke="none" filter="url(#${blurId})"`;
+        const maskShapes = fillablePaths
+          .map((pathItem) => `<path d="${pathItem.d}" ${maskAttrs}/>`)
+          .join("");
+        defs.push(
+          `<filter id="${blurId}" filterUnits="userSpaceOnUse" x="${maskX}" y="${maskY}" width="${maskW}" height="${maskH}"><feGaussianBlur stdDeviation="${roundSvgNumber(r / 2)}"/></filter>`,
+        );
+        defs.push(
+          `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="${maskX}" y="${maskY}" width="${maskW}" height="${maskH}">${maskShapes}</mask>`,
+        );
+        imageElement = `<g mask="url(#${maskId})">${imageElement}</g>`;
+      }
     }
   }
 

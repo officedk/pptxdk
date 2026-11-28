@@ -295,39 +295,66 @@ function readClrScheme(
 
 const reservedThemeFontPattern = /^(?:major|minor|\+(?:mj|mn)-)/iu;
 
+function readThemeFontSlotTypeface(
+  child: XmlElementCursor,
+  elementTag: "a:latin" | "a:ea",
+  partPath: string,
+  slideIndex: number | undefined,
+  diagnostics: ImportDiagnostic[],
+): string | undefined {
+  let result: string | undefined;
+  const typeface = child.attr("typeface");
+  if (typeface !== undefined && typeface.trim() !== "") {
+    if (reservedThemeFontPattern.test(typeface.trim())) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: {
+          part: partPath,
+          xpath: `${child.xpath}/@typeface`,
+          ...(slideIndex === undefined ? {} : { slideIndex }),
+        },
+        attributeOrElement: `${elementTag}/@typeface`,
+        rawValue: typeface,
+      });
+    } else {
+      result = typeface;
+    }
+  }
+  child.consumeAttr("panose");
+  child.consumeAttr("pitchFamily");
+  child.consumeAttr("charset");
+  return result;
+}
+
 function readFontCollection(
   fontCollectionCursor: XmlElementCursor,
   partPath: string,
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
-): string | undefined {
+): { readonly latin?: string; readonly ea?: string } {
   let latinTypeface: string | undefined;
+  let eaTypeface: string | undefined;
   for (const child of fontCollectionCursor.remainingElementChildren()) {
     if (child.namespaceUri !== A_NS) continue;
     if (child.localName === "latin") {
-      const typeface = child.attr("typeface");
-      if (typeface !== undefined && typeface.trim() !== "") {
-        if (reservedThemeFontPattern.test(typeface.trim())) {
-          diagnostics.push({
-            code: "invalid-xml-value",
-            category: "corrupt-input",
-            disposition: "omitted",
-            location: {
-              part: partPath,
-              xpath: `${child.xpath}/@typeface`,
-              ...(slideIndex === undefined ? {} : { slideIndex }),
-            },
-            attributeOrElement: "a:latin/@typeface",
-            rawValue: typeface,
-          });
-        } else {
-          latinTypeface = typeface;
-        }
-      }
-      child.consumeAttr("panose");
-      child.consumeAttr("pitchFamily");
-      child.consumeAttr("charset");
-    } else if (child.localName === "ea" || child.localName === "cs") {
+      latinTypeface = readThemeFontSlotTypeface(
+        child,
+        "a:latin",
+        partPath,
+        slideIndex,
+        diagnostics,
+      );
+    } else if (child.localName === "ea") {
+      eaTypeface = readThemeFontSlotTypeface(
+        child,
+        "a:ea",
+        partPath,
+        slideIndex,
+        diagnostics,
+      );
+    } else if (child.localName === "cs") {
       child.consumeAttr("typeface");
       child.consumeAttr("panose");
       child.consumeAttr("pitchFamily");
@@ -337,7 +364,10 @@ function readFontCollection(
       child.consumeAttr("typeface");
     }
   }
-  return latinTypeface;
+  return {
+    ...(latinTypeface === undefined ? {} : { latin: latinTypeface }),
+    ...(eaTypeface === undefined ? {} : { ea: eaTypeface }),
+  };
 }
 
 function readFontScheme(
@@ -349,25 +379,45 @@ function readFontScheme(
   | {
       readonly major?: string;
       readonly minor?: string;
+      readonly majorEastAsian?: string;
+      readonly minorEastAsian?: string;
     }
   | undefined {
   fontSchemeCursor.consumeAttr("name");
   const majorCursor = fontSchemeCursor.child(A_NS, "majorFont");
   const minorCursor = fontSchemeCursor.child(A_NS, "minorFont");
-  const major =
+  const majorInfo =
     majorCursor === undefined
       ? undefined
       : readFontCollection(majorCursor, partPath, slideIndex, diagnostics);
-  const minor =
+  const minorInfo =
     minorCursor === undefined
       ? undefined
       : readFontCollection(minorCursor, partPath, slideIndex, diagnostics);
-  if (major === undefined && minor === undefined) {
+  const major = majorInfo?.latin;
+  const minor = minorInfo?.latin;
+  // Preserve single-script idempotency: only restore EA slot when it diverges from the Latin slot.
+  const majorEastAsian =
+    majorInfo?.ea !== undefined && majorInfo.ea !== major
+      ? majorInfo.ea
+      : undefined;
+  const minorEastAsian =
+    minorInfo?.ea !== undefined && minorInfo.ea !== minor
+      ? minorInfo.ea
+      : undefined;
+  if (
+    major === undefined &&
+    minor === undefined &&
+    majorEastAsian === undefined &&
+    minorEastAsian === undefined
+  ) {
     return undefined;
   }
   return {
     ...(major === undefined ? {} : { major }),
     ...(minor === undefined ? {} : { minor }),
+    ...(majorEastAsian === undefined ? {} : { majorEastAsian }),
+    ...(minorEastAsian === undefined ? {} : { minorEastAsian }),
   };
 }
 
@@ -858,7 +908,12 @@ export function readThemePart(
 
   const themeElements = themeCursor.child(A_NS, "themeElements");
   let colors: Record<NativeColorSlot, HexColor> = { ...officeFallbackColors };
-  let fonts: { readonly major?: string; readonly minor?: string } = {};
+  let fonts: {
+    readonly major?: string;
+    readonly minor?: string;
+    readonly majorEastAsian?: string;
+    readonly minorEastAsian?: string;
+  } = {};
   let formatScheme: FormatScheme | undefined;
 
   if (themeElements !== undefined) {

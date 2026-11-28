@@ -3,6 +3,7 @@ import {
   chart,
   group,
   image,
+  line,
   paragraph,
   path,
   placeholder,
@@ -114,21 +115,20 @@ export function createBeamDivergenceDiagram(
         background: "#38B69A",
       },
     }),
-    shape({
-      geometry: preset("straightConnector1"),
+    line({
+      stroke: {
+        color: "#7BA7F7",
+        width: 1.5,
+        style: "solid",
+        startArrow: "triangle",
+        endArrow: "triangle",
+      },
       style: {
         position: "absolute",
         left: 414,
         top: 26,
-        width: 1,
+        width: 0,
         height: 226,
-        border: {
-          color: "#7BA7F7",
-          width: 1.5,
-          style: "solid",
-          startArrow: "triangle",
-          endArrow: "triangle",
-        },
       },
     }),
     text(

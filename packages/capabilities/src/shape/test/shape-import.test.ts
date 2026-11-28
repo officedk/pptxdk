@@ -215,4 +215,43 @@ describe("Shape OOXML import", () => {
       },
     );
   });
+
+  it("omits border arrows on external open-path shapes and records a shape-line-arrow diagnostic", async () => {
+    const base = deck({ width: 640, height: 360 }).append(
+      slide({ id: "open-path-arrow" }),
+    );
+    const basePptx = emit(resolveDocument(base)).pptx;
+    const spXml = `
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="77" name="Open Arc With Arrow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="${40 * emuPerPx}" y="${40 * emuPerPx}"/><a:ext cx="${120 * emuPerPx}" cy="${60 * emuPerPx}"/></a:xfrm>
+          <a:prstGeom prst="arc"><a:avLst/></a:prstGeom>
+          <a:noFill/>
+          <a:ln w="${2 * emuPerPx}">
+            <a:solidFill><a:srgbClr val="0F172A"/></a:solidFill>
+            <a:tailEnd type="triangle"/>
+          </a:ln>
+        </p:spPr>
+      </p:sp>`;
+    const imported = importDocument(replaceSlide1Xml(basePptx, spXml));
+    const arrowDiag = imported.report.diagnostics.find(
+      (d) =>
+        d.code === "unsupported-mechanism" &&
+        "mechanismHint" in d &&
+        d.mechanismHint === "shape-line-arrow",
+    );
+    assert.ok(arrowDiag, "Expected shape-line-arrow diagnostic");
+    assert.equal(arrowDiag.disposition, "omitted");
+    assert.equal(arrowDiag.location.objectId, 77);
+    const importedShape = findNodesByType(imported.document, "shape").find(
+      (node) => node.props["name"] === "Open Arc With Arrow",
+    );
+    assert.ok(importedShape !== undefined);
+    const style = importedShape.props["style"] as {
+      border?: Record<string, unknown>;
+    };
+    assert.equal(style.border?.["startArrow"], undefined);
+    assert.equal(style.border?.["endArrow"], undefined);
+  });
 });

@@ -9,6 +9,7 @@ import type {
   PlaceholderListStyles,
 } from "@pptxdk/core";
 import {
+  resolveFontClassification,
   resolvePlaceholderBoxFromLayers,
   type EmittedSlideLayoutSpec,
   type EmittedSlideMasterSpec,
@@ -24,6 +25,8 @@ import {
   schemeColorSlots,
   type ColorMap,
   type ColorMapOverride,
+  type Font,
+  type FontFaceStyle,
   type FontSize,
   type FormatColorTransform,
   type FormatEffectStyle,
@@ -283,16 +286,52 @@ function colorSchemeXml(
     .join("")}</a:clrScheme>`;
 }
 
+function fontClassificationAttrs(
+  fontValue: Font | undefined,
+  weight?: number,
+  faceStyle?: FontFaceStyle,
+): string {
+  if (fontValue === undefined) return "";
+  const cls = resolveFontClassification(fontValue, weight, faceStyle);
+  if (cls === undefined) return "";
+  const panoseAttr = cls.panose === undefined ? "" : ` panose="${cls.panose}"`;
+  return `${panoseAttr} pitchFamily="${cls.pitchFamily}"`;
+}
+
 function fontSchemeXml(
   name: string,
   majorValue: Theme["fonts"]["major"],
   minorValue: Theme["fonts"]["minor"],
+  majorEastAsianValue?: Theme["fonts"]["majorEastAsian"],
+  minorEastAsianValue?: Theme["fonts"]["minorEastAsian"],
 ): string {
+  const effectiveMajorEa = majorEastAsianValue ?? majorValue;
+  const effectiveMinorEa = minorEastAsianValue ?? minorValue;
   const major = isFont(majorValue) ? majorValue.family : majorValue;
   const minor = isFont(minorValue) ? minorValue.family : minorValue;
+  const majorEa = isFont(effectiveMajorEa)
+    ? effectiveMajorEa.family
+    : effectiveMajorEa;
+  const minorEa = isFont(effectiveMinorEa)
+    ? effectiveMinorEa.family
+    : effectiveMinorEa;
   const majorEscaped = xmlEscape(major);
   const minorEscaped = xmlEscape(minor);
-  return `<a:fontScheme name="${xmlEscape(name)}"><a:majorFont><a:latin typeface="${majorEscaped}"/><a:ea typeface="${majorEscaped}"/><a:cs typeface="${majorEscaped}"/></a:majorFont><a:minorFont><a:latin typeface="${minorEscaped}"/><a:ea typeface="${minorEscaped}"/><a:cs typeface="${minorEscaped}"/></a:minorFont></a:fontScheme>`;
+  const majorEaEscaped = xmlEscape(majorEa);
+  const minorEaEscaped = xmlEscape(minorEa);
+  const majorAttrs = fontClassificationAttrs(
+    isFont(majorValue) ? majorValue : undefined,
+  );
+  const minorAttrs = fontClassificationAttrs(
+    isFont(minorValue) ? minorValue : undefined,
+  );
+  const majorEaAttrs = fontClassificationAttrs(
+    isFont(effectiveMajorEa) ? effectiveMajorEa : undefined,
+  );
+  const minorEaAttrs = fontClassificationAttrs(
+    isFont(effectiveMinorEa) ? effectiveMinorEa : undefined,
+  );
+  return `<a:fontScheme name="${xmlEscape(name)}"><a:majorFont><a:latin typeface="${majorEscaped}"${majorAttrs}/><a:ea typeface="${majorEaEscaped}"${majorEaAttrs}/><a:cs typeface="${majorEscaped}"/></a:majorFont><a:minorFont><a:latin typeface="${minorEscaped}"${minorAttrs}/><a:ea typeface="${minorEaEscaped}"${minorEaAttrs}/><a:cs typeface="${minorEscaped}"/></a:minorFont></a:fontScheme>`;
 }
 
 function formatColorTransformXml(transform: FormatColorTransform): string {
@@ -426,7 +465,13 @@ function formatSchemeXml(scheme?: FormatScheme): string {
 export function themeXml(value: Theme): string {
   const name = xmlEscape(value.name);
   const colors = colorSchemeXml(value.name, value.colors);
-  const fonts = fontSchemeXml(value.name, value.fonts.major, value.fonts.minor);
+  const fonts = fontSchemeXml(
+    value.name,
+    value.fonts.major,
+    value.fonts.minor,
+    value.fonts.majorEastAsian,
+    value.fonts.minorEastAsian,
+  );
   const format = formatSchemeXml(value.formatScheme);
   return xmlDocument(
     `<a:theme xmlns:a="${namespaces.a}" name="${name}"><a:themeElements>${colors}${fonts}${format}</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`,
@@ -527,27 +572,64 @@ function levelDefRPrXml(
     effectXml = `<a:effectLst><a:outerShdw blurRad="${blur}" dist="${dist}" dir="${dir}" algn="ctr" rotWithShape="0">${resolvedColorXml(shadowColor)}</a:outerShdw></a:effectLst>`;
   }
   let fontXml = "";
-  if (style.fontFamily !== undefined) {
-    const resolved = themeContext.resolveFont(style.fontFamily);
-    const latin =
-      resolved.themeFont === "major"
-        ? "+mj-lt"
-        : resolved.themeFont === "minor"
-          ? "+mn-lt"
-          : resolved.family;
-    const ea =
-      resolved.themeFont === "major"
-        ? "+mj-ea"
-        : resolved.themeFont === "minor"
-          ? "+mn-ea"
-          : resolved.family;
-    const cs =
-      resolved.themeFont === "major"
-        ? "+mj-cs"
-        : resolved.themeFont === "minor"
-          ? "+mn-cs"
-          : resolved.family;
-    fontXml = `<a:latin typeface="${xmlEscape(latin)}"/><a:ea typeface="${xmlEscape(ea)}"/><a:cs typeface="${xmlEscape(cs)}"/>`;
+  if (
+    style.fontFamily !== undefined ||
+    style.eastAsianFontFamily !== undefined
+  ) {
+    const weight =
+      style.fontWeight === "bold"
+        ? 700
+        : style.fontWeight === "normal"
+          ? 400
+          : typeof style.fontWeight === "number"
+            ? style.fontWeight
+            : 400;
+    const latinPart = (() => {
+      if (style.fontFamily === undefined) return "";
+      const resolved = themeContext.resolveFont(style.fontFamily);
+      const clsAttrs =
+        resolved.themeFont === undefined
+          ? fontClassificationAttrs(resolved.font, weight, style.fontStyle)
+          : "";
+      const latin =
+        resolved.themeFont === "major"
+          ? "+mj-lt"
+          : resolved.themeFont === "minor"
+            ? "+mn-lt"
+            : resolved.family;
+      return `<a:latin typeface="${xmlEscape(latin)}"${clsAttrs}/>`;
+    })();
+    const eaPart = (() => {
+      const eaSource = style.eastAsianFontFamily ?? style.fontFamily;
+      if (eaSource === undefined) return "";
+      const resolvedEa =
+        style.eastAsianFontFamily !== undefined
+          ? themeContext.resolveEastAsianFont(style.eastAsianFontFamily)
+          : themeContext.resolveFont(eaSource);
+      const clsAttrs =
+        resolvedEa.themeFont === undefined
+          ? fontClassificationAttrs(resolvedEa.font, weight, style.fontStyle)
+          : "";
+      const ea =
+        resolvedEa.themeFont === "major"
+          ? "+mj-ea"
+          : resolvedEa.themeFont === "minor"
+            ? "+mn-ea"
+            : resolvedEa.family;
+      return `<a:ea typeface="${xmlEscape(ea)}"${clsAttrs}/>`;
+    })();
+    const csPart = (() => {
+      if (style.fontFamily === undefined) return "";
+      const resolved = themeContext.resolveFont(style.fontFamily);
+      const cs =
+        resolved.themeFont === "major"
+          ? "+mj-cs"
+          : resolved.themeFont === "minor"
+            ? "+mn-cs"
+            : resolved.family;
+      return `<a:cs typeface="${xmlEscape(cs)}"/>`;
+    })();
+    fontXml = `${latinPart}${eaPart}${csPart}`;
   }
   if (
     attrs.length === 0 &&
@@ -633,6 +715,7 @@ function styleAsLevel1(
   const lvl: Record<string, unknown> = {};
   for (const key of [
     "fontFamily",
+    "eastAsianFontFamily",
     "fontSize",
     "fontWeight",
     "fontStyle",
@@ -809,6 +892,12 @@ function effectiveThemeWithOverride(
     ...(override.fonts?.minor === undefined
       ? {}
       : { minor: override.fonts.minor }),
+    ...(override.fonts?.majorEastAsian === undefined
+      ? {}
+      : { majorEastAsian: override.fonts.majorEastAsian }),
+    ...(override.fonts?.minorEastAsian === undefined
+      ? {}
+      : { minorEastAsian: override.fonts.minorEastAsian }),
   };
   return {
     ...baseTheme,
@@ -831,7 +920,9 @@ export function hasThemeOverrideContent(
       Object.keys(override.colors).length > 0) ||
     (override.fonts !== undefined &&
       (override.fonts.major !== undefined ||
-        override.fonts.minor !== undefined)) ||
+        override.fonts.minor !== undefined ||
+        override.fonts.majorEastAsian !== undefined ||
+        override.fonts.minorEastAsian !== undefined)) ||
     override.formatScheme !== undefined
   );
 }
@@ -855,6 +946,8 @@ export function themeOverrideXml(
           baseTheme.name,
           override.fonts.major ?? baseTheme.fonts.major,
           override.fonts.minor ?? baseTheme.fonts.minor,
+          override.fonts.majorEastAsian ?? baseTheme.fonts.majorEastAsian,
+          override.fonts.minorEastAsian ?? baseTheme.fonts.minorEastAsian,
         );
   const formatXml =
     override.formatScheme === undefined

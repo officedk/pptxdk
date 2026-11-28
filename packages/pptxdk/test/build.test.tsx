@@ -1457,7 +1457,7 @@ describe("public build entry", () => {
     assert.equal((presentation.match(/<p:embeddedFont>/gu) ?? []).length, 1);
     assert.match(
       presentation,
-      /<p:font typeface="Jost\*" pitchFamily="2" charset="0"\/>/u,
+      /<p:font typeface="Jost\*" panose="00000000000000000000" pitchFamily="2" charset="0"\/>/u,
     );
     assert.match(
       presentation,

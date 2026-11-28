@@ -20,15 +20,27 @@ export type {
 } from "#/shape/shape.ts";
 export { Shape } from "#/shape/shape-elements.ts";
 export type { ShapeProps } from "#/shape/shape-elements.ts";
+export { lineCapability } from "#/line/line.ts";
+export type {
+  LineAdjust,
+  LineDeclarationProps,
+  LineEndpoint,
+  LineLayoutStyle,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
+} from "#/line/line.ts";
+export { Line } from "#/line/line-elements.ts";
+export type { LineProps } from "#/line/line-elements.ts";
 export { boxCapability } from "#/box/box.ts";
 export { Box, type BoxProps } from "#/box/box-elements.ts";
 export {
   arrowTypes,
   hasVisibleBoxStyle,
-  lineEndStyleKeys,
   type ArrowType,
-  type LineEndStyle,
-  type ShapeVisualStyle,
 } from "#/shared/visual.ts";
 export type {
   GradientStop,
@@ -122,7 +134,7 @@ export type {
   RowProps,
   TableProps,
 } from "#/table/table-elements.ts";
-export { font, textCapability } from "#/text/text.ts";
+export { font, fromFontCollection, textCapability } from "#/text/text.ts";
 export { P, SlideNumber, Span, Text } from "#/text/text-elements.ts";
 export { notesCapability } from "#/notes/notes.ts";
 export { Notes } from "#/notes/notes-elements.ts";

@@ -77,13 +77,18 @@ export type {
 } from "#/stage-options.ts";
 export {
   bytesSha256,
+  computePitchFamilyFromPanose,
   createSealedFontFace,
+  formatPanoseHex,
   hasFontFaceBytes,
   isImmutableBytes,
   isSealedFont,
   markImmutableBytes,
   markSealedFont,
+  peekFontFaceClassification,
   peekFontFaceResource,
+  resolveFontClassification,
+  type FontClassification,
   type FontFaceResourceView,
 } from "#/font-seal.ts";
 export {
@@ -338,6 +343,7 @@ export type {
   ResolvedTable,
   ResolvedTableCell,
   ResolvedTableRow,
+  ScopeTargetObject,
   ScreenPoint,
   BackgroundRef,
   FooterPlaceholderSpec,

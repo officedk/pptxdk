@@ -215,39 +215,45 @@ export const lineEndStyleSchema: z.ZodType<LineEndStyle> =
       : never
   >;
 
-const rawShapeBorderObjectSchema = z
+export type LineStroke = BorderObject & LineEndStyle;
+
+const rawLineStrokeObjectSchema = z
   .strictObject({
     ...borderObjectShape,
     startArrow: arrowTypeSchema.optional(),
     endArrow: arrowTypeSchema.optional(),
   })
   .readonly();
-export const shapeBorderObjectSchema: z.ZodType<BorderObject & LineEndStyle> =
-  rawShapeBorderObjectSchema;
+export const lineStrokeObjectSchema: z.ZodType<LineStroke> =
+  rawLineStrokeObjectSchema;
 
-export type ShapeBorderValue = "none" | (BorderObject & LineEndStyle);
-
-const rawShapeBorderValueSchema = z.union([
+export type LineStrokeValue = "none" | LineStroke;
+const rawLineStrokeValueSchema = z.union([
   z.literal("none"),
-  rawShapeBorderObjectSchema,
+  rawLineStrokeObjectSchema,
 ]);
-export const shapeBorderValueSchema: z.ZodType<ShapeBorderValue> =
-  rawShapeBorderValueSchema satisfies z.ZodType<
+export const lineStrokeSchema: z.ZodType<LineStroke> =
+  rawLineStrokeObjectSchema satisfies z.ZodType<
     AssertExact<
-      ShapeBorderValue,
-      z.infer<typeof rawShapeBorderValueSchema>
+      LineStroke,
+      z.infer<typeof rawLineStrokeObjectSchema>
     > extends true
-      ? ShapeBorderValue
+      ? LineStroke
+      : never
+  >;
+export const lineStrokeValueSchema: z.ZodType<LineStrokeValue> =
+  rawLineStrokeValueSchema satisfies z.ZodType<
+    AssertExact<
+      LineStrokeValue,
+      z.infer<typeof rawLineStrokeValueSchema>
+    > extends true
+      ? LineStrokeValue
       : never
   >;
 
 export const lineEndStyleKeys = Object.keys(
   lineEndStyleObjectSchema.shape,
 ) as readonly (keyof LineEndStyle)[];
-
-export type ShapeVisualStyle = Omit<CoreVisualStyle, "border"> & {
-  readonly border?: ShapeBorderValue | undefined;
-};
 
 export const visualStyleKeys = Object.keys(
   visualStyleShape,
@@ -259,10 +265,10 @@ export type ShapePropertiesOptions = {
   readonly box: ShapeBox;
   readonly geometry?: Geometry;
   readonly image?: boolean;
-  /** Allows `startArrow` / `endArrow` inside `style.border` (Shape only). */
-  readonly allowBorderArrows?: boolean;
   /** Layout containers without visible styling do not require emitting native transforms. */
   readonly layoutOnlyWhenInvisible?: boolean;
+  /** Pre-resolved stroke/border override used by capabilities whose stroke lives outside `style.border` (such as Line). */
+  readonly borderOverride?: ResolvedBorder | null;
 };
 
 export type ShapePropertiesResult = {
@@ -322,10 +328,24 @@ function emu(
   return converted;
 }
 
-/** Validates that a visible object box has positive DrawingML EMU extents during resolve. */
-export function assertVisualBoxExtent(box: ShapeBox): void {
+/** Validates that a visible object box has valid DrawingML EMU extents during resolve. */
+export function assertVisualBoxExtent(
+  box: ShapeBox,
+  options?: { readonly allowSingleZeroExtent?: boolean },
+): void {
   emu(box.x, "x", true, true);
   emu(box.y, "y", true, true);
+  if (options?.allowSingleZeroExtent === true) {
+    const cx = emu(box.width, "width", true);
+    const cy = emu(box.height, "height", true);
+    if (cx === 0 && cy === 0) {
+      invalid(
+        "invalid-visual-style",
+        "Computed width and height are both 0px; at least one axis must be greater than 0px",
+      );
+    }
+    return;
+  }
   emu(box.width, "width", false);
   emu(box.height, "height", false);
 }
@@ -510,6 +530,17 @@ function gradientStopsSvg(stops: readonly ResolvedGradientStop[]): string {
     .join("");
 }
 
+function isFinitePositiveBox(box: ShapeBox): boolean {
+  return (
+    Number.isFinite(box.x) &&
+    Number.isFinite(box.y) &&
+    Number.isFinite(box.width) &&
+    Number.isFinite(box.height) &&
+    box.width > 1e-6 &&
+    box.height > 1e-6
+  );
+}
+
 /** Generates deterministic SVG `<linearGradient>` or `<radialGradient>` definition markup. */
 export function gradientDefSvg(
   id: string,
@@ -518,14 +549,25 @@ export function gradientDefSvg(
   const stops = gradientStopsSvg(gradient.stops);
   switch (gradient.kind) {
     case "linear-gradient": {
-      const rad = (gradient.angle * Math.PI) / 180;
+      const angle = Number.isFinite(gradient.angle) ? gradient.angle : 0;
+      const rad = (angle * Math.PI) / 180;
       const dx = Math.sin(rad);
       const dy = -Math.cos(rad);
       const halfSpan = (Math.abs(dx) + Math.abs(dy)) / 2;
-      const x1 = roundSvgNumber(0.5 - dx * halfSpan);
-      const y1 = roundSvgNumber(0.5 - dy * halfSpan);
-      const x2 = roundSvgNumber(0.5 + dx * halfSpan);
-      const y2 = roundSvgNumber(0.5 + dy * halfSpan);
+      const x1Val = 0.5 - dx * halfSpan;
+      const y1Val = 0.5 - dy * halfSpan;
+      const x2Val = 0.5 + dx * halfSpan;
+      const y2Val = 0.5 + dy * halfSpan;
+      const validVec =
+        Number.isFinite(x1Val) &&
+        Number.isFinite(y1Val) &&
+        Number.isFinite(x2Val) &&
+        Number.isFinite(y2Val) &&
+        Math.hypot(x2Val - x1Val, y2Val - y1Val) > 1e-6;
+      const x1 = validVec ? roundSvgNumber(x1Val) : "0";
+      const y1 = validVec ? roundSvgNumber(y1Val) : "0";
+      const x2 = validVec ? roundSvgNumber(x2Val) : "1";
+      const y2 = validVec ? roundSvgNumber(y2Val) : "0";
       return `<linearGradient id="${id}" gradientUnits="objectBoundingBox" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops}</linearGradient>`;
     }
     case "radial-gradient":
@@ -698,28 +740,23 @@ function resolveVisualFill(
   }
 }
 
-function resolveVisualBorder(
+function resolveStrokeValue(
   theme: ThemeContext,
-  style: VisualStyleRecord,
+  rawStroke: unknown,
   opacity: number | undefined,
-  allowBorderArrows: boolean,
+  schema: z.ZodType<"none" | (BorderObject & Partial<LineEndStyle>)>,
+  label: string,
 ): ResolvedBorder | undefined {
-  if (!Object.hasOwn(style, "border") || style["border"] === undefined) {
+  if (rawStroke === undefined || rawStroke === "none") {
     return undefined;
   }
-  const rawBorder = style["border"];
-  if (rawBorder === "none") {
-    return undefined;
-  }
-  const parsed = (
-    allowBorderArrows ? shapeBorderValueSchema : borderValueSchema
-  ).safeParse(rawBorder);
+  const parsed = schema.safeParse(rawStroke);
   if (!parsed.success || parsed.data === "none") {
     const issue = parsed.success ? undefined : parsed.error.issues[0];
     if (issue?.code === "unrecognized_keys" && issue.keys[0] !== undefined) {
       invalid(
         "invalid-visual-style",
-        `border contains unsupported property ${issue.keys[0]}`,
+        `${label} contains unsupported property ${issue.keys[0]}`,
       );
     }
     if (
@@ -729,11 +766,11 @@ function resolveVisualBorder(
           branch.some((sub) => sub.path[0] === "color"),
         ))
     ) {
-      invalid("invalid-color", issue?.message ?? "Invalid border color");
+      invalid("invalid-color", issue?.message ?? `Invalid ${label} color`);
     }
     invalid(
       "invalid-visual-style",
-      issue?.message ?? "Invalid border declaration",
+      issue?.message ?? `Invalid ${label} declaration`,
     );
   }
   const width = parsed.data.width ?? 1;
@@ -741,12 +778,8 @@ function resolveVisualBorder(
     return undefined;
   }
   lineWidthEmu(width);
-  const startArrow = (
-    parsed.data as { readonly startArrow?: ArrowType | undefined }
-  ).startArrow;
-  const endArrow = (
-    parsed.data as { readonly endArrow?: ArrowType | undefined }
-  ).endArrow;
+  const startArrow = parsed.data.startArrow;
+  const endArrow = parsed.data.endArrow;
   return {
     color: withOpacity(theme.resolveColor(parsed.data.color), opacity),
     width,
@@ -754,6 +787,42 @@ function resolveVisualBorder(
     ...(startArrow === undefined ? {} : { startArrow }),
     ...(endArrow === undefined ? {} : { endArrow }),
   };
+}
+
+/** Validates and resolves top-level `Line.stroke` into a closed `ResolvedBorder` (defaulting to solid `tx1` 1px when omitted). */
+export function resolveLineStroke(
+  theme: ThemeContext,
+  rawStroke: unknown,
+  opacity: number | undefined,
+): ResolvedBorder | undefined {
+  const effective =
+    rawStroke === undefined
+      ? { color: "tx1" as const, width: 1, style: "solid" as const }
+      : rawStroke;
+  return resolveStrokeValue(
+    theme,
+    effective,
+    opacity,
+    lineStrokeValueSchema,
+    "stroke",
+  );
+}
+
+function resolveVisualBorder(
+  theme: ThemeContext,
+  style: VisualStyleRecord,
+  opacity: number | undefined,
+): ResolvedBorder | undefined {
+  if (!Object.hasOwn(style, "border") || style["border"] === undefined) {
+    return undefined;
+  }
+  return resolveStrokeValue(
+    theme,
+    style["border"],
+    opacity,
+    borderValueSchema,
+    "border",
+  );
 }
 
 /** Determines whether a Box style specifies visible fill, border, or shadow. */
@@ -822,12 +891,10 @@ export function resolveVisualModel(
   }
 
   const fill = resolveVisualFill(theme, style, opacity);
-  const border = resolveVisualBorder(
-    theme,
-    style,
-    opacity,
-    Boolean(options.allowBorderArrows),
-  );
+  const border =
+    options.borderOverride !== undefined
+      ? (options.borderOverride ?? undefined)
+      : resolveVisualBorder(theme, style, opacity);
   const explicitNoShadow = style["boxShadow"] === "none";
   const boxShadow =
     style["boxShadow"] === undefined || explicitNoShadow
@@ -846,7 +913,7 @@ export function resolveVisualModel(
     }
   }
 
-  const hasVisibleStyle = hasVisibleBoxStyle(style);
+  const hasVisibleStyle = hasVisibleBoxStyle(style) || border !== undefined;
   const layoutOnlyWhenInvisible = Boolean(options.layoutOnlyWhenInvisible);
   const resolvedGeometry = resolveGeometry({
     geometry: options.geometry,
@@ -955,13 +1022,23 @@ function emitEffectsXml(
 export function emitVisualModel(
   model: ResolvedVisualModel,
   registerResource?: (resource: CapabilityResource) => string,
-  options?: { readonly omitFill?: boolean },
+  options?: {
+    readonly omitFill?: boolean;
+    readonly allowSingleZeroExtent?: boolean;
+  },
 ): ShapePropertiesResult {
   const { box } = model;
+  const allowSingleZeroExtent = Boolean(options?.allowSingleZeroExtent);
+  if (
+    allowSingleZeroExtent &&
+    !(model.layoutOnlyWhenInvisible && !model.hasVisibleStyle)
+  ) {
+    assertVisualBoxExtent(box, { allowSingleZeroExtent: true });
+  }
   const transform =
     model.layoutOnlyWhenInvisible && !model.hasVisibleStyle
       ? ""
-      : `<a:xfrm${model.rotationUnits === undefined || model.rotationUnits === 0 ? "" : ` rot="${model.rotationUnits}"`}${model.flipH ? ' flipH="1"' : ""}${model.flipV ? ' flipV="1"' : ""}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", false)}" cy="${emu(box.height, "height", false)}"/></a:xfrm>`;
+      : `<a:xfrm${model.rotationUnits === undefined || model.rotationUnits === 0 ? "" : ` rot="${model.rotationUnits}"`}${model.flipH ? ' flipH="1"' : ""}${model.flipV ? ' flipV="1"' : ""}><a:off x="${emu(box.x, "x", true, true)}" y="${emu(box.y, "y", true, true)}"/><a:ext cx="${emu(box.width, "width", allowSingleZeroExtent)}" cy="${emu(box.height, "height", allowSingleZeroExtent)}"/></a:xfrm>`;
   const geometryXmlText = resolvedGeometryXml(model.geometry);
   const visualFill = options?.omitFill
     ? ""
@@ -1535,6 +1612,14 @@ export function paintVisualModel(options: {
 }): PaintOutput {
   const { model, slideNumber, objectId } = options;
   const { box } = model;
+  if (!isFinitePositiveBox(box)) {
+    return {
+      svg: "",
+      ...(model.fill.kind === "image" && model.fill.source.kind === "external"
+        ? { placeholders: [{ url: model.fill.source.externalUrl }] }
+        : {}),
+    };
+  }
   const prefix = `obj-s${slideNumber}-o${objectId}`;
   const defs: string[] = [];
 
@@ -1550,10 +1635,15 @@ export function paintVisualModel(options: {
       break;
     }
     case "image": {
-      fillDefId = `${prefix}-fill`;
-      defs.push(
-        imageFillMechanism.paint(model.fill, { id: fillDefId, box }).svg,
-      );
+      const candidateId = `${prefix}-fill`;
+      const patternSvg = imageFillMechanism.paint(model.fill, {
+        id: candidateId,
+        box,
+      }).svg;
+      if (patternSvg !== "") {
+        fillDefId = candidateId;
+        defs.push(patternSvg);
+      }
       break;
     }
     default: {
@@ -1660,12 +1750,14 @@ export function readBlipFill(
 export type ImportedSpPrVisuals = {
   readonly transform: ImportedTransform;
   readonly geometry?: Geometry;
-  readonly style: ShapeVisualStyle;
+  readonly style: CoreVisualStyle;
+  readonly borderArrows?: LineEndStyle;
 };
 
 export type ImportedSpPrAppearance = {
   readonly geometry?: Geometry;
-  readonly style: ShapeVisualStyle;
+  readonly style: CoreVisualStyle;
+  readonly borderArrows?: LineEndStyle;
 };
 
 /**
@@ -1756,7 +1848,7 @@ export function readSpPrAppearance(
   }
 
   const resolvedBackground = background ?? (hasNoFill ? "none" : undefined);
-  const resolvedBorder: ShapeBorderValue | undefined =
+  const resolvedBorder: CoreVisualStyle["border"] =
     border.borderColor !== undefined
       ? {
           color: border.borderColor,
@@ -1766,6 +1858,13 @@ export function readSpPrAppearance(
           ...(border.borderStyle === undefined
             ? {}
             : { style: border.borderStyle }),
+        }
+      : border.noFill === true
+        ? "none"
+        : undefined;
+  const borderArrows: LineEndStyle | undefined =
+    border.startArrow !== undefined || border.endArrow !== undefined
+      ? {
           ...(border.startArrow === undefined
             ? {}
             : { startArrow: border.startArrow }),
@@ -1773,10 +1872,8 @@ export function readSpPrAppearance(
             ? {}
             : { endArrow: border.endArrow }),
         }
-      : border.noFill === true
-        ? "none"
-        : undefined;
-  const resolvedBoxShadow: ShapeVisualStyle["boxShadow"] =
+      : undefined;
+  const resolvedBoxShadow: CoreVisualStyle["boxShadow"] =
     effects.boxShadow ??
     (options?.preservePlaceholderClears === true &&
     hasEmptyEffectLst &&
@@ -1784,7 +1881,7 @@ export function readSpPrAppearance(
       ? "none"
       : undefined);
 
-  const style: ShapeVisualStyle = {
+  const style: CoreVisualStyle = {
     ...(resolvedBackground === undefined
       ? {}
       : { background: resolvedBackground }),
@@ -1798,6 +1895,7 @@ export function readSpPrAppearance(
   return {
     ...(geometry === undefined ? {} : { geometry }),
     style,
+    ...(borderArrows === undefined ? {} : { borderArrows }),
   };
 }
 
@@ -1839,7 +1937,7 @@ export function readSpPrVisuals(
     diagnostics,
   );
 
-  const style: ShapeVisualStyle = {
+  const style: CoreVisualStyle = {
     ...appearance.style,
     ...(transform.rotate === undefined ? {} : { rotate: transform.rotate }),
     ...(transform.flipH === true ? { flipH: true } : {}),
@@ -1852,6 +1950,9 @@ export function readSpPrVisuals(
       ? {}
       : { geometry: appearance.geometry }),
     style,
+    ...(appearance.borderArrows === undefined
+      ? {}
+      : { borderArrows: appearance.borderArrows }),
   };
 }
 
@@ -2039,6 +2140,9 @@ export function paintImageFillSvg(
   id: string,
   box: ShapeBox,
 ): string {
+  if (!isFinitePositiveBox(box)) {
+    return "";
+  }
   const bx = roundSvgNumber(box.x);
   const by = roundSvgNumber(box.y);
   const bw = roundSvgNumber(box.width);

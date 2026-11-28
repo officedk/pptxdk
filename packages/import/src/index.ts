@@ -57,6 +57,7 @@ export {
 export {
   readEmbeddedFontList,
   readPresentationThemeFontScheme,
+  readRunFontSlots,
   unpackEotFontData,
 } from "#/fonts.ts";
 export type {
@@ -76,6 +77,7 @@ export type {
   ImportMechanismHandler,
   OmittedSlideObjectInfo,
   PlaceholderVisualReader,
+  ScopeConnectorResolutionContext,
   ShapeTreeImportContext,
   ShapeTreeImportHandler,
   ShapeTreeImportOutcome,

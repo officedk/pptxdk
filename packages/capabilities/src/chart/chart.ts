@@ -815,8 +815,10 @@ function parsedAxes(
     second.crossAxisId ??= first.id!;
   }
 
-  const parsed: ParsedChartAxis[] = firstUse.map((axis) =>
-    axis.spec.kind === "category"
+  const parsed: ParsedChartAxis[] = firstUse.map((axis) => {
+    const titleRotationDegrees =
+      axis.direction === "vertical" ? (-90 as const) : undefined;
+    return axis.spec.kind === "category"
       ? {
           kind: "category",
           name: axis.name,
@@ -825,6 +827,9 @@ function parsedAxes(
           direction: axis.direction!,
           position: axis.position!,
           crossing: axis.crossing!,
+          ...(titleRotationDegrees === undefined
+            ? {}
+            : { titleRotationDegrees }),
           spec: axis.spec,
         }
       : {
@@ -835,9 +840,12 @@ function parsedAxes(
           direction: axis.direction!,
           position: axis.position!,
           crossing: axis.crossing!,
+          ...(titleRotationDegrees === undefined
+            ? {}
+            : { titleRotationDegrees }),
           spec: axis.spec,
-        },
-  );
+        };
+  });
 
   const parsedByDraft = new Map(
     firstUse.map((axis, index) => [axis, parsed[index]!]),
@@ -1916,7 +1924,7 @@ function chartResourceClaims(
     fontUsages.push(...output.fontUsages);
     missingGlyphErrors.push(...output.missingGlyphErrors);
   }
-  for (const { name, spec } of parsed.axes) {
+  for (const { name, spec, titleRotationDegrees } of parsed.axes) {
     if (spec.style !== undefined) {
       const output = writeChartTextProperties(
         mergeTextStyle(chartStyle, spec.style),
@@ -1948,6 +1956,7 @@ function chartResourceClaims(
         ),
         `Chart.axes.${name}.title`,
         theme,
+        titleRotationDegrees,
       );
       textStyles.axisTitles ??= new Map();
       textStyles.axisTitles.set(name, output.xml);

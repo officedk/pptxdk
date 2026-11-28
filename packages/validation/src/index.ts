@@ -61,16 +61,25 @@ export type ValidationIssue = {
   readonly xpath?: string;
 };
 
+export type FileConnectorEndpoint = {
+  readonly id: number;
+  readonly idx: number;
+};
+
 export type FileObject = {
   readonly id: number;
   readonly name: string;
-  readonly kind: "shape" | "image" | "chart" | "group" | "table";
+  readonly kind: "shape" | "line" | "image" | "chart" | "group" | "table";
   readonly placeholder?: {
     readonly type: string;
     readonly idx?: number;
   };
   readonly hasLocalTransform?: boolean;
   readonly geometry?: string;
+  readonly connection?: {
+    readonly start?: FileConnectorEndpoint;
+    readonly end?: FileConnectorEndpoint;
+  };
   readonly boxEmu: {
     readonly x: number;
     readonly y: number;
@@ -1904,8 +1913,14 @@ function readFontSchemeMap(
       fontSet === undefined
         ? undefined
         : first(fontSet, drawingNamespace, "latin");
+    const ea =
+      fontSet === undefined
+        ? undefined
+        : first(fontSet, drawingNamespace, "ea");
     const family = latin === undefined ? "" : attribute(latin, "typeface");
     if (family !== "") fonts.set(token, family);
+    const eaFamily = ea === undefined ? "" : attribute(ea, "typeface");
+    if (eaFamily !== "") fonts.set(`${token}EastAsian`, eaFamily);
   }
   return fonts;
 }
@@ -2076,14 +2091,13 @@ function validateFontSchemeSlots(
       latinTypeface === "" ||
       eaTypeface === "" ||
       csTypeface === "" ||
-      latinTypeface !== eaTypeface ||
       latinTypeface !== csTypeface
     ) {
       issue(
         errors,
         part,
         "invalid-theme-font-slots",
-        `Theme ${name} must define matching non-empty latin, ea, and cs font slots`,
+        `Theme ${name} must define non-empty latin, ea, and cs font slots with matching latin and cs`,
       );
     }
   }
@@ -2275,29 +2289,23 @@ function readTextRun(
   const fill = first(properties, drawingNamespace, "solidFill");
   const rawFontFamily = latin === undefined ? "" : attribute(latin, "typeface");
   if (latin !== undefined) {
-    if (ea === undefined || cs === undefined) {
+    if (ea !== undefined && attribute(ea, "typeface") === "") {
       issue(
         errors,
         part,
-        "missing-font-slot",
-        "Text run is missing East Asian or Complex Script font slot",
+        "mismatched-font-slots",
+        "Text run East Asian font slot cannot be empty",
       );
-    } else {
-      const eaTypeface = attribute(ea, "typeface");
+    }
+    if (cs !== undefined) {
       const csTypeface = attribute(cs, "typeface");
-      const expectedEa =
-        rawFontFamily === "+mj-lt"
-          ? "+mj-ea"
-          : rawFontFamily === "+mn-lt"
-            ? "+mn-ea"
-            : rawFontFamily;
       const expectedCs =
         rawFontFamily === "+mj-lt"
           ? "+mj-cs"
           : rawFontFamily === "+mn-lt"
             ? "+mn-cs"
             : rawFontFamily;
-      if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+      if (csTypeface !== expectedCs) {
         issue(
           errors,
           part,
@@ -3750,6 +3758,128 @@ function validateShape(
     boxEmu: { x, y, width, height },
     ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
     ...(text === undefined ? {} : { text }),
+  };
+}
+
+function readConnectorEndpoint(
+  container: XmlElement | undefined,
+  tagName: "stCxn" | "endCxn",
+  connectorName: string,
+  part: string,
+  errors: ValidationIssue[],
+): FileConnectorEndpoint | undefined {
+  if (container === undefined) return undefined;
+  const endpoint = first(container, drawingNamespace, tagName);
+  if (endpoint === undefined) return undefined;
+  const targetId = integerAttribute(endpoint, "id");
+  const idx = integerAttribute(endpoint, "idx");
+  if (targetId === undefined || targetId < 1 || idx === undefined || idx < 0) {
+    issue(
+      errors,
+      part,
+      "invalid-connector-endpoint",
+      `Connector ${connectorName} has invalid ${tagName} attributes`,
+    );
+    return undefined;
+  }
+  return { id: targetId, idx };
+}
+
+function validateConnector(
+  connector: XmlElement,
+  part: string,
+  errors: ValidationIssue[],
+): FileObject | undefined {
+  const identity = objectIdentity(
+    connector,
+    "nvCxnSpPr",
+    part,
+    "connector",
+    errors,
+  );
+  if (identity === undefined) return undefined;
+  const nvCxnSpPr = first(connector, presentationNamespace, "nvCxnSpPr");
+  const cNvCxnSpPr =
+    nvCxnSpPr === undefined
+      ? undefined
+      : first(nvCxnSpPr, presentationNamespace, "cNvCxnSpPr");
+  const start = readConnectorEndpoint(
+    cNvCxnSpPr,
+    "stCxn",
+    identity.name,
+    part,
+    errors,
+  );
+  const end = readConnectorEndpoint(
+    cNvCxnSpPr,
+    "endCxn",
+    identity.name,
+    part,
+    errors,
+  );
+  const properties = first(connector, presentationNamespace, "spPr");
+  const geometryName = readGeometryName(properties);
+  if (geometryName === "") {
+    issue(
+      errors,
+      part,
+      "missing-connector-geometry",
+      `Connector ${identity.name} missing preset geometry`,
+    );
+    return undefined;
+  }
+  const transform =
+    properties === undefined
+      ? undefined
+      : first(properties, drawingNamespace, "xfrm");
+  const rotation = readRotationDegrees(transform);
+  const offset =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "off");
+  const extent =
+    transform === undefined
+      ? undefined
+      : first(transform, drawingNamespace, "ext");
+  const x = integerAttribute(offset, "x");
+  const y = integerAttribute(offset, "y");
+  const width = integerAttribute(extent, "cx");
+  const height = integerAttribute(extent, "cy");
+  if (
+    x === undefined ||
+    y === undefined ||
+    width === undefined ||
+    height === undefined ||
+    width < 0 ||
+    width > maximumShapeExtentEmu ||
+    height < 0 ||
+    height > maximumShapeExtentEmu ||
+    (width === 0 && height === 0)
+  ) {
+    issue(
+      errors,
+      part,
+      "invalid-connector-transform",
+      `Connector ${identity.name} coordinates or dimensions are invalid`,
+    );
+    return undefined;
+  }
+  validateLineProperties(properties, part, errors);
+  const connection =
+    start === undefined && end === undefined
+      ? undefined
+      : {
+          ...(start === undefined ? {} : { start }),
+          ...(end === undefined ? {} : { end }),
+        };
+  return {
+    id: identity.id,
+    name: identity.name,
+    kind: "line",
+    geometry: geometryName,
+    boxEmu: { x, y, width, height },
+    ...(rotation === undefined ? {} : { rotationDegrees: rotation }),
+    ...(connection === undefined ? {} : { connection }),
   };
 }
 
@@ -5783,29 +5913,23 @@ function validateChart(
     const cs = first(defRPr, drawingNamespace, "cs");
     if (latin !== undefined) {
       const rawFamily = attribute(latin, "typeface");
-      if (ea === undefined || cs === undefined) {
+      if (ea !== undefined && attribute(ea, "typeface") === "") {
         issue(
           errors,
           chartPart,
-          "missing-font-slot",
-          "Chart defRPr is missing East Asian or Complex Script font slot",
+          "mismatched-font-slots",
+          "Chart defRPr East Asian font slot cannot be empty",
         );
-      } else {
-        const eaTypeface = attribute(ea, "typeface");
+      }
+      if (cs !== undefined) {
         const csTypeface = attribute(cs, "typeface");
-        const expectedEa =
-          rawFamily === "+mj-lt"
-            ? "+mj-ea"
-            : rawFamily === "+mn-lt"
-              ? "+mn-ea"
-              : rawFamily;
         const expectedCs =
           rawFamily === "+mj-lt"
             ? "+mj-cs"
             : rawFamily === "+mn-lt"
               ? "+mn-cs"
               : rawFamily;
-        if (eaTypeface !== expectedEa || csTypeface !== expectedCs) {
+        if (csTypeface !== expectedCs) {
           issue(
             errors,
             chartPart,
@@ -7762,6 +7886,9 @@ function readObjects(
         object = validateShape(spEl, part, errors, theme, placeholderLookup);
         break;
       }
+      case "cxnSp":
+        object = validateConnector(child as XmlElement, part, errors);
+        break;
       case "pic":
         object = validatePicture(
           child as XmlElement,
@@ -7821,6 +7948,21 @@ function readObjects(
         errors,
       );
       objects.push({ ...object, ...(link === undefined ? {} : { link }) });
+    }
+  }
+  const siblingIds = new Set(objects.map((entry) => entry.id));
+  for (const obj of objects) {
+    if (obj.connection === undefined) continue;
+    for (const endpoint of [obj.connection.start, obj.connection.end]) {
+      if (endpoint === undefined) continue;
+      if (endpoint.id === obj.id || !siblingIds.has(endpoint.id)) {
+        issue(
+          errors,
+          part,
+          "invalid-connector-target",
+          `Connector ${obj.name} references missing or invalid target object ${endpoint.id}`,
+        );
+      }
     }
   }
   return objects;

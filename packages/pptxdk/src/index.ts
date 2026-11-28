@@ -413,6 +413,18 @@ export { footerPlaceholderCapability } from "@pptxdk/capabilities/footer-placeho
 export { groupCapability } from "@pptxdk/capabilities/group";
 export { imageCapability } from "@pptxdk/capabilities/image";
 export type { ImageSource, ImageVisualStyle } from "@pptxdk/capabilities/image";
+export { lineCapability } from "@pptxdk/capabilities/line";
+export type {
+  LineAdjust,
+  LineEndpoint,
+  LineLayoutStyle,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
+} from "@pptxdk/capabilities/line";
 export { mastersCapability } from "@pptxdk/capabilities/masters";
 export { placeholderCapability } from "@pptxdk/capabilities/placeholder";
 export type {
@@ -512,16 +524,13 @@ export {
   shapeCapability,
 } from "@pptxdk/capabilities/shape";
 export type {
-  ArrowType,
   CustomGeometry,
   Geometry,
   GeometryPath,
-  LineEndStyle,
   PathCommand,
   PathOptions,
   PresetGeometry,
   PresetGeometryName,
-  ShapeVisualStyle,
 } from "@pptxdk/capabilities/shape";
 export { tableCapability } from "@pptxdk/capabilities/table";
 export type {
@@ -533,7 +542,11 @@ export type {
   TableTextStyle,
   TableVerticalAlign,
 } from "@pptxdk/capabilities/table";
-export { font, textCapability } from "@pptxdk/capabilities/text";
+export {
+  font,
+  fromFontCollection,
+  textCapability,
+} from "@pptxdk/capabilities/text";
 export type {
   ParagraphStyle,
   ShapeTextStyle,

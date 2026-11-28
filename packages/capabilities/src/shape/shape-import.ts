@@ -11,6 +11,7 @@ import {
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
   P_NS,
+  readRunFontSlots,
   XML_NS,
   emuToPx,
   type ImportDiagnostic,
@@ -22,6 +23,7 @@ import {
 } from "@pptxdk/import";
 import { z } from "zod";
 
+import { isLineNormalizedSpElement } from "../line/line-import.ts";
 import {
   attachDeferredSlideLink,
   consumeNonPlaceholderNvPr,
@@ -79,10 +81,6 @@ const RunPrAttrSchema = z.object({
   spc: ooxmlIntSchema.optional(),
   dirty: ooxmlBoolSchema.optional(),
   smtClean: ooxmlBoolSchema.optional(),
-});
-
-const TypefaceAttrSchema = z.object({
-  typeface: z.string().min(1),
 });
 
 const BulletCharAttrSchema = z.object({
@@ -154,12 +152,13 @@ function isCustomGeomSpElement(cursor: XmlElementCursor): boolean {
   return directElementChild(spPr, A_NS, "custGeom") !== undefined;
 }
 
-/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, or `<a:custGeom>`). */
+/** Side-effect-free predicate matching non-textbox preset shapes (`<p:sp>` without `txBox="1"`, `<p:ph>`, `<a:custGeom>`, or normalized 1D lines). */
 export function isPresetShapeSpElement(cursor: XmlElementCursor): boolean {
   return (
     !isPlaceholderSpElement(cursor) &&
     !isTextBoxSpElement(cursor) &&
-    !isCustomGeomSpElement(cursor)
+    !isCustomGeomSpElement(cursor) &&
+    !isLineNormalizedSpElement(cursor)
   );
 }
 
@@ -317,27 +316,11 @@ function readShapeRunProperties(
       ? {}
       : readEffectList(effectLst, location, diagnostics);
 
-  let fontFamily: NonNullable<TextStyle["fontFamily"]> | undefined;
-  const latin = rPrCursor.child(A_NS, "latin");
-  const ea = rPrCursor.child(A_NS, "ea");
-  const cs = rPrCursor.child(A_NS, "cs");
-  const fontCursor = latin ?? ea ?? cs;
-  if (fontCursor !== undefined) {
-    const parsedFont = TypefaceAttrSchema.safeParse(
-      fontCursor.attrsObject(["typeface"]),
-    );
-    if (parsedFont.success) {
-      const tf = parsedFont.data.typeface;
-      if (tf.startsWith("+mj-")) fontFamily = "major";
-      else if (tf.startsWith("+mn-")) fontFamily = "minor";
-      else fontFamily = tf;
-    }
-  }
-  if (ea !== undefined && ea !== fontCursor) ea.consumeAttr("typeface");
-  if (cs !== undefined && cs !== fontCursor) cs.consumeAttr("typeface");
+  const { fontFamily, eastAsianFontFamily } = readRunFontSlots(rPrCursor);
 
   return {
     ...(fontFamily === undefined ? {} : { fontFamily }),
+    ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
     ...(fontSize === undefined ? {} : { fontSize }),
     ...(fontWeight === undefined ? {} : { fontWeight }),
     ...(fontStyle === undefined ? {} : { fontStyle }),
@@ -763,6 +746,18 @@ export function readShapeSp(
       : undefined;
 
   const { border: rawBorder, ...restVisualStyle } = visuals.style;
+  if (visuals.borderArrows !== undefined) {
+    diagnostics.push({
+      code: "unsupported-mechanism",
+      category: "unsupported",
+      disposition: "omitted",
+      location,
+      namespaceUri: A_NS,
+      localName:
+        visuals.borderArrows.startArrow !== undefined ? "headEnd" : "tailEnd",
+      mechanismHint: "shape-line-arrow",
+    });
+  }
   const effectiveVisualStyle =
     rawBorder === "none" ? restVisualStyle : visuals.style;
 

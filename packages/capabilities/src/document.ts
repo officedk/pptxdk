@@ -38,7 +38,7 @@ import {
   type ChartNode,
   type ChartProps,
 } from "./chart/chart-declaration.ts";
-import { font } from "./font/font.ts";
+import { font, fromFontCollection } from "./font/font.ts";
 import {
   createGroupNode,
   type GroupDeclarationProps,
@@ -47,6 +47,19 @@ import {
   createImageNode,
   type ImageDeclarationProps,
 } from "./image/image-declaration.ts";
+import {
+  createLineNode,
+  type LineAdjust,
+  type LineDeclarationProps,
+  type LineEndpoint,
+  type LineLayoutStyle,
+  type LinePort,
+  type LineRouting,
+  type LineStroke,
+  type LineStrokeValue,
+  type LineStyle,
+  type LineVisualStyle,
+} from "./line/line-declaration.ts";
 import {
   createMotionScopeNode,
   createMotionStepIdentity,
@@ -238,6 +251,7 @@ export type SectionAuthorProps = SectionProps;
 
 export type BoxAuthorProps = BoxDeclarationProps;
 export type ImageAuthorProps = ImageDeclarationProps;
+export type LineAuthorProps = LineDeclarationProps;
 export type GroupAuthorProps = GroupDeclarationProps;
 export type ShapeAuthorProps = ShapeDeclarationProps;
 export type TextAuthorProps = TextDeclarationProps;
@@ -277,6 +291,11 @@ export type ImageNode = CommonNode<
   "image",
   ImageDeclarationProps,
   NonNullable<ImageDeclarationProps["style"]>
+>;
+export type LineNode = CommonNode<
+  "line",
+  LineDeclarationProps,
+  NonNullable<LineDeclarationProps["style"]>
 >;
 export type GroupNode = CommonContainer<
   "group",
@@ -468,6 +487,11 @@ export function image(props: ImageAuthorProps): ImageNode {
   return createImageNode(props);
 }
 
+/** Creates a 1D line or connector (`<p:cxnSp>`) with box-layout or anchored `from`/`to` positioning. */
+export function line(props: LineAuthorProps = {}): LineNode {
+  return createLineNode(props);
+}
+
 /** Creates a native group preserving member identity and layout children. */
 export function group(props: GroupAuthorProps = {}): GroupNode {
   return createGroupNode(props);
@@ -609,7 +633,7 @@ export {
 export { motionSchedule } from "./motion/motion-query.ts";
 export { blockArc, path, preset } from "./shared/geometry.ts";
 export { linearGradient, radialGradient } from "./shared/visual.ts";
-export { font, transitions };
+export { font, fromFontCollection, transitions };
 export type {
   ContentPlaceholderRole,
   EmptyPlaceholderMap,
@@ -691,11 +715,18 @@ export type {
   PresetGeometry,
   PresetGeometryName,
 } from "./shared/geometry.ts";
+export type { ArrowType } from "./shared/visual.ts";
 export type {
-  ArrowType,
-  LineEndStyle,
-  ShapeVisualStyle,
-} from "./shared/visual.ts";
+  LineAdjust,
+  LineEndpoint,
+  LineLayoutStyle,
+  LinePort,
+  LineRouting,
+  LineStroke,
+  LineStrokeValue,
+  LineStyle,
+  LineVisualStyle,
+};
 export type {
   ImageSource,
   ImageVisualStyle,

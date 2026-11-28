@@ -1,4 +1,8 @@
+import { assertValidLang, type TextStyle } from "@pptxdk/core";
 import { z } from "zod";
+
+import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
+import type { XmlElementCursor } from "#/xml-reader.ts";
 
 const integerStringPattern = /^-?\d+$/u;
 const hexRgbPattern = /^[0-9a-fA-F]{6}$/u;
@@ -19,6 +23,282 @@ export const ooxmlNonNegativeIntSchema = ooxmlIntSchema.refine(
 export const ooxmlPositiveIntSchema = ooxmlIntSchema.refine(
   (value) => value > 0,
 );
+
+/** DrawingML `<a:rPr sz="...">` valid integer centipoint domain (`1pt .. 4000pt`). */
+export const ooxmlFontSizeCentipointsSchema = ooxmlIntSchema.refine(
+  (value) => value >= 100 && value <= 400_000,
+);
+
+/** DrawingML `<a:rPr spc="...">` valid integer centipoint domain (`-4000pt .. 4000pt`). */
+export const ooxmlLetterSpacingCentipointsSchema = ooxmlIntSchema.refine(
+  (value) => value >= -400_000 && value <= 400_000,
+);
+
+/** DrawingML `<a:rPr baseline="...">` valid 32-bit signed thousandths of a percent (`ST_Percentage`). */
+export const ooxmlBaselineShiftThousandthsSchema = ooxmlIntSchema.refine(
+  (value) => value >= -2_147_483_648 && value <= 2_147_483_647,
+);
+
+/** DrawingML `<a:lnSpc><a:spcPts val="...">` valid centipoint domain (`>0 .. 1584pt`). */
+export const ooxmlLineSpacingPointsSchema = ooxmlIntSchema.refine(
+  (value) => value >= 1 && value <= 158_400,
+);
+
+/** DrawingML `<a:lnSpc><a:spcPct val="...">` valid thousandth-percent domain (`>0% .. 13200%`). */
+export const ooxmlLineSpacingPercentSchema = ooxmlIntSchema.refine(
+  (value) => value >= 1 && value <= 13_200_000,
+);
+
+/** DrawingML `<a:spcBef|spcAft><a:spcPts val="...">` valid non-negative centipoint domain (`0 .. 1584pt`). */
+export const ooxmlParagraphSpacingPointsSchema = ooxmlIntSchema.refine(
+  (value) => value >= 0 && value <= 158_400,
+);
+
+/** DrawingML `<a:buAutoNum startAt="...">` valid integer domain (`1 .. 32767`). */
+export const ooxmlAutoNumStartAtSchema = ooxmlIntSchema.refine(
+  (value) => value >= 1 && value <= 32_767,
+);
+
+/** DrawingML `<a:pPr lvl="...">` valid paragraph level (`0 .. 8`). */
+export const ooxmlListLevelSchema = ooxmlIntSchema.refine(
+  (value) => value >= 0 && value <= 8,
+);
+
+export type OoxmlRunAttrStyleResult = {
+  readonly fontSize?: NonNullable<TextStyle["fontSize"]>;
+  readonly sizePt?: number;
+  readonly fontWeight?: NonNullable<TextStyle["fontWeight"]>;
+  readonly fontStyle?: NonNullable<TextStyle["fontStyle"]>;
+  readonly textDecoration?: NonNullable<TextStyle["textDecoration"]>;
+  readonly textTransform?: NonNullable<TextStyle["textTransform"]>;
+  readonly letterSpacing?: number;
+  readonly lang?: string;
+  readonly baselineShift?: `${number}%`;
+  readonly inlineKind?: "sup" | "sub";
+};
+
+function pushInvalidXmlAttrDiagnostic(
+  diagnostics: ImportDiagnostic[],
+  location: ImportLocation,
+  elementXpath: string,
+  attrName: string,
+  rawValue: string,
+): void {
+  diagnostics.push({
+    code: "invalid-xml-value",
+    category: "corrupt-input",
+    disposition: "omitted",
+    location: { ...location, xpath: `${elementXpath}/@${attrName}` },
+    attributeOrElement: `@${attrName}`,
+    rawValue,
+  });
+}
+
+/**
+ * Parses `<a:rPr>`, `<a:defRPr>`, or `<a:endParaRPr>` scalar attributes independently so an
+ * out-of-range or malformed attribute strips only itself (recording `invalid-xml-value`) while
+ * preserving valid sibling attributes.
+ */
+export function readOoxmlRunAttrStyles(args: {
+  readonly rPrCursor: XmlElementCursor;
+  readonly location: ImportLocation;
+  readonly diagnostics: ImportDiagnostic[];
+  readonly allowBaseline?: boolean;
+  readonly allowNoneTextDecoration?: boolean;
+  readonly diagnoseUnsupportedEnums?: boolean;
+}): OoxmlRunAttrStyleResult {
+  const { rPrCursor, location, diagnostics } = args;
+  const raw = rPrCursor.attrsObject([
+    "lang",
+    "sz",
+    "b",
+    "i",
+    "u",
+    "strike",
+    "cap",
+    "spc",
+    "kern",
+    "dirty",
+    "smtClean",
+    "baseline",
+  ]);
+
+  let lang: string | undefined;
+  if (raw["lang"] !== undefined) {
+    try {
+      lang = assertValidLang(raw["lang"]);
+    } catch {
+      pushInvalidXmlAttrDiagnostic(
+        diagnostics,
+        location,
+        rPrCursor.xpath,
+        "lang",
+        raw["lang"],
+      );
+    }
+  }
+
+  let fontSize: NonNullable<TextStyle["fontSize"]> | undefined;
+  let sizePt: number | undefined;
+  if (raw["sz"] !== undefined) {
+    const parsed = ooxmlFontSizeCentipointsSchema.safeParse(raw["sz"]);
+    if (parsed.success) {
+      sizePt = parsed.data / 100;
+      fontSize = `${sizePt}pt`;
+    } else {
+      pushInvalidXmlAttrDiagnostic(
+        diagnostics,
+        location,
+        rPrCursor.xpath,
+        "sz",
+        raw["sz"],
+      );
+    }
+  }
+
+  let fontWeight: NonNullable<TextStyle["fontWeight"]> | undefined;
+  if (raw["b"] !== undefined) {
+    const parsed = ooxmlBoolSchema.safeParse(raw["b"]);
+    if (parsed.success) {
+      fontWeight = parsed.data ? "bold" : "normal";
+    } else {
+      pushInvalidXmlAttrDiagnostic(
+        diagnostics,
+        location,
+        rPrCursor.xpath,
+        "b",
+        raw["b"],
+      );
+    }
+  }
+
+  let fontStyle: NonNullable<TextStyle["fontStyle"]> | undefined;
+  if (raw["i"] !== undefined) {
+    const parsed = ooxmlBoolSchema.safeParse(raw["i"]);
+    if (parsed.success) {
+      fontStyle = parsed.data ? "italic" : "normal";
+    } else {
+      pushInvalidXmlAttrDiagnostic(
+        diagnostics,
+        location,
+        rPrCursor.xpath,
+        "i",
+        raw["i"],
+      );
+    }
+  }
+
+  const rawU = raw["u"];
+  if (
+    rawU !== undefined &&
+    rawU !== "none" &&
+    rawU !== "sng" &&
+    args.diagnoseUnsupportedEnums === true
+  ) {
+    pushInvalidXmlAttrDiagnostic(
+      diagnostics,
+      location,
+      rPrCursor.xpath,
+      "u",
+      rawU,
+    );
+  }
+  const rawStrike = raw["strike"];
+  if (
+    rawStrike !== undefined &&
+    rawStrike !== "noStrike" &&
+    rawStrike !== "sngStrike" &&
+    args.diagnoseUnsupportedEnums === true
+  ) {
+    pushInvalidXmlAttrDiagnostic(
+      diagnostics,
+      location,
+      rPrCursor.xpath,
+      "strike",
+      rawStrike,
+    );
+  }
+  const textDecoration: NonNullable<TextStyle["textDecoration"]> | undefined =
+    rawU === "sng"
+      ? "underline"
+      : rawStrike === "sngStrike"
+        ? "line-through"
+        : args.allowNoneTextDecoration === true &&
+            rawU === "none" &&
+            rawStrike === "noStrike"
+          ? "none"
+          : undefined;
+
+  const rawCap = raw["cap"];
+  if (
+    rawCap !== undefined &&
+    rawCap !== "none" &&
+    rawCap !== "all" &&
+    args.diagnoseUnsupportedEnums === true
+  ) {
+    pushInvalidXmlAttrDiagnostic(
+      diagnostics,
+      location,
+      rPrCursor.xpath,
+      "cap",
+      rawCap,
+    );
+  }
+  const textTransform: NonNullable<TextStyle["textTransform"]> | undefined =
+    rawCap === "all" ? "uppercase" : rawCap === "none" ? "none" : undefined;
+
+  let letterSpacing: number | undefined;
+  if (raw["spc"] !== undefined) {
+    const parsed = ooxmlLetterSpacingCentipointsSchema.safeParse(raw["spc"]);
+    if (parsed.success) {
+      letterSpacing = parsed.data === 0 ? 0 : parsed.data / 75;
+    } else {
+      pushInvalidXmlAttrDiagnostic(
+        diagnostics,
+        location,
+        rPrCursor.xpath,
+        "spc",
+        raw["spc"],
+      );
+    }
+  }
+
+  let baselineShift: `${number}%` | undefined;
+  let inlineKind: "sup" | "sub" | undefined;
+  if (args.allowBaseline === true && raw["baseline"] !== undefined) {
+    const parsed = ooxmlBaselineShiftThousandthsSchema.safeParse(
+      raw["baseline"],
+    );
+    if (!parsed.success) {
+      pushInvalidXmlAttrDiagnostic(
+        diagnostics,
+        location,
+        rPrCursor.xpath,
+        "baseline",
+        raw["baseline"],
+      );
+    } else if (parsed.data === 30_000) {
+      inlineKind = "sup";
+    } else if (parsed.data === -25_000) {
+      inlineKind = "sub";
+    } else if (parsed.data !== 0) {
+      baselineShift = `${parsed.data / 1000}%`;
+    }
+  }
+
+  return {
+    ...(fontSize === undefined ? {} : { fontSize }),
+    ...(sizePt === undefined ? {} : { sizePt }),
+    ...(fontWeight === undefined ? {} : { fontWeight }),
+    ...(fontStyle === undefined ? {} : { fontStyle }),
+    ...(textDecoration === undefined ? {} : { textDecoration }),
+    ...(textTransform === undefined ? {} : { textTransform }),
+    ...(letterSpacing === undefined ? {} : { letterSpacing }),
+    ...(lang === undefined ? {} : { lang }),
+    ...(baselineShift === undefined ? {} : { baselineShift }),
+    ...(inlineKind === undefined ? {} : { inlineKind }),
+  };
+}
 
 /** Parses OOXML xsd:boolean attribute values ("1" | "0" | "true" | "false"). */
 export const ooxmlBoolSchema = z

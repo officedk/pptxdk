@@ -23,7 +23,11 @@ import {
 import { pxToEmu, xmlEscape } from "@pptxdk/emit";
 import { defineCanvasMechanism } from "@pptxdk/import";
 
-import { evaluateGeometry, type Geometry } from "../shared/geometry.ts";
+import {
+  applyTransformToPoints,
+  evaluateGeometry,
+  type Geometry,
+} from "../shared/geometry.ts";
 export {
   blockArc,
   path,
@@ -519,9 +523,20 @@ export const shapeCapability: ObjectCapabilityModule<
         const geometryName =
           visual.geometry.kind === "custom" ? "custom" : visual.geometry.name;
 
+        const evaluated = evaluateGeometry(visual.geometry, box);
+        const connectionSites = applyTransformToPoints(
+          evaluated.connectionSites,
+          box,
+          {
+            flipH: visual.flipH,
+            flipV: visual.flipV,
+            rotate: visual.rotate,
+          },
+        );
+
         let resolvedText: ResolvedTextBody | undefined;
         if (hasTextBody && paragraphs.length > 0) {
-          const { textRect } = evaluateGeometry(visual.geometry, box);
+          const { textRect } = evaluated;
           resolvedText = resolveTextBody(
             paragraphs,
             parsedTextStyle,
@@ -606,6 +621,7 @@ export const shapeCapability: ObjectCapabilityModule<
                 }),
           },
           transform,
+          connectionSites,
           extensions: [],
           ...(annotations.length === 0 ? {} : { annotations }),
           ...(resolvedText === undefined

@@ -33,6 +33,7 @@ export type PresetPathDefinition = {
 export type PresetShapeDefinition = {
   readonly av?: readonly (readonly [string, string])[];
   readonly gd?: readonly (readonly [string, string])[];
+  readonly cxn?: readonly (readonly [string, string])[];
   readonly rect?: readonly [string, string, string, string];
   readonly paths: readonly PresetPathDefinition[];
 };
@@ -41,6 +42,10 @@ export const presetDefinitions: Readonly<
   Record<PresetGeometryName, PresetShapeDefinition>
 > = {
   line: {
+    cxn: [
+      ["l", "t"],
+      ["r", "b"],
+    ],
     paths: [
       {
         cmds: [
@@ -51,6 +56,10 @@ export const presetDefinitions: Readonly<
     ],
   },
   lineInv: {
+    cxn: [
+      ["l", "b"],
+      ["r", "t"],
+    ],
     paths: [
       {
         cmds: [
@@ -61,6 +70,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   triangle: {
+    cxn: [
+      ["x2", "t"],
+      ["x1", "vc"],
+      ["l", "b"],
+      ["x2", "b"],
+      ["r", "b"],
+      ["x3", "vc"],
+    ],
     av: [["adj", "val 50000"]],
     gd: [
       ["a", "pin 0 adj 100000"],
@@ -74,6 +91,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   rtTriangle: {
+    cxn: [
+      ["l", "t"],
+      ["l", "vc"],
+      ["l", "b"],
+      ["hc", "b"],
+      ["r", "b"],
+      ["hc", "vc"],
+    ],
     gd: [
       ["it", "*/ h 7 12"],
       ["ir", "*/ w 7 12"],
@@ -117,6 +142,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   parallelogram: {
+    cxn: [
+      ["hc", "y2"],
+      ["x4", "t"],
+      ["x6", "vc"],
+      ["x3", "b"],
+      ["hc", "y1"],
+      ["x1", "vc"],
+    ],
     av: [["adj", "val 25000"]],
     gd: [
       ["maxAdj", "*/ 100000 w ss"],
@@ -152,6 +185,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   trapezoid: {
+    cxn: [
+      ["hc", "t"],
+      ["x1", "vc"],
+      ["hc", "b"],
+      ["x4", "vc"],
+    ],
     av: [["adj", "val 25000"]],
     gd: [
       ["maxAdj", "*/ 50000 w ss"],
@@ -178,6 +217,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   nonIsoscelesTrapezoid: {
+    cxn: [
+      ["x4", "vc"],
+      ["hc", "b"],
+      ["x1", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -211,6 +256,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   pentagon: {
+    cxn: [
+      ["hc", "t"],
+      ["x1", "y1"],
+      ["x2", "y2"],
+      ["hc", "b"],
+      ["x3", "y2"],
+      ["x4", "y1"],
+    ],
     av: [
       ["hf", "val 105146"],
       ["vf", "val 110557"],
@@ -246,6 +299,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   hexagon: {
+    cxn: [
+      ["r", "vc"],
+      ["x2", "y2"],
+      ["x1", "y2"],
+      ["l", "vc"],
+      ["x1", "y1"],
+      ["x2", "y1"],
+    ],
     av: [
       ["adj", "val 25000"],
       ["vf", "val 115470"],
@@ -288,6 +349,15 @@ export const presetDefinitions: Readonly<
     ],
   },
   heptagon: {
+    cxn: [
+      ["x5", "y1"],
+      ["x6", "y2"],
+      ["x4", "y3"],
+      ["x3", "y3"],
+      ["x1", "y2"],
+      ["x2", "y1"],
+      ["hc", "t"],
+    ],
     av: [
       ["hf", "val 102572"],
       ["vf", "val 105210"],
@@ -330,6 +400,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   octagon: {
+    cxn: [
+      ["r", "x1"],
+      ["r", "y2"],
+      ["x2", "b"],
+      ["x1", "b"],
+      ["l", "y2"],
+      ["l", "x1"],
+      ["x1", "t"],
+      ["x2", "t"],
+    ],
     av: [["adj", "val 29289"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -358,6 +438,18 @@ export const presetDefinitions: Readonly<
     ],
   },
   decagon: {
+    cxn: [
+      ["x4", "y2"],
+      ["r", "vc"],
+      ["x4", "y3"],
+      ["x3", "y4"],
+      ["x2", "y4"],
+      ["x1", "y3"],
+      ["l", "vc"],
+      ["x1", "y2"],
+      ["x2", "y1"],
+      ["x3", "y1"],
+    ],
     av: [["vf", "val 105146"]],
     gd: [
       ["shd2", "*/ hd2 vf 100000"],
@@ -394,6 +486,20 @@ export const presetDefinitions: Readonly<
     ],
   },
   dodecagon: {
+    cxn: [
+      ["x4", "y1"],
+      ["r", "y2"],
+      ["r", "y3"],
+      ["x4", "y4"],
+      ["x3", "b"],
+      ["x2", "b"],
+      ["x1", "y4"],
+      ["l", "y3"],
+      ["l", "y2"],
+      ["x1", "y1"],
+      ["x2", "t"],
+      ["x3", "t"],
+    ],
     gd: [
       ["x1", "*/ w 2894 21600"],
       ["x2", "*/ w 7906 21600"],
@@ -457,6 +563,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   star5: {
+    cxn: [
+      ["hc", "t"],
+      ["x1", "y1"],
+      ["x2", "y2"],
+      ["x3", "y2"],
+      ["x4", "y1"],
+    ],
     av: [
       ["adj", "val 19098"],
       ["hf", "val 105146"],
@@ -512,6 +625,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   star6: {
+    cxn: [
+      ["x2", "hd4"],
+      ["x2", "y2"],
+      ["hc", "b"],
+      ["x1", "y2"],
+      ["x1", "hd4"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj", "val 28868"],
       ["hf", "val 115470"],
@@ -557,6 +678,15 @@ export const presetDefinitions: Readonly<
     ],
   },
   star7: {
+    cxn: [
+      ["x5", "y1"],
+      ["x6", "y2"],
+      ["x4", "y3"],
+      ["x3", "y3"],
+      ["x1", "y2"],
+      ["x2", "y1"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj", "val 34601"],
       ["hf", "val 102572"],
@@ -626,6 +756,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   star8: {
+    cxn: [
+      ["r", "vc"],
+      ["x2", "y2"],
+      ["hc", "b"],
+      ["x1", "y2"],
+      ["l", "vc"],
+      ["x1", "y1"],
+      ["hc", "t"],
+      ["x2", "y1"],
+    ],
     av: [["adj", "val 37500"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -677,6 +817,18 @@ export const presetDefinitions: Readonly<
     ],
   },
   star10: {
+    cxn: [
+      ["x4", "y2"],
+      ["x4", "y3"],
+      ["x3", "y4"],
+      ["hc", "b"],
+      ["x2", "y4"],
+      ["x1", "y3"],
+      ["x1", "y2"],
+      ["x2", "y1"],
+      ["hc", "t"],
+      ["x3", "y1"],
+    ],
     av: [
       ["adj", "val 42533"],
       ["hf", "val 105146"],
@@ -744,6 +896,20 @@ export const presetDefinitions: Readonly<
     ],
   },
   star12: {
+    cxn: [
+      ["x4", "hd4"],
+      ["r", "vc"],
+      ["x4", "y3"],
+      ["x3", "y4"],
+      ["hc", "b"],
+      ["wd4", "y4"],
+      ["x1", "y3"],
+      ["l", "vc"],
+      ["x1", "hd4"],
+      ["wd4", "y1"],
+      ["hc", "t"],
+      ["x3", "y1"],
+    ],
     av: [["adj", "val 37500"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -811,6 +977,24 @@ export const presetDefinitions: Readonly<
     ],
   },
   star16: {
+    cxn: [
+      ["x5", "y2"],
+      ["x6", "y3"],
+      ["r", "vc"],
+      ["x6", "y4"],
+      ["x5", "y5"],
+      ["x4", "y6"],
+      ["hc", "b"],
+      ["x3", "y6"],
+      ["x2", "y5"],
+      ["x1", "y4"],
+      ["l", "vc"],
+      ["x1", "y3"],
+      ["x2", "y2"],
+      ["x3", "y1"],
+      ["hc", "t"],
+      ["x4", "y1"],
+    ],
     av: [["adj", "val 37500"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -1273,6 +1457,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   round2SameRect: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 16667"],
       ["adj2", "val 0"],
@@ -1311,6 +1501,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   round2DiagRect: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 16667"],
       ["adj2", "val 0"],
@@ -1349,6 +1545,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   snipRoundRect: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 16667"],
       ["adj2", "val 16667"],
@@ -1379,6 +1581,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   snip1Rect: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [["adj", "val 16667"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -1402,6 +1610,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   snip2SameRect: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 16667"],
       ["adj2", "val 0"],
@@ -1439,6 +1653,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   snip2DiagRect: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 0"],
       ["adj2", "val 16667"],
@@ -1504,6 +1724,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   ellipse: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["l", "vc"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+    ],
     gd: [
       ["idx", "cos wd2 2700000"],
       ["idy", "sin hd2 2700000"],
@@ -1527,6 +1757,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   teardrop: {
+    cxn: [
+      ["r", "vc"],
+      ["ir", "ib"],
+      ["hc", "b"],
+      ["il", "ib"],
+      ["l", "vc"],
+      ["il", "it"],
+      ["hc", "t"],
+      ["x1", "y1"],
+    ],
     av: [["adj", "val 100000"]],
     gd: [
       ["a", "pin 0 adj 200000"],
@@ -1564,6 +1804,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   homePlate: {
+    cxn: [
+      ["x2", "t"],
+      ["l", "vc"],
+      ["x1", "b"],
+      ["r", "vc"],
+    ],
     av: [["adj", "val 50000"]],
     gd: [
       ["maxAdj", "*/ 100000 w ss"],
@@ -1588,6 +1834,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   chevron: {
+    cxn: [
+      ["x3", "t"],
+      ["x1", "vc"],
+      ["x3", "b"],
+      ["r", "vc"],
+    ],
     av: [["adj", "val 50000"]],
     gd: [
       ["maxAdj", "*/ 100000 w ss"],
@@ -1615,6 +1867,10 @@ export const presetDefinitions: Readonly<
     ],
   },
   pieWedge: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+    ],
     gd: [
       ["g1", "cos w 13500000"],
       ["g2", "sin h 13500000"],
@@ -1634,6 +1890,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   pie: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 0"],
       ["adj2", "val 16200000"],
@@ -1676,6 +1938,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   blockArc: {
+    cxn: [
+      ["x5", "y5"],
+      ["x6", "y6"],
+      ["hc", "vc"],
+    ],
     av: [
       ["adj1", "val 10800000"],
       ["adj2", "val 0"],
@@ -1768,6 +2035,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   donut: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["l", "vc"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+    ],
     av: [["adj", "val 25000"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -1802,6 +2079,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   noSmoking: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["l", "vc"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+    ],
     av: [["adj", "val 18750"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -1858,6 +2145,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   rightArrow: {
+    cxn: [
+      ["x1", "t"],
+      ["l", "vc"],
+      ["x1", "b"],
+      ["r", "vc"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -1891,6 +2184,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftArrow: {
+    cxn: [
+      ["x2", "t"],
+      ["l", "vc"],
+      ["x2", "b"],
+      ["r", "vc"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -1924,6 +2223,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   upArrow: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "y2"],
+      ["hc", "b"],
+      ["r", "y2"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -1957,6 +2262,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   downArrow: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "y1"],
+      ["hc", "b"],
+      ["r", "y1"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -1990,6 +2301,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   stripedRightArrow: {
+    cxn: [
+      ["x5", "t"],
+      ["l", "vc"],
+      ["x5", "b"],
+      ["r", "vc"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -2034,6 +2351,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   notchedRightArrow: {
+    cxn: [
+      ["x2", "t"],
+      ["x1", "vc"],
+      ["x2", "b"],
+      ["r", "vc"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -2068,6 +2391,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   bentUpArrow: {
+    cxn: [
+      ["x3", "t"],
+      ["x1", "y1"],
+      ["l", "y3"],
+      ["x0", "b"],
+      ["x4", "y15"],
+      ["r", "y1"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2110,6 +2441,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftRightArrow: {
+    cxn: [
+      ["r", "vc"],
+      ["x3", "b"],
+      ["x2", "b"],
+      ["l", "vc"],
+      ["x2", "t"],
+      ["x3", "t"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -2147,6 +2486,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   upDownArrow: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "y2"],
+      ["x1", "vc"],
+      ["l", "y3"],
+      ["hc", "b"],
+      ["r", "y3"],
+      ["x2", "vc"],
+      ["r", "y2"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -2184,6 +2533,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftUpArrow: {
+    cxn: [
+      ["x4", "t"],
+      ["x2", "x1"],
+      ["x1", "y2"],
+      ["l", "y4"],
+      ["x1", "b"],
+      ["cx1", "y5"],
+      ["x5", "cy1"],
+      ["r", "x1"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2233,6 +2592,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftRightUpArrow: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "y4"],
+      ["hc", "y5"],
+      ["r", "y4"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2350,6 +2715,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftArrowCallout: {
+    cxn: [
+      ["x3", "t"],
+      ["l", "vc"],
+      ["x3", "b"],
+      ["r", "vc"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2398,6 +2769,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   rightArrowCallout: {
+    cxn: [
+      ["x1", "t"],
+      ["l", "vc"],
+      ["x1", "b"],
+      ["r", "vc"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2446,6 +2823,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   upArrowCallout: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "y2"],
+      ["hc", "b"],
+      ["r", "y2"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2494,6 +2877,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   downArrowCallout: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "y1"],
+      ["hc", "b"],
+      ["r", "y1"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2731,6 +3120,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   bentArrow: {
+    cxn: [
+      ["x4", "t"],
+      ["x4", "y4"],
+      ["th2", "b"],
+      ["r", "aw2"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2783,6 +3178,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   uturnArrow: {
+    cxn: [
+      ["x6", "y4"],
+      ["x8", "y5"],
+      ["r", "y4"],
+      ["cx", "t"],
+      ["th2", "b"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 25000"],
@@ -2849,6 +3251,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   circularArrow: {
+    cxn: [
+      ["xI", "yI"],
+      ["xGp", "yGp"],
+      ["xA", "yA"],
+      ["xBp", "yBp"],
+    ],
     av: [
       ["adj1", "val 12500"],
       ["adj2", "val 1142319"],
@@ -3067,6 +3475,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftCircularArrow: {
+    cxn: [
+      ["xI", "yI"],
+      ["xGp", "yGp"],
+      ["xA", "yA"],
+      ["xBp", "yBp"],
+    ],
     av: [
       ["adj1", "val 12500"],
       ["adj2", "val -1142319"],
@@ -3299,6 +3713,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftRightCircularArrow: {
+    cxn: [
+      ["xL", "yL"],
+      ["xKp", "yKp"],
+      ["xGp", "yGp"],
+      ["xA", "yA"],
+      ["xBp", "yBp"],
+      ["xJp", "yJp"],
+    ],
     av: [
       ["adj1", "val 12500"],
       ["adj2", "val 1142319"],
@@ -3558,6 +3980,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedRightArrow: {
+    cxn: [
+      ["l", "iy"],
+      ["x1", "y8"],
+      ["r", "y6"],
+      ["x1", "y4"],
+      ["r", "q12"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 50000"],
@@ -3650,6 +4079,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedLeftArrow: {
+    cxn: [
+      ["l", "q12"],
+      ["x1", "y4"],
+      ["l", "y6"],
+      ["x1", "y8"],
+      ["r", "iy"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 50000"],
@@ -3741,6 +4177,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedUpArrow: {
+    cxn: [
+      ["x6", "t"],
+      ["x4", "y1"],
+      ["q12", "t"],
+      ["ix", "b"],
+      ["x8", "y1"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 50000"],
@@ -3834,6 +4277,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedDownArrow: {
+    cxn: [
+      ["ix", "t"],
+      ["q12", "b"],
+      ["x4", "y1"],
+      ["x6", "b"],
+      ["x8", "y1"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 50000"],
@@ -3927,6 +4377,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   swooshArrow: {
+    cxn: [
+      ["l", "b"],
+      ["xC", "t"],
+      ["r", "yD"],
+      ["xE", "yE"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 16667"],
@@ -3975,6 +4431,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   cube: {
+    cxn: [
+      ["x3", "t"],
+      ["x2", "y1"],
+      ["l", "y3"],
+      ["x2", "b"],
+      ["x4", "y3"],
+      ["r", "y2"],
+    ],
     av: [["adj", "val 25000"]],
     gd: [
       ["a", "pin 0 adj 100000"],
@@ -4040,6 +4504,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   can: {
+    cxn: [
+      ["hc", "y2"],
+      ["hc", "t"],
+      ["l", "vc"],
+      ["hc", "b"],
+      ["r", "vc"],
+    ],
     av: [["adj", "val 25000"]],
     gd: [
       ["maxAdj", "*/ 50000 h ss"],
@@ -4084,6 +4555,15 @@ export const presetDefinitions: Readonly<
     ],
   },
   lightningBolt: {
+    cxn: [
+      ["x3", "t"],
+      ["l", "y1"],
+      ["x1", "y6"],
+      ["x5", "y11"],
+      ["r", "b"],
+      ["x11", "y7"],
+      ["x8", "y2"],
+    ],
     gd: [
       ["x1", "*/ w 5022 21600"],
       ["x3", "*/ w 8472 21600"],
@@ -4123,6 +4603,10 @@ export const presetDefinitions: Readonly<
     ],
   },
   heart: {
+    cxn: [
+      ["hc", "hd4"],
+      ["hc", "b"],
+    ],
     gd: [
       ["dx1", "*/ w 49 48"],
       ["dx2", "*/ w 10 48"],
@@ -4242,6 +4726,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   moon: {
+    cxn: [
+      ["r", "t"],
+      ["l", "vc"],
+      ["r", "b"],
+      ["g0w", "vc"],
+    ],
     av: [["adj", "val 50000"]],
     gd: [
       ["a", "pin 0 adj 87500"],
@@ -4292,6 +4782,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   smileyFace: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["l", "vc"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+    ],
     av: [["adj", "val 4653"]],
     gd: [
       ["a", "pin -4653 adj 4653"],
@@ -4344,6 +4844,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   irregularSeal1: {
+    cxn: [
+      ["x24", "t"],
+      ["l", "y6"],
+      ["x12", "b"],
+      ["r", "y18"],
+    ],
     gd: [
       ["x5", "*/ w 4627 21600"],
       ["x12", "*/ w 8485 21600"],
@@ -4390,6 +4896,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   irregularSeal2: {
+    cxn: [
+      ["x2", "y2"],
+      ["l", "y8"],
+      ["x16", "y16"],
+      ["r", "y24"],
+    ],
     gd: [
       ["x2", "*/ w 9722 21600"],
       ["x5", "*/ w 5372 21600"],
@@ -4487,6 +4999,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   bevel: {
+    cxn: [
+      ["r", "vc"],
+      ["x2", "vc"],
+      ["hc", "b"],
+      ["hc", "y2"],
+      ["l", "vc"],
+      ["x1", "vc"],
+      ["hc", "t"],
+      ["hc", "x1"],
+    ],
     av: [["adj", "val 12500"]],
     gd: [
       ["a", "pin 0 adj 50000"],
@@ -4602,6 +5124,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   halfFrame: {
+    cxn: [
+      ["cx2", "cy2"],
+      ["cx1", "cy1"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 33333"],
       ["adj2", "val 33333"],
@@ -4640,6 +5168,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   corner: {
+    cxn: [
+      ["r", "cy1"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["cx1", "t"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -4674,6 +5208,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   diagStripe: {
+    cxn: [
+      ["hc", "vc"],
+      ["l", "y3"],
+      ["x1", "y1"],
+      ["x3", "t"],
+    ],
     av: [["adj", "val 50000"]],
     gd: [
       ["a", "pin 0 adj 100000"],
@@ -4698,6 +5238,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   chord: {
+    cxn: [
+      ["x1", "y1"],
+      ["x2", "y2"],
+      ["x3", "y3"],
+    ],
     av: [
       ["adj1", "val 2700000"],
       ["adj2", "val 16200000"],
@@ -4739,6 +5284,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   arc: {
+    cxn: [
+      ["x1", "y1"],
+      ["hc", "vc"],
+      ["x2", "y2"],
+    ],
     av: [
       ["adj1", "val 16200000"],
       ["adj2", "val 0"],
@@ -4808,6 +5358,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftBracket: {
+    cxn: [
+      ["r", "t"],
+      ["l", "vc"],
+      ["r", "b"],
+    ],
     av: [["adj", "val 8333"]],
     gd: [
       ["maxAdj", "*/ 50000 h ss"],
@@ -4844,6 +5399,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   rightBracket: {
+    cxn: [
+      ["l", "t"],
+      ["l", "b"],
+      ["r", "vc"],
+    ],
     av: [["adj", "val 8333"]],
     gd: [
       ["maxAdj", "*/ 50000 h ss"],
@@ -4880,6 +5440,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftBrace: {
+    cxn: [
+      ["r", "t"],
+      ["l", "y3"],
+      ["r", "b"],
+    ],
     av: [
       ["adj1", "val 8333"],
       ["adj2", "val 50000"],
@@ -4930,6 +5495,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   rightBrace: {
+    cxn: [
+      ["l", "t"],
+      ["r", "y3"],
+      ["l", "b"],
+    ],
     av: [
       ["adj1", "val 8333"],
       ["adj2", "val 50000"],
@@ -5082,6 +5652,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   straightConnector1: {
+    cxn: [],
     rect: ["l", "t", "r", "b"],
     paths: [
       {
@@ -5094,6 +5665,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   bentConnector2: {
+    cxn: [],
     rect: ["l", "t", "r", "b"],
     paths: [
       {
@@ -5107,6 +5679,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   bentConnector3: {
+    cxn: [],
     av: [["adj1", "val 50000"]],
     gd: [["x1", "*/ w adj1 100000"]],
     rect: ["l", "t", "r", "b"],
@@ -5123,6 +5696,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   bentConnector4: {
+    cxn: [],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -5148,6 +5722,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   bentConnector5: {
+    cxn: [],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -5177,6 +5752,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedConnector2: {
+    cxn: [],
     rect: ["l", "t", "r", "b"],
     paths: [
       {
@@ -5189,6 +5765,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedConnector3: {
+    cxn: [],
     av: [["adj1", "val 50000"]],
     gd: [
       ["x2", "*/ w adj1 100000"],
@@ -5209,6 +5786,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedConnector4: {
+    cxn: [],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -5239,6 +5817,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   curvedConnector5: {
+    cxn: [],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -5275,6 +5854,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   callout1: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5309,6 +5894,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   callout2: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5348,6 +5939,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   callout3: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5392,6 +5989,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   accentCallout1: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5427,6 +6030,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   accentCallout2: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5467,6 +6076,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   accentCallout3: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5512,6 +6127,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   borderCallout1: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5545,6 +6166,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   borderCallout2: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5583,6 +6210,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   borderCallout3: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5626,6 +6259,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   accentBorderCallout1: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5660,6 +6299,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   accentBorderCallout2: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5699,6 +6344,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   accentBorderCallout3: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     av: [
       ["adj1", "val 18750"],
       ["adj2", "val -8333"],
@@ -5743,6 +6394,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   wedgeRectCallout: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "vc"],
+      ["hc", "b"],
+      ["r", "vc"],
+      ["xPos", "yPos"],
+    ],
     av: [
       ["adj1", "val -20833"],
       ["adj2", "val 62500"],
@@ -5809,6 +6467,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   wedgeRoundRectCallout: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "vc"],
+      ["hc", "b"],
+      ["r", "vc"],
+      ["xPos", "yPos"],
+    ],
     av: [
       ["adj1", "val -20833"],
       ["adj2", "val 62500"],
@@ -5884,6 +6549,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   wedgeEllipseCallout: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+      ["xPos", "yPos"],
+    ],
     av: [
       ["adj1", "val -20833"],
       ["adj2", "val 62500"],
@@ -5931,6 +6606,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   cloudCallout: {
+    cxn: [
+      ["g27", "vc"],
+      ["hc", "g28"],
+      ["g29", "vc"],
+      ["hc", "g30"],
+      ["xPos", "yPos"],
+    ],
     av: [
       ["adj1", "val -20833"],
       ["adj2", "val 62500"],
@@ -6054,6 +6736,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   cloud: {
+    cxn: [
+      ["g29", "vc"],
+      ["hc", "g28"],
+      ["g27", "vc"],
+      ["hc", "g30"],
+    ],
     gd: [
       ["il", "*/ w 2977 21600"],
       ["it", "*/ h 3262 21600"],
@@ -6117,6 +6805,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   ribbon: {
+    cxn: [
+      ["hc", "y2"],
+      ["wd8", "y3"],
+      ["hc", "b"],
+      ["x10", "y3"],
+    ],
     av: [
       ["adj1", "val 16667"],
       ["adj2", "val 50000"],
@@ -6225,6 +6919,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   ribbon2: {
+    cxn: [
+      ["hc", "t"],
+      ["wd8", "y3"],
+      ["hc", "y2"],
+      ["x10", "y3"],
+    ],
     av: [
       ["adj1", "val 16667"],
       ["adj2", "val 50000"],
@@ -6336,6 +7036,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   ellipseRibbon: {
+    cxn: [
+      ["hc", "q1"],
+      ["wd8", "y2"],
+      ["hc", "b"],
+      ["x6", "y2"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 50000"],
@@ -6453,6 +7159,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   ellipseRibbon2: {
+    cxn: [
+      ["hc", "t"],
+      ["wd8", "y2"],
+      ["hc", "rh"],
+      ["x6", "y2"],
+    ],
     av: [
       ["adj1", "val 25000"],
       ["adj2", "val 50000"],
@@ -6581,6 +7293,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   leftRightRibbon: {
+    cxn: [
+      ["r", "ry3"],
+      ["x4", "b"],
+      ["x1", "ly4"],
+      ["l", "ly2"],
+      ["x1", "t"],
+      ["x4", "ry1"],
+    ],
     av: [
       ["adj1", "val 50000"],
       ["adj2", "val 50000"],
@@ -6675,6 +7395,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   verticalScroll: {
+    cxn: [
+      ["hc", "t"],
+      ["ch", "vc"],
+      ["hc", "b"],
+      ["x6", "vc"],
+    ],
     av: [["adj", "val 12500"]],
     gd: [
       ["a", "pin 0 adj 25000"],
@@ -6758,6 +7484,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   horizontalScroll: {
+    cxn: [
+      ["hc", "ch"],
+      ["l", "vc"],
+      ["hc", "y6"],
+      ["r", "vc"],
+    ],
     av: [["adj", "val 12500"]],
     gd: [
       ["a", "pin 0 adj 25000"],
@@ -6841,6 +7573,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   wave: {
+    cxn: [
+      ["xAdj2", "y1"],
+      ["x1", "vc"],
+      ["xAdj", "y4"],
+      ["x9", "vc"],
+    ],
     av: [
       ["adj1", "val 12500"],
       ["adj2", "val 0"],
@@ -6891,6 +7629,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   doubleWave: {
+    cxn: [
+      ["x12", "y1"],
+      ["x1", "vc"],
+      ["x5", "y4"],
+      ["x16", "vc"],
+    ],
     av: [
       ["adj1", "val 6250"],
       ["adj2", "val 0"],
@@ -7019,6 +7763,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartInputOutput: {
+    cxn: [
+      ["x4", "t"],
+      ["hc", "t"],
+      ["wd10", "vc"],
+      ["x3", "b"],
+      ["hc", "b"],
+      ["x6", "vc"],
+    ],
     gd: [
       ["x3", "*/ w 2 5"],
       ["x4", "*/ w 3 5"],
@@ -7122,6 +7874,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartDocument: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "vc"],
+      ["hc", "y2"],
+      ["r", "vc"],
+    ],
     gd: [
       ["y1", "*/ h 17322 21600"],
       ["y2", "*/ h 20172 21600"],
@@ -7142,6 +7900,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartMultidocument: {
+    cxn: [
+      ["x4", "t"],
+      ["l", "vc"],
+      ["x3", "y8"],
+      ["r", "vc"],
+    ],
     gd: [
       ["y2", "*/ h 3675 21600"],
       ["y8", "*/ h 20782 21600"],
@@ -7265,6 +8029,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartManualInput: {
+    cxn: [
+      ["hc", "hd10"],
+      ["l", "vc"],
+      ["hc", "b"],
+      ["r", "vc"],
+    ],
     rect: ["l", "hd5", "r", "b"],
     paths: [
       {
@@ -7281,6 +8051,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartManualOperation: {
+    cxn: [
+      ["hc", "t"],
+      ["wd10", "vc"],
+      ["hc", "b"],
+      ["x4", "vc"],
+    ],
     gd: [
       ["x3", "*/ w 4 5"],
       ["x4", "*/ w 9 10"],
@@ -7301,6 +8077,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartConnector: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["l", "vc"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+    ],
     gd: [
       ["idx", "cos wd2 2700000"],
       ["idy", "sin hd2 2700000"],
@@ -7341,6 +8127,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartPunchedTape: {
+    cxn: [
+      ["hc", "hd10"],
+      ["l", "vc"],
+      ["hc", "y2"],
+      ["r", "vc"],
+    ],
     gd: [
       ["y2", "*/ h 9 10"],
       ["ib", "*/ h 4 5"],
@@ -7363,6 +8155,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartSummingJunction: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["l", "vc"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+    ],
     gd: [
       ["idx", "cos wd2 2700000"],
       ["idy", "sin hd2 2700000"],
@@ -7407,6 +8209,16 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartOr: {
+    cxn: [
+      ["hc", "t"],
+      ["il", "it"],
+      ["l", "vc"],
+      ["il", "ib"],
+      ["hc", "b"],
+      ["ir", "ib"],
+      ["r", "vc"],
+      ["ir", "it"],
+    ],
     gd: [
       ["idx", "cos wd2 2700000"],
       ["idy", "sin hd2 2700000"],
@@ -7451,6 +8263,11 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartCollate: {
+    cxn: [
+      ["hc", "t"],
+      ["hc", "vc"],
+      ["hc", "b"],
+    ],
     gd: [
       ["ir", "*/ w 3 4"],
       ["ib", "*/ h 3 4"],
@@ -7515,6 +8332,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartExtract: {
+    cxn: [
+      ["hc", "t"],
+      ["wd4", "vc"],
+      ["hc", "b"],
+      ["x2", "vc"],
+    ],
     gd: [["x2", "*/ w 3 4"]],
     rect: ["wd4", "vc", "x2", "b"],
     paths: [
@@ -7526,6 +8349,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartMerge: {
+    cxn: [
+      ["hc", "t"],
+      ["wd4", "vc"],
+      ["hc", "b"],
+      ["x2", "vc"],
+    ],
     gd: [["x2", "*/ w 3 4"]],
     rect: ["wd4", "t", "x2", "vc"],
     paths: [
@@ -7537,6 +8366,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartOfflineStorage: {
+    cxn: [
+      ["x4", "vc"],
+      ["hc", "b"],
+      ["wd4", "vc"],
+      ["hc", "t"],
+    ],
     gd: [["x4", "*/ w 3 4"]],
     rect: ["wd4", "t", "x4", "vc"],
     paths: [
@@ -7564,6 +8399,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartOnlineStorage: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "vc"],
+      ["hc", "b"],
+      ["x2", "vc"],
+    ],
     gd: [["x2", "*/ w 5 6"]],
     rect: ["wd6", "t", "x2", "b"],
     paths: [
@@ -7608,6 +8449,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartMagneticDisk: {
+    cxn: [
+      ["hc", "hd3"],
+      ["hc", "t"],
+      ["l", "vc"],
+      ["hc", "b"],
+      ["r", "vc"],
+    ],
     gd: [["y3", "*/ h 5 6"]],
     rect: ["l", "hd3", "r", "y3"],
     paths: [
@@ -7647,6 +8495,13 @@ export const presetDefinitions: Readonly<
     ],
   },
   flowChartMagneticDrum: {
+    cxn: [
+      ["hc", "t"],
+      ["l", "vc"],
+      ["hc", "b"],
+      ["x2", "vc"],
+      ["r", "vc"],
+    ],
     gd: [["x2", "*/ w 2 3"]],
     rect: ["wd6", "t", "x2", "b"],
     paths: [
@@ -7770,6 +8625,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonBlank: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     rect: ["l", "t", "r", "b"],
     paths: [
       {
@@ -7784,6 +8645,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonHome: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -7909,6 +8776,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonHelp: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8010,6 +8883,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonInformation: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8124,6 +9003,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonForwardNext: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8179,6 +9064,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonBackPrevious: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8234,6 +9125,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonEnd: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8309,6 +9206,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonBeginning: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8384,6 +9287,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonReturn: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8490,6 +9399,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonDocument: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8569,6 +9484,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonSound: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8653,6 +9574,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   actionButtonMovie: {
+    cxn: [
+      ["r", "vc"],
+      ["hc", "b"],
+      ["l", "vc"],
+      ["hc", "t"],
+    ],
     gd: [
       ["dx2", "*/ ss 3 8"],
       ["g9", "+- vc 0 dx2"],
@@ -8792,6 +9719,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   gear6: {
+    cxn: [
+      ["xCxn1", "yCxn1"],
+      ["xCxn1", "yCxn2"],
+      ["hc", "yB3"],
+      ["xCxn4", "yCxn2"],
+      ["xCxn4", "yCxn1"],
+      ["hc", "yC6"],
+    ],
     av: [
       ["adj1", "val 15000"],
       ["adj2", "val 3526"],
@@ -8940,6 +9875,17 @@ export const presetDefinitions: Readonly<
     ],
   },
   gear9: {
+    cxn: [
+      ["xCxn1", "yCxn1"],
+      ["xCxn2", "yCxn2"],
+      ["xCxn3", "yCxn3"],
+      ["xCxn4", "yCxn4"],
+      ["xCxn5", "yCxn4"],
+      ["xCxn6", "yCxn3"],
+      ["xCxn7", "yCxn2"],
+      ["xCxn8", "yCxn1"],
+      ["hc", "yC9"],
+    ],
     av: [
       ["adj1", "val 10000"],
       ["adj2", "val 1763"],
@@ -9235,6 +10181,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   funnel: {
+    cxn: [],
     gd: [
       ["d", "*/ ss 1 20"],
       ["rw2", "+- wd2 0 d"],
@@ -9285,6 +10232,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   mathPlus: {
+    cxn: [
+      ["x4", "vc"],
+      ["hc", "y4"],
+      ["x1", "vc"],
+      ["hc", "y1"],
+    ],
     av: [["adj1", "val 23520"]],
     gd: [
       ["a1", "pin 0 adj1 73490"],
@@ -9322,6 +10275,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   mathMinus: {
+    cxn: [
+      ["x2", "vc"],
+      ["hc", "y2"],
+      ["x1", "vc"],
+      ["hc", "y1"],
+    ],
     av: [["adj1", "val 23520"]],
     gd: [
       ["a1", "pin 0 adj1 100000"],
@@ -9346,6 +10305,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   mathMultiply: {
+    cxn: [
+      ["xM", "yM"],
+      ["xC2", "yM"],
+      ["xC2", "yC3"],
+      ["xM", "yC3"],
+    ],
     av: [["adj1", "val 23520"]],
     gd: [
       ["a1", "pin 0 adj1 51965"],
@@ -9402,6 +10367,12 @@ export const presetDefinitions: Readonly<
     ],
   },
   mathDivide: {
+    cxn: [
+      ["x3", "vc"],
+      ["hc", "y5"],
+      ["x1", "vc"],
+      ["hc", "y1"],
+    ],
     av: [
       ["adj1", "val 23520"],
       ["adj2", "val 5880"],
@@ -9451,6 +10422,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   mathEqual: {
+    cxn: [
+      ["x2", "yC1"],
+      ["x2", "yC2"],
+      ["hc", "y4"],
+      ["x1", "yC1"],
+      ["x1", "yC2"],
+      ["hc", "y1"],
+    ],
     av: [
       ["adj1", "val 23520"],
       ["adj2", "val 11760"],
@@ -9491,6 +10470,14 @@ export const presetDefinitions: Readonly<
     ],
   },
   mathNotEqual: {
+    cxn: [
+      ["x8", "yC2"],
+      ["x8", "yC3"],
+      ["xC2", "yC4"],
+      ["x1", "yC2"],
+      ["x1", "yC3"],
+      ["xC1", "yC1"],
+    ],
     av: [
       ["adj1", "val 23520"],
       ["adj2", "val 6600000"],
@@ -9583,6 +10570,20 @@ export const presetDefinitions: Readonly<
     ],
   },
   cornerTabs: {
+    cxn: [
+      ["l", "t"],
+      ["l", "dx"],
+      ["l", "y1"],
+      ["l", "b"],
+      ["dx", "t"],
+      ["x1", "t"],
+      ["dx", "b"],
+      ["x1", "b"],
+      ["r", "t"],
+      ["r", "dx"],
+      ["r", "y1"],
+      ["r", "b"],
+    ],
     gd: [
       ["md", "mod w h 0"],
       ["dx", "*/ 1 md 20"],
@@ -9598,6 +10599,24 @@ export const presetDefinitions: Readonly<
     ],
   },
   squareTabs: {
+    cxn: [
+      ["l", "t"],
+      ["l", "dx"],
+      ["l", "y1"],
+      ["l", "b"],
+      ["dx", "dx"],
+      ["dx", "x1"],
+      ["dx", "t"],
+      ["x1", "t"],
+      ["dx", "b"],
+      ["x1", "b"],
+      ["r", "t"],
+      ["r", "dx"],
+      ["r", "y1"],
+      ["r", "b"],
+      ["x1", "dx"],
+      ["x1", "y1"],
+    ],
     gd: [
       ["md", "mod w h 0"],
       ["dx", "*/ 1 md 20"],
@@ -9645,6 +10664,20 @@ export const presetDefinitions: Readonly<
     ],
   },
   plaqueTabs: {
+    cxn: [
+      ["l", "t"],
+      ["l", "dx"],
+      ["l", "y1"],
+      ["l", "b"],
+      ["dx", "t"],
+      ["x1", "t"],
+      ["dx", "b"],
+      ["x1", "b"],
+      ["r", "t"],
+      ["r", "dx"],
+      ["r", "y1"],
+      ["r", "b"],
+    ],
     gd: [
       ["md", "mod w h 0"],
       ["dx", "*/ 1 md 20"],
@@ -9688,6 +10721,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   chartX: {
+    cxn: [],
     paths: [
       {
         w: 10,
@@ -9715,6 +10749,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   chartStar: {
+    cxn: [],
     paths: [
       {
         w: 10,
@@ -9744,6 +10779,7 @@ export const presetDefinitions: Readonly<
     ],
   },
   chartPlus: {
+    cxn: [],
     paths: [
       {
         w: 10,

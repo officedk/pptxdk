@@ -20,6 +20,7 @@ import {
   SlideContainer,
   SlideLayoutContainer,
   SlideMasterContainer,
+  defineTheme,
   type LayoutPlaceholderSpec,
   type Theme,
 } from "@pptxdk/core";
@@ -48,6 +49,18 @@ const jostFont = font("Jost*", [
     weight: 400,
     data: readFileSync(
       new URL("../../../test/assets/fonts/Jost-400-Book.ttf", import.meta.url),
+    ),
+  },
+]);
+
+const notoScFont = font("Noto Sans CJK SC", [
+  {
+    weight: 400,
+    data: readFileSync(
+      new URL(
+        "../../../test/assets/fonts/NotoSansSC-Regular.woff2",
+        import.meta.url,
+      ),
     ),
   },
 ]);
@@ -1197,6 +1210,164 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     assert.equal(
       validated.slides[0]?.objects[0]?.name,
       "Healthy Sibling Shape",
+    );
+  });
+
+  it("preserves inherited eastAsianFontFamily across layout placeholder defRPr emit, paint, and import roundtrip when only fontFamily is declared", async () => {
+    const dualScriptTheme = defineTheme({
+      name: "DualScript Master Theme",
+      fonts: {
+        major: jostFont,
+        minor: jostFont,
+        majorEastAsian: notoScFont,
+        minorEastAsian: notoScFont,
+      },
+    });
+
+    const dualLayout = defineSlideLayout({
+      id: "dual-script-layout",
+      name: "Dual Script Layout",
+      type: "obj",
+      preserve: true,
+      placeholders: {
+        title: {
+          type: "title",
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 32,
+            width: 544,
+            height: 64,
+            fontFamily: jostFont,
+            fontSize: "24pt",
+          },
+        },
+        body: {
+          type: "body",
+          idx: 1,
+          style: {
+            position: "absolute",
+            left: 48,
+            top: 120,
+            width: 544,
+            height: 180,
+          },
+          listStyles: {
+            1: {
+              fontFamily: "major",
+              fontSize: "16pt",
+            },
+          },
+        },
+      },
+    });
+
+    const doc = deck({ width: 640, height: 360 }).append(
+      slideMaster({
+        id: "dual-master",
+        name: "Dual Master",
+        theme: dualScriptTheme,
+        preserve: true,
+        textStyles: {
+          titleStyle: {
+            1: { eastAsianFontFamily: "major" },
+          },
+          bodyStyle: {
+            1: { eastAsianFontFamily: "minor" },
+          },
+        },
+      }).append(slideLayout(dualLayout)),
+      slide({
+        id: "dual-slide",
+        layout: dualLayout,
+        placeholders: {
+          title: text("Latin Title 中文标题"),
+          body: text("Body ABC 中文正文"),
+        },
+      }),
+    );
+
+    const resolved = resolveDocument(doc);
+    const emitted = emit(resolved);
+    const painted = paint(resolved);
+    const validated = await validatePptx(emitted.pptx);
+    assert.deepEqual(validated.errors, []);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+
+    const zipEntries = unzipSync(emitted.pptx);
+    const layoutXmlStr = strFromU8(
+      zipEntries["ppt/slideLayouts/slideLayout1.xml"]!,
+    );
+    assert.match(layoutXmlStr, /<a:latin typeface="Jost\*"/u);
+    assert.doesNotMatch(layoutXmlStr, /<a:ea typeface="Jost\*"/u);
+    assert.match(layoutXmlStr, /<a:latin typeface="\+mj-lt"\/>/u);
+    assert.doesNotMatch(layoutXmlStr, /<a:ea typeface="\+mj-ea"\/>/u);
+
+    const imported = importDocument(emitted.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const importedDeck = imported.document as DeckContainer;
+    const importedMaster = importedDeck.masters[0]!;
+    assert.equal(importedMaster.theme?.fonts?.major, "Jost*");
+    assert.equal(
+      importedMaster.theme?.fonts?.majorEastAsian,
+      "Noto Sans CJK SC",
+    );
+    assert.equal(
+      importedMaster.theme?.fonts?.minorEastAsian,
+      "Noto Sans CJK SC",
+    );
+    const importedLayout = importedMaster.layouts[0]!;
+    (importedMaster.theme as { set?(patch: unknown): void } | undefined)?.set?.(
+      {
+        fonts: {
+          major: jostFont,
+          minor: jostFont,
+          majorEastAsian: notoScFont,
+          minorEastAsian: notoScFont,
+        },
+      },
+    );
+    const importedPlaceholders = importedLayout.props[
+      "placeholders"
+    ] as Readonly<Record<string, LayoutPlaceholderSpec>>;
+    const importedTitleSpec = importedPlaceholders["title"];
+    const importedBodySpec = importedPlaceholders["body"];
+    assert.ok(importedTitleSpec !== undefined);
+    assert.ok(importedBodySpec !== undefined);
+    assert.equal(importedTitleSpec.style?.eastAsianFontFamily, undefined);
+    assert.equal(
+      importedBodySpec.listStyles?.[1]?.eastAsianFontFamily,
+      undefined,
+    );
+    (importedLayout as unknown as { set(patch: unknown): void }).set({
+      placeholders: {
+        ...importedPlaceholders,
+        title: {
+          ...importedTitleSpec,
+          style: {
+            ...importedTitleSpec.style,
+            fontFamily: jostFont,
+          },
+          ...(importedTitleSpec.listStyles === undefined
+            ? {}
+            : {
+                listStyles: {
+                  ...importedTitleSpec.listStyles,
+                  1: {
+                    ...importedTitleSpec.listStyles[1],
+                    fontFamily: jostFont,
+                  },
+                },
+              }),
+        },
+      },
+    });
+    const importedResolved = resolveDocument(importedDeck);
+    const importedPainted = paint(importedResolved);
+    assert.deepEqual(importedPainted.pages[0]?.errors, []);
+    assert.ok(
+      importedPainted.pages[0]?.png !== undefined &&
+        importedPainted.pages[0].png.byteLength > 0,
     );
   });
 });

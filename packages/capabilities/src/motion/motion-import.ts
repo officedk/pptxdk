@@ -41,6 +41,7 @@ import {
   relativeLuminance,
   repeat,
   spin,
+  spinAngleSchema,
   spinIn,
   spinOut,
   stretch,
@@ -144,6 +145,10 @@ type ParsedBehavior = {
   readonly xpath: string;
   readonly targets: readonly ParsedTargetRef[];
   readonly durationMs?: number;
+  readonly invalidDuration?: {
+    readonly raw: string;
+    readonly xpath: string;
+  };
   readonly attrNames: readonly string[];
   readonly additive?: string;
   readonly fromColor?: string;
@@ -151,6 +156,10 @@ type ParsedBehavior = {
   readonly rotationFrom?: number;
   readonly rotationTo?: number;
   readonly rotationBy?: number;
+  readonly invalidRotation?: {
+    readonly attr: "from" | "to" | "by";
+    readonly raw: string;
+  };
 };
 
 type ParsedTimingCondition =
@@ -261,22 +270,38 @@ function locationFor(
   };
 }
 
-function parsePositiveInt(raw: string | undefined): number | undefined {
+function parsePositiveInt(
+  raw: string | undefined,
+  maxValue?: number,
+): number | undefined {
   if (raw === undefined) return undefined;
   const parsed = ooxmlPositiveIntSchema.safeParse(raw);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) return undefined;
+  if (maxValue !== undefined && parsed.data > maxValue) return undefined;
+  return parsed.data;
 }
 
-function parseNonNegativeInt(raw: string | undefined): number | undefined {
+function parseNonNegativeInt(
+  raw: string | undefined,
+  maxValue?: number,
+): number | undefined {
   if (raw === undefined) return undefined;
   const parsed = ooxmlNonNegativeIntSchema.safeParse(raw);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) return undefined;
+  if (maxValue !== undefined && parsed.data > maxValue) return undefined;
+  return parsed.data;
 }
 
 function parseSignedInt(raw: string | undefined): number | undefined {
   if (raw === undefined || !/^-?\d+$/u.test(raw)) return undefined;
   const n = Number(raw);
   return Number.isSafeInteger(n) ? n : undefined;
+}
+
+function parseRotationUnits(raw: string | undefined): number | undefined {
+  const units = parseSignedInt(raw);
+  if (units === undefined) return undefined;
+  return spinAngleSchema.safeParse(units / 60_000).success ? units : undefined;
 }
 
 function consumeTargetElement(tgtEl: XmlElementCursor): ParsedTargetRef[] {
@@ -341,16 +366,30 @@ function consumeTargetElement(tgtEl: XmlElementCursor): ParsedTargetRef[] {
 
 function consumeConditionList(
   condList: XmlElementCursor | undefined,
+  context?: SlideImportContext,
+  diagnostics?: ImportDiagnostic[],
 ): ParsedTimingCondition[] {
   if (condList === undefined) return [];
   const result: ParsedTimingCondition[] = [];
   for (const cond of condList.children(P_NS, "cond")) {
     const evt = cond.attr("evt");
     const rawDelay = cond.attr("delay");
-    const delayMs =
-      rawDelay === undefined || rawDelay === "indefinite"
-        ? 0
-        : (parseNonNegativeInt(rawDelay) ?? 0);
+    let delayMs = 0;
+    if (rawDelay !== undefined && rawDelay !== "indefinite") {
+      const parsedDelay = parseNonNegativeInt(rawDelay, maximumTimeNodeValue);
+      if (parsedDelay !== undefined) {
+        delayMs = parsedDelay;
+      } else if (context !== undefined && diagnostics !== undefined) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: locationFor(context, `${cond.xpath}/@delay`),
+          attributeOrElement: "p:cond/@delay",
+          rawValue: rawDelay,
+        });
+      }
+    }
     const tn = cond.child(P_NS, "tn");
     const sourceId = parsePositiveInt(tn?.attr("val"));
     const tgtEl = cond.child(P_NS, "tgtEl");
@@ -469,9 +508,17 @@ function readBehaviorElement(behavior: XmlElementCursor): ParsedBehavior {
     localName === "animRot" ? behavior.attr("from") : undefined;
   const rawRotTo = localName === "animRot" ? behavior.attr("to") : undefined;
   const rawRotBy = localName === "animRot" ? behavior.attr("by") : undefined;
-  const rotationFrom = parseSignedInt(rawRotFrom);
-  const rotationTo = parseSignedInt(rawRotTo);
-  const rotationBy = parseSignedInt(rawRotBy);
+  const rotationFrom = parseRotationUnits(rawRotFrom);
+  const rotationTo = parseRotationUnits(rawRotTo);
+  const rotationBy = parseRotationUnits(rawRotBy);
+  const invalidRotation: ParsedBehavior["invalidRotation"] =
+    rawRotBy !== undefined && rotationBy === undefined
+      ? { attr: "by", raw: rawRotBy }
+      : rawRotFrom !== undefined && rotationFrom === undefined
+        ? { attr: "from", raw: rawRotFrom }
+        : rawRotTo !== undefined && rotationTo === undefined
+          ? { attr: "to", raw: rawRotTo }
+          : undefined;
 
   const cBhvr = behavior.child(P_NS, "cBhvr");
   const additive = cBhvr?.attr("additive");
@@ -483,7 +530,15 @@ function readBehaviorElement(behavior: XmlElementCursor): ParsedBehavior {
   if (innerCTn !== undefined) {
     consumeConditionList(innerCTn.child(P_NS, "stCondLst"));
   }
-  const durationMs = parsePositiveInt(innerAttrs?.dur);
+  const durationMs = parsePositiveInt(innerAttrs?.dur, maximumTimeNodeValue);
+  const invalidDuration: ParsedBehavior["invalidDuration"] =
+    localName !== "set" &&
+    innerCTn !== undefined &&
+    innerAttrs?.dur !== undefined &&
+    innerAttrs.dur !== "indefinite" &&
+    durationMs === undefined
+      ? { raw: innerAttrs.dur, xpath: `${innerCTn.xpath}/@dur` }
+      : undefined;
 
   const tgtEl = cBhvr?.child(P_NS, "tgtEl");
   const targets = tgtEl === undefined ? [] : consumeTargetElement(tgtEl);
@@ -522,6 +577,7 @@ function readBehaviorElement(behavior: XmlElementCursor): ParsedBehavior {
     xpath: behavior.xpath,
     targets,
     ...(durationMs === undefined ? {} : { durationMs }),
+    ...(invalidDuration === undefined ? {} : { invalidDuration }),
     attrNames,
     ...(additive === undefined ? {} : { additive }),
     ...(fromColor === undefined ? {} : { fromColor }),
@@ -529,6 +585,7 @@ function readBehaviorElement(behavior: XmlElementCursor): ParsedBehavior {
     ...(rotationFrom === undefined ? {} : { rotationFrom }),
     ...(rotationTo === undefined ? {} : { rotationTo }),
     ...(rotationBy === undefined ? {} : { rotationBy }),
+    ...(invalidRotation === undefined ? {} : { invalidRotation }),
   };
 }
 
@@ -908,7 +965,11 @@ export function readSlideMotionImport(
       return undefined;
     }
     const timingId = attrs.id;
-    const conds = consumeConditionList(cTn.child(P_NS, "stCondLst"));
+    const conds = consumeConditionList(
+      cTn.child(P_NS, "stCondLst"),
+      context,
+      diagnostics,
+    );
     let delayMs = 0;
     const dependsOn: {
       readonly timingId: number;
@@ -943,7 +1004,22 @@ export function readSlideMotionImport(
       if (rawType === "wd") iterateBy = "word";
       else if (rawType === "lt") iterateBy = "letter";
       const tmAbs = iterateEl.child(P_NS, "tmAbs");
-      iterateIntervalMs = parsePositiveInt(tmAbs?.attr("val"));
+      const rawInterval = tmAbs?.attr("val");
+      iterateIntervalMs = parsePositiveInt(rawInterval, maximumTimeNodeValue);
+      if (
+        tmAbs !== undefined &&
+        rawInterval !== undefined &&
+        iterateIntervalMs === undefined
+      ) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: locationFor(context, `${tmAbs.xpath}/@val`),
+          attributeOrElement: "p:tmAbs/@val",
+          rawValue: rawInterval,
+        });
+      }
       iterateEl.consumeAttr("backwards");
     }
 
@@ -1106,10 +1182,7 @@ export function readSlideMotionImport(
   }
 
   // 3. Validate targets / behaviors and resolve cascaded omission dependencies
-  const rootDiagnosticByNodeId = new Map<
-    number,
-    Extract<ImportDiagnostic, { readonly code: "unsupported-mechanism" }>
-  >();
+  const rootDiagnosticByNodeId = new Map<number, ImportDiagnostic>();
   const omittedNodeIds = new Set<number>();
 
   const isKnownSlideTarget = (spid: number): boolean =>
@@ -1271,6 +1344,59 @@ export function readSlideMotionImport(
         continue;
       }
     }
+
+    const invalidDurationBehavior = rawNode.behaviors.find(
+      (b) => b.invalidDuration !== undefined,
+    );
+    if (invalidDurationBehavior?.invalidDuration !== undefined) {
+      rootDiagnosticByNodeId.set(timingId, {
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: locationFor(
+          context,
+          invalidDurationBehavior.invalidDuration.xpath,
+          targetId,
+        ),
+        attributeOrElement: "p:cTn/@dur",
+        rawValue: invalidDurationBehavior.invalidDuration.raw,
+      });
+      omittedNodeIds.add(timingId);
+      rawNode.cursor.suppressUnconsumed();
+      continue;
+    }
+
+    if (preset === "spin") {
+      const rotBehavior = rawNode.behaviors.find(
+        (b) => b.localName === "animRot",
+      );
+      if (
+        rotBehavior === undefined ||
+        rotBehavior.invalidRotation !== undefined ||
+        (rotBehavior.rotationFrom === undefined &&
+          rotBehavior.rotationBy === undefined) ||
+        (rotBehavior.rotationFrom !== undefined &&
+          rotBehavior.rotationBy !== undefined)
+      ) {
+        rootDiagnosticByNodeId.set(timingId, {
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: locationFor(
+            context,
+            rotBehavior?.xpath ?? rawNode.xpath,
+            targetId,
+          ),
+          attributeOrElement: "p:animRot",
+          ...(rotBehavior?.invalidRotation === undefined
+            ? {}
+            : { rawValue: rotBehavior.invalidRotation.raw }),
+        });
+        omittedNodeIds.add(timingId);
+        rawNode.cursor.suppressUnconsumed();
+        continue;
+      }
+    }
   }
 
   // Cascade omission dependencies: if a downstream effect or container depends on an omitted
@@ -1348,10 +1474,25 @@ export function readSlideMotionImport(
 
   for (const [rootId, diag] of rootDiagnosticByNodeId) {
     const cascaded = cascadedByRootDiag.get(rootId);
-    if (cascaded !== undefined && cascaded.length > 0) {
+    if (
+      cascaded !== undefined &&
+      cascaded.length > 0 &&
+      diag.code === "unsupported-mechanism"
+    ) {
       diagnostics.push({ ...diag, cascaded });
     } else {
       diagnostics.push(diag);
+      if (cascaded !== undefined) {
+        for (const dep of cascaded) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: dep.location,
+            attributeOrElement: "p:stCondLst/p:cond",
+          });
+        }
+      }
     }
   }
 
@@ -1369,13 +1510,13 @@ export function readSlideMotionImport(
     if (node === undefined) return;
 
     const dep = node.dependsOn[0];
-    const effectiveDelayMs =
+    let effectiveDelayMs =
       dep !== undefined
         ? dep.offsetMs
         : inheritedStartAfter !== undefined
           ? inheritedStartAfter.offsetMs + node.delayMs
           : accumulatedDelayMs + node.delayMs;
-    const effectiveStartAfter =
+    let effectiveStartAfter =
       dep !== undefined && !omittedNodeIds.has(dep.timingId)
         ? dep
         : inheritedStartAfter;
@@ -1417,6 +1558,28 @@ export function readSlideMotionImport(
           : 500;
     const durationMs =
       preset === "breathe" ? traversalDurationMs * 2 : traversalDurationMs;
+    if (
+      !Number.isSafeInteger(effectiveDelayMs) ||
+      effectiveDelayMs < 0 ||
+      effectiveDelayMs > maximumTimeNodeValue ||
+      !Number.isSafeInteger(effectiveDelayMs + durationMs)
+    ) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: locationFor(context, node.xpath, targetId),
+        attributeOrElement: "p:cond/@delay",
+        rawValue: String(effectiveDelayMs),
+      });
+      effectiveDelayMs = 0;
+      if (effectiveStartAfter !== undefined) {
+        effectiveStartAfter = {
+          timingId: effectiveStartAfter.timingId,
+          offsetMs: 0,
+        };
+      }
+    }
 
     let easing: Easing | undefined;
     if (

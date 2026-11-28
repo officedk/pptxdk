@@ -155,6 +155,21 @@ async function discoverTopLevelPptxFiles(
   return files;
 }
 
+function supportsCjkFallback(fontData: Uint8Array | undefined): boolean {
+  if (fontData === undefined) return false;
+  try {
+    const opened = fontkit.create(Buffer.from(fontData));
+    return (
+      "hasGlyphForCodePoint" in opened &&
+      typeof opened.hasGlyphForCodePoint === "function" &&
+      opened.hasGlyphForCodePoint(0x4e00) &&
+      opened.glyphForCodePoint(0x4e00).id !== 0
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function loadTopLevelSubstituteFontPool(
   fontsDir: string,
 ): Promise<LoadedFontPool> {
@@ -177,11 +192,6 @@ async function loadTopLevelSubstituteFontPool(
 
   const byFamilyBuckets = new Map<string, Map<string, FontFace>>();
   const fallbackBySlot = new Map<string, FontFace>();
-  const preferredFallbackFamilies = new Set([
-    "microsoft yahei",
-    "noto sans sc",
-    "noto serif sc",
-  ]);
   const fallbackPreferredSlots = new Set<string>();
 
   const registerFamilyFace = (
@@ -242,9 +252,8 @@ async function loadTopLevelSubstituteFontPool(
           const faces = unpackedFont.faces ?? [];
           if (faces.length === 0) continue;
           const key = fam.toLowerCase();
-          const isPreferred = preferredFallbackFamilies.has(key);
           for (const face of faces) {
-            registerFamilyFace(key, face, isPreferred);
+            registerFamilyFace(key, face, supportsCjkFallback(face.data));
           }
         } catch {
           continue;
@@ -304,7 +313,7 @@ async function loadTopLevelSubstituteFontPool(
     const face: FontFace = { weight, style, data: raw };
     if (familyName !== undefined && familyName !== "") {
       const key = familyName.toLowerCase();
-      registerFamilyFace(key, face, preferredFallbackFamilies.has(key));
+      registerFamilyFace(key, face, supportsCjkFallback(raw));
     } else {
       const slotKey = `${face.weight ?? 400}:${face.style ?? "normal"}`;
       if (!fallbackBySlot.has(slotKey)) {

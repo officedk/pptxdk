@@ -1,6 +1,132 @@
 const EPSILON = 1e-6;
 const SAFE_OFFSCREEN_PAD = 512;
 const MAX_BLUR_STD_DEVIATION = 256;
+const HOIST_DATA_URI_MIN_LENGTH = 4096;
+const IMAGE_ELEMENT_PATTERN = /<image\b([^>]*?)\/>/gu;
+const SVG_ATTR_PATTERN = /([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/gu;
+const SVG_OPEN_TAG_PATTERN = /<svg\b[^>]*>/u;
+
+/** Hoists large `data:image/` elements in an SVG fragment into a shared map and returns `<use>` references. */
+export function hoistSvgRasterImages(
+  svgFragment: string,
+  idPrefix: string,
+  sharedRasterImages: Map<string, string>,
+): string {
+  if (!svgFragment.includes('href="data:image/')) {
+    return svgFragment;
+  }
+  return svgFragment.replace(
+    IMAGE_ELEMENT_PATTERN,
+    (fullMatch: string, rawAttrs: string) => {
+      let dataUri: string | undefined;
+      let x = "0";
+      let y = "0";
+      let width: string | undefined;
+      let height: string | undefined;
+      const passthroughAttrs: string[] = [];
+
+      for (const match of rawAttrs.matchAll(SVG_ATTR_PATTERN)) {
+        const key = match[1];
+        const value = match[2] ?? match[3] ?? "";
+        if (key === undefined) continue;
+        switch (key) {
+          case "href":
+            dataUri = value;
+            break;
+          case "x":
+            x = value;
+            break;
+          case "y":
+            y = value;
+            break;
+          case "width":
+            width = value;
+            break;
+          case "height":
+            height = value;
+            break;
+          case "preserveAspectRatio":
+            break;
+          default:
+            passthroughAttrs.push(`${key}="${value}"`);
+            break;
+        }
+      }
+
+      if (
+        dataUri === undefined ||
+        !dataUri.startsWith("data:image/") ||
+        dataUri.length < HOIST_DATA_URI_MIN_LENGTH ||
+        width === undefined ||
+        height === undefined
+      ) {
+        return fullMatch;
+      }
+
+      const numW = Number(width);
+      const numH = Number(height);
+      const numX = Number(x);
+      const numY = Number(y);
+      if (
+        !Number.isFinite(numX) ||
+        !Number.isFinite(numY) ||
+        !Number.isFinite(numW) ||
+        !Number.isFinite(numH) ||
+        numW <= 0 ||
+        numH <= 0
+      ) {
+        return fullMatch;
+      }
+
+      let sharedId = sharedRasterImages.get(dataUri);
+      if (sharedId === undefined) {
+        sharedId = `${idPrefix}-${sharedRasterImages.size + 1}`;
+        sharedRasterImages.set(dataUri, sharedId);
+      }
+
+      const useNode = `<use href="#${sharedId}" transform="translate(${x} ${y}) scale(${width} ${height})"/>`;
+      return passthroughAttrs.length === 0
+        ? useNode
+        : `<g ${passthroughAttrs.join(" ")}>${useNode}</g>`;
+    },
+  );
+}
+
+/** Builds the shared `<defs>` block for hoisted raster data URIs. */
+export function buildSharedRasterDefsSvg(
+  sharedRasterImages: ReadonlyMap<string, string>,
+): string {
+  if (sharedRasterImages.size === 0) return "";
+  const images = [...sharedRasterImages.entries()]
+    .map(
+      ([dataUri, id]) =>
+        `<image id="${id}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${dataUri}"/>`,
+    )
+    .join("");
+  return `<defs>${images}</defs>`;
+}
+
+/**
+ * Deduplicates large raster `data:image/` elements inside an SVG document by hoisting
+ * them into a shared `<defs>` block and replacing occurrences with scaled `<use>` nodes.
+ */
+export function deduplicateSvgRasterImages(
+  svg: string,
+  idPrefix = "shared-img",
+): string {
+  const sharedRasterImages = new Map<string, string>();
+  const hoisted = hoistSvgRasterImages(svg, idPrefix, sharedRasterImages);
+  if (sharedRasterImages.size === 0) {
+    return svg;
+  }
+  const sharedDefs = buildSharedRasterDefsSvg(sharedRasterImages);
+  const openTagMatch = SVG_OPEN_TAG_PATTERN.exec(hoisted);
+  if (openTagMatch === null) {
+    return `${sharedDefs}${hoisted}`;
+  }
+  const insertAt = openTagMatch.index + openTagMatch[0].length;
+  return `${hoisted.slice(0, insertAt)}${sharedDefs}${hoisted.slice(insertAt)}`;
+}
 
 type BBox = {
   readonly minX: number;

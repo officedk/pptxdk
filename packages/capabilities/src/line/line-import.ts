@@ -24,6 +24,10 @@ import {
   type BoxCoordinateMapper,
 } from "../shape/shape-import.ts";
 import {
+  getGeometryConnectionSiteCount,
+  type Geometry,
+} from "../shared/geometry.ts";
+import {
   attachDeferredSlideLink,
   consumeNonPlaceholderNvPr,
 } from "../shared/identity.ts";
@@ -562,6 +566,13 @@ export function readLineCxnSp(
           return;
         }
 
+        const targetSiteCount = (target: CommonNode): number =>
+          target.type === "shape"
+            ? getGeometryConnectionSiteCount(
+                target.props["geometry"] as Geometry | undefined,
+              )
+            : 4;
+
         const resolveImportedSide = (
           cxn: { readonly id: number; readonly idx: number } | undefined,
           fallbackPoint: { readonly x: number; readonly y: number },
@@ -569,9 +580,11 @@ export function readLineCxnSp(
           if (cxn === undefined) {
             return { x: fallbackPoint.x, y: fallbackPoint.y };
           }
-          if (cxn.idx < 0 || cxn.idx >= 4) return undefined;
           const target = scopeCtx.scopeObjectsBySpid.get(cxn.id);
           if (target === undefined || target === node) return undefined;
+          if (cxn.idx < 0 || cxn.idx >= targetSiteCount(target)) {
+            return undefined;
+          }
           let targetId =
             typeof target.props["id"] === "string" &&
             target.props["id"].trim().length > 0

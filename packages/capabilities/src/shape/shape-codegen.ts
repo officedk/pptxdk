@@ -141,6 +141,9 @@ function trySerializeCustomAsPath(
   value: Record<string, unknown>,
   ctx: CodegenContext,
 ): CodegenExpr | undefined {
+  if (value["connectionSites"] !== undefined) {
+    return undefined;
+  }
   const width = value["width"];
   const height = value["height"];
   const paths = value["paths"];

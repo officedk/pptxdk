@@ -1,12 +1,14 @@
 import {
   allocatePlaceholderAuthorKeys,
-  assertValidLang,
+  geometrySchema,
   layoutPlaceholderSpecSchema,
   masterPlaceholderSpecSchema,
   masterTextStylesSchema,
+  placeholderLevelStyleSchema,
   placeholderOrientSchema,
   placeholderRoleSchema,
   placeholderSizeSchema,
+  placeholderStyleSchema,
   schemeColorNameSchema,
   slideLayoutTypeSchema,
   type ColorMap,
@@ -85,10 +87,14 @@ import { readPlaceholderSpPrVisuals } from "#/visual.ts";
 import {
   hexRgb6Schema,
   normalizeBulletCharacter,
+  ooxmlAutoNumStartAtSchema,
   ooxmlBoolSchema,
   ooxmlIntSchema,
+  ooxmlLineSpacingPercentSchema,
+  ooxmlLineSpacingPointsSchema,
   ooxmlNonNegativeIntSchema,
-  ooxmlPositiveIntSchema,
+  ooxmlParagraphSpacingPointsSchema,
+  readOoxmlRunAttrStyles,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
@@ -218,61 +224,17 @@ function readStyleColor(
 function readDefRPr(
   rPr: XmlElementCursor,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
+  partPath: string,
+  diagnostics: ImportDiagnostic[],
 ): Partial<PlaceholderLevelStyle> {
-  const raw = rPr.attrsObject([
-    "lang",
-    "sz",
-    "b",
-    "i",
-    "u",
-    "strike",
-    "cap",
-    "spc",
-    "kern",
-    "dirty",
-    "smtClean",
-    "baseline",
-  ]);
-  let lang: string | undefined;
-  if (raw["lang"] !== undefined) {
-    try {
-      lang = assertValidLang(raw["lang"]);
-    } catch {
-      lang = undefined;
-    }
-  }
-  const szParsed = ooxmlPositiveIntSchema.safeParse(raw["sz"]);
-  const fontSize = szParsed.success
-    ? (`${szParsed.data / 100}pt` as const)
-    : undefined;
-  const bParsed = ooxmlBoolSchema.safeParse(raw["b"]);
-  const fontWeight = bParsed.success
-    ? bParsed.data
-      ? ("bold" as const)
-      : ("normal" as const)
-    : undefined;
-  const iParsed = ooxmlBoolSchema.safeParse(raw["i"]);
-  const fontStyle = iParsed.success
-    ? iParsed.data
-      ? ("italic" as const)
-      : ("normal" as const)
-    : undefined;
-  const textDecoration =
-    raw["u"] === "sng"
-      ? ("underline" as const)
-      : raw["strike"] === "sngStrike"
-        ? ("line-through" as const)
-        : raw["u"] === "none" && raw["strike"] === "noStrike"
-          ? ("none" as const)
-          : undefined;
-  const textTransform =
-    raw["cap"] === "all"
-      ? ("uppercase" as const)
-      : raw["cap"] === "none"
-        ? ("none" as const)
-        : undefined;
-  const spcParsed = ooxmlIntSchema.safeParse(raw["spc"]);
-  const letterSpacing = spcParsed.success ? spcParsed.data / 75 : undefined;
+  const attrStyles = readOoxmlRunAttrStyles({
+    rPrCursor: rPr,
+    location: { part: partPath },
+    diagnostics,
+    allowBaseline: false,
+    allowNoneTextDecoration: true,
+    diagnoseUnsupportedEnums: false,
+  });
 
   const solidFill = rPr.child(A_NS, "solidFill");
   const color =
@@ -312,16 +274,45 @@ function readDefRPr(
   return {
     ...(fontFamily === undefined ? {} : { fontFamily }),
     ...(eastAsianFontFamily === undefined ? {} : { eastAsianFontFamily }),
-    ...(fontSize === undefined ? {} : { fontSize }),
-    ...(fontWeight === undefined ? {} : { fontWeight }),
-    ...(fontStyle === undefined ? {} : { fontStyle }),
+    ...(attrStyles.fontSize === undefined
+      ? {}
+      : { fontSize: attrStyles.fontSize }),
+    ...(attrStyles.fontWeight === undefined
+      ? {}
+      : { fontWeight: attrStyles.fontWeight }),
+    ...(attrStyles.fontStyle === undefined
+      ? {}
+      : { fontStyle: attrStyles.fontStyle }),
     ...(color === undefined ? {} : { color }),
-    ...(letterSpacing === undefined ? {} : { letterSpacing }),
-    ...(textTransform === undefined ? {} : { textTransform }),
-    ...(textDecoration === undefined ? {} : { textDecoration }),
+    ...(attrStyles.letterSpacing === undefined
+      ? {}
+      : { letterSpacing: attrStyles.letterSpacing }),
+    ...(attrStyles.textTransform === undefined
+      ? {}
+      : { textTransform: attrStyles.textTransform }),
+    ...(attrStyles.textDecoration === undefined
+      ? {}
+      : { textDecoration: attrStyles.textDecoration }),
     ...(textShadow === undefined ? {} : { textShadow }),
-    ...(lang === undefined ? {} : { lang }),
+    ...(attrStyles.lang === undefined ? {} : { lang: attrStyles.lang }),
   };
+}
+
+function pushBoundedAttrDiagnostic(
+  diagnostics: ImportDiagnostic[],
+  partPath: string,
+  xpath: string,
+  attrName: string,
+  rawValue: string,
+): void {
+  diagnostics.push({
+    code: "invalid-xml-value",
+    category: "corrupt-input",
+    disposition: "omitted",
+    location: { part: partPath, xpath: `${xpath}/@${attrName}` },
+    attributeOrElement: `@${attrName}`,
+    rawValue,
+  });
 }
 
 function readLevelParagraphProperties(
@@ -359,27 +350,77 @@ function readLevelParagraphProperties(
   const spcBefPts = spcBef?.child(A_NS, "spcPts");
   const spcBefPct = spcBef?.child(A_NS, "spcPct");
   spcBefPct?.consumeAttr("val");
-  const spcBefVal = ooxmlNonNegativeIntSchema.safeParse(spcBefPts?.attr("val"));
-  const spacingBefore = spcBefVal.success ? spcBefVal.data / 75 : undefined;
+  let spacingBefore: number | undefined;
+  if (spcBefPts !== undefined) {
+    const rawVal = spcBefPts.attr("val");
+    const parsed = ooxmlParagraphSpacingPointsSchema.safeParse(rawVal);
+    if (parsed.success) {
+      spacingBefore = parsed.data / 75;
+    } else if (rawVal !== undefined) {
+      pushBoundedAttrDiagnostic(
+        diagnostics,
+        partPath,
+        spcBefPts.xpath,
+        "val",
+        rawVal,
+      );
+    }
+  }
 
   const spcAft = pPr.child(A_NS, "spcAft");
   const spcAftPts = spcAft?.child(A_NS, "spcPts");
   const spcAftPct = spcAft?.child(A_NS, "spcPct");
   spcAftPct?.consumeAttr("val");
-  const spcAftVal = ooxmlNonNegativeIntSchema.safeParse(spcAftPts?.attr("val"));
-  const spacingAfter = spcAftVal.success ? spcAftVal.data / 75 : undefined;
+  let spacingAfter: number | undefined;
+  if (spcAftPts !== undefined) {
+    const rawVal = spcAftPts.attr("val");
+    const parsed = ooxmlParagraphSpacingPointsSchema.safeParse(rawVal);
+    if (parsed.success) {
+      spacingAfter = parsed.data / 75;
+    } else if (rawVal !== undefined) {
+      pushBoundedAttrDiagnostic(
+        diagnostics,
+        partPath,
+        spcAftPts.xpath,
+        "val",
+        rawVal,
+      );
+    }
+  }
 
   const lnSpc = pPr.child(A_NS, "lnSpc");
   const lnSpcPts = lnSpc?.child(A_NS, "spcPts");
   const lnSpcPct = lnSpc?.child(A_NS, "spcPct");
-  const lnSpcPtsVal = ooxmlPositiveIntSchema.safeParse(lnSpcPts?.attr("val"));
-  const lnSpcPctVal = ooxmlPositiveIntSchema.safeParse(lnSpcPct?.attr("val"));
-  const lineHeight =
-    lnSpcPtsVal.success && lnSpcPtsVal.data <= 158_400
-      ? (`${lnSpcPtsVal.data / 100}pt` as const)
-      : lnSpcPctVal.success && lnSpcPctVal.data <= 13_200_000
-        ? (`${lnSpcPctVal.data / 1000}%` as const)
-        : undefined;
+  let lineHeight: PlaceholderLevelStyle["lineHeight"];
+  if (lnSpcPts !== undefined) {
+    const rawVal = lnSpcPts.attr("val");
+    const parsed = ooxmlLineSpacingPointsSchema.safeParse(rawVal);
+    if (parsed.success) {
+      lineHeight = `${parsed.data / 100}pt`;
+    } else if (rawVal !== undefined) {
+      pushBoundedAttrDiagnostic(
+        diagnostics,
+        partPath,
+        lnSpcPts.xpath,
+        "val",
+        rawVal,
+      );
+    }
+  } else if (lnSpcPct !== undefined) {
+    const rawVal = lnSpcPct.attr("val");
+    const parsed = ooxmlLineSpacingPercentSchema.safeParse(rawVal);
+    if (parsed.success) {
+      lineHeight = `${parsed.data / 1000}%`;
+    } else if (rawVal !== undefined) {
+      pushBoundedAttrDiagnostic(
+        diagnostics,
+        partPath,
+        lnSpcPct.xpath,
+        "val",
+        rawVal,
+      );
+    }
+  }
 
   pPr.ignoreEmptyChild(A_NS, "buNone");
   const buFont = pPr.child(A_NS, "buFont");
@@ -412,19 +453,35 @@ function readLevelParagraphProperties(
     };
   } else if (buAutoNum !== undefined) {
     buAutoNum.consumeAttr("type");
-    const startParsed = ooxmlPositiveIntSchema.safeParse(
-      buAutoNum.attr("startAt"),
-    );
+    const rawStartAt = buAutoNum.attr("startAt");
+    let startAt: number | undefined;
+    if (rawStartAt !== undefined) {
+      const startParsed = ooxmlAutoNumStartAtSchema.safeParse(rawStartAt);
+      if (startParsed.success) {
+        startAt = startParsed.data;
+      } else {
+        pushBoundedAttrDiagnostic(
+          diagnostics,
+          partPath,
+          buAutoNum.xpath,
+          "startAt",
+          rawStartAt,
+        );
+      }
+    }
     list = {
       type: "number",
       style: "arabicPeriod",
-      ...(startParsed.success ? { startAt: startParsed.data } : {}),
+      ...(startAt === undefined ? {} : { startAt }),
       ...(levelIndex0 > 0 ? { level: levelIndex0 } : {}),
     };
   }
 
   const defRPr = pPr.child(A_NS, "defRPr");
-  const defStyle = defRPr === undefined ? {} : readDefRPr(defRPr, clrMap);
+  const defStyle =
+    defRPr === undefined
+      ? {}
+      : readDefRPr(defRPr, clrMap, partPath, diagnostics);
 
   return {
     ...defStyle,
@@ -436,6 +493,24 @@ function readLevelParagraphProperties(
     ...(lineHeight === undefined ? {} : { lineHeight }),
     ...(spacingAfter === undefined ? {} : { spacingAfter }),
   };
+}
+
+function sanitizeObjectBySchema<T extends Record<string, unknown>>(
+  candidate: T,
+  fullSchema: z.ZodType<T>,
+  singleFieldValidate: (key: string, value: unknown) => boolean,
+): T | undefined {
+  const direct = fullSchema.safeParse(candidate);
+  if (direct.success) return direct.data;
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(candidate)) {
+    if (value === undefined) continue;
+    if (singleFieldValidate(key, value)) {
+      cleaned[key] = value;
+    }
+  }
+  const reparsed = fullSchema.safeParse(cleaned);
+  return reparsed.success ? reparsed.data : undefined;
 }
 
 function readPlaceholderListStyles(
@@ -450,15 +525,23 @@ function readPlaceholderListStyles(
   for (const levelNum of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
     const pPr = container.child(A_NS, `lvl${levelNum}pPr`);
     if (pPr === undefined) continue;
-    const style = readLevelParagraphProperties(
+    const rawStyle = readLevelParagraphProperties(
       pPr,
       levelNum - 1,
       clrMap,
       partPath,
       diagnostics,
     );
-    levels[levelNum] = style;
-    count += 1;
+    const sanitized = sanitizeObjectBySchema<PlaceholderLevelStyle>(
+      rawStyle,
+      placeholderLevelStyleSchema,
+      (key, value) =>
+        placeholderLevelStyleSchema.safeParse({ [key]: value }).success,
+    );
+    if (sanitized !== undefined && Object.keys(sanitized).length > 0) {
+      levels[levelNum] = sanitized;
+      count += 1;
+    }
   }
   return count === 0 ? undefined : levels;
 }
@@ -679,7 +762,9 @@ function readPlaceholderSpList(
         for (const r of p.children(A_NS, "r")) {
           const rPr = r.child(A_NS, "rPr");
           const rStyle =
-            rPr === undefined ? undefined : readDefRPr(rPr, clrMap);
+            rPr === undefined
+              ? undefined
+              : readDefRPr(rPr, clrMap, partPath, diagnostics);
           if (
             promptLvl1Fallback === undefined &&
             (pStyle !== undefined || rStyle !== undefined)
@@ -698,7 +783,9 @@ function readPlaceholderSpList(
           fld.consumeAttr("type");
           const rPr = fld.child(A_NS, "rPr");
           const rStyle =
-            rPr === undefined ? undefined : readDefRPr(rPr, clrMap);
+            rPr === undefined
+              ? undefined
+              : readDefRPr(rPr, clrMap, partPath, diagnostics);
           if (
             promptLvl1Fallback === undefined &&
             (pStyle !== undefined || rStyle !== undefined)
@@ -714,7 +801,7 @@ function readPlaceholderSpList(
         }
         const endPara = p.child(A_NS, "endParaRPr");
         if (endPara !== undefined) {
-          const endStyle = readDefRPr(endPara, clrMap);
+          const endStyle = readDefRPr(endPara, clrMap, partPath, diagnostics);
           if (
             promptLvl1Fallback === undefined &&
             (pStyle !== undefined || Object.keys(endStyle).length > 0)
@@ -727,19 +814,39 @@ function readPlaceholderSpList(
       if (promptParagraphs.length > 0) {
         promptText = promptParagraphs.join("\n");
       }
-      if (
+      const sanitizedPromptLvl1 =
         listStyles === undefined &&
         promptLvl1Fallback !== undefined &&
         Object.keys(promptLvl1Fallback).length > 0
+          ? sanitizeObjectBySchema<PlaceholderLevelStyle>(
+              promptLvl1Fallback,
+              placeholderLevelStyleSchema,
+              (key, value) =>
+                placeholderLevelStyleSchema.safeParse({ [key]: value }).success,
+            )
+          : undefined;
+      if (
+        listStyles === undefined &&
+        sanitizedPromptLvl1 !== undefined &&
+        Object.keys(sanitizedPromptLvl1).length > 0
       ) {
-        listStyles = { 1: promptLvl1Fallback };
+        listStyles = { 1: sanitizedPromptLvl1 };
       }
     }
 
-    const style =
+    const rawStyle =
       Object.keys(styleProps).length === 0
         ? undefined
-        : (styleProps as PlaceholderStyle);
+        : sanitizeObjectBySchema<PlaceholderStyle>(
+            styleProps as PlaceholderStyle,
+            placeholderStyleSchema,
+            (key, value) =>
+              placeholderStyleSchema.safeParse({ [key]: value }).success,
+          );
+    const style =
+      rawStyle !== undefined && Object.keys(rawStyle).length > 0
+        ? rawStyle
+        : undefined;
     const candidate: LayoutPlaceholderSpec = {
       type: phType,
       ...(explicitType ? {} : { explicitType: false }),
@@ -750,7 +857,9 @@ function readPlaceholderSpList(
         ? { hasCustomPrompt: true }
         : {}),
       ...(name === undefined ? {} : { name }),
-      ...(geometry === undefined ? {} : { geometry }),
+      ...(geometry !== undefined && geometrySchema.safeParse(geometry).success
+        ? { geometry }
+        : {}),
       ...(style === undefined ? {} : { style }),
       ...(listStyles === undefined ? {} : { listStyles }),
       ...(promptText === undefined ? {} : { promptText }),
@@ -759,8 +868,32 @@ function readPlaceholderSpList(
       ? masterPlaceholderSpecSchema
       : layoutPlaceholderSpecSchema;
     const validated = schema.safeParse(candidate);
-    rawSpecs.push(validated.success ? validated.data : candidate);
-    rawSpids.push(spid);
+    if (validated.success) {
+      rawSpecs.push(validated.data);
+      rawSpids.push(spid);
+      continue;
+    }
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "recovered",
+      location: {
+        part: partPath,
+        xpath: sp.xpath,
+        ...(spid === undefined ? {} : { objectId: spid }),
+        ...(name === undefined ? {} : { objectName: name }),
+      },
+      attributeOrElement: "p:sp",
+    });
+    const sanitizedSpec = sanitizeObjectBySchema<LayoutPlaceholderSpec>(
+      candidate,
+      schema,
+      (key, value) => schema.safeParse({ type: phType, [key]: value }).success,
+    );
+    if (sanitizedSpec !== undefined) {
+      rawSpecs.push(sanitizedSpec);
+      rawSpids.push(spid);
+    }
   }
   if (rawSpecs.length === 0) return { placeholderKeyBySpid };
   const keys = allocatePlaceholderAuthorKeys(rawSpecs);

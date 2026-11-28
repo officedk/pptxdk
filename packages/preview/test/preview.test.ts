@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 
 import { createResolver } from "@pptxdk/core/build";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@pptxdk/core/document";
 import {
   PreviewPageRangeError,
+  deduplicateSvgRasterImages,
   paint,
   paintOptionsSchema,
   previewPageNumberSchema,
@@ -182,68 +184,47 @@ describe("@pptxdk/preview pure unit contract (without rasterizer)", () => {
     assert.equal(sanitizeSvgForRasterization(validSvg, dimensions), validSvg);
   });
 
-  it("deduplicates repeated large raster data URIs across layers into shared <defs> before joining slide SVG", () => {
-    const minimalPng = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AAAAMBAQAY3Y2wAAAAAElFTkSuQmCC",
-      "base64",
-    );
-    const payloadLen = 3_600_000;
-    const largePng = new Uint8Array(minimalPng.byteLength + 12 + payloadLen);
-    const iendOffset = minimalPng.byteLength - 12;
-    largePng.set(minimalPng.subarray(0, iendOffset), 0);
-    new DataView(largePng.buffer).setUint32(iendOffset, payloadLen);
-    largePng.set([0x74, 0x45, 0x58, 0x74], iendOffset + 4);
-    largePng.set(minimalPng.subarray(iendOffset), iendOffset + 12 + payloadLen);
-    const repeatedBase64 = Buffer.from(largePng).toString("base64");
+  it("deduplicates repeated large raster data URIs into shared <defs> and leaves small or invalid images untouched without loading resvg", () => {
+    const largeDataUri = `data:image/png;base64,${"A".repeat(5000)}`;
+    const smallDataUri = "data:image/png;base64,AAAA";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><rect width="100%" height="100%" fill="white"/><image clip-path="url(#c1)" x="10" y="20" width="40" height="30" preserveAspectRatio="none" href="${largeDataUri}"/><image x="60" y="20" width="40" height="30" preserveAspectRatio="none" href="${largeDataUri}"/><image x="110" y="20" width="20" height="20" href="${smallDataUri}"/><image x="140" y="20" width="0" height="20" href="${largeDataUri}"/><image x="170" y="20" width="20" height="20" href="https://example.com/a.png"/></svg>`;
 
-    const repeatedImageCapability: ObjectCapabilityModule = {
-      declaration: "repeated-raster",
-      bind: (input, context) => ({
-        contract: parseCapabilityLayoutContract({
-          nativeKind: "sp",
-          props: input.props,
-          allowedStyleKeys: new Set(layoutStyleKeys),
-          path: context.path,
-        }),
-        resolve: (ctx) => ({
-          observation: {
-            id: 1,
-            kind: "repeated-raster",
-            name: "repeated-raster",
-            ...(ctx.layoutBox === undefined ? {} : { box: ctx.layoutBox }),
-          },
-          extensions: [],
-          emit: () => ({ xml: "" }),
-          paint: () => ({
-            svg: `<image x="10" y="10" width="20" height="20" preserveAspectRatio="none" href="data:image/png;base64,${repeatedBase64}"/>`,
-          }),
-        }),
-      }),
-    };
-    const resolve = createResolver([repeatedImageCapability]);
-    const doc = createDeckNode({ width: 320, height: 180 }).append(
-      createSlideNode({ id: "s1" }).append(
-        ...Array.from(
-          { length: 120 },
-          (_, i) =>
-            new CommonNode("repeated-raster", "repeated-raster", {
-              id: `img-${i}`,
-              style: {
-                position: "absolute",
-                left: 10,
-                top: 10,
-                width: 20,
-                height: 20,
-              },
-            }),
-        ),
+    const deduplicated = deduplicateSvgRasterImages(svg, "shared-img-s1");
+    assert.equal(
+      (deduplicated.match(/<image\b/gu) ?? []).length,
+      4,
+      "1 shared <defs><image> + 3 non-hoisted <image> elements",
+    );
+    assert.equal((deduplicated.match(/<use\b/gu) ?? []).length, 2);
+    assert.ok(
+      deduplicated.includes(
+        `<defs><image id="shared-img-s1-1" x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${largeDataUri}"/></defs>`,
       ),
     );
-    const resolution = resolve(doc);
-    const rendered = paint(resolution);
-    const page = rendered.pages[0]!;
-    assert.deepEqual(page.errors, []);
-    assert.ok(page.png !== undefined && page.png.byteLength > 0);
-    assert.ok(page.svg !== undefined && page.svg.length < 6_000_000);
+    assert.ok(
+      deduplicated.includes(
+        '<g clip-path="url(#c1)"><use href="#shared-img-s1-1" transform="translate(10 20) scale(40 30)"/></g>',
+      ),
+    );
+    assert.ok(
+      deduplicated.includes(
+        '<use href="#shared-img-s1-1" transform="translate(60 20) scale(40 30)"/>',
+      ),
+    );
+    assert.ok(deduplicated.includes(`href="${smallDataUri}"`));
+    assert.ok(deduplicated.includes('width="0" height="20"'));
+    assert.ok(deduplicated.includes('href="https://example.com/a.png"'));
+
+    // Negative / no-op cases: SVG without hoistable data URIs is returned unchanged.
+    const unchangedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><image x="0" y="0" width="10" height="10" href="${smallDataUri}"/></svg>`;
+    assert.equal(deduplicateSvgRasterImages(unchangedSvg), unchangedSvg);
+
+    // @pptxdk/preview#test must never load @resvg/resvg-js.
+    const req = createRequire(import.meta.url);
+    assert.equal(
+      Object.keys(req.cache).some((id) => id.includes("resvg")),
+      false,
+      "@pptxdk/preview unit tests must not load @resvg/resvg-js",
+    );
   });
 });

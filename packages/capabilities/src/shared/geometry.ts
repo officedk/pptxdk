@@ -16,6 +16,7 @@ import {
   type PathCommand,
   type PresetGeometry,
   type PresetGeometryName,
+  type ScreenPoint,
 } from "@pptxdk/core/capability";
 import { pxToEmu } from "@pptxdk/emit";
 import {
@@ -73,6 +74,7 @@ export type ResolvedGeometry =
         readonly fill: boolean;
         readonly stroke: boolean;
       }[];
+      readonly connectionSites?: readonly ScreenPoint[];
     };
 
 export type EvaluatedGeometryPath = {
@@ -85,7 +87,78 @@ export type EvaluatedGeometryPath = {
 export type EvaluatedGeometry = {
   readonly paths: readonly EvaluatedGeometryPath[];
   readonly textRect: Rect;
+  readonly connectionSites: readonly ScreenPoint[];
 };
+
+const STANDARD_CARDINAL_CXN: readonly (readonly [string, string])[] = [
+  ["hc", "t"],
+  ["l", "vc"],
+  ["hc", "b"],
+  ["r", "vc"],
+];
+
+/** Returns the 4 standard cardinal connection sites (top, left, bottom, right) for an un-transformed box. */
+export function standardBoxConnectionSites(box: Rect): readonly ScreenPoint[] {
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  return [
+    { x: cx, y: box.y },
+    { x: box.x, y: cy },
+    { x: cx, y: box.y + box.height },
+    { x: box.x + box.width, y: cy },
+  ];
+}
+
+/** Applies flipH, flipV, and clockwise rotation (degrees) around `box` center to a list of points. */
+export function applyTransformToPoints(
+  points: readonly ScreenPoint[],
+  box: Rect,
+  transform?: {
+    readonly flipH?: boolean;
+    readonly flipV?: boolean;
+    readonly rotate?: number;
+    readonly angle?: number;
+  },
+): readonly ScreenPoint[] {
+  const flipH = transform?.flipH ?? false;
+  const flipV = transform?.flipV ?? false;
+  const angleDeg = transform?.rotate ?? transform?.angle ?? 0;
+  if (!flipH && !flipV && angleDeg === 0) {
+    return points;
+  }
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const rad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return points.map((pt) => {
+    const dx = (pt.x - cx) * (flipH ? -1 : 1);
+    const dy = (pt.y - cy) * (flipV ? -1 : 1);
+    return {
+      x: cx + dx * cos - dy * sin,
+      y: cy + dx * sin + dy * cos,
+    };
+  });
+}
+
+/** Returns the ECMA-376 / custom connection site count for an author `Geometry` value. */
+export function getGeometryConnectionSiteCount(
+  geometry: Geometry | undefined,
+): number {
+  if (geometry === undefined) return 4;
+  if (typeof geometry === "string") {
+    const def = presetDefinitions[geometry];
+    return (def?.cxn ?? STANDARD_CARDINAL_CXN).length;
+  }
+  if (geometry.type === "preset") {
+    const def = presetDefinitions[geometry.name];
+    return (def?.cxn ?? STANDARD_CARDINAL_CXN).length;
+  }
+  if (geometry.connectionSites !== undefined) {
+    return geometry.connectionSites.length;
+  }
+  return 4;
+}
 
 /** Complete DrawingML preset geometry enumeration from ECMA-376 ST_ShapeType. */
 export const presetGeometryNames: ReadonlySet<string> = new Set(
@@ -757,12 +830,20 @@ export function resolveGeometry(options: {
         stroke: item.stroke ?? true,
       };
     });
+    const resolvedSites = custom.connectionSites?.map((site) => {
+      pointUnit(site.x, "connectionSite.x");
+      pointUnit(site.y, "connectionSite.y");
+      return { x: site.x, y: site.y };
+    });
     return {
       geometry: {
         kind: "custom",
         width: custom.width,
         height: custom.height,
         paths: resolvedPaths,
+        ...(resolvedSites === undefined
+          ? {}
+          : { connectionSites: resolvedSites }),
       },
       name: "custom",
     };
@@ -891,7 +972,17 @@ export function resolvedGeometryXml(geometry: ResolvedGeometry): string {
           return `<a:path w="${widthUnits}" h="${heightUnits}"${pathItem.fill ? "" : ' fill="none"'}${pathItem.stroke ? "" : ' stroke="0"'}>${commands}</a:path>`;
         })
         .join("");
-      return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`;
+      const cxnXml =
+        geometry.connectionSites === undefined ||
+        geometry.connectionSites.length === 0
+          ? "<a:cxnLst/>"
+          : `<a:cxnLst>${geometry.connectionSites
+              .map(
+                (site) =>
+                  `<a:cxn ang="0"><a:pos x="${pointUnit(site.x, "connectionSite.x")}" y="${pointUnit(site.y, "connectionSite.y")}"/></a:cxn>`,
+              )
+              .join("")}</a:cxnLst>`;
+      return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/>${cxnXml}<a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`;
     }
     default: {
       const exhaustive: never = geometry;
@@ -1289,7 +1380,13 @@ function evaluatePresetGeometry(
     };
   });
 
-  return { paths, textRect };
+  const cxnDefs = def.cxn ?? STANDARD_CARDINAL_CXN;
+  const connectionSites: ScreenPoint[] = cxnDefs.map(([cxToken, cyToken]) => ({
+    x: box.x + (arg(cxToken) / W) * box.width,
+    y: box.y + (arg(cyToken) / H) * box.height,
+  }));
+
+  return { paths, textRect, connectionSites };
 }
 
 function evaluateCustomGeometry(
@@ -1344,7 +1441,15 @@ function evaluateCustomGeometry(
     };
   });
 
-  return { paths, textRect: box };
+  const connectionSites: readonly ScreenPoint[] =
+    geometry.connectionSites !== undefined
+      ? geometry.connectionSites.map((site) => ({
+          x: mapX(site.x),
+          y: mapY(site.y),
+        }))
+      : standardBoxConnectionSites(box);
+
+  return { paths, textRect: box, connectionSites };
 }
 
 /** Exhaustively evaluates any ResolvedGeometry into page-space SVG paths and embedded textRect. */
@@ -1571,7 +1676,24 @@ export function readCustomGeometryXml(
     }
   }
   custGeomCursor.ignoreEmptyChild(A_NS, "ahLst");
-  custGeomCursor.ignoreEmptyChild(A_NS, "cxnLst");
+  const cxnLstCursor = custGeomCursor.child(A_NS, "cxnLst");
+  let importedConnectionSites: ScreenPoint[] | undefined;
+  if (cxnLstCursor !== undefined) {
+    const parsedSites: ScreenPoint[] = [];
+    for (const cxnCursor of cxnLstCursor.children(A_NS, "cxn")) {
+      cxnCursor.consumeAttr("ang");
+      const posCursor = cxnCursor.child(A_NS, "pos");
+      if (posCursor !== undefined) {
+        const pt = readCustomPoint(posCursor, location, diagnostics);
+        if (pt !== undefined) {
+          parsedSites.push(pt);
+        }
+      }
+    }
+    if (parsedSites.length > 0) {
+      importedConnectionSites = parsedSites;
+    }
+  }
   const rect = custGeomCursor.child(A_NS, "rect");
   if (rect !== undefined) {
     rect.consumeAttr("l");
@@ -1809,5 +1931,8 @@ export function readCustomGeometryXml(
     width: viewWidth,
     height: viewHeight,
     paths,
+    ...(importedConnectionSites === undefined
+      ? {}
+      : { connectionSites: importedConnectionSites }),
   };
 }

@@ -308,6 +308,9 @@ function paintConnectorLineModel(
     slideNumber: paintContext.slideNumber,
     objectId: paintContext.objectId,
     allowSingleZeroExtent: true,
+    ...(paintContext.registerRasterResource === undefined
+      ? {}
+      : { registerRasterResource: paintContext.registerRasterResource }),
   });
 }
 

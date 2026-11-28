@@ -15,6 +15,7 @@ import {
   type ImageBackgroundPosition,
   type LinearGradient,
   type PaintOutput,
+  type PaintRasterResource,
   type RadialGradient,
   type ResolvedColor,
   type ThemeContext,
@@ -1622,6 +1623,7 @@ export function paintVisualModel(options: {
   readonly slideNumber: number;
   readonly objectId: number;
   readonly allowSingleZeroExtent?: boolean;
+  readonly registerRasterResource?: (resource: PaintRasterResource) => string;
 }): PaintOutput {
   const { model, slideNumber, objectId } = options;
   const { box } = model;
@@ -1655,6 +1657,9 @@ export function paintVisualModel(options: {
       const patternSvg = imageFillMechanism.paint(model.fill, {
         id: candidateId,
         box,
+        ...(options.registerRasterResource === undefined
+          ? {}
+          : { registerRasterResource: options.registerRasterResource }),
       }).svg;
       if (patternSvg !== "") {
         fillDefId = candidateId;
@@ -2155,6 +2160,7 @@ export function paintImageFillSvg(
   fill: ImageFillModel,
   id: string,
   box: ShapeBox,
+  registerRasterResource?: (resource: PaintRasterResource) => string,
 ): string {
   if (!isFinitePositiveBox(box)) {
     return "";
@@ -2163,7 +2169,8 @@ export function paintImageFillSvg(
   const by = roundSvgNumber(box.y);
   const bw = roundSvgNumber(box.width);
   const bh = roundSvgNumber(box.height);
-  const imgOpacity = roundSvgNumber(fill.opacity ?? 1);
+  const opacity = fill.opacity ?? 1;
+  const imgOpacity = roundSvgNumber(opacity);
 
   if (fill.source.kind === "external") {
     return `<pattern id="${id}" patternUnits="userSpaceOnUse" x="${bx}" y="${by}" width="${bw}" height="${bh}"><rect x="0" y="0" width="${bw}" height="${bh}" fill="#F1F5F9" fill-opacity="${imgOpacity}"/></pattern>`;
@@ -2184,7 +2191,10 @@ export function paintImageFillSvg(
     }
     throw error;
   }
-  const base64 = Buffer.from(pngBytes).toString("base64");
+  const href =
+    registerRasterResource !== undefined
+      ? registerRasterResource({ contentType: "image/png", bytes: pngBytes })
+      : `data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}`;
   let drawX = 0;
   let drawY = 0;
   let drawW = box.width;
@@ -2220,7 +2230,8 @@ export function paintImageFillSvg(
     drawY = (box.height - drawH) * fill.position.y;
   }
 
-  return `<pattern id="${id}" patternUnits="userSpaceOnUse" x="${bx}" y="${by}" width="${bw}" height="${bh}"><image x="${roundSvgNumber(drawX)}" y="${roundSvgNumber(drawY)}" width="${roundSvgNumber(drawW)}" height="${roundSvgNumber(drawH)}" preserveAspectRatio="none" opacity="${imgOpacity}" href="data:image/png;base64,${base64}"/></pattern>`;
+  const opacityAttr = opacity === 1 ? "" : ` opacity="${imgOpacity}"`;
+  return `<pattern id="${id}" patternUnits="userSpaceOnUse" x="${bx}" y="${by}" width="${bw}" height="${bh}"><image x="${roundSvgNumber(drawX)}" y="${roundSvgNumber(drawY)}" width="${roundSvgNumber(drawW)}" height="${roundSvgNumber(drawH)}" preserveAspectRatio="none"${opacityAttr} href="${href}"/></pattern>`;
 }
 
 /** Native canvas mechanism for DrawingML `<a:blipFill>` shape image fills. */
@@ -2237,10 +2248,21 @@ export const imageFillMechanism = defineCanvasMechanism({
   },
   paint(
     fill: ImageFillModel,
-    context: { readonly id: string; readonly box: ShapeBox },
+    context: {
+      readonly id: string;
+      readonly box: ShapeBox;
+      readonly registerRasterResource?: (
+        resource: PaintRasterResource,
+      ) => string;
+    },
   ): PaintOutput {
     return {
-      svg: paintImageFillSvg(fill, context.id, context.box),
+      svg: paintImageFillSvg(
+        fill,
+        context.id,
+        context.box,
+        context.registerRasterResource,
+      ),
     };
   },
   import: {

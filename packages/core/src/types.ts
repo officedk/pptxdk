@@ -819,6 +819,12 @@ export type EmitOutput = {
   readonly presentationContributions?: readonly CapabilityPresentationContribution[];
 };
 
+/** Raster image payload submitted by a capability during static preview painting. */
+export type PaintRasterResource = {
+  readonly contentType: "image/png" | "image/jpeg" | "image/gif";
+  readonly bytes: Uint8Array;
+};
+
 export type PaintContext = {
   readonly path: string;
   readonly slideNumber: number;
@@ -826,6 +832,16 @@ export type PaintContext = {
   readonly box?: Rect;
   readonly theme: ThemeContext;
   readonly childrenSvg?: string;
+  /**
+   * Registers raster image bytes for the current preview page and returns an SVG `href` token
+   * for `<image href="..."/>`.
+   *
+   * When provided by `@pptxdk/preview`, identical raster payloads on the same page are encoded
+   * to Base64 at most once after offscreen/clip sanitization: a single surviving `<image>`
+   * receives an inline `data:` URI, while two or more surviving `<image>` elements share a
+   * page-level `<defs>` entry and `<use>` references.
+   */
+  readonly registerRasterResource?: (resource: PaintRasterResource) => string;
 };
 
 export type PaintPlaceholderRecord = {
@@ -983,6 +999,11 @@ export type SlidePaintContext = {
   readonly dimensions: { readonly width: number; readonly height: number };
   readonly theme: ThemeContext;
   readonly slideNumber: number;
+  /**
+   * Registers raster image bytes for the current preview page and returns an SVG `href` token
+   * for `<image href="..."/>`. See {@link PaintContext.registerRasterResource}.
+   */
+  readonly registerRasterResource?: (resource: PaintRasterResource) => string;
 };
 
 export type SlidePaintOutput = {

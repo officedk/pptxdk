@@ -339,7 +339,12 @@ function paintImageModel(
       fillAttr = `fill="url(#${bgDefId})"`;
     } else if (visual.fill.kind === "image") {
       const bgDefId = `${prefix}-bg`;
-      const patternSvg = paintImageFillSvg(visual.fill, bgDefId, box);
+      const patternSvg = paintImageFillSvg(
+        visual.fill,
+        bgDefId,
+        box,
+        paintContext.registerRasterResource,
+      );
       if (patternSvg !== "") {
         defs.push(patternSvg);
         fillAttr = `fill="url(#${bgDefId})"`;
@@ -377,7 +382,14 @@ function paintImageModel(
       );
       const opacityAttr =
         opacity === 1 ? "" : ` opacity="${roundSvgNumber(opacity)}"`;
-      imageElement = `<image clip-path="url(#${clipId})" x="${roundSvgNumber(imgX)}" y="${roundSvgNumber(imgY)}" width="${roundSvgNumber(imgWidth)}" height="${roundSvgNumber(imgHeight)}" preserveAspectRatio="none"${opacityAttr} href="data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}"/>`;
+      const href =
+        paintContext.registerRasterResource !== undefined
+          ? paintContext.registerRasterResource({
+              contentType: "image/png",
+              bytes: pngBytes,
+            })
+          : `data:image/png;base64,${Buffer.from(pngBytes).toString("base64")}`;
+      imageElement = `<image clip-path="url(#${clipId})" x="${roundSvgNumber(imgX)}" y="${roundSvgNumber(imgY)}" width="${roundSvgNumber(imgWidth)}" height="${roundSvgNumber(imgHeight)}" preserveAspectRatio="none"${opacityAttr} href="${href}"/>`;
 
       if (visual.softEdge !== undefined && visual.softEdge > 0) {
         const r = visual.softEdge;

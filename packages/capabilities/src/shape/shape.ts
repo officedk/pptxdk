@@ -250,6 +250,9 @@ function paintShapeModel(
     model: model.visual,
     slideNumber: paintContext.slideNumber,
     objectId: paintContext.objectId,
+    ...(paintContext.registerRasterResource === undefined
+      ? {}
+      : { registerRasterResource: paintContext.registerRasterResource }),
   });
   switch (model.text.kind) {
     case "none":

@@ -7,6 +7,7 @@ import {
   type SlideLocator,
 } from "@pptxdk/core/build";
 import type {
+  PaintRasterResource,
   PreviewTransform,
   Rect,
   ResolvedLayout,
@@ -37,23 +38,19 @@ import {
   type ScreenPoint,
 } from "#/options.ts";
 import {
-  buildSharedRasterDefsSvg,
-  deduplicateSvgRasterImages,
-  hoistSvgRasterImages,
+  createPageRasterRegistry,
   sanitizeSvgForRasterization,
 } from "#/svg-guard.ts";
 
 export type { PreviewTransform };
 export {
   PreviewPageRangeError,
-  deduplicateSvgRasterImages,
   paintOptionsSchema,
   previewErrorSchema,
   previewOptionsSchema,
   previewPageNumberSchema,
   previewPagesSchema,
   previewPlaceholderSchema,
-  sanitizeSvgForRasterization,
   screenGeometrySchema,
   screenPointSchema,
   validatePaintOptions,
@@ -324,7 +321,7 @@ function paintLayer(
   placeholders: PreviewPlaceholder[],
   nodePaths: Map<number, string>,
   transforms: Map<number, PreviewTransform>,
-  sharedRasterImages: Map<string, string>,
+  registerRasterResource: (resource: PaintRasterResource) => string,
   paintIdOffset = 0,
   recordNodes = true,
 ): string {
@@ -339,7 +336,7 @@ function paintLayer(
               placeholders,
               nodePaths,
               transforms,
-              sharedRasterImages,
+              registerRasterResource,
               paintIdOffset,
               recordNodes,
             ),
@@ -355,7 +352,7 @@ function paintLayer(
                 placeholders,
                 nodePaths,
                 transforms,
-                sharedRasterImages,
+                registerRasterResource,
                 paintIdOffset,
                 recordNodes,
               ),
@@ -388,6 +385,7 @@ function paintLayer(
         ...(layer.box === undefined ? {} : { box: layer.box }),
         theme: layer.theme,
         ...(childrenSvg === undefined ? {} : { childrenSvg }),
+        registerRasterResource,
       });
       recordNodeIdentity();
       recordPaintPlaceholders(
@@ -396,11 +394,7 @@ function paintLayer(
         layer.path,
         layer.authorId,
       );
-      return hoistSvgRasterImages(
-        output.svg,
-        `shared-img-s${pageNumber}`,
-        sharedRasterImages,
-      );
+      return output.svg;
     } catch (error) {
       recordNodeIdentity();
       const errorPath =
@@ -453,7 +447,11 @@ export function paint(
     const placeholders: PreviewPlaceholder[] = [];
     const nodePaths = new Map<number, string>();
     const transforms = new Map<number, PreviewTransform>();
-    const sharedRasterImages = new Map<string, string>();
+    const rasterRegistry = createPageRasterRegistry(
+      `shared-img-s${pageNumber}`,
+    );
+    const registerRasterResource = (resource: PaintRasterResource): string =>
+      rasterRegistry.register(resource);
 
     const masterOffset = maxPaintObjectId(slide.layers) + 1000;
     const wrapSharedObjectSvg = (svg: string): string =>
@@ -469,7 +467,7 @@ export function paint(
           placeholders,
           nodePaths,
           transforms,
-          sharedRasterImages,
+          registerRasterResource,
           masterOffset,
           false,
         ),
@@ -490,7 +488,7 @@ export function paint(
           placeholders,
           nodePaths,
           transforms,
-          sharedRasterImages,
+          registerRasterResource,
           layoutOffset,
           false,
         ),
@@ -510,7 +508,7 @@ export function paint(
           placeholders,
           nodePaths,
           transforms,
-          sharedRasterImages,
+          registerRasterResource,
         ),
       )
       .join("");
@@ -530,22 +528,15 @@ export function paint(
             dimensions: internal.dimensions,
             theme: slideCap.theme,
             slideNumber: pageNumber,
+            registerRasterResource,
           });
           if (slideCap.slot === "background" && previewOutput.svg !== "") {
-            background = hoistSvgRasterImages(
-              previewOutput.svg,
-              `shared-img-s${pageNumber}`,
-              sharedRasterImages,
-            );
+            background = previewOutput.svg;
           } else if (
             slideCap.slot === "shape-tree" &&
             previewOutput.svg !== ""
           ) {
-            shapeTreeCapSvg += hoistSvgRasterImages(
-              previewOutput.svg,
-              `shared-img-s${pageNumber}`,
-              sharedRasterImages,
-            );
+            shapeTreeCapSvg += previewOutput.svg;
           }
           recordPaintPlaceholders(
             placeholders,
@@ -581,13 +572,10 @@ export function paint(
           dimensions: internal.dimensions,
           theme: slide.inheritedBackground.theme,
           slideNumber: pageNumber,
+          registerRasterResource,
         });
         if (inheritedOutput.svg !== "") {
-          background = hoistSvgRasterImages(
-            inheritedOutput.svg,
-            `shared-img-s${pageNumber}`,
-            sharedRasterImages,
-          );
+          background = inheritedOutput.svg;
         }
         recordPaintPlaceholders(
           placeholders,
@@ -667,9 +655,12 @@ export function paint(
               : { themeOverride: slide.effectiveThemeOverride }),
           }).svg
         : defaultCanvasBackground;
-    const sharedDefsSvg = buildSharedRasterDefsSvg(sharedRasterImages);
-    const rawSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${sharedDefsSvg}${background ?? fallbackBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
-    const svg = sanitizeSvgForRasterization(rawSvg, internal.dimensions);
+    const rawSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${internal.dimensions.width}" height="${internal.dimensions.height}" viewBox="0 0 ${internal.dimensions.width} ${internal.dimensions.height}">${background ?? fallbackBackground}${masterLayersSvg}${layoutLayersSvg}${shapeTreeCapSvg}${layers}</svg>`;
+    const svg = sanitizeSvgForRasterization(
+      rawSvg,
+      internal.dimensions,
+      rasterRegistry,
+    );
     const Resvg = getResvg();
     const png = new Uint8Array(
       new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng(),

@@ -214,6 +214,9 @@ function paintTextModel(
         model: model.visual,
         slideNumber: paintContext.slideNumber,
         objectId: paintContext.objectId,
+        ...(paintContext.registerRasterResource === undefined
+          ? {}
+          : { registerRasterResource: paintContext.registerRasterResource }),
       })
     : undefined;
   const backgroundSvg = visualPaint?.svg ?? "";

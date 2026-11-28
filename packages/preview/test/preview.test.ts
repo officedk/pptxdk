@@ -14,15 +14,18 @@ import {
 } from "@pptxdk/core/document";
 import {
   PreviewPageRangeError,
-  deduplicateSvgRasterImages,
   paint,
   paintOptionsSchema,
   previewPageNumberSchema,
-  sanitizeSvgForRasterization,
   screenGeometry,
   validatePaintOptions,
 } from "@pptxdk/preview";
 import { describe, it } from "vitest";
+
+import {
+  createPageRasterRegistry,
+  sanitizeSvgForRasterization,
+} from "#/svg-guard.ts";
 
 const unsupportedWidgetCapability: ObjectCapabilityModule = {
   declaration: "custom-widget",
@@ -184,40 +187,107 @@ describe("@pptxdk/preview pure unit contract (without rasterizer)", () => {
     assert.equal(sanitizeSvgForRasterization(validSvg, dimensions), validSvg);
   });
 
-  it("deduplicates repeated large raster data URIs into shared <defs> and leaves small or invalid images untouched without loading resvg", () => {
-    const largeDataUri = `data:image/png;base64,${"A".repeat(5000)}`;
-    const smallDataUri = "data:image/png;base64,AAAA";
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><rect width="100%" height="100%" fill="white"/><image clip-path="url(#c1)" x="10" y="20" width="40" height="30" preserveAspectRatio="none" href="${largeDataUri}"/><image x="60" y="20" width="40" height="30" preserveAspectRatio="none" href="${largeDataUri}"/><image x="110" y="20" width="20" height="20" href="${smallDataUri}"/><image x="140" y="20" width="0" height="20" href="${largeDataUri}"/><image x="170" y="20" width="20" height="20" href="https://example.com/a.png"/></svg>`;
+  it("materializes single surviving raster resources as plain <image> and shares repeated surviving resources via <defs> without loading resvg", () => {
+    const dimensions = { width: 320, height: 180 };
 
-    const deduplicated = deduplicateSvgRasterImages(svg, "shared-img-s1");
+    // 1. Single-use large payload (> 4 KB) stays a plain <image> with no <defs> or <use> rewrite.
+    const singleRegistry = createPageRasterRegistry("shared-img-s1");
+    const largePayload = new Uint8Array(6000).fill(0x5a);
+    const singleToken = singleRegistry.register({
+      contentType: "image/png",
+      bytes: largePayload,
+    });
+    const singleRawSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><rect width="100%" height="100%" fill="white"/><image x="10" y="20" width="40" height="30" preserveAspectRatio="none" href="${singleToken}"/></svg>`;
+    const singleSanitized = sanitizeSvgForRasterization(
+      singleRawSvg,
+      dimensions,
+      singleRegistry,
+    );
+    assert.equal(singleSanitized.includes("shared-img-s1"), false);
+    assert.equal(singleSanitized.includes("<use"), false);
     assert.equal(
-      (deduplicated.match(/<image\b/gu) ?? []).length,
-      4,
-      "1 shared <defs><image> + 3 non-hoisted <image> elements",
-    );
-    assert.equal((deduplicated.match(/<use\b/gu) ?? []).length, 2);
-    assert.ok(
-      deduplicated.includes(
-        `<defs><image id="shared-img-s1-1" x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${largeDataUri}"/></defs>`,
+      singleSanitized.includes(
+        `href="data:image/png;base64,${Buffer.from(largePayload).toString("base64")}"`,
       ),
+      true,
     );
-    assert.ok(
-      deduplicated.includes(
-        '<g clip-path="url(#c1)"><use href="#shared-img-s1-1" transform="translate(10 20) scale(40 30)"/></g>',
-      ),
-    );
-    assert.ok(
-      deduplicated.includes(
-        '<use href="#shared-img-s1-1" transform="translate(60 20) scale(40 30)"/>',
-      ),
-    );
-    assert.ok(deduplicated.includes(`href="${smallDataUri}"`));
-    assert.ok(deduplicated.includes('width="0" height="20"'));
-    assert.ok(deduplicated.includes('href="https://example.com/a.png"'));
 
-    // Negative / no-op cases: SVG without hoistable data URIs is returned unchanged.
-    const unchangedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><image x="0" y="0" width="10" height="10" href="${smallDataUri}"/></svg>`;
-    assert.equal(deduplicateSvgRasterImages(unchangedSvg), unchangedSvg);
+    // 2. Repeated payload (>= 2 surviving uses, even tiny bytes and distinct Uint8Array copies) hoists into <defs> + <use>.
+    const sharedRegistry = createPageRasterRegistry("shared-img-s2");
+    const repeatedCopyA = new Uint8Array([1, 2, 3, 4]);
+    const repeatedCopyB = new Uint8Array([1, 2, 3, 4]);
+    const clippedOnlyBytes = new Uint8Array([9, 8, 7, 6]);
+    const droppedAllBytes = new Uint8Array([5, 5, 5, 5]);
+
+    const tokA = sharedRegistry.register({
+      contentType: "image/png",
+      bytes: repeatedCopyA,
+    });
+    const tokB = sharedRegistry.register({
+      contentType: "image/png",
+      bytes: repeatedCopyB,
+    });
+    assert.equal(tokA, tokB, "identical byte digests share one page token");
+
+    const tokClipped = sharedRegistry.register({
+      contentType: "image/jpeg",
+      bytes: clippedOnlyBytes,
+    });
+    const tokDropped = sharedRegistry.register({
+      contentType: "image/gif",
+      bytes: droppedAllBytes,
+    });
+
+    const multiRawSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><defs><clipPath id="c-ok" clipPathUnits="userSpaceOnUse"><rect x="10" y="20" width="40" height="30"/></clipPath><clipPath id="c-zero" clipPathUnits="userSpaceOnUse"><rect x="0" y="0" width="0" height="20"/></clipPath></defs><rect width="100%" height="100%" fill="white"/><image clip-path="url(#c-ok)" x="10" y="20" width="40" height="30" preserveAspectRatio="none" opacity="0.5" href="${tokA}"/><image x="60" y="20" width="80" height="50" preserveAspectRatio="none" href="${tokB}"/><image x="150" y="20" width="20" height="20" preserveAspectRatio="none" href="${tokClipped}"/><image clip-path="url(#c-zero)" x="180" y="20" width="20" height="20" preserveAspectRatio="none" href="${tokClipped}"/><image x="90000" y="20" width="20" height="20" preserveAspectRatio="none" href="${tokDropped}"/></svg>`;
+    const multiSanitized = sanitizeSvgForRasterization(
+      multiRawSvg,
+      dimensions,
+      sharedRegistry,
+    );
+
+    const repeatedDataUri = `data:image/png;base64,${Buffer.from(repeatedCopyA).toString("base64")}`;
+    const singleSurvivorDataUri = `data:image/jpeg;base64,${Buffer.from(clippedOnlyBytes).toString("base64")}`;
+    const droppedDataUri = `data:image/gif;base64,${Buffer.from(droppedAllBytes).toString("base64")}`;
+
+    assert.ok(
+      multiSanitized.includes(
+        `<defs><image id="shared-img-s2-1" x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${repeatedDataUri}"/></defs>`,
+      ),
+    );
+    assert.ok(
+      multiSanitized.includes(
+        '<g clip-path="url(#c-ok)" opacity="0.5"><use href="#shared-img-s2-1" transform="translate(10 20) scale(40 30)"/></g>',
+      ),
+    );
+    assert.ok(
+      multiSanitized.includes(
+        '<use href="#shared-img-s2-1" transform="translate(60 20) scale(80 50)"/>',
+      ),
+    );
+    // tokClipped registered twice, but one occurrence was dropped by zero-area clip -> single survivor stays plain <image>.
+    assert.ok(
+      multiSanitized.includes(
+        `<image x="150" y="20" width="20" height="20" preserveAspectRatio="none" href="${singleSurvivorDataUri}"/>`,
+      ),
+    );
+    assert.equal(multiSanitized.includes("shared-img-s2-2"), false);
+    // tokDropped was completely offscreen -> never Base64-encoded into output SVG.
+    assert.equal(multiSanitized.includes(droppedDataUri), false);
+
+    // 3. Non-"none" preserveAspectRatio does not distort different dimensions with non-uniform scale().
+    const aspectRegistry = createPageRasterRegistry("shared-img-s3");
+    const aspectTok = aspectRegistry.register({
+      contentType: "image/png",
+      bytes: repeatedCopyA,
+    });
+    const diffAspectSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><image x="10" y="10" width="40" height="30" href="${aspectTok}"/><image x="60" y="10" width="80" height="30" href="${aspectTok}"/></svg>`;
+    const diffAspectSanitized = sanitizeSvgForRasterization(
+      diffAspectSvg,
+      dimensions,
+      aspectRegistry,
+    );
+    assert.equal(diffAspectSanitized.includes("<use"), false);
+    assert.equal((diffAspectSanitized.match(/<image\b/gu) ?? []).length, 2);
 
     // @pptxdk/preview#test must never load @resvg/resvg-js.
     const req = createRequire(import.meta.url);

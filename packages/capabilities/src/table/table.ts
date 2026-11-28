@@ -718,7 +718,12 @@ function paintTableModel(
       );
     } else if (fill.kind === "image") {
       const fillDefId = `${idPrefix}-fill`;
-      const patternSvg = paintImageFillSvg(fill, fillDefId, cellBox);
+      const patternSvg = paintImageFillSvg(
+        fill,
+        fillDefId,
+        cellBox,
+        paintContext.registerRasterResource,
+      );
       if (fill.source.kind === "external") {
         placeholders.push({
           ...(cell.authorId === undefined ? {} : { id: cell.authorId }),

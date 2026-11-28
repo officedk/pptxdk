@@ -913,7 +913,85 @@ describe("Image static preview positive behaviors", () => {
     );
   });
 
-  it("deduplicates 120 repeated large raster layers during paint(resolution) and rasterizes a valid PNG", () => {
+  it("keeps single-use images as plain <image> and deduplicates repeated raster resources via PaintContext.registerRasterResource", () => {
+    // Part A: real imageCapability across single-use (> 4 KB) vs multi-use slides.
+    const noisy = new PNG({ width: 64, height: 64 });
+    let state = 0x12345678;
+    for (let i = 0; i < noisy.data.length; i += 4) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      noisy.data[i] = 220;
+      noisy.data[i + 1] = state & 0x3f;
+      noisy.data[i + 2] = (state >>> 8) & 0x3f;
+      noisy.data[i + 3] = 255;
+    }
+    const largeRealPng = new Uint8Array(PNG.sync.write(noisy));
+    assert.ok(
+      largeRealPng.byteLength > 4096,
+      "real PNG fixture exceeds 4 KB so legacy threshold would have rewritten single-use slide",
+    );
+
+    const resolveReal = createResolver(documentCapabilities);
+    const twoSlideDoc = deck({ width: 320, height: 180 }).append(
+      slide({ id: "s-single" }).append(
+        image({
+          id: "solo",
+          src: largeRealPng,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 64,
+            height: 64,
+          },
+        }),
+      ),
+      slide({ id: "s-shared" }).append(
+        image({
+          id: "dup-1",
+          src: largeRealPng,
+          style: {
+            position: "absolute",
+            left: 20,
+            top: 20,
+            width: 64,
+            height: 64,
+          },
+        }),
+        image({
+          id: "dup-2",
+          src: largeRealPng,
+          style: {
+            position: "absolute",
+            left: 120,
+            top: 20,
+            width: 96,
+            height: 64,
+          },
+        }),
+      ),
+    );
+    const realPainted = paint(resolveReal(twoSlideDoc));
+    const singlePage = realPainted.pages[0]!;
+    const sharedPage = realPainted.pages[1]!;
+
+    assert.deepEqual(singlePage.errors, []);
+    assert.ok(singlePage.svg !== undefined);
+    assert.equal(singlePage.svg.includes("shared-img-"), false);
+    assert.equal(singlePage.svg.includes("<use"), false);
+    assert.equal((singlePage.svg.match(/<image\b/gu) ?? []).length, 1);
+
+    assert.deepEqual(sharedPage.errors, []);
+    assert.ok(sharedPage.svg !== undefined && sharedPage.png !== undefined);
+    assert.equal(sharedPage.svg.includes('id="shared-img-s2-1"'), true);
+    assert.equal((sharedPage.svg.match(/<image\b/gu) ?? []).length, 1);
+    assert.equal((sharedPage.svg.match(/<use\b/gu) ?? []).length, 2);
+    const sharedPng = PNG.sync.read(Buffer.from(sharedPage.png));
+    const firstCenter = (52 * sharedPng.width + 52) * 4;
+    const secondCenter = (52 * sharedPng.width + 168) * 4;
+    assert.ok((sharedPng.data[firstCenter] ?? 0) > 200);
+    assert.ok((sharedPng.data[secondCenter] ?? 0) > 200);
+
+    // Part B: 120 repeated 3.6 MB raster layers stay well below V8 string limits and encode once.
     const minimalPng = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AAAAMBAQAY3Y2wAAAAAElFTkSuQmCC",
       "base64",
@@ -925,7 +1003,6 @@ describe("Image static preview positive behaviors", () => {
     new DataView(largePng.buffer).setUint32(iendOffset, payloadLen);
     largePng.set([0x74, 0x45, 0x58, 0x74], iendOffset + 4);
     largePng.set(minimalPng.subarray(iendOffset), iendOffset + 12 + payloadLen);
-    const repeatedBase64 = Buffer.from(largePng).toString("base64");
 
     const repeatedImageCapability: ObjectCapabilityModule = {
       declaration: "repeated-raster",
@@ -945,9 +1022,18 @@ describe("Image static preview positive behaviors", () => {
           },
           extensions: [],
           emit: () => ({ xml: "" }),
-          paint: () => ({
-            svg: `<image x="10" y="10" width="20" height="20" preserveAspectRatio="none" href="data:image/png;base64,${repeatedBase64}"/>`,
-          }),
+          paint: (paintContext) => {
+            const href =
+              paintContext.registerRasterResource !== undefined
+                ? paintContext.registerRasterResource({
+                    contentType: "image/png",
+                    bytes: largePng,
+                  })
+                : `data:image/png;base64,${Buffer.from(largePng).toString("base64")}`;
+            return {
+              svg: `<image x="10" y="10" width="20" height="20" preserveAspectRatio="none" href="${href}"/>`,
+            };
+          },
         }),
       }),
     };

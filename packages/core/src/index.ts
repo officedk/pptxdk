@@ -307,6 +307,7 @@ export type {
   PaintContext,
   PaintOutput,
   PaintPlaceholderRecord,
+  PaintRasterResource,
   PlaceholderLevelStyle,
   PlaceholderListStyles,
   PlaceholderMap,

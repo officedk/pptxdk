@@ -221,6 +221,11 @@ export const boxCapability: ObjectCapabilityModule = {
               model: visual,
               slideNumber: paintContext.slideNumber,
               objectId: paintContext.objectId,
+              ...(paintContext.registerRasterResource === undefined
+                ? {}
+                : {
+                    registerRasterResource: paintContext.registerRasterResource,
+                  }),
             });
             return {
               svg: `${background.svg}${childrenSvg}`,

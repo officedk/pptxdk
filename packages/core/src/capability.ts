@@ -324,6 +324,7 @@ export type {
   PaintContext,
   PaintOutput,
   PaintPlaceholderRecord,
+  PaintRasterResource,
   PptxRelationship,
   PreviewTransform,
   Rect,

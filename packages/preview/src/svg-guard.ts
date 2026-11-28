@@ -1,131 +1,78 @@
+import { bytesSha256, type PaintRasterResource } from "@pptxdk/core/capability";
+
 const EPSILON = 1e-6;
 const SAFE_OFFSCREEN_PAD = 512;
 const MAX_BLUR_STD_DEVIATION = 256;
-const HOIST_DATA_URI_MIN_LENGTH = 4096;
-const IMAGE_ELEMENT_PATTERN = /<image\b([^>]*?)\/>/gu;
-const SVG_ATTR_PATTERN = /([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/gu;
-const SVG_OPEN_TAG_PATTERN = /<svg\b[^>]*>/u;
+const RASTER_TOKEN_PREFIX = "urn:pptxdk-raster:";
 
-/** Hoists large `data:image/` elements in an SVG fragment into a shared map and returns `<use>` references. */
-export function hoistSvgRasterImages(
-  svgFragment: string,
-  idPrefix: string,
-  sharedRasterImages: Map<string, string>,
-): string {
-  if (!svgFragment.includes('href="data:image/')) {
-    return svgFragment;
-  }
-  return svgFragment.replace(
-    IMAGE_ELEMENT_PATTERN,
-    (fullMatch: string, rawAttrs: string) => {
-      let dataUri: string | undefined;
-      let x = "0";
-      let y = "0";
-      let width: string | undefined;
-      let height: string | undefined;
-      const passthroughAttrs: string[] = [];
-
-      for (const match of rawAttrs.matchAll(SVG_ATTR_PATTERN)) {
-        const key = match[1];
-        const value = match[2] ?? match[3] ?? "";
-        if (key === undefined) continue;
-        switch (key) {
-          case "href":
-            dataUri = value;
-            break;
-          case "x":
-            x = value;
-            break;
-          case "y":
-            y = value;
-            break;
-          case "width":
-            width = value;
-            break;
-          case "height":
-            height = value;
-            break;
-          case "preserveAspectRatio":
-            break;
-          default:
-            passthroughAttrs.push(`${key}="${value}"`);
-            break;
-        }
-      }
-
-      if (
-        dataUri === undefined ||
-        !dataUri.startsWith("data:image/") ||
-        dataUri.length < HOIST_DATA_URI_MIN_LENGTH ||
-        width === undefined ||
-        height === undefined
-      ) {
-        return fullMatch;
-      }
-
-      const numW = Number(width);
-      const numH = Number(height);
-      const numX = Number(x);
-      const numY = Number(y);
-      if (
-        !Number.isFinite(numX) ||
-        !Number.isFinite(numY) ||
-        !Number.isFinite(numW) ||
-        !Number.isFinite(numH) ||
-        numW <= 0 ||
-        numH <= 0
-      ) {
-        return fullMatch;
-      }
-
-      let sharedId = sharedRasterImages.get(dataUri);
-      if (sharedId === undefined) {
-        sharedId = `${idPrefix}-${sharedRasterImages.size + 1}`;
-        sharedRasterImages.set(dataUri, sharedId);
-      }
-
-      const useNode = `<use href="#${sharedId}" transform="translate(${x} ${y}) scale(${width} ${height})"/>`;
-      return passthroughAttrs.length === 0
-        ? useNode
-        : `<g ${passthroughAttrs.join(" ")}>${useNode}</g>`;
-    },
-  );
-}
-
-/** Builds the shared `<defs>` block for hoisted raster data URIs. */
-export function buildSharedRasterDefsSvg(
-  sharedRasterImages: ReadonlyMap<string, string>,
-): string {
-  if (sharedRasterImages.size === 0) return "";
-  const images = [...sharedRasterImages.entries()]
-    .map(
-      ([dataUri, id]) =>
-        `<image id="${id}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${dataUri}"/>`,
-    )
-    .join("");
-  return `<defs>${images}</defs>`;
-}
+type RasterEntry = {
+  readonly id: number;
+  readonly contentType: PaintRasterResource["contentType"];
+  readonly bytes: Uint8Array;
+  dataUri?: string;
+};
 
 /**
- * Deduplicates large raster `data:image/` elements inside an SVG document by hoisting
- * them into a shared `<defs>` block and replacing occurrences with scaled `<use>` nodes.
+ * Page-scoped registry for raster payloads submitted via `PaintContext.registerRasterResource`.
+ *
+ * Defers Base64 encoding until after SVG sanitization so offscreen or zero-clip images are never
+ * encoded, single-use images remain plain `<image>` elements, and payloads surviving two or more
+ * times on the same page are encoded once into `<defs>` + `<use>`.
  */
-export function deduplicateSvgRasterImages(
-  svg: string,
-  idPrefix = "shared-img",
-): string {
-  const sharedRasterImages = new Map<string, string>();
-  const hoisted = hoistSvgRasterImages(svg, idPrefix, sharedRasterImages);
-  if (sharedRasterImages.size === 0) {
-    return svg;
-  }
-  const sharedDefs = buildSharedRasterDefsSvg(sharedRasterImages);
-  const openTagMatch = SVG_OPEN_TAG_PATTERN.exec(hoisted);
-  if (openTagMatch === null) {
-    return `${sharedDefs}${hoisted}`;
-  }
-  const insertAt = openTagMatch.index + openTagMatch[0].length;
-  return `${hoisted.slice(0, insertAt)}${sharedDefs}${hoisted.slice(insertAt)}`;
+export type PageRasterRegistry = {
+  readonly idPrefix: string;
+  readonly size: number;
+  register(resource: PaintRasterResource): string;
+  getEntry(id: number): RasterEntry | undefined;
+  getDataUri(entry: RasterEntry): string;
+};
+
+export function createPageRasterRegistry(idPrefix: string): PageRasterRegistry {
+  const entries: RasterEntry[] = [];
+  const byBytesRef = new Map<
+    Uint8Array,
+    Map<PaintRasterResource["contentType"], RasterEntry>
+  >();
+  const byDigest = new Map<string, RasterEntry>();
+
+  return {
+    idPrefix,
+    get size(): number {
+      return entries.length;
+    },
+    register(resource: PaintRasterResource): string {
+      let byType = byBytesRef.get(resource.bytes);
+      const refHit = byType?.get(resource.contentType);
+      if (refHit !== undefined) {
+        return `${RASTER_TOKEN_PREFIX}${refHit.id}`;
+      }
+
+      const digestKey = `${resource.contentType}:${bytesSha256(resource.bytes)}`;
+      let entry = byDigest.get(digestKey);
+      if (entry === undefined) {
+        entry = {
+          id: entries.length,
+          contentType: resource.contentType,
+          bytes: resource.bytes,
+        };
+        entries.push(entry);
+        byDigest.set(digestKey, entry);
+      }
+      if (byType === undefined) {
+        byType = new Map();
+        byBytesRef.set(resource.bytes, byType);
+      }
+      byType.set(resource.contentType, entry);
+      return `${RASTER_TOKEN_PREFIX}${entry.id}`;
+    },
+    getEntry(id: number): RasterEntry | undefined {
+      return entries[id];
+    },
+    getDataUri(entry: RasterEntry): string {
+      entry.dataUri ??= `data:${entry.contentType};base64,${Buffer.from(entry.bytes).toString("base64")}`;
+      return entry.dataUri;
+    },
+  };
 }
 
 type BBox = {
@@ -1293,14 +1240,196 @@ function sanitizeBodyNode(
   return node;
 }
 
+type RasterOccurrence = {
+  readonly parent: SvgElement;
+  readonly childIndex: number;
+  readonly element: SvgElement;
+  readonly entry: RasterEntry;
+  readonly x: string;
+  readonly y: string;
+  readonly width: string | undefined;
+  readonly height: string | undefined;
+  readonly preserveAspectRatio: string | undefined;
+  readonly groupKey: string | undefined;
+};
+
+function resolveRasterTokensInSvgTree(
+  svgRoot: SvgElement,
+  registry: PageRasterRegistry,
+): void {
+  const occurrences: RasterOccurrence[] = [];
+  const groups = new Map<string, RasterOccurrence[]>();
+
+  const visitChildren = (parent: SvgElement): void => {
+    for (let i = 0; i < parent.children.length; i += 1) {
+      const child = parent.children[i];
+      if (child === undefined || child.kind !== "element") continue;
+      if (child.tag === "image") {
+        const href = child.attrs.get("href");
+        if (href !== undefined && href.startsWith(RASTER_TOKEN_PREFIX)) {
+          const id = Number(href.slice(RASTER_TOKEN_PREFIX.length));
+          const entry =
+            Number.isInteger(id) && id >= 0 ? registry.getEntry(id) : undefined;
+          if (entry !== undefined) {
+            const x = child.attrs.get("x") ?? "0";
+            const y = child.attrs.get("y") ?? "0";
+            const width = child.attrs.get("width");
+            const height = child.attrs.get("height");
+            const preserveAspectRatio = child.attrs.get("preserveAspectRatio");
+            const numX = Number(x);
+            const numY = Number(y);
+            const numW = Number(width);
+            const numH = Number(height);
+            const canShare =
+              width !== undefined &&
+              height !== undefined &&
+              Number.isFinite(numX) &&
+              Number.isFinite(numY) &&
+              Number.isFinite(numW) &&
+              Number.isFinite(numH) &&
+              numW > EPSILON &&
+              numH > EPSILON;
+            const groupKey = !canShare
+              ? undefined
+              : preserveAspectRatio === "none"
+                ? `${entry.id}|none`
+                : `${entry.id}|${preserveAspectRatio ?? ""}|${width}|${height}`;
+            const occurrence: RasterOccurrence = {
+              parent,
+              childIndex: i,
+              element: child,
+              entry,
+              x,
+              y,
+              width,
+              height,
+              preserveAspectRatio,
+              groupKey,
+            };
+            occurrences.push(occurrence);
+            if (groupKey !== undefined) {
+              let bucket = groups.get(groupKey);
+              if (bucket === undefined) {
+                bucket = [];
+                groups.set(groupKey, bucket);
+              }
+              bucket.push(occurrence);
+            }
+          }
+        }
+      }
+      visitChildren(child);
+    }
+  };
+
+  visitChildren(svgRoot);
+  if (occurrences.length === 0) return;
+
+  // Single surviving occurrences keep plain <image href="data:..."/> without <defs> hoisting.
+  for (const occurrence of occurrences) {
+    if (
+      occurrence.groupKey === undefined ||
+      (groups.get(occurrence.groupKey)?.length ?? 0) < 2
+    ) {
+      occurrence.element.attrs.set(
+        "href",
+        registry.getDataUri(occurrence.entry),
+      );
+    }
+  }
+
+  const sharedDefImages: SvgNode[] = [];
+  let sharedSeq = 0;
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    const first = members[0]!;
+    sharedSeq += 1;
+    const sharedId = `${registry.idPrefix}-${sharedSeq}`;
+    const isUnitStretch = first.preserveAspectRatio === "none";
+    const defAttrs = new Map<string, string>([
+      ["id", sharedId],
+      ["x", "0"],
+      ["y", "0"],
+      ["width", isUnitStretch ? "1" : first.width!],
+      ["height", isUnitStretch ? "1" : first.height!],
+    ]);
+    if (first.preserveAspectRatio !== undefined) {
+      defAttrs.set("preserveAspectRatio", first.preserveAspectRatio);
+    }
+    defAttrs.set("href", registry.getDataUri(first.entry));
+    sharedDefImages.push({
+      kind: "element",
+      tag: "image",
+      attrs: defAttrs,
+      children: [],
+      selfClosing: true,
+    });
+
+    for (const member of members) {
+      const passthroughAttrs = new Map<string, string>();
+      for (const [key, value] of member.element.attrs.entries()) {
+        if (
+          key === "href" ||
+          key === "x" ||
+          key === "y" ||
+          key === "width" ||
+          key === "height" ||
+          key === "preserveAspectRatio"
+        ) {
+          continue;
+        }
+        passthroughAttrs.set(key, value);
+      }
+      const useAttrs = new Map<string, string>([["href", `#${sharedId}`]]);
+      const transform = isUnitStretch
+        ? `translate(${member.x} ${member.y}) scale(${member.width!} ${member.height!})`
+        : Number(member.x) === 0 && Number(member.y) === 0
+          ? undefined
+          : `translate(${member.x} ${member.y})`;
+      if (transform !== undefined) {
+        useAttrs.set("transform", transform);
+      }
+      const useNode: SvgElement = {
+        kind: "element",
+        tag: "use",
+        attrs: useAttrs,
+        children: [],
+        selfClosing: true,
+      };
+      member.parent.children[member.childIndex] =
+        passthroughAttrs.size === 0
+          ? useNode
+          : {
+              kind: "element",
+              tag: "g",
+              attrs: passthroughAttrs,
+              children: [useNode],
+              selfClosing: false,
+            };
+    }
+  }
+
+  if (sharedDefImages.length > 0) {
+    svgRoot.children.unshift({
+      kind: "element",
+      tag: "defs",
+      attrs: new Map(),
+      children: sharedDefImages,
+      selfClosing: false,
+    });
+  }
+}
+
 /**
  * Sanitizes an assembled single-page SVG before handing it to `@resvg/resvg-js`,
  * eliminating zero-area clipPaths/masks/filters, degenerate gradients, non-finite numbers,
- * and extreme off-canvas geometry that trigger Rust `geom.rs` panics.
+ * and extreme off-canvas geometry that trigger Rust `geom.rs` panics, then materializes
+ * registered page raster tokens into either inline `<image>` or shared `<defs>` + `<use>`.
  */
 export function sanitizeSvgForRasterization(
   svg: string,
   dimensions: { readonly width: number; readonly height: number },
+  rasterRegistry?: PageRasterRegistry,
 ): string {
   const width =
     Number.isFinite(dimensions.width) && dimensions.width > EPSILON
@@ -1357,6 +1486,10 @@ export function sanitizeSvgForRasterization(
   }
   svgRoot.children.length = 0;
   svgRoot.children.push(...keptRootChildren);
+
+  if (rasterRegistry !== undefined && rasterRegistry.size > 0) {
+    resolveRasterTokensInSvgTree(svgRoot, rasterRegistry);
+  }
 
   return nodes.map(serializeSvgNode).join("");
 }

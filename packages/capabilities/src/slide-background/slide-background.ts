@@ -257,12 +257,17 @@ function paintSlideBackground(
       const patId = `bg-s${paintContext.slideNumber}-img`;
       let def: string;
       try {
-        def = paintImageFillSvg(resolved, patId, {
-          x: 0,
-          y: 0,
-          width,
-          height,
-        });
+        def = paintImageFillSvg(
+          resolved,
+          patId,
+          {
+            x: 0,
+            y: 0,
+            width,
+            height,
+          },
+          paintContext.registerRasterResource,
+        );
       } catch (error) {
         const message =
           error instanceof Error

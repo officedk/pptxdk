@@ -313,6 +313,10 @@ let cachedDecoders:
   | { readonly png: PngJsModule; readonly jpeg: JpegJsModule }
   | undefined;
 
+// Memoize normalized preview PNG bytes for immutable LoadedImage buffers so slides or decks
+// reusing the same image do not repeatedly inflate and re-deflate identical pixel payloads.
+const normalizedPngByImmutableBytes = new WeakMap<Uint8Array, Uint8Array>();
+
 // Load pngjs and jpeg-js lazily only when paint() executes so resolve() and emit() never pull rasterizers.
 function imageDecoders(): {
   readonly png: PngJsModule;
@@ -333,6 +337,13 @@ function imageDecoders(): {
  * Throws `preview-corrupt-image` if compressed pixel data is invalid.
  */
 export function decodeImageToPngBytes(image: LoadedImage): Uint8Array {
+  const immutableSource = isImmutableBytes(image.bytes);
+  if (immutableSource) {
+    const cached = normalizedPngByImmutableBytes.get(image.bytes);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
   const { png: pngModule, jpeg: jpegModule } = imageDecoders();
   let decoded: {
     readonly width: number;
@@ -381,5 +392,10 @@ export function decodeImageToPngBytes(image: LoadedImage): Uint8Array {
     height: decoded.height,
   });
   normalized.data = Buffer.from(decoded.data);
-  return new Uint8Array(pngModule.PNG.sync.write(normalized));
+  const pngBytes = new Uint8Array(pngModule.PNG.sync.write(normalized));
+  if (immutableSource) {
+    markImmutableBytes(pngBytes);
+    normalizedPngByImmutableBytes.set(image.bytes, pngBytes);
+  }
+  return pngBytes;
 }

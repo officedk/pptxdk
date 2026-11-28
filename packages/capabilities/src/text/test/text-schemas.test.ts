@@ -36,7 +36,18 @@ import { BuildError } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { CommonNode, RichTextContainer } from "@pptxdk/core/document";
 import { emit, pxToEmu } from "@pptxdk/emit";
-import { createImporter } from "@pptxdk/import";
+import {
+  A_NS,
+  OPC_REL_NS,
+  P_NS,
+  REL_OFFICE_DOCUMENT,
+  REL_SLIDE,
+  REL_SLIDE_LAYOUT,
+  REL_SLIDE_MASTER,
+  REL_THEME,
+  R_NS,
+  createImporter,
+} from "@pptxdk/import";
 import {
   Deck,
   Slide,
@@ -44,7 +55,7 @@ import {
   SlideMaster,
   expandDocument,
 } from "@pptxdk/react";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
@@ -865,5 +876,62 @@ describe("Text & font public contract schemas", () => {
 
     const imported = importAll(emitted.pptx);
     assert.deepEqual(imported.report.diagnostics, []);
+  });
+
+  it("recovers multi-code-point and empty <a:buChar> values across Text, Shape, and Master list styles so resolve and codegen succeed", () => {
+    const pptx = zipSync({
+      "_rels/.rels": strToU8(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE}" Target="slides/slide1.xml"/></Relationships>`,
+      ),
+      "ppt/theme/theme1.xml": strToU8(
+        `<a:theme xmlns:a="${A_NS}" name="T"><a:themeElements><a:clrScheme name="C"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="222222"/></a:dk2><a:lt2><a:srgbClr val="EEEEEE"/></a:lt2><a:accent1><a:srgbClr val="123456"/></a:accent1><a:accent2><a:srgbClr val="654321"/></a:accent2><a:accent3><a:srgbClr val="112233"/></a:accent3><a:accent4><a:srgbClr val="445566"/></a:accent4><a:accent5><a:srgbClr val="778899"/></a:accent5><a:accent6><a:srgbClr val="AABBCC"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme><a:fontScheme name="F"><a:majorFont><a:latin typeface="Jost*"/></a:majorFont><a:minorFont><a:latin typeface="Jost*"/></a:minorFont></a:fontScheme><a:fmtScheme name="O"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
+      ),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld name="M1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle><a:lvl1pPr><a:buChar char="•&#xFE0F;"/></a:lvl1pPr></p:bodyStyle><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="blank"><p:cSld name="L1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slides/slide1.xml": strToU8(
+        `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld name="s1"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="T1"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="95250" y="95250"/><a:ext cx="1905000" cy="952500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:buChar char="-&gt;"/></a:pPr><a:r><a:rPr sz="1600"/><a:t>Text bullet</a:t></a:r></a:p><a:p><a:pPr><a:buChar char=""/></a:pPr><a:r><a:rPr sz="1600"/><a:t>Empty bullet</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="S1"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="95250" y="1143000"/><a:ext cx="1905000" cy="952500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EEEEEE"/></a:solidFill></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:buChar char="ab"/></a:pPr><a:r><a:rPr sz="1600"/><a:t>Shape bullet</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+      ),
+      "ppt/slides/_rels/slide1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+      ),
+    });
+
+    const importer = createImporter(documentCapabilities);
+    const imported = importer(pptx);
+    const bulletDiags = imported.report.diagnostics.filter(
+      (d) =>
+        d.code === "invalid-xml-value" &&
+        d.attributeOrElement === "a:buChar/@char",
+    );
+    assert.ok(bulletDiags.length >= 3);
+    assert.ok(bulletDiags.every((d) => d.disposition === "recovered"));
+
+    const codegen = createCodegen(documentCapabilities);
+    const vanilla = codegen(imported.document, {
+      target: "vanilla",
+    });
+    const react = codegen(imported.document, {
+      target: "react",
+    });
+    assert.ok(
+      Object.keys(vanilla.files).length > 0 &&
+        Object.keys(react.files).length > 0,
+    );
   });
 });

@@ -2830,54 +2830,149 @@ function readMasterOrLayoutAnimationObjects(root: XmlElement): FileObject[] {
       ? undefined
       : first(cSld, presentationNamespace, "spTree");
   if (spTree === undefined) return [];
-  const objects: FileObject[] = [];
-  for (const sp of elements(spTree, presentationNamespace, "sp")) {
-    const nvSpPr = first(sp, presentationNamespace, "nvSpPr");
-    const cNvPr =
-      nvSpPr === undefined
-        ? undefined
-        : first(nvSpPr, presentationNamespace, "cNvPr");
-    const id = positiveIntegerValue(
-      cNvPr === undefined ? "" : attribute(cNvPr, "id"),
-    );
-    if (id === undefined) continue;
-    const name = cNvPr === undefined ? "" : attribute(cNvPr, "name");
-    const spPr = first(sp, presentationNamespace, "spPr");
+
+  const readTransformBoxEmu = (
+    container: XmlElement | undefined,
+  ): {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  } => {
     const xfrm =
-      spPr === undefined ? undefined : first(spPr, drawingNamespace, "xfrm");
+      container === undefined
+        ? undefined
+        : (first(container, drawingNamespace, "xfrm") ??
+          first(container, presentationNamespace, "xfrm"));
     const off =
       xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "off");
     const ext =
       xfrm === undefined ? undefined : first(xfrm, drawingNamespace, "ext");
-    const x = off === undefined ? 0 : (integerAttribute(off, "x") ?? 0);
-    const y = off === undefined ? 0 : (integerAttribute(off, "y") ?? 0);
-    const cx = ext === undefined ? 0 : (integerAttribute(ext, "cx") ?? 0);
-    const cy = ext === undefined ? 0 : (integerAttribute(ext, "cy") ?? 0);
-    const txBody = first(sp, presentationNamespace, "txBody");
-    const paragraphEls =
-      txBody === undefined ? [] : elements(txBody, drawingNamespace, "p");
-    const paragraphs = paragraphEls.map((p) => {
-      const runs = elements(p, drawingNamespace, "r").map((r) => ({
-        text: first(r, drawingNamespace, "t")?.textContent ?? "",
-      }));
-      return { text: runs.map((r) => r.text).join(""), runs };
-    });
-    objects.push({
-      id,
-      name,
-      kind: "shape",
-      boxEmu: { x, y, width: cx, height: cy },
-      ...(paragraphs.length > 0
-        ? {
-            text: {
-              text: paragraphs.map((p) => p.text).join("\n"),
-              paragraphs,
-            },
-          }
-        : {}),
-    });
-  }
-  return objects;
+    return {
+      x: off === undefined ? 0 : (integerAttribute(off, "x") ?? 0),
+      y: off === undefined ? 0 : (integerAttribute(off, "y") ?? 0),
+      width: ext === undefined ? 0 : (integerAttribute(ext, "cx") ?? 0),
+      height: ext === undefined ? 0 : (integerAttribute(ext, "cy") ?? 0),
+    };
+  };
+
+  const collectFromTree = (container: XmlElement): FileObject[] => {
+    const objects: FileObject[] = [];
+    for (
+      let child = container.firstChild;
+      child !== null;
+      child = child.nextSibling
+    ) {
+      if (child.nodeType !== 1 || child.namespaceURI !== presentationNamespace)
+        continue;
+      const el = child as XmlElement;
+      const tag = el.localName;
+      if (
+        tag !== "sp" &&
+        tag !== "cxnSp" &&
+        tag !== "pic" &&
+        tag !== "graphicFrame" &&
+        tag !== "grpSp"
+      ) {
+        continue;
+      }
+      const nvWrapperName =
+        tag === "sp"
+          ? "nvSpPr"
+          : tag === "cxnSp"
+            ? "nvCxnSpPr"
+            : tag === "pic"
+              ? "nvPicPr"
+              : tag === "graphicFrame"
+                ? "nvGraphicFramePr"
+                : "nvGrpSpPr";
+      const nvWrapper = first(el, presentationNamespace, nvWrapperName);
+      const cNvPr =
+        nvWrapper === undefined
+          ? undefined
+          : first(nvWrapper, presentationNamespace, "cNvPr");
+      const id = positiveIntegerValue(
+        cNvPr === undefined ? "" : attribute(cNvPr, "id"),
+      );
+      if (id === undefined) continue;
+      const name = cNvPr === undefined ? "" : attribute(cNvPr, "name");
+
+      if (tag === "sp") {
+        const spPr = first(el, presentationNamespace, "spPr");
+        const txBody = first(el, presentationNamespace, "txBody");
+        const paragraphEls =
+          txBody === undefined ? [] : elements(txBody, drawingNamespace, "p");
+        const paragraphs = paragraphEls.map((p) => {
+          const runs = elements(p, drawingNamespace, "r").map((r) => ({
+            text: first(r, drawingNamespace, "t")?.textContent ?? "",
+          }));
+          return { text: runs.map((r) => r.text).join(""), runs };
+        });
+        objects.push({
+          id,
+          name,
+          kind: "shape",
+          boxEmu: readTransformBoxEmu(spPr),
+          ...(paragraphs.length > 0
+            ? {
+                text: {
+                  text: paragraphs.map((p) => p.text).join("\n"),
+                  paragraphs,
+                },
+              }
+            : {}),
+        });
+      } else if (tag === "cxnSp") {
+        const spPr = first(el, presentationNamespace, "spPr");
+        objects.push({
+          id,
+          name,
+          kind: "line",
+          boxEmu: readTransformBoxEmu(spPr),
+        });
+      } else if (tag === "pic") {
+        const spPr = first(el, presentationNamespace, "spPr");
+        objects.push({
+          id,
+          name,
+          kind: "image",
+          boxEmu: readTransformBoxEmu(spPr),
+        });
+      } else if (tag === "graphicFrame") {
+        const graphic = first(el, drawingNamespace, "graphic");
+        const graphicData =
+          graphic === undefined
+            ? undefined
+            : first(graphic, drawingNamespace, "graphicData");
+        const uri =
+          graphicData === undefined ? undefined : attribute(graphicData, "uri");
+        objects.push({
+          id,
+          name,
+          kind:
+            uri === chartNamespace
+              ? "chart"
+              : uri === tableUri
+                ? "table"
+                : "shape",
+          boxEmu: readTransformBoxEmu(el),
+        });
+      } else {
+        const grpSpPr = first(el, presentationNamespace, "grpSpPr");
+        const members = collectFromTree(el);
+        objects.push({
+          id,
+          name,
+          kind: "group",
+          boxEmu: readTransformBoxEmu(grpSpPr),
+          members,
+        });
+      }
+    }
+    return objects;
+  };
+
+  return collectFromTree(spTree);
 }
 
 function readMastersAndLayouts(

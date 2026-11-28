@@ -1413,8 +1413,8 @@ const PresetGeomAttrSchema = z.object({
   prst: z.string().min(1),
 });
 
-const AdjustGuideAttrSchema = z.object({
-  name: geometryAdjustKeySchema,
+const AdjustGuideXmlSchema = z.object({
+  name: z.string().min(1),
   fmla: z.string().regex(/^val\s+(-?\d+)$/u),
 });
 
@@ -1480,8 +1480,8 @@ export function readPresetGeometryXml(
   if (avLst !== undefined) {
     for (const gd of avLst.children(A_NS, "gd")) {
       const rawGd = gd.attrsObject(["name", "fmla"]);
-      const parsedGd = AdjustGuideAttrSchema.safeParse(rawGd);
-      if (!parsedGd.success) {
+      const parsedXml = AdjustGuideXmlSchema.safeParse(rawGd);
+      if (!parsedXml.success) {
         diagnostics.push({
           code: "invalid-xml-value",
           category: "corrupt-input",
@@ -1492,11 +1492,23 @@ export function readPresetGeometryXml(
         });
         continue;
       }
-      const match = /^val\s+(-?\d+)$/u.exec(parsedGd.data.fmla);
+      if (!geometryAdjustKeySchema.safeParse(parsedXml.data.name).success) {
+        diagnostics.push({
+          code: "unsupported-mechanism",
+          category: "unsupported",
+          disposition: "omitted",
+          location: { ...location, xpath: gd.xpath },
+          namespaceUri: A_NS,
+          localName: "gd",
+          mechanismHint: `geometry-adjust:${parsedXml.data.name}`,
+        });
+        continue;
+      }
+      const match = /^val\s+(-?\d+)$/u.exec(parsedXml.data.fmla);
       if (match !== null) {
         const value = Number(match[1]);
         if (Number.isSafeInteger(value)) {
-          adjust[parsedGd.data.name] = value;
+          adjust[parsedXml.data.name] = value;
         }
       }
     }

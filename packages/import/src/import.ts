@@ -6,6 +6,7 @@ import {
 } from "@pptxdk/core";
 import type {
   MasterPlaceholderMap,
+  MasterTextStyles,
   NativeColorSlot,
   PlaceholderMap,
   RegisteredCapabilityModule,
@@ -213,6 +214,7 @@ function readSlidePart(
   registerDeferredSlideLink: (link: DeferredSlideLink) => void,
   morphScope: ReturnType<typeof createMorphScope>,
   morphHandleByToken: Map<string, MorphKey>,
+  slideDimensions: { readonly width: number; readonly height: number },
   diagnostics: ImportDiagnostic[],
 ): { readonly node: CommonNode; readonly slideId: string } | undefined {
   const xmlText = pkg.readTextPart(slidePartPath);
@@ -362,6 +364,9 @@ function readSlidePart(
   const masterPlaceholders = layoutNode?.parent?.props["placeholders"] as
     | MasterPlaceholderMap
     | undefined;
+  const masterTextStyles = layoutNode?.parent?.props["textStyles"] as
+    | MasterTextStyles
+    | undefined;
   const layoutClrMap =
     resolvedLayoutPath === undefined
       ? undefined
@@ -447,6 +452,7 @@ function readSlidePart(
   const usedSlideMorphTokens = new Set<string>();
 
   const spTree = cSld.child(P_NS, "spTree");
+  const claimedPlaceholderKeys = new Set<string>();
   if (spTree !== undefined) {
     readShapeTreeItems({
       spTree,
@@ -472,8 +478,11 @@ function readSlidePart(
       },
       diagnostics,
       containerNode: slideNode,
+      slideDimensions,
+      claimedPlaceholderKeys,
       ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
       ...(masterPlaceholders === undefined ? {} : { masterPlaceholders }),
+      ...(masterTextStyles === undefined ? {} : { masterTextStyles }),
       ...(layoutClrMap === undefined ? {} : { clrMap: layoutClrMap }),
     });
   }
@@ -678,6 +687,7 @@ export function createImporter(
           registerDeferredSlideLink,
           morphScope,
           morphHandleByToken,
+          size,
           diagnostics,
         );
         if (slideResult !== undefined) {

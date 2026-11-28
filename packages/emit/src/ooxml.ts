@@ -434,6 +434,17 @@ function formatEffectStyleXml(effect: FormatEffectStyle): string {
   return `<a:effectStyle><a:effectLst><a:outerShdw blurRad="${blur}" dist="${dist}" dir="${dir}" rotWithShape="0">${color}</a:outerShdw></a:effectLst></a:effectStyle>`;
 }
 
+function padFormatStyleXmlList(
+  entries: readonly string[],
+  fallbackXml: string,
+): string {
+  const padded = [...entries];
+  while (padded.length < 3) {
+    padded.push(fallbackXml);
+  }
+  return padded.join("");
+}
+
 function formatSchemeXml(scheme?: FormatScheme): string {
   const fill = `<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>`;
   const line = `<a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>`;
@@ -441,22 +452,22 @@ function formatSchemeXml(scheme?: FormatScheme): string {
   if (scheme === undefined) {
     return `<a:fmtScheme name="Office"><a:fillStyleLst>${fill}${fill}${fill}</a:fillStyleLst><a:lnStyleLst>${line}${line}${line}</a:lnStyleLst><a:effectStyleLst>${effect}${effect}${effect}</a:effectStyleLst><a:bgFillStyleLst>${fill}${fill}${fill}</a:bgFillStyleLst></a:fmtScheme>`;
   }
-  const fillList =
-    scheme.fillStyles !== undefined && scheme.fillStyles.length > 0
-      ? scheme.fillStyles.map(formatFillStyleXml).join("")
-      : `${fill}${fill}${fill}`;
-  const lnList =
-    scheme.lineStyles !== undefined && scheme.lineStyles.length > 0
-      ? scheme.lineStyles.map(formatLineStyleXml).join("")
-      : `${line}${line}${line}`;
-  const effList =
-    scheme.effectStyles !== undefined && scheme.effectStyles.length > 0
-      ? scheme.effectStyles.map(formatEffectStyleXml).join("")
-      : `${effect}${effect}${effect}`;
-  const bgList =
-    scheme.bgFillStyles !== undefined && scheme.bgFillStyles.length > 0
-      ? scheme.bgFillStyles.map(formatFillStyleXml).join("")
-      : `${fill}${fill}${fill}`;
+  const fillList = padFormatStyleXmlList(
+    (scheme.fillStyles ?? []).map(formatFillStyleXml),
+    fill,
+  );
+  const lnList = padFormatStyleXmlList(
+    (scheme.lineStyles ?? []).map(formatLineStyleXml),
+    line,
+  );
+  const effList = padFormatStyleXmlList(
+    (scheme.effectStyles ?? []).map(formatEffectStyleXml),
+    effect,
+  );
+  const bgList = padFormatStyleXmlList(
+    (scheme.bgFillStyles ?? []).map(formatFillStyleXml),
+    fill,
+  );
   return `<a:fmtScheme name="${xmlEscape(scheme.name ?? "Office")}"><a:fillStyleLst>${fillList}</a:fillStyleLst><a:lnStyleLst>${lnList}</a:lnStyleLst><a:effectStyleLst>${effList}</a:effectStyleLst><a:bgFillStyleLst>${bgList}</a:bgFillStyleLst></a:fmtScheme>`;
 }
 

@@ -84,6 +84,7 @@ import {
 import { readPlaceholderSpPrVisuals } from "#/visual.ts";
 import {
   hexRgb6Schema,
+  normalizeBulletCharacter,
   ooxmlBoolSchema,
   ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
@@ -327,6 +328,8 @@ function readLevelParagraphProperties(
   pPr: XmlElementCursor,
   levelIndex0: number,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
+  partPath: string,
+  diagnostics: ImportDiagnostic[],
 ): PlaceholderLevelStyle {
   const rawAttrs = pPr.attrsObject([
     "marL",
@@ -390,14 +393,23 @@ function readLevelParagraphProperties(
   const buAutoNum = pPr.child(A_NS, "buAutoNum");
   let list: TextList | undefined;
   if (buChar !== undefined) {
-    const ch = buChar.attr("char");
-    if (ch !== undefined && ch.length > 0) {
-      list = {
-        type: "bullet",
-        character: ch,
-        ...(levelIndex0 > 0 ? { level: levelIndex0 } : {}),
-      };
+    const rawChar = buChar.attr("char");
+    const normalized = normalizeBulletCharacter(rawChar);
+    if (normalized.recovered) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: { part: partPath, xpath: `${buChar.xpath}/@char` },
+        attributeOrElement: "a:buChar/@char",
+        rawValue: rawChar ?? "",
+      });
     }
+    list = {
+      type: "bullet",
+      character: normalized.character,
+      ...(levelIndex0 > 0 ? { level: levelIndex0 } : {}),
+    };
   } else if (buAutoNum !== undefined) {
     buAutoNum.consumeAttr("type");
     const startParsed = ooxmlPositiveIntSchema.safeParse(
@@ -429,6 +441,8 @@ function readLevelParagraphProperties(
 function readPlaceholderListStyles(
   container: XmlElementCursor | undefined,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
+  partPath: string,
+  diagnostics: ImportDiagnostic[],
 ): PlaceholderListStyles | undefined {
   if (container === undefined) return undefined;
   const levels: Record<number, PlaceholderLevelStyle> = {};
@@ -436,7 +450,13 @@ function readPlaceholderListStyles(
   for (const levelNum of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
     const pPr = container.child(A_NS, `lvl${levelNum}pPr`);
     if (pPr === undefined) continue;
-    const style = readLevelParagraphProperties(pPr, levelNum - 1, clrMap);
+    const style = readLevelParagraphProperties(
+      pPr,
+      levelNum - 1,
+      clrMap,
+      partPath,
+      diagnostics,
+    );
     levels[levelNum] = style;
     count += 1;
   }
@@ -446,14 +466,31 @@ function readPlaceholderListStyles(
 function readMasterTextStyles(
   txStyles: XmlElementCursor | undefined,
   clrMap: Readonly<Record<string, NativeColorSlot>>,
+  partPath: string,
+  diagnostics: ImportDiagnostic[],
 ): MasterTextStyles | undefined {
   if (txStyles === undefined) return undefined;
   const titleStyleCursor = txStyles.child(P_NS, "titleStyle");
   const bodyStyleCursor = txStyles.child(P_NS, "bodyStyle");
   const otherStyleCursor = txStyles.child(P_NS, "otherStyle");
-  const titleStyle = readPlaceholderListStyles(titleStyleCursor, clrMap);
-  const bodyStyle = readPlaceholderListStyles(bodyStyleCursor, clrMap);
-  const otherStyle = readPlaceholderListStyles(otherStyleCursor, clrMap);
+  const titleStyle = readPlaceholderListStyles(
+    titleStyleCursor,
+    clrMap,
+    partPath,
+    diagnostics,
+  );
+  const bodyStyle = readPlaceholderListStyles(
+    bodyStyleCursor,
+    clrMap,
+    partPath,
+    diagnostics,
+  );
+  const otherStyle = readPlaceholderListStyles(
+    otherStyleCursor,
+    clrMap,
+    partPath,
+    diagnostics,
+  );
   const candidate: MasterTextStyles = {
     ...(titleStyle === undefined ? {} : { titleStyle }),
     ...(bodyStyle === undefined ? {} : { bodyStyle }),
@@ -617,7 +654,12 @@ function readPlaceholderSpList(
       }
 
       const lstStyle = txBody.child(A_NS, "lstStyle");
-      listStyles = readPlaceholderListStyles(lstStyle, clrMap);
+      listStyles = readPlaceholderListStyles(
+        lstStyle,
+        clrMap,
+        partPath,
+        diagnostics,
+      );
 
       const promptParagraphs: string[] = [];
       let promptLvl1Fallback: Partial<PlaceholderLevelStyle> | undefined;
@@ -626,7 +668,13 @@ function readPlaceholderSpList(
         const pStyle =
           pPr === undefined
             ? undefined
-            : readLevelParagraphProperties(pPr, 0, clrMap);
+            : readLevelParagraphProperties(
+                pPr,
+                0,
+                clrMap,
+                partPath,
+                diagnostics,
+              );
         const runTexts: string[] = [];
         for (const r of p.children(A_NS, "r")) {
           const rPr = r.child(A_NS, "rPr");
@@ -898,12 +946,18 @@ function readSingleShapeTreeItem(
   ) => void,
   scopeObjectsBySpid?: Map<number, CommonNode>,
   usedAuthorIds?: Set<string>,
+  masterTextStyles?: MasterTextStyles,
+  slideDimensions?: { readonly width: number; readonly height: number },
+  claimedPlaceholderKeys?: Set<string>,
 ): CommonNode | undefined {
   const identity = peekShapeTreeObjectIdentity(itemCursor.element);
   const match = shapeTreeHandlers.find(
     (handler) =>
       itemCursor.namespaceUri === P_NS &&
-      handler.localName === itemCursor.localName &&
+      (handler.localName === itemCursor.localName ||
+        handler.alternateLocalNames?.includes(
+          itemCursor.localName as ShapeTreeImportHandler["localName"],
+        ) === true) &&
       (handler.matches === undefined || handler.matches(itemCursor)),
   );
   if (match === undefined) {
@@ -954,6 +1008,7 @@ function readSingleShapeTreeItem(
     package: pkg,
     ...(containerNode === undefined ? {} : { containerNode }),
     relationships: relIndex.byId,
+    relationshipEntries: relIndex.entries,
     registerDeferredSlideLink,
     ...(registerImportedObject === undefined ? {} : { registerImportedObject }),
     ...(registerDeferredConnector === undefined
@@ -961,6 +1016,9 @@ function readSingleShapeTreeItem(
       : { registerDeferredConnector }),
     ...(layoutPlaceholders === undefined ? {} : { layoutPlaceholders }),
     ...(masterPlaceholders === undefined ? {} : { masterPlaceholders }),
+    ...(masterTextStyles === undefined ? {} : { masterTextStyles }),
+    ...(slideDimensions === undefined ? {} : { slideDimensions }),
+    ...(claimedPlaceholderKeys === undefined ? {} : { claimedPlaceholderKeys }),
     ...(clrMap === undefined ? {} : { clrMap }),
   });
   if (outcome.diagnostics !== undefined) {
@@ -1007,6 +1065,12 @@ export function readShapeTreeItems(args: {
   readonly containerNode?: CommonNode;
   readonly layoutPlaceholders?: PlaceholderMap;
   readonly masterPlaceholders?: MasterPlaceholderMap;
+  readonly masterTextStyles?: MasterTextStyles;
+  readonly slideDimensions?: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly claimedPlaceholderKeys?: Set<string>;
   readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
   readonly registerImportedObject?: (spid: number, node: CommonNode) => void;
   readonly omittedSpids?: Map<number, OmittedSlideObjectInfo>;
@@ -1024,6 +1088,9 @@ export function readShapeTreeItems(args: {
     containerNode,
     layoutPlaceholders,
     masterPlaceholders,
+    masterTextStyles,
+    slideDimensions,
+    claimedPlaceholderKeys,
     clrMap,
     registerImportedObject,
     omittedSpids,
@@ -1067,6 +1134,9 @@ export function readShapeTreeItems(args: {
             registerDeferredConnector,
             scopeObjectsBySpid,
             usedAuthorIds,
+            masterTextStyles,
+            slideDimensions,
+            claimedPlaceholderKeys,
           );
           if (node !== undefined) appendNode(node);
         }
@@ -1092,6 +1162,9 @@ export function readShapeTreeItems(args: {
             registerDeferredConnector,
             scopeObjectsBySpid,
             usedAuthorIds,
+            masterTextStyles,
+            slideDimensions,
+            claimedPlaceholderKeys,
           );
           if (node !== undefined) {
             adoptedFallback = true;
@@ -1155,6 +1228,9 @@ export function readShapeTreeItems(args: {
       registerDeferredConnector,
       scopeObjectsBySpid,
       usedAuthorIds,
+      masterTextStyles,
+      slideDimensions,
+      claimedPlaceholderKeys,
     );
     if (node !== undefined) appendNode(node);
   }
@@ -1402,6 +1478,8 @@ function readSlideLayoutPart(
       : { headerFooter: layoutHeaderFooter }),
   };
   const layoutNode = createSlideLayoutNode(props);
+  const layoutObjectBySpid = new Map<number, CommonNode>();
+  const layoutOmittedSpids = new Map<number, OmittedSlideObjectInfo>();
   if (spTree !== undefined && shapeTreeHandlers.length > 0) {
     const relIndex: RelationshipIndex = {
       entries: layoutRels.entries,
@@ -1416,6 +1494,10 @@ function readSlideLayoutPart(
       relIndex,
       shapeTreeHandlers,
       registerDeferredSlideLink,
+      registerImportedObject: (spid, node) => {
+        layoutObjectBySpid.set(spid, node);
+      },
+      omittedSpids: layoutOmittedSpids,
       appendNode: (node) => layoutNode.append(node),
       diagnostics,
       containerNode: layoutNode,
@@ -1436,6 +1518,8 @@ function readSlideLayoutPart(
       part: layoutPartPath,
       ...(slideHandler.slot === "transition" ? {} : { slideIndex: 0 }),
       package: pkg,
+      objectBySpid: layoutObjectBySpid,
+      omittedSpids: layoutOmittedSpids,
       ...(layoutPlaceholderKeyBySpid === undefined
         ? {}
         : { placeholderKeyBySpid: layoutPlaceholderKeyBySpid }),
@@ -1569,7 +1653,12 @@ function readSlideMasterPart(
     txStylesCursor.ignoreEmptyChild(P_NS, "titleStyle");
     txStylesCursor.ignoreEmptyChild(P_NS, "bodyStyle");
     txStylesCursor.ignoreEmptyChild(P_NS, "otherStyle");
-    textStyles = readMasterTextStyles(txStylesCursor, masterClrMap);
+    textStyles = readMasterTextStyles(
+      txStylesCursor,
+      masterClrMap,
+      masterPartPath,
+      diagnostics,
+    );
   }
   const masterHeaderFooter = readHeaderFooterElement(
     masterCursor,
@@ -1629,6 +1718,8 @@ function readSlideMasterPart(
       : { headerFooter: masterHeaderFooter }),
   };
   const masterNode = createSlideMasterNode(masterProps);
+  const masterObjectBySpid = new Map<number, CommonNode>();
+  const masterOmittedSpids = new Map<number, OmittedSlideObjectInfo>();
   if (spTree !== undefined && shapeTreeHandlers.length > 0) {
     readShapeTreeItems({
       spTree,
@@ -1642,6 +1733,10 @@ function readSlideMasterPart(
       },
       shapeTreeHandlers,
       registerDeferredSlideLink,
+      registerImportedObject: (spid, node) => {
+        masterObjectBySpid.set(spid, node);
+      },
+      omittedSpids: masterOmittedSpids,
       appendNode: (node) => masterNode.append(node),
       diagnostics,
       containerNode: masterNode,
@@ -1661,6 +1756,8 @@ function readSlideMasterPart(
       part: masterPartPath,
       ...(slideHandler.slot === "transition" ? {} : { slideIndex: 0 }),
       package: pkg,
+      objectBySpid: masterObjectBySpid,
+      omittedSpids: masterOmittedSpids,
       ...(masterPlaceholderKeyBySpid === undefined
         ? {}
         : { placeholderKeyBySpid: masterPlaceholderKeyBySpid }),

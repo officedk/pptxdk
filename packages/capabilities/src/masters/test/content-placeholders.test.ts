@@ -46,14 +46,16 @@ describe("Native content placeholders fixtures", () => {
     const bytes = readFixture("ph-populated-placeholders.pptx");
     const imported = importDocument(bytes);
 
-    // Every diagnostic on the raw Office fixture is an unsupported non-core mechanism (theme 3D, slide 3 tableStyleId, slide 8 SmartArt dgm).
+    // Every diagnostic on the raw Office fixture is an unsupported non-core mechanism (theme 3D, slide 3 tableStyleId, slide 8 SmartArt -> Group fallback).
     expect(
-      imported.report.diagnostics.every((d) => d.category === "unsupported"),
-    ).toBe(true);
+      imported.report.diagnostics.filter((d) => d.category !== "unsupported"),
+    ).toEqual([]);
     expect(
       imported.report.diagnostics.some(
         (d) =>
-          d.code === "unsupported-mechanism" && d.location.slideIndex === 7,
+          d.code === "compatibility-fallback" &&
+          d.location.slideIndex === 7 &&
+          d.selectedFallback === "group",
       ),
     ).toBe(true);
 

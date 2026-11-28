@@ -1,6 +1,5 @@
 import {
   bcp47LangSchema,
-  matchLayoutPlaceholderKey,
   schemeColorNameSchema,
   type ColorValue,
   type HexColor,
@@ -41,8 +40,10 @@ import {
   type ClickLinkReadResult,
 } from "../shared/identity.ts";
 import {
+  emitPlaceholderUnbindDiagnostic,
   isPlaceholderGraphicFrameElement,
   readNvPrPlaceholder,
+  resolvePlaceholderImportClaim,
 } from "../shared/placeholder-import.ts";
 import { createChartNode } from "./chart-declaration.ts";
 import {
@@ -1854,10 +1855,14 @@ function readCategorySeries(
   }
 
   const pointCount = Math.max(catData.values.length, valData.length);
+  const categories =
+    catData.values.length === 0 && valData.length > 0
+      ? Array.from({ length: valData.length }, (_, i) => String(i + 1))
+      : catData.values;
   const normalizedPoints: Record<number, ChartPoint> = {};
   for (const [key, pt] of Object.entries(pointsRecord)) {
     const numKey = Number(key);
-    if (numKey >= 0 && numKey < pointCount) {
+    if (numKey >= 0 && Number.isSafeInteger(numKey)) {
       normalizedPoints[numKey] = pt;
     }
   }
@@ -1865,7 +1870,7 @@ function readCategorySeries(
   return {
     order,
     name: name.trim() === "" ? `Series ${fallbackIndex + 1}` : name,
-    categories: catData.values,
+    categories,
     ...(catData.formula === undefined
       ? {}
       : { categoryFormula: catData.formula }),
@@ -1884,9 +1889,11 @@ function readCategorySeries(
     ...(Object.keys(normalizedPoints).length === 0
       ? {}
       : { points: normalizedPoints }),
-    ...(trendlines === undefined ? {} : { trendlines }),
+    ...(trendlines === undefined || pointCount === 0 ? {} : { trendlines }),
     ...(errorBars === undefined ? {} : { errorBars }),
-    ...(datalabelsRange === undefined ? {} : { datalabelsRange }),
+    ...(datalabelsRange === undefined || datalabelsRange.length === 0
+      ? {}
+      : { datalabelsRange }),
   };
 }
 
@@ -2026,7 +2033,7 @@ function readScatterSeries(
   const normalizedPoints: Record<number, ScatterChartPoint> = {};
   for (const [key, pt] of Object.entries(pointsRecord)) {
     const numKey = Number(key);
-    if (numKey >= 0 && numKey < x.length) {
+    if (numKey >= 0 && Number.isSafeInteger(numKey)) {
       normalizedPoints[numKey] = pt;
     }
   }
@@ -2563,22 +2570,179 @@ function withLiftedDataLabelsStyle(
     : groupLabels;
 }
 
+function trimSeriesPointsToLength<T>(
+  points: Readonly<Record<number, T>> | undefined,
+  pointCount: number,
+  chartLocation: ImportLocation,
+  diagnostics: ImportDiagnostic[],
+): Readonly<Record<number, T>> | undefined {
+  if (points === undefined) return undefined;
+  const trimmed: Record<number, T> = {};
+  for (const [rawKey, value] of Object.entries(points)) {
+    const idx = Number(rawKey);
+    if (!Number.isSafeInteger(idx) || idx < 0 || idx >= pointCount) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: chartLocation,
+        attributeOrElement: "c:dPt/@idx",
+        rawValue: rawKey,
+      });
+      continue;
+    }
+    trimmed[idx] = value;
+  }
+  return Object.keys(trimmed).length === 0 ? undefined : trimmed;
+}
+
+function alignCustomErrorBars(
+  errorBars: ChartErrorBars | undefined,
+  pointCount: number,
+): ChartErrorBars | undefined {
+  if (errorBars === undefined || errorBars.type !== "custom") {
+    return errorBars;
+  }
+  const plus =
+    errorBars.plus === undefined
+      ? undefined
+      : alignErrorBarValues(errorBars.plus, pointCount);
+  const minus =
+    errorBars.minus === undefined
+      ? undefined
+      : alignErrorBarValues(errorBars.minus, pointCount);
+  if (errorBars.include === "plus" && plus !== undefined) {
+    return { ...errorBars, plus };
+  }
+  if (errorBars.include === "minus" && minus !== undefined) {
+    return { ...errorBars, minus };
+  }
+  if (
+    errorBars.include === "both" &&
+    plus !== undefined &&
+    minus !== undefined
+  ) {
+    return { ...errorBars, plus, minus };
+  }
+  return undefined;
+}
+
+function filterValidTrendlines(
+  trendlines: readonly ChartTrendline[] | undefined,
+  pointCount: number,
+): readonly ChartTrendline[] | undefined {
+  if (trendlines === undefined) return undefined;
+  const kept = trendlines.filter(
+    (item) => item.type !== "movingAverage" || item.period < pointCount,
+  );
+  return kept.length === 0 ? undefined : kept;
+}
+
 function buildChartAxesAndGroups(
   groupDrafts: readonly ImportedGroupDraft[],
   importedAxes: readonly ImportedAxisRecord[],
+  chartLocation: ImportLocation,
+  diagnostics: ImportDiagnostic[],
 ): { readonly axes?: ChartAxes; readonly groups: readonly ChartGroup[] } {
   const axisById = new Map(importedAxes.map((ax) => [ax.id, ax]));
   const axisDirectionById = new Map<number, "horizontal" | "vertical">();
+  const referencedAxisIds = new Set<number>();
+  const validGroupDrafts: ImportedGroupDraft[] = [];
+
   for (const group of groupDrafts) {
-    if (group.kind === "pie" || group.kind === "doughnut") continue;
-    const [firstId, secondId] = group.axisIds;
-    if (group.kind === "bar") {
-      if (firstId !== undefined) axisDirectionById.set(firstId, "vertical");
-      if (secondId !== undefined) axisDirectionById.set(secondId, "horizontal");
-    } else {
-      if (firstId !== undefined) axisDirectionById.set(firstId, "horizontal");
-      if (secondId !== undefined) axisDirectionById.set(secondId, "vertical");
+    if (group.series.length === 0) {
+      diagnostics.push({
+        code: "corrupt-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: chartLocation,
+      });
+      continue;
     }
+    if (group.kind === "pie" || group.kind === "doughnut") {
+      validGroupDrafts.push(group);
+      continue;
+    }
+    if (group.kind === "scatter") {
+      const [xId, yId] = group.axisIds;
+      const xAx = xId === undefined ? undefined : axisById.get(xId);
+      const yAx = yId === undefined ? undefined : axisById.get(yId);
+      const xDir = xId === undefined ? undefined : axisDirectionById.get(xId);
+      const yDir = yId === undefined ? undefined : axisDirectionById.get(yId);
+      const nextAxisCount =
+        referencedAxisIds.size +
+        (xId !== undefined && !referencedAxisIds.has(xId) ? 1 : 0) +
+        (yId !== undefined && yId !== xId && !referencedAxisIds.has(yId)
+          ? 1
+          : 0);
+      if (
+        xAx === undefined ||
+        yAx === undefined ||
+        xAx.id === yAx.id ||
+        xAx.kind !== "value" ||
+        yAx.kind !== "value" ||
+        (xDir !== undefined && xDir !== "horizontal") ||
+        (yDir !== undefined && yDir !== "vertical") ||
+        nextAxisCount > 4
+      ) {
+        diagnostics.push({
+          code: "corrupt-part",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: chartLocation,
+        });
+        continue;
+      }
+      axisDirectionById.set(xAx.id, "horizontal");
+      axisDirectionById.set(yAx.id, "vertical");
+      referencedAxisIds.add(xAx.id);
+      referencedAxisIds.add(yAx.id);
+      validGroupDrafts.push(group);
+      continue;
+    }
+
+    const [catId, valId] = group.axisIds;
+    const catAx = catId === undefined ? undefined : axisById.get(catId);
+    const valAx = valId === undefined ? undefined : axisById.get(valId);
+    const expectedCatDir = group.kind === "bar" ? "vertical" : "horizontal";
+    const expectedValDir = group.kind === "bar" ? "horizontal" : "vertical";
+    const catDir =
+      catId === undefined ? undefined : axisDirectionById.get(catId);
+    const valDir =
+      valId === undefined ? undefined : axisDirectionById.get(valId);
+    const nextAxisCount =
+      referencedAxisIds.size +
+      (catId !== undefined && !referencedAxisIds.has(catId) ? 1 : 0) +
+      (valId !== undefined && valId !== catId && !referencedAxisIds.has(valId)
+        ? 1
+        : 0);
+    if (
+      catAx === undefined ||
+      valAx === undefined ||
+      catAx.id === valAx.id ||
+      catAx.kind !== "category" ||
+      valAx.kind !== "value" ||
+      (catDir !== undefined && catDir !== expectedCatDir) ||
+      (valDir !== undefined && valDir !== expectedValDir) ||
+      nextAxisCount > 4
+    ) {
+      diagnostics.push({
+        code: "corrupt-part",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: chartLocation,
+      });
+      continue;
+    }
+    axisDirectionById.set(catAx.id, expectedCatDir);
+    axisDirectionById.set(valAx.id, expectedValDir);
+    referencedAxisIds.add(catAx.id);
+    referencedAxisIds.add(valAx.id);
+    validGroupDrafts.push(group);
+  }
+
+  if (validGroupDrafts.length === 0) {
+    return { groups: [] };
   }
 
   // Map native crosses/crossesAt back to author-facing crossing partners.
@@ -2681,7 +2845,7 @@ function buildChartAxesAndGroups(
     return candidate;
   };
 
-  for (const group of groupDrafts) {
+  for (const group of validGroupDrafts) {
     if (group.kind === "pie" || group.kind === "doughnut") continue;
     if (group.kind === "scatter") {
       const [xId, yId] = group.axisIds;
@@ -2751,7 +2915,7 @@ function buildChartAxesAndGroups(
 
   // Ensure shared category axis domains agree across groups referencing the same category axis.
   const sharedDomainByCatAxis = new Map<number, readonly string[]>();
-  for (const group of groupDrafts) {
+  for (const group of validGroupDrafts) {
     if (
       group.kind === "scatter" ||
       group.kind === "pie" ||
@@ -2767,7 +2931,7 @@ function buildChartAxesAndGroups(
     }
   }
 
-  const groups: ChartGroup[] = groupDrafts.map((group) => {
+  const groups: ChartGroup[] = validGroupDrafts.map((group) => {
     const liftedDataLabels = withLiftedDataLabelsStyle(
       group.dataLabels,
       group.seriesDataLabelsStyle,
@@ -2777,15 +2941,60 @@ function buildChartAxesAndGroups(
       const [xId, yId] = group.axisIds;
       const xName = xId === undefined ? undefined : axisNameById.get(xId);
       const yName = yId === undefined ? undefined : axisNameById.get(yId);
+      const scatterShowLine = group.line !== undefined && group.line !== false;
+      const scatterMarkers = scatterShowLine ? group.markers : true;
+      const sanitizedScatterSeries = group.series
+        .map((item) => {
+          const trimmedPoints = trimSeriesPointsToLength(
+            item.points,
+            item.x.length,
+            chartLocation,
+            diagnostics,
+          );
+          const trimmedTrendlines = filterValidTrendlines(
+            item.trendlines,
+            item.x.length,
+          );
+          const xErr = alignCustomErrorBars(item.errorBars?.x, item.x.length);
+          const yErr = alignCustomErrorBars(item.errorBars?.y, item.y.length);
+          const errorBars =
+            xErr !== undefined || yErr !== undefined
+              ? {
+                  ...(xErr === undefined ? {} : { x: xErr }),
+                  ...(yErr === undefined ? {} : { y: yErr }),
+                }
+              : undefined;
+          return {
+            ...item,
+            ...(trimmedPoints === undefined
+              ? { points: undefined }
+              : { points: trimmedPoints }),
+            ...(trimmedTrendlines === undefined
+              ? { trendlines: undefined }
+              : { trendlines: trimmedTrendlines }),
+            ...(errorBars === undefined
+              ? { errorBars: undefined }
+              : { errorBars }),
+          };
+        })
+        .map((item) => {
+          const { points: pt, trendlines: tl, errorBars: eb, ...rest } = item;
+          return {
+            ...rest,
+            ...(pt === undefined ? {} : { points: pt }),
+            ...(tl === undefined ? {} : { trendlines: tl }),
+            ...(eb === undefined ? {} : { errorBars: eb }),
+          };
+        });
       return {
         kind: "scatter",
         data: { kind: "xy" },
-        series: group.series,
+        series: sanitizedScatterSeries,
         ...(xName !== undefined && yName !== undefined && xName !== yName
           ? { axes: { x: xName, y: yName } }
           : {}),
         ...(group.line === undefined ? {} : { line: group.line }),
-        markers: group.markers,
+        markers: scatterMarkers,
         ...(liftedDataLabels === undefined
           ? {}
           : { dataLabels: liftedDataLabels as false | ScatterDataLabels }),
@@ -2807,10 +3016,17 @@ function buildChartAxesAndGroups(
       if (isIndependent) {
         const series: IndependentCategorySeries[] = group.series.map((item) => {
           const cats = item.datalabelsRange ?? item.categories;
-          const values =
+          const values = (
             item.values.length === cats.length
               ? item.values
-              : cats.map((_, idx) => item.values[idx] ?? null);
+              : cats.map((_, idx) => item.values[idx] ?? null)
+          ).map((v) => (v !== null && v < 0 ? null : v));
+          const trimmedPoints = trimSeriesPointsToLength(
+            item.points,
+            cats.length,
+            chartLocation,
+            diagnostics,
+          );
           return {
             name: item.name,
             categories: cats,
@@ -2823,13 +3039,7 @@ function buildChartAxesAndGroups(
             ...(item.dataLabels === undefined
               ? {}
               : { dataLabels: item.dataLabels }),
-            ...(item.points === undefined ? {} : { points: item.points }),
-            ...(item.trendlines === undefined
-              ? {}
-              : { trendlines: item.trendlines }),
-            ...(item.errorBars === undefined
-              ? {}
-              : { errorBars: item.errorBars }),
+            ...(trimmedPoints === undefined ? {} : { points: trimmedPoints }),
           };
         });
         const indDoughnutLabels = narrowGroupDataLabels(liftedDataLabels, []);
@@ -2878,6 +3088,20 @@ function buildChartAxesAndGroups(
         group.kind === "pie" || group.kind === "doughnut"
           ? values.map((v) => (v !== null && v < 0 ? null : v))
           : values;
+      const trimmedPoints = trimSeriesPointsToLength(
+        item.points,
+        domain.length,
+        chartLocation,
+        diagnostics,
+      );
+      const trimmedTrendlines = filterValidTrendlines(
+        item.trendlines,
+        domain.length,
+      );
+      const alignedErrorBars = alignCustomErrorBars(
+        item.errorBars,
+        domain.length,
+      );
       return {
         name: item.name,
         values: safeValues,
@@ -2889,11 +3113,13 @@ function buildChartAxesAndGroups(
           : { dataLabels: item.dataLabels }),
         ...(item.marker === undefined ? {} : { marker: item.marker }),
         ...(item.smooth === undefined ? {} : { smooth: item.smooth }),
-        ...(item.points === undefined ? {} : { points: item.points }),
-        ...(item.trendlines === undefined
+        ...(trimmedPoints === undefined ? {} : { points: trimmedPoints }),
+        ...(trimmedTrendlines === undefined
           ? {}
-          : { trendlines: item.trendlines }),
-        ...(item.errorBars === undefined ? {} : { errorBars: item.errorBars }),
+          : { trendlines: trimmedTrendlines }),
+        ...(alignedErrorBars === undefined
+          ? {}
+          : { errorBars: alignedErrorBars }),
       };
     });
 
@@ -3050,13 +3276,7 @@ function consumeChartAlternateContent(ac: XmlElementCursor): boolean {
 export function readChartGraphicFrame(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const {
-    cursor,
-    part,
-    slideIndex,
-    package: pkg,
-    layoutPlaceholders,
-  } = context;
+  const { cursor, part, slideIndex, package: pkg } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvGraphicFramePr = cursor.child(P_NS, "nvGraphicFramePr");
@@ -3125,13 +3345,17 @@ export function readChartGraphicFrame(
   }
   const nativeRef: NativePlaceholderRef | undefined =
     phResult.kind === "ok" ? phResult.nativeRef : undefined;
-  const matchedKey =
+  const chartCompatiblePlaceholderRoles = new Set<string>(["chart", "obj"]);
+  const claim =
     nativeRef === undefined
       ? undefined
-      : matchLayoutPlaceholderKey(layoutPlaceholders, {
-          type: nativeRef.type,
-          idx: nativeRef.idx,
+      : resolvePlaceholderImportClaim({
+          context,
+          nativeRef,
+          compatibleRoles: chartCompatiblePlaceholderRoles,
         });
+  const matchedKey = claim?.bound === true ? claim.key : undefined;
+  const unboundPlaceholder = claim !== undefined && !claim.bound;
 
   const xfrm = cursor.child(P_NS, "xfrm");
   const off = xfrm?.child(A_NS, "off");
@@ -3507,7 +3731,21 @@ export function readChartGraphicFrame(
     return { diagnostics };
   }
 
-  const { axes, groups } = buildChartAxesAndGroups(groupDrafts, importedAxes);
+  const { axes, groups } = buildChartAxesAndGroups(
+    groupDrafts,
+    importedAxes,
+    {
+      part: chartPartPath,
+      xpath: plotAreaEl.xpath,
+      slideIndex,
+      ...(objectId === undefined ? {} : { objectId }),
+      ...(objectName === undefined ? {} : { objectName }),
+    },
+    diagnostics,
+  );
+  if (groups.length === 0) {
+    return { diagnostics };
+  }
 
   // Guard displayBlanksAs against chart kind / stacking constraints.
   if (displayBlanksAs !== undefined) {
@@ -3536,7 +3774,9 @@ export function readChartGraphicFrame(
   const props: ChartProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
-    ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
+    ...(matchedKey === undefined || nativeRef === undefined
+      ? {}
+      : { nativePlaceholder: nativeRef }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
     ...(axes === undefined ? {} : { axes }),
     groups,
@@ -3553,6 +3793,14 @@ export function readChartGraphicFrame(
     ...(legend === undefined ? {} : { legend }),
     ...(plotArea === undefined ? {} : { plotArea }),
   };
+
+  if (unboundPlaceholder) {
+    emitPlaceholderUnbindDiagnostic({
+      diagnostics,
+      location: chartLocation,
+      retainedAs: "chart",
+    });
+  }
 
   const node = createChartNode(props);
   attachDeferredSlideLink(node, clickResult?.deferredSlideLink, context);

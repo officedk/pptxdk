@@ -93,6 +93,7 @@ export {
   CONTENT_TYPES_NS,
   C_NS,
   DIAGRAM_NS,
+  DSP_NS,
   EMU_PER_PX,
   MC_NS,
   OPC_REL_NS,
@@ -156,6 +157,7 @@ export type {
 export {
   extentEmuFragmentSchema,
   hexRgb6Schema,
+  normalizeBulletCharacter,
   offsetEmuFragmentSchema,
   ooxmlBoolSchema,
   ooxmlIntSchema,

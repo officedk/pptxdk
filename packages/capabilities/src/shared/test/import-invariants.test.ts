@@ -16,6 +16,7 @@ import {
   REL_CHART,
   REL_DIAGRAM_DATA,
   REL_DIAGRAM_DRAWING,
+  REL_IMAGE,
   REL_OFFICE_DOCUMENT,
   REL_SLIDE,
   REL_SLIDE_LAYOUT,
@@ -1040,6 +1041,242 @@ describe("importPptx postcondition invariants", () => {
     assert.ok(
       imported.report.diagnostics.filter((d) => d.code === "invalid-xml-value")
         .length >= 8,
+    );
+
+    assertCodegenAndEmitPass(deck, { attachJostFont: true });
+  });
+
+  it("enforces DrawingML geometry transform, line width, shadow/softEdge, and inset upper bounds across master, layout, footer, table, and slide objects", () => {
+    const png1x1Bytes = Uint8Array.from(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const masterXml = `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}">
+  <p:cSld name="M1">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="MasterTitle"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="274320"/><a:ext cx="8229600" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:ln w="30000000"><a:solidFill><a:srgbClr val="1D4ED8"/></a:solidFill></a:ln>
+        </p:spPr>
+        <p:txBody><a:bodyPr lIns="3000000000" tIns="1500000000" bIns="1500000000"/><a:lstStyle/><a:p><a:r><a:t>Title</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="3" name="MasterBody"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="1371600"/><a:ext cx="4000000" cy="2286000"/></a:xfrm></p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle><a:lvl1pPr><a:defRPr sz="1600"><a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></a:defRPr></a:lvl1pPr></a:lstStyle><a:p><a:r><a:t>Body</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="4" name="MasterFooter"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="ftr" sz="half" idx="11"/></p:nvPr></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="4500000"/><a:ext cx="3000000000" cy="360000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+        <p:txBody><a:bodyPr lIns="3000000000"/><a:lstStyle/><a:p><a:r><a:t>Footer Text</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+  <p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst>
+  <p:txStyles>
+    <p:titleStyle><a:lvl1pPr><a:defRPr sz="2400"><a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></a:defRPr></a:lvl1pPr></p:titleStyle>
+    <p:bodyStyle><a:lvl1pPr><a:defRPr sz="1600"><a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></a:defRPr></a:lvl1pPr></p:bodyStyle>
+    <p:otherStyle/>
+  </p:txStyles>
+</p:sldMaster>`;
+
+    const layoutXml = `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="obj">
+  <p:cSld name="L1">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="LayoutTitle"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="274320"/><a:ext cx="8229600" cy="914400"/></a:xfrm>
+          <a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw><a:softEdge rad="3000000000"/></a:effectLst>
+        </p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Title</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="3" name="LayoutBodyBadExt"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="20000000000" y="0"/><a:ext cx="3000000000" cy="952500"/></a:xfrm></p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Body</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sldLayout>`;
+
+    const slideXml = `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}">
+  <p:cSld name="s1">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="SlideTitleBadLocalBox"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="20000000000" y="0"/><a:ext cx="3000000000" cy="952500"/></a:xfrm></p:spPr>
+        <p:txBody><a:bodyPr lIns="3000000000" tIns="1500000000" bIns="1500000000"/><a:lstStyle/><a:p><a:r><a:t>Bound Title</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="3" name="SlideBodyInheritedTextShadow"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>
+        <p:spPr/>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Bound Body</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="10" name="FreeShapeBadOff"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="20000000000" y="0"/><a:ext cx="952500" cy="952500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="2563EB"/></a:solidFill></p:spPr>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="11" name="FreeTextBadExt"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="457200"/><a:ext cx="3000000000" cy="952500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+        <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Omit me</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:cxnSp>
+        <p:nvCxnSpPr><p:cNvPr id="12" name="DanglingConnector"/><p:cNvCxnSpPr><a:stCxn id="10" idx="0"/></p:cNvCxnSpPr><p:nvPr/></p:nvCxnSpPr>
+        <p:spPr><a:xfrm><a:off x="457200" y="2500000"/><a:ext cx="1828800" cy="0"/></a:xfrm><a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom><a:ln w="30000000"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill></a:ln></p:spPr>
+      </p:cxnSp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="13" name="BoundsShapeEffects"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="2800000"/><a:ext cx="2743200" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill>
+          <a:ln w="30000000"><a:solidFill><a:srgbClr val="1E40AF"/></a:solidFill></a:ln>
+          <a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw><a:softEdge rad="3000000000"/></a:effectLst>
+        </p:spPr>
+        <p:txBody><a:bodyPr lIns="3000000000" tIns="3000000000" rIns="3000000000" bIns="3000000000" anchor="ctr"/><a:lstStyle/><a:p><a:r><a:rPr sz="1400"><a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></a:rPr><a:t>Shape text</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="14" name="BoundsTextBox"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="3600000" y="2800000"/><a:ext cx="2200000" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:ln w="30000000"><a:solidFill><a:srgbClr val="334155"/></a:solidFill></a:ln>
+          <a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw><a:softEdge rad="3000000000"/></a:effectLst>
+        </p:spPr>
+        <p:txBody><a:bodyPr lIns="3000000000" tIns="1500000000" rIns="95250" bIns="1500000000" wrap="square"/><a:lstStyle/><a:p><a:r><a:rPr sz="1400"><a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></a:rPr><a:t>Box text</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="15" name="BoundsImage"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+        <p:spPr>
+          <a:xfrm><a:off x="6200000" y="2800000"/><a:ext cx="914400" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:ln w="30000000"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill></a:ln>
+          <a:effectLst><a:outerShdw blurRad="3000000000" dist="3000000000" dir="5400000"><a:srgbClr val="000000"/></a:outerShdw><a:softEdge rad="3000000000"/></a:effectLst>
+        </p:spPr>
+      </p:pic>
+      <p:graphicFrame>
+        <p:nvGraphicFramePr><p:cNvPr id="16" name="BoundsTable"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+        <p:xfrm><a:off x="457200" y="3850000"/><a:ext cx="3657600" cy="700000"/></p:xfrm>
+        <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+          <a:tbl>
+            <a:tblPr/>
+            <a:tblGrid><a:gridCol w="1828800"/><a:gridCol w="1828800"/></a:tblGrid>
+            <a:tr h="350000">
+              <a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>A</a:t></a:r></a:p></a:txBody><a:tcPr marL="3000000000" marR="3000000000" marT="1500000000" marB="1500000000"><a:lnL w="30000000"><a:solidFill><a:srgbClr val="475569"/></a:solidFill></a:lnL></a:tcPr></a:tc>
+              <a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>B</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>
+            </a:tr>
+          </a:tbl>
+        </a:graphicData></a:graphic>
+      </p:graphicFrame>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`;
+
+    const pptx = baseDeckFiles({
+      slideXml,
+      slideRelsXml: `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_IMAGE}" Target="../media/image1.png"/></Relationships>`,
+      extraFiles: {
+        "ppt/slideMasters/slideMaster1.xml": masterXml,
+        "ppt/slideLayouts/slideLayout1.xml": layoutXml,
+        "ppt/media/image1.png": png1x1Bytes,
+      },
+    });
+
+    const imported = importAll(pptx);
+    const deck = imported.document as DeckContainer;
+    const slideNode = deck.children.find(
+      (c): c is CommonNode => c instanceof CommonNode && c.kind === "slide",
+    )!;
+    assert.ok(slideNode !== undefined);
+    const byName = (
+      targetName: string,
+      root: CommonNode = slideNode,
+    ): CommonNode | undefined => {
+      for (const child of root.children) {
+        if (!(child instanceof CommonNode)) continue;
+        if (child.props["name"] === targetName) return child;
+        const nested = byName(targetName, child);
+        if (nested !== undefined) return nested;
+      }
+      return undefined;
+    };
+
+    // Free shapes/textboxes with out-of-bounds off/ext are omitted cleanly and connected lines fall back
+    assert.equal(byName("FreeShapeBadOff"), undefined);
+    assert.equal(byName("FreeTextBadExt"), undefined);
+    assert.equal(byName("DanglingConnector")?.props["from"], undefined);
+
+    // Bound placeholders keep surviving nodes by stripping invalid local boxes
+    const boundTitle = byName("SlideTitleBadLocalBox");
+    assert.ok(boundTitle !== undefined);
+    assert.equal(
+      (boundTitle.props["style"] as Record<string, unknown> | undefined)?.[
+        "left"
+      ],
+      undefined,
+    );
+    assert.equal(
+      (boundTitle.props["style"] as Record<string, unknown> | undefined)?.[
+        "width"
+      ],
+      undefined,
+    );
+
+    // Master txStyles and placeholder defRPr strip oversized textShadow
+    const masterTitleStyle = (
+      deck.masters[0]?.props["textStyles"] as
+        | {
+            readonly titleStyle?: Record<number, Record<string, unknown>>;
+            readonly bodyStyle?: Record<number, Record<string, unknown>>;
+          }
+        | undefined
+    )?.titleStyle?.[1];
+    assert.equal(masterTitleStyle?.["textShadow"], undefined);
+
+    // Layout placeholder stripped invalid box, master footer stripped invalid box
+    const layoutBodyStyle = (
+      deck.masters[0]?.layouts[0]?.props["placeholders"] as
+        | Record<string, { readonly style?: Record<string, unknown> }>
+        | undefined
+    )?.["body-1"]?.style;
+    assert.equal(layoutBodyStyle?.["width"], undefined);
+    const masterFooterStyle = (
+      deck.masters[0]?.props["footerPlaceholders"] as
+        | { readonly footer?: { readonly style?: Record<string, unknown> } }
+        | undefined
+    )?.footer?.style;
+    assert.equal(masterFooterStyle?.["width"], undefined);
+
+    // Oversized line width preserves color with fallback width while oversized shadow/softEdge/insets are stripped
+    const boundsShape = byName("BoundsShapeEffects")!;
+    const shapeStyle = boundsShape.props["style"] as Record<string, unknown>;
+    assert.deepEqual(
+      { ...(shapeStyle["border"] as Record<string, unknown>) },
+      { color: "#1E40AF", width: 1 },
+    );
+    assert.equal(shapeStyle["boxShadow"], undefined);
+    assert.equal(shapeStyle["softEdge"], undefined);
+    assert.equal(shapeStyle["paddingLeft"], undefined);
+    assert.equal(shapeStyle["paddingTop"], undefined);
+    assert.equal(shapeStyle["verticalAlign"], "middle");
+
+    assert.ok(
+      imported.report.diagnostics.filter((d) => d.code === "invalid-xml-value")
+        .length >= 10,
     );
 
     assertCodegenAndEmitPass(deck, { attachJostFont: true });

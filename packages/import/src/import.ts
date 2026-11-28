@@ -75,9 +75,20 @@ export type ImportResult = {
 const defaultSlideWidthPx = 960;
 const defaultSlideHeightPx = 540;
 
-const slideSizeFragmentSchema = extentEmuFragmentSchema.extend({
-  type: z.string().optional(),
-});
+const minimumSlideSizeEmu = 914_400;
+const maximumSlideSizeEmu = 51_206_400;
+
+const slideSizeFragmentSchema = extentEmuFragmentSchema
+  .extend({
+    type: z.string().optional(),
+  })
+  .refine(
+    (value) =>
+      value.cx >= minimumSlideSizeEmu &&
+      value.cx <= maximumSlideSizeEmu &&
+      value.cy >= minimumSlideSizeEmu &&
+      value.cy <= maximumSlideSizeEmu,
+  );
 
 const slideShowAttrSchema = z.object({
   show: ooxmlBoolSchema.optional(),

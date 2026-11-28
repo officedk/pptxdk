@@ -16,6 +16,8 @@ import {
   ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
+  ooxmlPositiveLineWidthEmuSchema,
+  ooxmlWritableExtentEmuSchema,
 } from "@pptxdk/import";
 import { z } from "zod";
 
@@ -286,8 +288,8 @@ export const geomGuideFragmentSchema = z.object({
 });
 
 export const customPathAttributesSchema = z.object({
-  w: ooxmlPositiveIntSchema.optional(),
-  h: ooxmlPositiveIntSchema.optional(),
+  w: ooxmlPositiveIntSchema.refine((v) => v <= 2_147_483_647).optional(),
+  h: ooxmlPositiveIntSchema.refine((v) => v <= 2_147_483_647).optional(),
   fill: z
     .enum(["none", "norm", "lighten", "lightenLess", "darken", "darkenLess"])
     .optional(),
@@ -295,12 +297,12 @@ export const customPathAttributesSchema = z.object({
 });
 
 export const customPathPointSchema = z.object({
-  x: ooxmlIntSchema,
-  y: ooxmlIntSchema,
+  x: ooxmlIntSchema.refine((v) => v >= -2_147_483_648 && v <= 2_147_483_647),
+  y: ooxmlIntSchema.refine((v) => v >= -2_147_483_648 && v <= 2_147_483_647),
 });
 
 export const lineAttributesFragmentSchema = z.object({
-  w: ooxmlPositiveIntSchema.optional(),
+  w: ooxmlPositiveLineWidthEmuSchema.optional(),
 });
 
 export const presetDashFragmentSchema = z.object({
@@ -308,13 +310,13 @@ export const presetDashFragmentSchema = z.object({
 });
 
 export const outerShadowFragmentSchema = z.object({
-  blurRad: ooxmlNonNegativeIntSchema.optional(),
-  dist: ooxmlNonNegativeIntSchema.optional(),
-  dir: ooxmlNonNegativeIntSchema.optional(),
+  blurRad: ooxmlWritableExtentEmuSchema.optional(),
+  dist: ooxmlWritableExtentEmuSchema.optional(),
+  dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: z.string().optional(),
 });
 
 export const softEdgeFragmentSchema = z.object({
-  rad: ooxmlNonNegativeIntSchema,
+  rad: ooxmlWritableExtentEmuSchema,
 });

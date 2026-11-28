@@ -94,6 +94,9 @@ import {
   ooxmlLineSpacingPointsSchema,
   ooxmlNonNegativeIntSchema,
   ooxmlParagraphSpacingPointsSchema,
+  ooxmlWritableExtentEmuSchema,
+  ooxmlWritableInt32CoordEmuSchema,
+  readOoxmlBoxInsets,
   readOoxmlRunAttrStyles,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
@@ -253,18 +256,41 @@ function readDefRPr(
         "algn",
         "rotWithShape",
       ]);
-      const blurParsed = ooxmlNonNegativeIntSchema.safeParse(
-        shdwAttrs["blurRad"],
-      );
-      const distParsed = ooxmlNonNegativeIntSchema.safeParse(shdwAttrs["dist"]);
-      const dirParsed = ooxmlIntSchema.safeParse(shdwAttrs["dir"]);
-      const shdwColor = readStyleColor(outerShdw, clrMap);
-      textShadow = {
-        ...(shdwColor === undefined ? {} : { color: shdwColor }),
-        blur: blurParsed.success ? emuToPx(blurParsed.data) : 0,
-        distance: distParsed.success ? emuToPx(distParsed.data) : 0,
-        angle: dirParsed.success ? dirParsed.data / 60_000 : 0,
-      };
+      const blurParsed =
+        shdwAttrs["blurRad"] === undefined
+          ? undefined
+          : ooxmlWritableExtentEmuSchema.safeParse(shdwAttrs["blurRad"]);
+      const distParsed =
+        shdwAttrs["dist"] === undefined
+          ? undefined
+          : ooxmlWritableExtentEmuSchema.safeParse(shdwAttrs["dist"]);
+      const dirParsed =
+        shdwAttrs["dir"] === undefined
+          ? undefined
+          : ooxmlIntSchema.safeParse(shdwAttrs["dir"]);
+      if (
+        (blurParsed !== undefined && !blurParsed.success) ||
+        (distParsed !== undefined && !distParsed.success) ||
+        (dirParsed !== undefined && !dirParsed.success)
+      ) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { part: partPath, xpath: outerShdw.xpath },
+          attributeOrElement: "a:outerShdw",
+          rawValue: JSON.stringify(shdwAttrs),
+        });
+        outerShdw.suppressUnconsumed();
+      } else {
+        const shdwColor = readStyleColor(outerShdw, clrMap);
+        textShadow = {
+          ...(shdwColor === undefined ? {} : { color: shdwColor }),
+          blur: blurParsed?.success ? emuToPx(blurParsed.data) : 0,
+          distance: distParsed?.success ? emuToPx(distParsed.data) : 0,
+          angle: dirParsed?.success ? dirParsed.data / 60_000 : 0,
+        };
+      }
     } else if (effectLst.element.children.length === 0) {
       textShadow = "none";
     }
@@ -333,10 +359,38 @@ function readLevelParagraphProperties(
     "hangingPunct",
     "fontAlgn",
   ]);
-  const marLParsed = ooxmlNonNegativeIntSchema.safeParse(rawAttrs["marL"]);
-  const marginLeft = marLParsed.success ? emuToPx(marLParsed.data) : undefined;
-  const indentParsed = ooxmlIntSchema.safeParse(rawAttrs["indent"]);
-  const indent = indentParsed.success ? emuToPx(indentParsed.data) : undefined;
+  let marginLeft: number | undefined;
+  if (rawAttrs["marL"] !== undefined) {
+    const marLParsed = ooxmlWritableExtentEmuSchema.safeParse(rawAttrs["marL"]);
+    if (marLParsed.success) {
+      marginLeft = emuToPx(marLParsed.data);
+    } else {
+      pushBoundedAttrDiagnostic(
+        diagnostics,
+        partPath,
+        pPr.xpath,
+        "marL",
+        rawAttrs["marL"],
+      );
+    }
+  }
+  let indent: number | undefined;
+  if (rawAttrs["indent"] !== undefined) {
+    const indentParsed = ooxmlWritableInt32CoordEmuSchema.safeParse(
+      rawAttrs["indent"],
+    );
+    if (indentParsed.success) {
+      indent = emuToPx(indentParsed.data);
+    } else {
+      pushBoundedAttrDiagnostic(
+        diagnostics,
+        partPath,
+        pPr.xpath,
+        "indent",
+        rawAttrs["indent"],
+      );
+    }
+  }
   const algnMap: Readonly<Record<string, TextAlignment>> = {
     l: "left",
     ctr: "center",
@@ -717,18 +771,25 @@ function readPlaceholderSpList(
         if (b["anchor"] === "t") styleProps["verticalAlign"] = "top";
         else if (b["anchor"] === "ctr") styleProps["verticalAlign"] = "middle";
         else if (b["anchor"] === "b") styleProps["verticalAlign"] = "bottom";
-        const lIns = ooxmlNonNegativeIntSchema.safeParse(b["lIns"]);
-        const tIns = ooxmlNonNegativeIntSchema.safeParse(b["tIns"]);
-        const rIns = ooxmlNonNegativeIntSchema.safeParse(b["rIns"]);
-        const bIns = ooxmlNonNegativeIntSchema.safeParse(b["bIns"]);
-        if (lIns.success && lIns.data !== 0)
-          styleProps["paddingLeft"] = emuToPx(lIns.data);
-        if (tIns.success && tIns.data !== 0)
-          styleProps["paddingTop"] = emuToPx(tIns.data);
-        if (rIns.success && rIns.data !== 0)
-          styleProps["paddingRight"] = emuToPx(rIns.data);
-        if (bIns.success && bIns.data !== 0)
-          styleProps["paddingBottom"] = emuToPx(bIns.data);
+        Object.assign(
+          styleProps,
+          readOoxmlBoxInsets({
+            rawAttrs: b,
+            attrNames: {
+              left: "lIns",
+              top: "tIns",
+              right: "rIns",
+              bottom: "bIns",
+            },
+            elementXpath: bodyPr.xpath,
+            location: {
+              part: partPath,
+              ...(spid === undefined ? {} : { objectId: spid }),
+              ...(name === undefined ? {} : { objectName: name }),
+            },
+            diagnostics,
+          }),
+        );
         bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
         bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
         const normAutofit = bodyPr.child(A_NS, "normAutofit");

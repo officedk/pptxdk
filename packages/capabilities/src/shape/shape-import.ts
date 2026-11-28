@@ -14,10 +14,10 @@ import {
   ooxmlNonNegativeIntSchema,
   ooxmlParagraphSpacingPointsSchema,
   P_NS,
+  readOoxmlBoxInsets,
   readOoxmlRunAttrStyles,
   readRunFontSlots,
   XML_NS,
-  emuToPx,
   type ImportDiagnostic,
   type ImportLocation,
   type ShapeTreeImportContext,
@@ -63,10 +63,6 @@ const NonVisualIdAttrSchema = z.object({
 const BodyPrAttrSchema = z.object({
   wrap: z.enum(["square", "none"]).optional(),
   rtlCol: ooxmlBoolSchema.optional(),
-  lIns: ooxmlNonNegativeIntSchema.optional(),
-  tIns: ooxmlNonNegativeIntSchema.optional(),
-  rIns: ooxmlNonNegativeIntSchema.optional(),
-  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
 });
 
@@ -631,11 +627,23 @@ function readShapeTxBody(
       if (b.anchor !== undefined) {
         verticalAlign = anchorToVerticalAlign[b.anchor];
       }
-      if (b.lIns !== undefined && b.lIns !== 0) paddingLeft = emuToPx(b.lIns);
-      if (b.tIns !== undefined && b.tIns !== 0) paddingTop = emuToPx(b.tIns);
-      if (b.rIns !== undefined && b.rIns !== 0) paddingRight = emuToPx(b.rIns);
-      if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
     }
+    const insets = readOoxmlBoxInsets({
+      rawAttrs: rawBodyPr,
+      attrNames: {
+        left: "lIns",
+        top: "tIns",
+        right: "rIns",
+        bottom: "bIns",
+      },
+      elementXpath: bodyPr.xpath,
+      location,
+      diagnostics,
+    });
+    paddingLeft = insets.paddingLeft;
+    paddingTop = insets.paddingTop;
+    paddingRight = insets.paddingRight;
+    paddingBottom = insets.paddingBottom;
     bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
     bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
   }

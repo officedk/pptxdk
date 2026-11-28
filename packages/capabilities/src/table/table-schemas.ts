@@ -23,6 +23,7 @@ import {
   ooxmlBoolSchema,
   ooxmlNonNegativeIntSchema,
   ooxmlPositiveIntSchema,
+  ooxmlWritablePositiveExtentEmuSchema,
 } from "@pptxdk/import";
 import { z } from "zod";
 
@@ -388,14 +389,14 @@ export const tblPrXmlSchema = z.object({
   rtl: ooxmlBoolSchema.optional(),
 });
 
-/** OOXML `<a:gridCol w="..."/>` fragment schema. */
+/** OOXML `<a:gridCol w="..."/>` fragment schema bounded to `1 .. 2_147_483_647` EMU. */
 export const tblGridColXmlSchema = z.object({
-  w: ooxmlPositiveIntSchema,
+  w: ooxmlWritablePositiveExtentEmuSchema,
 });
 
-/** OOXML `<a:tr h="..."/>` fragment schema. */
+/** OOXML `<a:tr h="..."/>` fragment schema bounded to `1 .. 2_147_483_647` EMU. */
 export const tblRowXmlSchema = z.object({
-  h: ooxmlPositiveIntSchema,
+  h: ooxmlWritablePositiveExtentEmuSchema,
 });
 
 /** OOXML `<a:tc gridSpan="..." rowSpan="..." hMerge="..." vMerge="..."/>` fragment schema. */
@@ -406,12 +407,8 @@ export const tblCellXmlSchema = z.object({
   vMerge: ooxmlBoolSchema.optional(),
 });
 
-/** OOXML `<a:tcPr .../>` attribute fragment schema. */
+/** OOXML `<a:tcPr .../>` non-margin attribute fragment schema. */
 export const tblCellPrXmlSchema = z.object({
-  marL: ooxmlNonNegativeIntSchema.optional(),
-  marR: ooxmlNonNegativeIntSchema.optional(),
-  marT: ooxmlNonNegativeIntSchema.optional(),
-  marB: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
   vert: z.string().optional(),
   horzOverflow: z.string().optional(),

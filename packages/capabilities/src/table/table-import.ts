@@ -4,9 +4,11 @@ import {
 } from "@pptxdk/core/capability";
 import {
   A_NS,
+  MAXIMUM_WRITABLE_EMU,
   P_NS,
   TABLE_NS_URI,
   emuToPx,
+  readOoxmlBoxInsets,
   type ImportDiagnostic,
   type ImportLocation,
   type ShapeTreeImportContext,
@@ -165,10 +167,6 @@ function readCellProperties(
     "anchorCtr",
   ]);
   const parsedAttrs = tblCellPrXmlSchema.safeParse(rawAttrs);
-  let paddingTop: number | undefined;
-  let paddingRight: number | undefined;
-  let paddingBottom: number | undefined;
-  let paddingLeft: number | undefined;
   let verticalAlign: TableVerticalAlign | undefined;
 
   if (!parsedAttrs.success) {
@@ -182,18 +180,6 @@ function readCellProperties(
     });
   } else {
     const attrs = parsedAttrs.data;
-    if (attrs.marT !== undefined && attrs.marT !== 0) {
-      paddingTop = emuToPx(attrs.marT);
-    }
-    if (attrs.marR !== undefined && attrs.marR !== 0) {
-      paddingRight = emuToPx(attrs.marR);
-    }
-    if (attrs.marB !== undefined && attrs.marB !== 0) {
-      paddingBottom = emuToPx(attrs.marB);
-    }
-    if (attrs.marL !== undefined && attrs.marL !== 0) {
-      paddingLeft = emuToPx(attrs.marL);
-    }
     if (attrs.anchor !== undefined) {
       verticalAlign = anchorToVerticalAlign[attrs.anchor];
     }
@@ -209,6 +195,20 @@ function readCellProperties(
       });
     }
   }
+
+  const { paddingTop, paddingRight, paddingBottom, paddingLeft } =
+    readOoxmlBoxInsets({
+      rawAttrs,
+      attrNames: {
+        left: "marL",
+        top: "marT",
+        right: "marR",
+        bottom: "marB",
+      },
+      elementXpath: tcPr.xpath,
+      location: cellLocation,
+      diagnostics,
+    });
 
   const borderLeft = readCellBorderSide(tcPr, "lnL", cellLocation, diagnostics);
   const borderRight = readCellBorderSide(
@@ -569,6 +569,7 @@ export function readTableGraphicFrame(
   }
 
   const columnWidths: number[] = [];
+  let totalWidthEmu = 0;
   for (const gridCol of gridCols) {
     const rawCol = gridCol.attrsObject(["w"]);
     const parsedCol = tblGridColXmlSchema.safeParse(rawCol);
@@ -583,7 +584,19 @@ export function readTableGraphicFrame(
       });
       return { diagnostics };
     }
+    totalWidthEmu += parsedCol.data.w;
     columnWidths.push(emuToPx(parsedCol.data.w));
+  }
+  if (totalWidthEmu > MAXIMUM_WRITABLE_EMU) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { ...tableLocation, xpath: tblGrid.xpath },
+      attributeOrElement: "a:tblGrid",
+      rawValue: String(totalWidthEmu),
+    });
+    return { diagnostics };
   }
 
   const trCursors = tbl.children(A_NS, "tr");
@@ -598,6 +611,7 @@ export function readTableGraphicFrame(
   }
 
   const rowHeights: number[] = [];
+  let totalHeightEmu = 0;
   const rawGrid: RawGridCell[][] = [];
   for (const trCursor of trCursors) {
     const rawRow = trCursor.attrsObject(["h"]);
@@ -613,7 +627,20 @@ export function readTableGraphicFrame(
       });
       return { diagnostics };
     }
+    totalHeightEmu += parsedRow.data.h;
     rowHeights.push(emuToPx(parsedRow.data.h));
+
+    if (totalHeightEmu > MAXIMUM_WRITABLE_EMU) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...tableLocation, xpath: tbl.xpath },
+        attributeOrElement: "a:tbl",
+        rawValue: String(totalHeightEmu),
+      });
+      return { diagnostics };
+    }
 
     const tcCursors = trCursor.children(A_NS, "tc");
     if (tcCursors.length !== columnWidths.length) {

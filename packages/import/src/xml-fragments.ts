@@ -2,6 +2,7 @@ import { assertValidLang, type TextStyle } from "@pptxdk/core";
 import { z } from "zod";
 
 import type { ImportDiagnostic, ImportLocation } from "#/diagnostics.ts";
+import { EMU_PER_PX, emuToPx } from "#/namespaces.ts";
 import type { XmlElementCursor } from "#/xml-reader.ts";
 
 const integerStringPattern = /^-?\d+$/u;
@@ -308,28 +309,197 @@ export const ooxmlBoolSchema = z
 /** Six-digit hex RGB value stored in `<a:srgbClr val="RRGGBB"/>`. */
 export const hexRgb6Schema = z.string().regex(hexRgbPattern);
 
-/** `<a:off x="..." y="..."/>` fragment schema. */
+/** Maximum logical pixel coordinate allowed by downstream builders (`[-1_000_000, 1_000_000]`). */
+export const MAXIMUM_COORDINATE_PX = 1_000_000;
+/** Maximum positive signed 32-bit DrawingML EMU value (`ST_PositiveCoordinate32`). */
+export const MAXIMUM_WRITABLE_EMU = 2_147_483_647;
+/** Minimum signed 32-bit DrawingML EMU value. */
+export const MINIMUM_WRITABLE_INT32_EMU = -2_147_483_648;
+/** Maximum DrawingML stroke line width in EMU (`ST_LineWidth`). */
+export const MAXIMUM_LINE_WIDTH_EMU = 20_116_800;
+
+function isWritablePixelCoordinateEmu(emu: number): boolean {
+  const px = emuToPx(emu);
+  const roundtrip = Math.round(px * EMU_PER_PX);
+  return (
+    Number.isFinite(px) &&
+    Math.abs(px) <= MAXIMUM_COORDINATE_PX &&
+    Number.isSafeInteger(roundtrip)
+  );
+}
+
+function isWritableNonNegativeEmu(
+  emu: number,
+  maxEmu = MAXIMUM_WRITABLE_EMU,
+): boolean {
+  const roundtrip = Math.round(emuToPx(emu) * EMU_PER_PX);
+  return (
+    emu >= 0 &&
+    emu <= maxEmu &&
+    Number.isSafeInteger(roundtrip) &&
+    roundtrip >= 0 &&
+    roundtrip <= maxEmu
+  );
+}
+
+function isWritablePositiveEmu(
+  emu: number,
+  maxEmu = MAXIMUM_WRITABLE_EMU,
+): boolean {
+  const roundtrip = Math.round(emuToPx(emu) * EMU_PER_PX);
+  return (
+    emu >= 1 &&
+    emu <= maxEmu &&
+    Number.isSafeInteger(roundtrip) &&
+    roundtrip >= 1 &&
+    roundtrip <= maxEmu
+  );
+}
+
+/** DrawingML non-negative writable EMU extent (`0 .. 2_147_483_647`). */
+export const ooxmlWritableExtentEmuSchema = ooxmlNonNegativeIntSchema.refine(
+  (value) => isWritableNonNegativeEmu(value),
+);
+
+/** DrawingML positive writable EMU extent (`1 .. 2_147_483_647`). */
+export const ooxmlWritablePositiveExtentEmuSchema =
+  ooxmlPositiveIntSchema.refine((value) => isWritablePositiveEmu(value));
+
+/** DrawingML signed 32-bit EMU coordinate within `[-1_000_000, 1_000_000]` px after conversion. */
+export const ooxmlWritableInt32CoordEmuSchema = ooxmlIntSchema.refine(
+  (value) =>
+    value >= MINIMUM_WRITABLE_INT32_EMU &&
+    value <= MAXIMUM_WRITABLE_EMU &&
+    isWritablePixelCoordinateEmu(value),
+);
+
+/** DrawingML `<a:ln w="...">` valid line width domain (`0 .. 20_116_800` EMU). */
+export const ooxmlLineWidthEmuSchema = ooxmlNonNegativeIntSchema.refine(
+  (value) => isWritableNonNegativeEmu(value, MAXIMUM_LINE_WIDTH_EMU),
+);
+
+/** DrawingML `<a:ln w="...">` strictly positive line width domain (`1 .. 20_116_800` EMU). */
+export const ooxmlPositiveLineWidthEmuSchema = ooxmlPositiveIntSchema.refine(
+  (value) => isWritablePositiveEmu(value, MAXIMUM_LINE_WIDTH_EMU),
+);
+
+/** `<a:off x="..." y="..."/>` fragment schema bounded to `[-1_000_000, 1_000_000]` px. */
 export const offsetEmuFragmentSchema = z.object({
-  x: ooxmlIntSchema,
-  y: ooxmlIntSchema,
+  x: ooxmlIntSchema.refine(isWritablePixelCoordinateEmu),
+  y: ooxmlIntSchema.refine(isWritablePixelCoordinateEmu),
 });
 export type OffsetEmuFragment = z.infer<typeof offsetEmuFragmentSchema>;
 
-/** `<a:ext cx="..." cy="..."/>` fragment schema. */
+/** `<a:ext cx="..." cy="..."/>` fragment schema bounded to `1 .. 2_147_483_647` EMU. */
 export const extentEmuFragmentSchema = z.object({
-  cx: ooxmlPositiveIntSchema,
-  cy: ooxmlPositiveIntSchema,
+  cx: ooxmlWritablePositiveExtentEmuSchema,
+  cy: ooxmlWritablePositiveExtentEmuSchema,
 });
 export type ExtentEmuFragment = z.infer<typeof extentEmuFragmentSchema>;
 
-/** `<a:ext cx="..." cy="..."/>` fragment schema allowing zero on one axis for 1D connectors. */
+/** `<a:ext cx="..." cy="..."/>` fragment schema allowing zero on one axis for 1D connectors, bounded to `0 .. 2_147_483_647` EMU. */
 export const nonNegativeExtentEmuFragmentSchema = z.object({
-  cx: ooxmlNonNegativeIntSchema,
-  cy: ooxmlNonNegativeIntSchema,
+  cx: ooxmlWritableExtentEmuSchema,
+  cy: ooxmlWritableExtentEmuSchema,
 });
 export type NonNegativeExtentEmuFragment = z.infer<
   typeof nonNegativeExtentEmuFragmentSchema
 >;
+
+export type OoxmlBoxInsetsResult = {
+  readonly paddingTop?: number;
+  readonly paddingRight?: number;
+  readonly paddingBottom?: number;
+  readonly paddingLeft?: number;
+};
+
+/**
+ * Parses box inset/margin attributes (`lIns/tIns/rIns/bIns` or `marL/marT/marR/marB`) independently
+ * within DrawingML `0 .. 2_147_483_647` EMU bounds and enforces opposing-pair sums `<= 2_147_483_647` EMU.
+ */
+export function readOoxmlBoxInsets(args: {
+  readonly rawAttrs: Readonly<Record<string, string | undefined>>;
+  readonly attrNames: {
+    readonly left: "lIns" | "marL";
+    readonly top: "tIns" | "marT";
+    readonly right: "rIns" | "marR";
+    readonly bottom: "bIns" | "marB";
+  };
+  readonly elementXpath: string;
+  readonly location: ImportLocation;
+  readonly diagnostics: ImportDiagnostic[];
+}): OoxmlBoxInsetsResult {
+  const { rawAttrs, attrNames, elementXpath, location, diagnostics } = args;
+  const parseEdge = (attrName: string): number | undefined => {
+    const raw = rawAttrs[attrName];
+    if (raw === undefined) return undefined;
+    const parsed = ooxmlWritableExtentEmuSchema.safeParse(raw);
+    if (!parsed.success) {
+      pushInvalidXmlAttrDiagnostic(
+        diagnostics,
+        location,
+        elementXpath,
+        attrName,
+        raw,
+      );
+      return undefined;
+    }
+    return parsed.data;
+  };
+
+  let leftEmu = parseEdge(attrNames.left);
+  let rightEmu = parseEdge(attrNames.right);
+  let topEmu = parseEdge(attrNames.top);
+  let bottomEmu = parseEdge(attrNames.bottom);
+
+  if (
+    leftEmu !== undefined &&
+    rightEmu !== undefined &&
+    leftEmu + rightEmu > MAXIMUM_WRITABLE_EMU
+  ) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "recovered",
+      location: { ...location, xpath: elementXpath },
+      attributeOrElement: `${attrNames.left}+${attrNames.right}`,
+      rawValue: `${leftEmu}+${rightEmu}`,
+    });
+    leftEmu = undefined;
+    rightEmu = undefined;
+  }
+  if (
+    topEmu !== undefined &&
+    bottomEmu !== undefined &&
+    topEmu + bottomEmu > MAXIMUM_WRITABLE_EMU
+  ) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "recovered",
+      location: { ...location, xpath: elementXpath },
+      attributeOrElement: `${attrNames.top}+${attrNames.bottom}`,
+      rawValue: `${topEmu}+${bottomEmu}`,
+    });
+    topEmu = undefined;
+    bottomEmu = undefined;
+  }
+
+  return {
+    ...(topEmu !== undefined && topEmu !== 0
+      ? { paddingTop: emuToPx(topEmu) }
+      : {}),
+    ...(rightEmu !== undefined && rightEmu !== 0
+      ? { paddingRight: emuToPx(rightEmu) }
+      : {}),
+    ...(bottomEmu !== undefined && bottomEmu !== 0
+      ? { paddingBottom: emuToPx(bottomEmu) }
+      : {}),
+    ...(leftEmu !== undefined && leftEmu !== 0
+      ? { paddingLeft: emuToPx(leftEmu) }
+      : {}),
+  };
+}
 
 /** `<a:xfrm rot="..." flipH="..." flipV="..."/>` attribute fragment schema. */
 export const transformAttributesFragmentSchema = z.object({

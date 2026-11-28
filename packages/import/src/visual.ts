@@ -23,7 +23,9 @@ import {
   nonNegativeExtentEmuFragmentSchema,
   offsetEmuFragmentSchema,
   ooxmlIntSchema,
+  ooxmlLineWidthEmuSchema,
   ooxmlNonNegativeIntSchema,
+  ooxmlWritableExtentEmuSchema,
   transformAttributesFragmentSchema,
 } from "#/xml-fragments.ts";
 import type { XmlElementCursor } from "#/xml-reader.ts";
@@ -72,7 +74,7 @@ const gradLinAttrSchema = z.object({
 });
 
 const lineAttrSchema = z.object({
-  w: ooxmlNonNegativeIntSchema.optional(),
+  w: ooxmlLineWidthEmuSchema.optional(),
   cap: z.enum(["rnd", "sq", "flat"]).optional(),
   cmpd: z.enum(["sng", "dbl", "thickThin", "thinThick", "tri"]).optional(),
   algn: z.enum(["ctr", "in"]).optional(),
@@ -89,15 +91,15 @@ const lineEndAttrSchema = z.object({
 });
 
 const outerShadowAttrSchema = z.object({
-  blurRad: ooxmlNonNegativeIntSchema.optional(),
-  dist: ooxmlNonNegativeIntSchema.optional(),
+  blurRad: ooxmlWritableExtentEmuSchema.optional(),
+  dist: ooxmlWritableExtentEmuSchema.optional(),
   dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: z.enum(["0", "1", "true", "false"]).optional(),
 });
 
 const softEdgeAttrSchema = z.object({
-  rad: ooxmlNonNegativeIntSchema,
+  rad: ooxmlWritableExtentEmuSchema,
 });
 
 /** Reads a DrawingML color child (`<a:srgbClr>`, `<a:schemeClr>`, `<a:sysClr>`) with optional alpha and luminance transforms. */
@@ -526,11 +528,23 @@ export function readLineBorder(
   diagnostics: ImportDiagnostic[],
 ): ImportedLineBorder {
   const rawLn = lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]);
-  const parsedLn = lineAttrSchema.safeParse(rawLn);
-  const width =
-    parsedLn.success && parsedLn.data.w !== undefined
-      ? emuToPx(parsedLn.data.w)
-      : undefined;
+  let width: number | undefined;
+  if (rawLn["w"] !== undefined) {
+    const parsedW = ooxmlLineWidthEmuSchema.safeParse(rawLn["w"]);
+    if (parsedW.success) {
+      width = emuToPx(parsedW.data);
+    } else {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: { ...location, xpath: `${lnCursor.xpath}/@w` },
+        attributeOrElement: "a:ln/@w",
+        rawValue: rawLn["w"],
+      });
+    }
+  }
+  lineAttrSchema.omit({ w: true }).safeParse(rawLn);
 
   let borderColor: ColorValue | undefined;
   let borderStyle: "solid" | "dashed" | "dotted" | undefined;
@@ -692,23 +706,42 @@ export function readEffectList(
         "rotWithShape",
       ]);
       const parsed = outerShadowAttrSchema.safeParse(raw);
-      const color = readDrawingColor(child, location, diagnostics);
-      if (parsed.success) {
-        boxShadow = {
-          ...(color === undefined ? {} : { color }),
-          blur:
-            parsed.data.blurRad === undefined
-              ? 0
-              : emuToPx(parsed.data.blurRad),
-          distance:
-            parsed.data.dist === undefined ? 0 : emuToPx(parsed.data.dist),
-          angle: parsed.data.dir === undefined ? 0 : parsed.data.dir / 60_000,
-        };
+      if (!parsed.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...location, xpath: child.xpath },
+          attributeOrElement: "a:outerShdw",
+          rawValue: JSON.stringify(raw),
+        });
+        child.suppressUnconsumed();
+        continue;
       }
+      const color = readDrawingColor(child, location, diagnostics);
+      boxShadow = {
+        ...(color === undefined ? {} : { color }),
+        blur:
+          parsed.data.blurRad === undefined ? 0 : emuToPx(parsed.data.blurRad),
+        distance:
+          parsed.data.dist === undefined ? 0 : emuToPx(parsed.data.dist),
+        angle: parsed.data.dir === undefined ? 0 : parsed.data.dir / 60_000,
+      };
     } else if (child.localName === "softEdge") {
       const raw = child.attrsObject(["rad"]);
       const parsed = softEdgeAttrSchema.safeParse(raw);
-      if (parsed.success && parsed.data.rad > 0) {
+      if (!parsed.success) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...location, xpath: `${child.xpath}/@rad` },
+          attributeOrElement: "a:softEdge/@rad",
+          rawValue: raw["rad"] ?? "",
+        });
+        continue;
+      }
+      if (parsed.data.rad > 0) {
         softEdge = emuToPx(parsed.data.rad);
       }
     } else {

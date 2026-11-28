@@ -17,6 +17,8 @@ import {
   ooxmlBoolSchema,
   ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
+  ooxmlPositiveLineWidthEmuSchema,
+  ooxmlWritableExtentEmuSchema,
   P_NS,
   readRunFontSlots,
   REL_CHART,
@@ -392,8 +394,8 @@ function readLineFromSpPr(spPr: XmlElementCursor): {
   }
   let width: number | undefined;
   if (rawW !== undefined) {
-    const parsedW = ooxmlIntSchema.safeParse(rawW);
-    if (parsedW.success && parsedW.data > 0) {
+    const parsedW = ooxmlPositiveLineWidthEmuSchema.safeParse(rawW);
+    if (parsedW.success) {
       width = emuToPx(parsedW.data);
     }
   }
@@ -447,13 +449,20 @@ function readChartOuterShadow(rPrCursor: XmlElementCursor): Shadow | undefined {
   const blurRad =
     blurRadRaw === undefined
       ? undefined
-      : ooxmlNonNegativeIntSchema.safeParse(blurRadRaw);
+      : ooxmlWritableExtentEmuSchema.safeParse(blurRadRaw);
   const dist =
     distRaw === undefined
       ? undefined
-      : ooxmlNonNegativeIntSchema.safeParse(distRaw);
+      : ooxmlWritableExtentEmuSchema.safeParse(distRaw);
   const dir =
     dirRaw === undefined ? undefined : ooxmlIntSchema.safeParse(dirRaw);
+  if (
+    (blurRad !== undefined && !blurRad.success) ||
+    (dist !== undefined && !dist.success) ||
+    (dir !== undefined && !dir.success)
+  ) {
+    return undefined;
+  }
   return {
     ...(color === undefined ? {} : { color }),
     ...(blurRad?.success ? { blur: emuToPx(blurRad.data) } : {}),

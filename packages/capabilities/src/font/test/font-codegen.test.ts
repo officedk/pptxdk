@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import {
+  deck,
+  paragraph,
+  slide,
+  span,
+  text,
+} from "@pptxdk/capabilities/document";
+import { font } from "@pptxdk/capabilities/font";
 import { createCodegen } from "@pptxdk/codegen";
 import { defineTheme } from "@pptxdk/core";
 import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
-import { deck, paragraph, slide, span, text } from "../../document.ts";
-import { font } from "../font.ts";
 
 const jostRegular = new Uint8Array(
   readFileSync(

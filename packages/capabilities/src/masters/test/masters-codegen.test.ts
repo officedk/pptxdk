@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import {
+  deck,
+  defineSlideLayout,
+  section,
+  slide,
+  slideLayout,
+  slideMaster,
+  text,
+} from "@pptxdk/capabilities/document";
 import { CodegenError, createCodegen } from "@pptxdk/codegen";
 import {
   DeckContainer,
@@ -10,17 +20,6 @@ import {
 } from "@pptxdk/core";
 import { createImporter } from "@pptxdk/import";
 import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
-import {
-  deck,
-  defineSlideLayout,
-  section,
-  slide,
-  slideLayout,
-  slideMaster,
-  text,
-} from "../../document.ts";
 
 const importDocument = createImporter(documentCapabilities);
 

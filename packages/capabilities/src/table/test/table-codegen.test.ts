@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { CommonNode } from "@pptxdk/core/document";
-import { createImporter } from "@pptxdk/import";
-import { Deck, Slide, expandDocument } from "@pptxdk/react";
-import { createElement } from "react";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   cell,
   deck,
@@ -23,8 +16,14 @@ import {
   span,
   table,
   text,
-} from "../../document.ts";
-import { Row, Table } from "../table-elements.ts";
+} from "@pptxdk/capabilities/document";
+import { Row, Table } from "@pptxdk/capabilities/table-elements";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { CommonNode } from "@pptxdk/core/document";
+import { createImporter } from "@pptxdk/import";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { createElement } from "react";
+import { describe, it } from "vitest";
 
 describe("table capability codegen", () => {
   it("generates vanilla and react source for table, row, cell, track modes, merges, borders, rich text, slide numbers, and placeholder bindings", () => {

@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { box, deck, shape, slide, text } from "@pptxdk/capabilities/document";
 import { CodegenError, createCodegen } from "@pptxdk/codegen";
 import { createMorphScope } from "@pptxdk/core/capability";
 import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
-import { box, deck, shape, slide, text } from "../../document.ts";
 
 describe("box capability codegen", () => {
   it("preserves Flex, Grid, and Block layout rules and nested Box children in vanilla and react source", () => {

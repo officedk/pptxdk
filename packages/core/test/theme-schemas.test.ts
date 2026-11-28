@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { CapabilityError, deckPropsSchema } from "@pptxdk/core";
+import { createDeckNode } from "@pptxdk/core/document";
 import {
   backgroundValueSchema,
   borderObjectSchema,
@@ -68,8 +69,6 @@ import {
   type VisualStyle,
 } from "@pptxdk/core/theme";
 import { describe, it } from "vitest";
-
-import { snapshotValue } from "../src/input-values.ts";
 
 describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
   it("exports Zod schemas for color, font, visual, and text style primitives and preserves units", () => {
@@ -378,8 +377,8 @@ describe("Slice 2: theme, color, font, and textStyle Zod schemas", () => {
     assert.equal(isTheme({ name: "Plain", colors: {}, fonts: {} }), false);
     assert.equal(brand.colors.accent2, "#AABBCC");
 
-    // snapshotValue preserves Theme reference identity (used by CommonNode props).
-    assert.equal(snapshotValue(brand), brand);
+    // CommonNode preserves Theme reference identity when snapshotting props.
+    assert.equal(createDeckNode({ theme: brand }).props["theme"], brand);
 
     const same = brand.set({
       name: "Brand A v2",

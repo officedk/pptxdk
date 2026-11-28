@@ -172,7 +172,8 @@
     "lint:fix": "oxlint --format=unix . --fix",
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts"
   },
   "dependencies": {
     "@pptxdk/codegen": "workspace:*",

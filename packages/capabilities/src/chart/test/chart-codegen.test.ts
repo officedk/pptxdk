@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { chartCapability } from "@pptxdk/capabilities/chart";
+import { chart, deck, font, slide, text } from "@pptxdk/capabilities/document";
 import { CodegenError, createCodegen } from "@pptxdk/codegen";
 import { createMorphScope } from "@pptxdk/core/capability";
 import { CommonContainer } from "@pptxdk/core/document";
 import { createImporter } from "@pptxdk/import";
 import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
-import { chart, deck, font, slide, text } from "../../document.ts";
-import { chartCapability } from "../chart.ts";
 
 describe("chart capability codegen", () => {
   it("generates vanilla and react source preserving groups, axes, three-state data ([] vs null vs 0), trendlines, errorBars, styles, and placeholders", () => {

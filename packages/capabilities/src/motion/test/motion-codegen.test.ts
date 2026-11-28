@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { createResolver } from "@pptxdk/core/build";
-import { emit } from "@pptxdk/emit";
-import { createImporter } from "@pptxdk/import";
-import { Deck, Slide, expandDocument } from "@pptxdk/react";
-import { createElement } from "react";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   after,
   breathe,
@@ -34,8 +26,15 @@ import {
   text,
   wipe,
   zoom,
-} from "../../document.ts";
-import { MotionScope, Step } from "../motion-elements.ts";
+} from "@pptxdk/capabilities/document";
+import { MotionScope, Step } from "@pptxdk/capabilities/motion-elements";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
+import { createImporter } from "@pptxdk/import";
+import { Deck, Slide, expandDocument } from "@pptxdk/react";
+import { createElement } from "react";
+import { describe, it } from "vitest";
 
 describe("motion capability codegen", () => {
   it("generates vanilla and react source for motion-step (filtering stepIdentity) and motion-scope choreography", () => {

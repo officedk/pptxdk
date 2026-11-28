@@ -297,8 +297,8 @@ export const customPathAttributesSchema = z.object({
 });
 
 export const customPathPointSchema = z.object({
-  x: ooxmlIntSchema.refine((v) => v >= -2_147_483_648 && v <= 2_147_483_647),
-  y: ooxmlIntSchema.refine((v) => v >= -2_147_483_648 && v <= 2_147_483_647),
+  x: ooxmlIntSchema.refine((v) => v >= -2_147_483_647 && v <= 2_147_483_647),
+  y: ooxmlIntSchema.refine((v) => v >= -2_147_483_647 && v <= 2_147_483_647),
 });
 
 export const lineAttributesFragmentSchema = z.object({

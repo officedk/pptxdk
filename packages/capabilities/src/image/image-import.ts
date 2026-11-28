@@ -7,6 +7,7 @@ import {
 } from "@pptxdk/core/capability";
 import {
   A_NS,
+  EMU_PER_PX,
   P_NS,
   REL_IMAGE,
   R_NS,
@@ -29,6 +30,9 @@ import {
 import { z } from "zod";
 
 import {
+  arePathCommandsBounded,
+  isValidPathUnit,
+  isValidPositivePathExtent,
   preset,
   presetGeometryNames,
   type CustomGeometry,
@@ -157,14 +161,27 @@ function readCustomPathPoint(
     });
     return undefined;
   }
-  return { x: parsed.data.x / 1000, y: parsed.data.y / 1000 };
+  const x = parsed.data.x / 1000;
+  const y = parsed.data.y / 1000;
+  if (!isValidPathUnit(x) || !isValidPathUnit(y)) {
+    diagnostics.push({
+      code: "invalid-xml-value",
+      category: "corrupt-input",
+      disposition: "omitted",
+      location: { part, xpath: ptCursor.xpath, slideIndex },
+      attributeOrElement: "a:pt",
+      rawValue: JSON.stringify(raw),
+    });
+    return undefined;
+  }
+  return { x, y };
 }
 
 function readCustomGeometry(
   custGeom: XmlElementCursor,
   part: string,
   slideIndex: number,
-  fallbackSizePx: { readonly width: number; readonly height: number },
+  fallbackExtentEmu: { readonly w: number; readonly h: number },
   diagnostics: ImportDiagnostic[],
 ): CustomGeometry | undefined {
   custGeom.ignoreEmptyChild(A_NS, "avLst");
@@ -197,8 +214,13 @@ function readCustomGeometry(
   const paths: GeometryPath[] = [];
   let viewWidth: number | undefined;
   let viewHeight: number | undefined;
+  let custGeomFailed = false;
 
   for (const pathCursor of pathLst.children(A_NS, "path")) {
+    if (custGeomFailed) {
+      pathCursor.suppressUnconsumed();
+      continue;
+    }
     const rawPath = pathCursor.attrsObject(["w", "h", "fill", "stroke"]);
     const parsedPath = customPathAttributesSchema.safeParse(rawPath);
     if (!parsedPath.success) {
@@ -211,22 +233,40 @@ function readCustomGeometry(
         rawValue: JSON.stringify(rawPath),
       });
       pathCursor.suppressUnconsumed();
-      return undefined;
+      custGeomFailed = true;
+      continue;
     }
 
-    const pathW =
-      parsedPath.data.w !== undefined
-        ? parsedPath.data.w / 1000
-        : fallbackSizePx.width;
-    const pathH =
-      parsedPath.data.h !== undefined
-        ? parsedPath.data.h / 1000
-        : fallbackSizePx.height;
+    const pathW = (parsedPath.data.w ?? fallbackExtentEmu.w) / 1000;
+    const pathH = (parsedPath.data.h ?? fallbackExtentEmu.h) / 1000;
+    if (
+      !isValidPositivePathExtent(pathW) ||
+      !isValidPositivePathExtent(pathH)
+    ) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part, xpath: pathCursor.xpath, slideIndex },
+        attributeOrElement: "a:path",
+        rawValue: JSON.stringify(rawPath),
+      });
+      pathCursor.suppressUnconsumed();
+      custGeomFailed = true;
+      continue;
+    }
     viewWidth ??= pathW;
     viewHeight ??= pathH;
+    const scaleX = pathW === viewWidth ? 1 : viewWidth / pathW;
+    const scaleY = pathH === viewHeight ? 1 : viewHeight / pathH;
 
     const commands: PathCommand[] = [];
+    let pathFailed = false;
     for (const cmdCursor of pathCursor.remainingElementChildren()) {
+      if (pathFailed) {
+        cmdCursor.suppressUnconsumed();
+        continue;
+      }
       if (cmdCursor.namespaceUri !== A_NS) {
         diagnostics.push({
           code: "unconsumed-xml",
@@ -246,8 +286,16 @@ function readCustomGeometry(
             pt === undefined
               ? undefined
               : readCustomPathPoint(pt, part, slideIndex, diagnostics);
-          if (coords === undefined) return undefined;
-          commands.push({ op: "M", x: coords.x, y: coords.y });
+          if (coords === undefined) {
+            cmdCursor.suppressUnconsumed();
+            pathFailed = true;
+            break;
+          }
+          commands.push({
+            op: "M",
+            x: coords.x * scaleX,
+            y: coords.y * scaleY,
+          });
           break;
         }
         case "lnTo": {
@@ -256,13 +304,25 @@ function readCustomGeometry(
             pt === undefined
               ? undefined
               : readCustomPathPoint(pt, part, slideIndex, diagnostics);
-          if (coords === undefined) return undefined;
-          commands.push({ op: "L", x: coords.x, y: coords.y });
+          if (coords === undefined) {
+            cmdCursor.suppressUnconsumed();
+            pathFailed = true;
+            break;
+          }
+          commands.push({
+            op: "L",
+            x: coords.x * scaleX,
+            y: coords.y * scaleY,
+          });
           break;
         }
         case "quadBezTo": {
           const pts = cmdCursor.children(A_NS, "pt");
-          if (pts.length !== 2) return undefined;
+          if (pts.length !== 2) {
+            cmdCursor.suppressUnconsumed();
+            pathFailed = true;
+            break;
+          }
           const p1 = readCustomPathPoint(
             pts[0]!,
             part,
@@ -275,13 +335,27 @@ function readCustomGeometry(
             slideIndex,
             diagnostics,
           );
-          if (p1 === undefined || p2 === undefined) return undefined;
-          commands.push({ op: "Q", x1: p1.x, y1: p1.y, x: p2.x, y: p2.y });
+          if (p1 === undefined || p2 === undefined) {
+            cmdCursor.suppressUnconsumed();
+            pathFailed = true;
+            break;
+          }
+          commands.push({
+            op: "Q",
+            x1: p1.x * scaleX,
+            y1: p1.y * scaleY,
+            x: p2.x * scaleX,
+            y: p2.y * scaleY,
+          });
           break;
         }
         case "cubicBezTo": {
           const pts = cmdCursor.children(A_NS, "pt");
-          if (pts.length !== 3) return undefined;
+          if (pts.length !== 3) {
+            cmdCursor.suppressUnconsumed();
+            pathFailed = true;
+            break;
+          }
           const p1 = readCustomPathPoint(
             pts[0]!,
             part,
@@ -301,16 +375,18 @@ function readCustomGeometry(
             diagnostics,
           );
           if (p1 === undefined || p2 === undefined || p3 === undefined) {
-            return undefined;
+            cmdCursor.suppressUnconsumed();
+            pathFailed = true;
+            break;
           }
           commands.push({
             op: "C",
-            x1: p1.x,
-            y1: p1.y,
-            x2: p2.x,
-            y2: p2.y,
-            x: p3.x,
-            y: p3.y,
+            x1: p1.x * scaleX,
+            y1: p1.y * scaleY,
+            x2: p2.x * scaleX,
+            y2: p2.y * scaleY,
+            x: p3.x * scaleX,
+            y: p3.y * scaleY,
           });
           break;
         }
@@ -327,12 +403,31 @@ function readCustomGeometry(
             namespaceUri: cmdCursor.namespaceUri,
             localName: cmdCursor.localName,
           });
-          return undefined;
+          cmdCursor.suppressUnconsumed();
+          pathFailed = true;
+          break;
         }
       }
     }
 
+    if (pathFailed) {
+      pathCursor.suppressUnconsumed();
+      custGeomFailed = true;
+      continue;
+    }
     if (commands.length === 0) continue;
+    if (!arePathCommandsBounded(commands)) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { part, xpath: pathCursor.xpath, slideIndex },
+        attributeOrElement: "a:path",
+      });
+      pathCursor.suppressUnconsumed();
+      custGeomFailed = true;
+      continue;
+    }
     const fill = parsedPath.data.fill === "none" ? false : true;
     const stroke =
       parsedPath.data.stroke === "0" || parsedPath.data.stroke === "false"
@@ -346,10 +441,14 @@ function readCustomGeometry(
   }
 
   if (
+    custGeomFailed ||
     paths.length === 0 ||
     viewWidth === undefined ||
-    viewHeight === undefined
+    viewHeight === undefined ||
+    !isValidPositivePathExtent(viewWidth) ||
+    !isValidPositivePathExtent(viewHeight)
   ) {
+    custGeom.suppressUnconsumed();
     return undefined;
   }
 
@@ -365,7 +464,7 @@ function readPictureGeometry(
   spPr: XmlElementCursor,
   part: string,
   slideIndex: number,
-  sizePx: { readonly width: number; readonly height: number },
+  fallbackExtentEmu: { readonly w: number; readonly h: number },
   diagnostics: ImportDiagnostic[],
 ): Geometry | undefined {
   const prstGeom = spPr.child(A_NS, "prstGeom");
@@ -415,7 +514,13 @@ function readPictureGeometry(
 
   const custGeom = spPr.child(A_NS, "custGeom");
   if (custGeom !== undefined) {
-    return readCustomGeometry(custGeom, part, slideIndex, sizePx, diagnostics);
+    return readCustomGeometry(
+      custGeom,
+      part,
+      slideIndex,
+      fallbackExtentEmu,
+      diagnostics,
+    );
   }
   return undefined;
 }
@@ -847,6 +952,8 @@ export function readImagePic(
   let localY: number | undefined;
   let localWidth: number | undefined;
   let localHeight: number | undefined;
+  let localWidthEmu: number | undefined;
+  let localHeightEmu: number | undefined;
   let rotate: number | undefined;
   let flipH: true | undefined;
   let flipV: true | undefined;
@@ -915,6 +1022,8 @@ export function readImagePic(
       localY = emuToPx(parsedOff.data.y);
       localWidth = emuToPx(parsedExt.data.cx);
       localHeight = emuToPx(parsedExt.data.cy);
+      localWidthEmu = parsedExt.data.cx;
+      localHeightEmu = parsedExt.data.cy;
     }
     rotate =
       parsedXfrm.success &&
@@ -942,8 +1051,16 @@ export function readImagePic(
     part,
     slideIndex,
     {
-      width: localWidth ?? layoutPhWidth ?? 100,
-      height: localHeight ?? layoutPhHeight ?? 100,
+      w:
+        localWidthEmu ??
+        (layoutPhWidth !== undefined
+          ? Math.round(layoutPhWidth * EMU_PER_PX)
+          : 100 * EMU_PER_PX),
+      h:
+        localHeightEmu ??
+        (layoutPhHeight !== undefined
+          ? Math.round(layoutPhHeight * EMU_PER_PX)
+          : 100 * EMU_PER_PX),
     },
     diagnostics,
   );

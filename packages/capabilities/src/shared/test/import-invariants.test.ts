@@ -25,7 +25,7 @@ import {
   R_NS,
   createImporter,
 } from "@pptxdk/import";
-import { strToU8, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
 const jostFont = font("Jost*", [
@@ -1280,5 +1280,249 @@ describe("importPptx postcondition invariants", () => {
     );
 
     assertCodegenAndEmitPass(deck, { attachJostFont: true });
+  });
+
+  it("strips <p:pic><a:custGeom> with out-of-bounds point x=-2147483648 and uses EMU/1000 fallback when <a:path w/h> is omitted", () => {
+    const png1x1Bytes = Uint8Array.from(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const slideXml = `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}">
+  <p:cSld name="s1">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="2" name="PicBadCustPt"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="457200"/><a:ext cx="914400" cy="914400"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/>
+            <a:pathLst><a:path w="100000" h="100000"><a:moveTo><a:pt x="-2147483648" y="0"/></a:moveTo><a:lnTo><a:pt x="100000" y="0"/></a:lnTo><a:lnTo><a:pt x="100000" y="100000"/></a:lnTo><a:close/></a:path></a:pathLst>
+          </a:custGeom>
+        </p:spPr>
+      </p:pic>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="3" name="PicOmittedPathExtent"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+        <p:spPr>
+          <a:xfrm><a:off x="1600000" y="457200"/><a:ext cx="1" cy="952500"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/>
+            <a:pathLst><a:path><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="1" y="0"/></a:lnTo><a:lnTo><a:pt x="1" y="952500"/></a:lnTo><a:close/></a:path></a:pathLst>
+          </a:custGeom>
+        </p:spPr>
+      </p:pic>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`;
+
+    const pptx = baseDeckFiles({
+      slideXml,
+      slideRelsXml: `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_IMAGE}" Target="../media/image1.png"/></Relationships>`,
+      extraFiles: { "ppt/media/image1.png": png1x1Bytes },
+    });
+
+    const imported = importAll(pptx);
+    const deck = imported.document as DeckContainer;
+    const slideNode = deck.children.find(
+      (c): c is CommonNode => c instanceof CommonNode && c.kind === "slide",
+    )!;
+    const picBadPt = slideNode.children.find(
+      (c): c is CommonNode =>
+        c instanceof CommonNode && c.props["name"] === "PicBadCustPt",
+    );
+    assert.ok(picBadPt !== undefined);
+    assert.equal(picBadPt.props["geometry"], undefined);
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "invalid-xml-value" &&
+          d.attributeOrElement === "a:pt" &&
+          d.location.part === "ppt/slides/slide1.xml",
+      ),
+    );
+    assert.deepEqual(
+      imported.report.diagnostics.filter((d) => d.code === "unconsumed-xml"),
+      [],
+    );
+
+    const picOmittedPathExtent = slideNode.children.find(
+      (c): c is CommonNode =>
+        c instanceof CommonNode && c.props["name"] === "PicOmittedPathExtent",
+    );
+    assert.ok(picOmittedPathExtent !== undefined);
+    const omittedGeom = picOmittedPathExtent.props["geometry"] as
+      | {
+          readonly type: "custom";
+          readonly width: number;
+          readonly height: number;
+        }
+      | undefined;
+    assert.equal(omittedGeom?.type, "custom");
+    assert.equal(omittedGeom?.width, 0.001);
+    assert.equal(omittedGeom?.height, 952.5);
+
+    assertCodegenAndEmitPass(deck, { attachJostFont: true });
+  });
+
+  it("strips out-of-range theme outerShdw/@dir, omits overflowing multi-col/row tables, and retains exact upper DrawingML boundaries", () => {
+    const themeXml = `<a:theme xmlns:a="${A_NS}" name="DirBoundsTheme">
+  <a:themeElements>
+    <a:clrScheme name="C"><a:dk1><a:srgbClr val="111111"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="222222"/></a:dk2><a:lt2><a:srgbClr val="EEEEEE"/></a:lt2><a:accent1><a:srgbClr val="2563EB"/></a:accent1><a:accent2><a:srgbClr val="10B981"/></a:accent2><a:accent3><a:srgbClr val="F59E0B"/></a:accent3><a:accent4><a:srgbClr val="EF4444"/></a:accent4><a:accent5><a:srgbClr val="8B5CF6"/></a:accent5><a:accent6><a:srgbClr val="06B6D4"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme>
+    <a:fontScheme name="F"><a:majorFont><a:latin typeface="Jost*"/></a:majorFont><a:minorFont><a:latin typeface="Jost*"/></a:minorFont></a:fontScheme>
+    <a:fmtScheme name="BoundsFmt">
+      <a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>
+      <a:lnStyleLst><a:ln w="20116800"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>
+      <a:effectStyleLst>
+        <a:effectStyle><a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="-5400000"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst></a:effectStyle>
+        <a:effectStyle><a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="21600000"><a:srgbClr val="1E293B"/></a:outerShdw></a:effectLst></a:effectStyle>
+      </a:effectStyleLst>
+      <a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst>
+    </a:fmtScheme>
+  </a:themeElements>
+</a:theme>`;
+
+    const slideXml = `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}">
+  <p:cSld name="s1">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+      <p:graphicFrame>
+        <p:nvGraphicFramePr><p:cNvPr id="2" name="OversizedColsTable"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+        <p:xfrm><a:off x="457200" y="457200"/><a:ext cx="3657600" cy="700000"/></p:xfrm>
+        <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+          <a:tbl>
+            <a:tblPr/>
+            <a:tblGrid><a:gridCol w="1500000000"/><a:gridCol w="1500000000"/></a:tblGrid>
+            <a:tr h="350000">
+              <a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>A</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>
+              <a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>B</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>
+            </a:tr>
+          </a:tbl>
+        </a:graphicData></a:graphic>
+      </p:graphicFrame>
+      <p:graphicFrame>
+        <p:nvGraphicFramePr><p:cNvPr id="3" name="OversizedRowsTable"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+        <p:xfrm><a:off x="457200" y="1300000"/><a:ext cx="3657600" cy="700000"/></p:xfrm>
+        <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+          <a:tbl>
+            <a:tblPr/>
+            <a:tblGrid><a:gridCol w="1828800"/></a:tblGrid>
+            <a:tr h="1500000000"><a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>R1</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc></a:tr>
+            <a:tr h="1500000000"><a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>R2</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc></a:tr>
+          </a:tbl>
+        </a:graphicData></a:graphic>
+      </p:graphicFrame>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="4" name="MaxBoundShape"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="457200" y="2200000"/><a:ext cx="2147483647" cy="914400"/></a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+          <a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill>
+          <a:ln w="20116800"><a:solidFill><a:srgbClr val="1D4ED8"/></a:solidFill></a:ln>
+          <a:effectLst><a:softEdge rad="2147483647"/></a:effectLst>
+        </p:spPr>
+        <p:txBody><a:bodyPr lIns="2147483647"/><a:lstStyle/><a:p><a:r><a:t>MaxBound</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`;
+
+    const pptx = baseDeckFiles({
+      slideXml,
+      extraFiles: { "ppt/theme/theme1.xml": themeXml },
+    });
+
+    const imported = importAll(pptx);
+    const deck = imported.document as DeckContainer;
+    const slideNode = deck.children.find(
+      (c): c is CommonNode => c instanceof CommonNode && c.kind === "slide",
+    )!;
+    const byName = (targetName: string): CommonNode | undefined =>
+      slideNode.children.find(
+        (c): c is CommonNode =>
+          c instanceof CommonNode && c.props["name"] === targetName,
+      );
+
+    // Theme outerShdw/@dir out of [0, 21_600_000) emits invalid-xml-value and strips dir
+    const themeDiags = imported.report.diagnostics.filter(
+      (d) =>
+        d.code === "invalid-xml-value" &&
+        d.location.part === "ppt/theme/theme1.xml" &&
+        d.attributeOrElement === "a:outerShdw/@dir",
+    );
+    assert.equal(themeDiags.length, 2);
+    const formatScheme = (
+      deck.masters[0]?.theme as
+        | {
+            readonly formatScheme?: {
+              readonly effectStyles?: readonly {
+                readonly shadow?: {
+                  readonly angle?: number;
+                  readonly blur?: number;
+                };
+              }[];
+            };
+          }
+        | undefined
+    )?.formatScheme;
+    assert.equal(formatScheme?.effectStyles?.[0]?.shadow?.angle, undefined);
+    assert.equal(formatScheme?.effectStyles?.[1]?.shadow?.angle, undefined);
+    assert.equal(formatScheme?.effectStyles?.[0]?.shadow?.blur, 4);
+
+    // Table multi-col and multi-row EMU sum overflows are omitted with invalid-xml-value diagnostics
+    assert.equal(byName("OversizedColsTable"), undefined);
+    assert.equal(byName("OversizedRowsTable"), undefined);
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "invalid-xml-value" &&
+          d.attributeOrElement === "a:tblGrid" &&
+          d.location.objectName === "OversizedColsTable",
+      ),
+    );
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "invalid-xml-value" &&
+          d.attributeOrElement === "a:tbl" &&
+          d.location.objectName === "OversizedRowsTable",
+      ),
+    );
+
+    // Exact upper-boundary values (w=20116800, cx=2147483647, rad=2147483647, lIns=2147483647) are retained
+    const maxBoundShape = byName("MaxBoundShape");
+    assert.ok(maxBoundShape !== undefined);
+    const maxStyle = maxBoundShape.props["style"] as Record<string, unknown>;
+    assert.equal(
+      Math.round((maxStyle["width"] as number) * 9525),
+      2_147_483_647,
+    );
+    assert.equal(
+      Math.round(
+        (maxStyle["border"] as { readonly width: number }).width * 9525,
+      ),
+      20_116_800,
+    );
+    assert.equal(
+      Math.round((maxStyle["softEdge"] as number) * 9525),
+      2_147_483_647,
+    );
+    assert.equal(
+      Math.round((maxStyle["paddingLeft"] as number) * 9525),
+      2_147_483_647,
+    );
+
+    assertCodegenAndEmitPass(deck, { attachJostFont: true });
+    const emitted = emit(resolveAll(deck));
+    const emittedThemeXml = strFromU8(
+      unzipSync(emitted.pptx)["ppt/theme/theme1.xml"]!,
+    );
+    assert.doesNotMatch(emittedThemeXml, /dir="-/u);
+    assert.doesNotMatch(emittedThemeXml, /dir="21600000"/u);
   });
 });

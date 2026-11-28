@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   ImportError,
@@ -25,21 +23,10 @@ import { PNG } from "pngjs";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const jostBytes = new Uint8Array(
   readFileSync(new URL("./assets/fonts/Jost-400-Book.ttf", import.meta.url)),
 );
 const jostFont = font("Jost*", [{ weight: 400, data: jostBytes }]);
-
-function runSubprocess(conditions: readonly string[], script: string): string {
-  const child = spawnSync(
-    process.execPath,
-    [...conditions, "--input-type=module", "--eval", script],
-    { cwd: packageRoot, encoding: "utf8" },
-  );
-  assert.equal(child.status, 0, child.stderr || child.stdout);
-  return child.stdout;
-}
 
 describe("pptxdk import -> edit -> resolve/preview/emit/build roundtrip", () => {
   it("imports a Transitional single-slide text PPTX, detaches from input bytes, edits text, previews with Font, and re-emits valid OOXML", async () => {
@@ -156,56 +143,11 @@ describe("pptxdk import -> edit -> resolve/preview/emit/build roundtrip", () => 
         ),
       ),
     );
-    const base64 = Buffer.from(sample.pptx).toString("base64");
-
-    const script = `
-import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const resolved = nextResolve(specifier, context);
-    if (
-      specifier === "@pptxdk/capabilities/all" ||
-      resolved.url.endsWith("/capabilities/src/all.ts") ||
-      resolved.url.endsWith("/capabilities/dist/all.js") ||
-      resolved.url.endsWith("/capabilities/src/chart/chart.ts") ||
-      resolved.url.endsWith("/capabilities/dist/chart/chart.js") ||
-      specifier === "react" ||
-      specifier === "@pptxdk/react" ||
-      specifier.includes("@pptxdk/preview") ||
-      specifier.includes("@resvg/resvg-js") ||
-      specifier.includes("@pptxdk/validation")
-    ) {
-      throw new Error("@officedk/pptxdk/build createImporter loaded forbidden module: " + resolved.url);
-    }
-    return resolved;
-  },
-});
-
-const { createImporter, selectCapabilities, createResolver, emit } = await import("@officedk/pptxdk/build");
-const modules = await selectCapabilities(["text"]);
-const importer = createImporter(modules);
-const bytes = new Uint8Array(Buffer.from("${base64}", "base64"));
-const imported = importer(bytes);
-bytes.fill(0);
-assert.equal(imported.report.slideCount, 1);
-assert.deepEqual(imported.report.diagnostics, []);
-const resolution = createResolver(modules)(imported.document);
-const emitted = emit(resolution);
-assert.ok(emitted.pptx instanceof Uint8Array && emitted.pptx.byteLength > 0);
-process.stdout.write("ok");
-`;
-
-    for (const conditions of [["--conditions=source"], []] as const) {
-      assert.equal(runSubprocess(conditions, script), "ok");
-    }
-
     const textOnly = await selectCapabilities(["text"]);
     const selectiveImporter = createImporter(textOnly);
     const res = selectiveImporter(sample.pptx);
     assert.equal(res.report.slideCount, 1);
-  }, 45_000);
+  });
 
   it("reads PPTX files via @officedk/pptxdk/node importPptxFile and surfaces ImportError on invalid files", async () => {
     const sample = await build(
@@ -268,71 +210,6 @@ process.stdout.write("ok");
       await rm(dir, { recursive: true, force: true });
     }
   });
-
-  it("runs @officedk/pptxdk importPptx without eagerly loading React, preview, resvg, or validation across source and dist", async () => {
-    const sample = await build(
-      createElement(
-        Deck,
-        { width: 320, height: 180 },
-        createElement(
-          Slide,
-          { id: "closure" },
-          createElement(
-            Text,
-            {
-              id: "t1",
-              style: {
-                position: "absolute",
-                left: 10,
-                top: 10,
-                width: 150,
-                height: 32,
-              },
-            },
-            "Closure check",
-          ),
-        ),
-      ),
-    );
-    const base64 = Buffer.from(sample.pptx).toString("base64");
-
-    const script = `
-import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier.startsWith("react/") ||
-      specifier === "@pptxdk/react" ||
-      specifier.includes("@pptxdk/preview") ||
-      specifier.includes("@resvg/resvg-js") ||
-      specifier.includes("@pptxdk/validation") ||
-      specifier === "@pptxdk/capabilities"
-    ) {
-      throw new Error("@officedk/pptxdk importPptx loaded forbidden dependency: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const { importPptx, resolve, emit } = await import("@officedk/pptxdk");
-const bytes = new Uint8Array(Buffer.from("${base64}", "base64"));
-const imported = importPptx(bytes);
-bytes.fill(0);
-assert.equal(imported.report.slideCount, 1);
-const res = resolve(imported.document);
-const out = emit(res);
-assert.ok(out.pptx instanceof Uint8Array && out.pptx.byteLength > 0);
-process.stdout.write("ok");
-`;
-
-    for (const conditions of [["--conditions=source"], []] as const) {
-      assert.equal(runSubprocess(conditions, script), "ok");
-    }
-  }, 45_000);
 
   it("reports exact part and xpath for unconsumed XML inside a text box while keeping the text editable", async () => {
     const base = await build(

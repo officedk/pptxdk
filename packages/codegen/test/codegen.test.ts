@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 
 import {
+  CodegenError,
+  codegenDiagnosticCodeSchema,
+  codegenDiagnosticSchema,
+  codegenOptionsSchema,
+  codegenTargetSchema,
+  createCodegen,
+  defineObjectCodegen,
+  defineSlideCodegen,
+  expr,
+} from "@pptxdk/codegen";
+import {
   createMorphScope,
   defaultTheme,
   defineSlideLayout,
@@ -18,18 +29,6 @@ import {
   createSlideNode,
 } from "@pptxdk/core/document";
 import { describe, it } from "vitest";
-
-import {
-  CodegenError,
-  codegenDiagnosticCodeSchema,
-  codegenDiagnosticSchema,
-  codegenOptionsSchema,
-  codegenTargetSchema,
-  createCodegen,
-  defineObjectCodegen,
-  defineSlideCodegen,
-  expr,
-} from "../src/index.ts";
 
 describe("@pptxdk/codegen core contract", () => {
   it("parses supported targets, options, and diagnostics via exported Zod schemas", () => {
@@ -107,7 +106,7 @@ describe("@pptxdk/codegen core contract", () => {
       width: 960,
       height: 540,
       unknownDeckProp: true,
-    } as Record<string, unknown>).append(createSlideNode({ id: "s1" }));
+    }).append(createSlideNode({ id: "s1" }));
     assert.throws(
       () => generate(invalidDeckProp, { target: "vanilla" }),
       (error: unknown) =>

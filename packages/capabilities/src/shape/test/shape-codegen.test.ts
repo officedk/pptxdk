@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { createMorphScope } from "@pptxdk/core/capability";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   blockArc,
   deck,
@@ -16,7 +12,10 @@ import {
   shape,
   slide,
   span,
-} from "../../document.ts";
+} from "@pptxdk/capabilities/document";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { createMorphScope } from "@pptxdk/core/capability";
+import { describe, it } from "vitest";
 
 describe("shape capability codegen", () => {
   it("generates vanilla and react source for preset geometries, adjusts, custom paths, arrows, transforms, and text modes", () => {

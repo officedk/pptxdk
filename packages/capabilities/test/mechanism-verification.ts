@@ -32,6 +32,10 @@ import {
   type ScenarioExecutionResult,
   type StageCounters,
 } from "./acceptance-runner.ts";
+import {
+  verifyBatchGeneratedSourcesAndRelocatedRebuilds,
+  type BatchCodegenCase,
+} from "./codegen-batch-acceptance.ts";
 
 export type ExtractMechanisms<Modules extends readonly unknown[]> =
   Modules[number] extends infer M
@@ -327,7 +331,11 @@ function assertGeneratedSourceNonEmptyAndComplete(
  */
 export async function runProductionMechanismVerifications(
   options: { readonly counters?: StageCounters } = {},
-): Promise<{ readonly codegenScenarioCount: number }> {
+): Promise<{
+  readonly codegenScenarioCount: number;
+  readonly typecheckedCaseCount: number;
+  readonly relocatedRebuildCount: number;
+}> {
   const entries = Object.entries(productionMechanismVerifications) as [
     ProductionMechanismKey,
     MechanismVerificationEntry<ProductionMechanism>,
@@ -337,6 +345,7 @@ export async function runProductionMechanismVerifications(
     Promise<ScenarioExecutionResult>
   >();
   const checkedCodegenScenarios = new Set<CapabilityScenario>();
+  const batchCases: BatchCodegenCase[] = [];
 
   for (const [, entry] of entries) {
     let executionPromise = cachedExecutions.get(entry.scenario);
@@ -385,10 +394,32 @@ export async function runProductionMechanismVerifications(
             doc,
             generated,
           );
+          batchCases.push({
+            scenarioId: entry.scenario.id,
+            originLabel,
+            result: generated,
+          });
         }
       }
     }
   }
 
-  return { codegenScenarioCount: checkedCodegenScenarios.size };
+  const batchSummary = await verifyBatchGeneratedSourcesAndRelocatedRebuilds(
+    batchCases,
+    [
+      "mechanism-image-roundtrip",
+      "mechanism-embedded-font-roundtrip",
+      "mechanism-master-layout-ownership",
+      "mechanism-motion-roundtrip",
+      "mechanism-chart-combo-roundtrip",
+      "mechanism-table-roundtrip",
+      "mechanism-slide-background-variants",
+    ],
+  );
+
+  return {
+    codegenScenarioCount: checkedCodegenScenarios.size,
+    typecheckedCaseCount: batchSummary.typecheckedCaseCount,
+    relocatedRebuildCount: batchSummary.relocatedRebuildCount,
+  };
 }

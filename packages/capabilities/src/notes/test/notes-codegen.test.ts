@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   deck,
   notes,
@@ -13,8 +10,10 @@ import {
   slideNumber,
   span,
   text,
-} from "../../document.ts";
-import { notesCapability } from "../notes.ts";
+} from "@pptxdk/capabilities/document";
+import { notesCapability } from "@pptxdk/capabilities/notes";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { describe, it } from "vitest";
 
 describe("notes capability codegen", () => {
   it("generates vanilla and react source for simple, rich-text, and empty speaker notes", () => {

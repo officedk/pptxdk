@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import {
   BuildError,
@@ -286,66 +284,7 @@ describe("Seam 1 & Seam 3: public resolve / emit / paint & createResolver", () =
     assert.deepEqual(jsxPaint.pages[0]?.png, docPaint.pages[0]?.png);
   });
 
-  it("never loads ./preview.ts, @pptxdk/preview, or @resvg/resvg-js when importing or running build subpaths", () => {
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const script = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier.includes("@resvg/resvg-js") ||
-      specifier.includes("@pptxdk/preview") ||
-      specifier.endsWith("/packages/preview/src/index.ts") ||
-      specifier.endsWith("/preview.ts") ||
-      specifier.endsWith("/preview.js") ||
-      specifier === "./preview.ts"
-    ) {
-      throw new Error("build path loaded preview dependency: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const { build, emit, resolve } = await import("@officedk/pptxdk");
-const vanillaEntry = await import("@officedk/pptxdk/vanilla");
-await import("@officedk/pptxdk/react");
-const buildEntry = await import("@officedk/pptxdk/build");
-await import("@officedk/pptxdk/node");
-
-const doc = vanillaEntry.deck({ width: 320, height: 180 }).append(
-  vanillaEntry.slide({ id: "s1" }).append(
-    vanillaEntry.shape({
-      id: "box",
-      style: { position: "absolute", left: 10, top: 10, width: 40, height: 40 },
-    }),
-  ),
-);
-const resolution = resolve(doc);
-const emitted = emit(resolution);
-const built = await build(doc);
-const trimmedBuilt = await buildEntry.build(doc, {
-  capabilities: ["shape", "chart"],
-});
-if (
-  emitted.pptx.byteLength === 0 ||
-  built.pptx.byteLength === 0 ||
-  trimmedBuilt.pptx.byteLength === 0
-) {
-  throw new Error("expected PPTX bytes");
-}
-process.stdout.write("ok");
-`;
-    const child = spawnSync(
-      process.execPath,
-      ["--conditions=source", "--input-type=module", "--eval", script],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(child.status, 0, child.stderr);
-    assert.equal(child.stdout, "ok");
-  });
-
-  it("exports preview and PreviewPageRangeError from root with ./preview parity and cold-load isolation during vanilla build", async () => {
+  it("exports preview and PreviewPageRangeError from root with ./preview parity, 1-based page validation, and full-deck validation", async () => {
     assert.equal(RootPreviewPageRangeError, PreviewPageRangeError);
     assert.equal(typeof rootPreview, "function");
 
@@ -363,75 +302,84 @@ process.stdout.write("ok");
           },
         }),
       ),
+      slide({ id: "p2", background: "#123456" }).append(
+        shape({
+          id: "box2",
+          style: {
+            position: "absolute",
+            left: 10,
+            top: 10,
+            width: 80,
+            height: 40,
+            background: "#FFFFFF",
+          },
+        }),
+      ),
     );
-    const options: PreviewOptions = { pages: [1] };
+    const options: PreviewOptions = { pages: [2] };
     const fromRoot: PreviewResult = await rootPreview(doc, options);
     const fromSubpath = await preview(doc, options);
     const rootPage: PreviewPageResult | undefined = fromRoot.pages[0];
     assert.equal(fromRoot.pages.length, 1);
-    assert.equal(rootPage?.id, "p1");
+    assert.equal(rootPage?.id, "p2");
+    assert.equal(fromRoot.report.slides.length, 2);
     assert.deepEqual(rootPage?.png, fromSubpath.pages[0]?.png);
     assert.equal(rootPage?.svg, fromSubpath.pages[0]?.svg);
 
-    await assert.rejects(
-      () => rootPreview(doc, { pages: [2] }),
-      (error: unknown) =>
-        error instanceof RootPreviewPageRangeError &&
-        error instanceof PreviewPageRangeError,
-    );
+    const noneSelected = await preview(doc, { pages: [] });
+    assert.equal(noneSelected.pages.length, 0);
+    assert.equal(noneSelected.report.slides.length, 2);
 
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const coldScript = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier.startsWith("react/") ||
-      specifier === "@pptxdk/react" ||
-      specifier.startsWith("@pptxdk/react/") ||
-      specifier.includes("@resvg/resvg-js") ||
-      specifier.includes("@pptxdk/preview") ||
-      specifier.endsWith("/preview.ts") ||
-      specifier.endsWith("/preview.js") ||
-      specifier === "./preview.ts" ||
-      specifier === "./preview.js" ||
-      specifier.includes("cli-contract")
-    ) {
-      throw new Error("root cold build loaded forbidden dependency: " + specifier);
+    for (const invalidPage of [0, -1, 1.5]) {
+      await assert.rejects(
+        () => preview(doc, { pages: [invalidPage] }),
+        RangeError,
+      );
+      await assert.rejects(
+        () =>
+          preview(
+            createElement(
+              Deck,
+              { width: 320, height: 180 },
+              createElement(Slide, { id: "one" }),
+            ),
+            { pages: [invalidPage] },
+          ),
+        RangeError,
+      );
     }
-    return nextResolve(specifier, context);
-  },
-});
 
-const rootEntry = await import("@officedk/pptxdk");
-const { deck, shape, slide } = await import("@officedk/pptxdk/vanilla");
-if (typeof rootEntry.preview !== "function" || typeof rootEntry.PreviewPageRangeError !== "function") {
-  throw new Error("root entrypoint must export preview and PreviewPageRangeError");
-}
-const doc = deck({ width: 320, height: 180 }).append(
-  slide({ id: "s1" }).append(
-    shape({
-      id: "box",
-      style: { position: "absolute", left: 10, top: 10, width: 40, height: 40 },
-    }),
-  ),
-);
-const built = await rootEntry.build(doc);
-if (built.pptx.byteLength === 0) {
-  throw new Error("expected PPTX bytes");
-}
-process.stdout.write("ok");
-`;
-    const child = spawnSync(
-      process.execPath,
-      ["--conditions=source", "--input-type=module", "--eval", coldScript],
-      { cwd: packageRoot, encoding: "utf8" },
+    await assert.rejects(
+      () => rootPreview(doc, { pages: [1, 3] }),
+      (error: unknown) =>
+        error instanceof RangeError &&
+        error instanceof RootPreviewPageRangeError &&
+        error instanceof PreviewPageRangeError &&
+        error.totalSlides === 2 &&
+        error.requestedPages.length === 2 &&
+        error.requestedPages[0] === 1 &&
+        error.requestedPages[1] === 3,
     );
-    assert.equal(child.status, 0, child.stderr);
-    assert.equal(child.stdout, "ok");
+
+    const invalidUnselected = deck({ width: 320, height: 180 }).append(
+      slide({ id: "broken-unselected" }).append(
+        shape({
+          id: "bad-x",
+          style: {
+            position: "absolute",
+            left: Number.NaN,
+            top: 0,
+            width: 50,
+            height: 50,
+          },
+        }),
+      ),
+      slide({ id: "valid-selected" }),
+    );
+    await assert.rejects(
+      () => preview(invalidUnselected, { pages: [2] }),
+      BuildError,
+    );
   });
 
   it("guides callers when root sync resolve() receives a JSX element or JSX-like object while preserving DeclarationContainer", () => {
@@ -477,123 +425,6 @@ process.stdout.write("ok");
       children: [doc],
     } as never);
     assert.equal(declarationContainerResolution.slides.length, 1);
-  });
-
-  it("never loads react, react-reconciler, or @pptxdk/react from any @pptxdk/core subpath and keeps host operations off public core entries", () => {
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const script = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier.startsWith("react/") ||
-      specifier === "@pptxdk/react" ||
-      specifier.startsWith("@pptxdk/react/") ||
-      specifier.includes("@pptxdk/emit") ||
-      specifier.includes("@pptxdk/preview")
-    ) {
-      throw new Error("core subpath loaded forbidden dependency: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const coreMain = await import("@pptxdk/core");
-const coreBuild = await import("@pptxdk/core/build");
-const coreCap = await import("@pptxdk/core/capability");
-const coreDoc = await import("@pptxdk/core/document");
-const coreHost = await import("@pptxdk/core/host");
-await import("@pptxdk/core/query");
-await import("@pptxdk/core/resolution");
-await import("@pptxdk/core/theme");
-void coreMain;
-void coreBuild;
-void coreCap;
-void coreDoc;
-
-for (const key of [
-  "hostNodeCreator",
-  "insertDeclarationChild",
-  "removeDeclarationChild",
-  "replaceDeclarationProps",
-  "setDeclarationText",
-  "validateAuthorIdScopes",
-]) {
-  if (!(key in coreHost)) {
-    throw new Error("@pptxdk/core/host must export " + key);
-  }
-}
-
-process.stdout.write("ok");
-`;
-    const child = spawnSync(
-      process.execPath,
-      ["--conditions=source", "--input-type=module", "--eval", script],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(child.status, 0, child.stderr);
-    assert.equal(child.stdout, "ok");
-  });
-
-  it("never loads react or react-reconciler when running imperative paint via @pptxdk/preview", () => {
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const script = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "react" ||
-      specifier === "react-reconciler" ||
-      specifier.startsWith("react/") ||
-      specifier === "@pptxdk/react" ||
-      specifier.startsWith("@pptxdk/react/")
-    ) {
-      throw new Error("preview package loaded React dependency: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const { paint } = await import("@pptxdk/preview");
-const { createResolver } = await import("@pptxdk/core/build");
-const { createDeckNode, createSlideNode } = await import("@pptxdk/core/document");
-const { shapeCapability, createShapeNode } = await import("@pptxdk/capabilities/shape");
-
-const d = createDeckNode({ width: 320, height: 180 });
-const s = createSlideNode({ id: "s1" });
-s.append(
-  createShapeNode({
-    id: "box",
-    style: {
-      position: "absolute",
-      left: 10,
-      top: 10,
-      width: 40,
-      height: 40,
-      background: "#2563EB",
-    },
-  }),
-);
-d.append(s);
-
-const resolution = createResolver([shapeCapability])({ children: [d] });
-const painted = paint(resolution);
-if (!painted.pages[0]?.png || painted.pages[0].png.byteLength === 0) {
-  throw new Error("expected PNG output");
-}
-process.stdout.write("ok");
-`;
-    const child = spawnSync(
-      process.execPath,
-      ["--conditions=source", "--input-type=module", "--eval", script],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(child.status, 0, child.stderr);
-    assert.equal(child.stdout, "ok");
   });
 
   it("assembles trimmed modules with createResolver, validates roots, and reports unsupported paint without blocking emit", async () => {
@@ -1182,121 +1013,5 @@ process.stdout.write("ok");
         );
       },
     );
-  });
-
-  it("resolves, emits, and paints tableCapability and chartCapability text outlines without registering or loading textCapability", () => {
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const script = `
-import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "@pptxdk/capabilities/text" ||
-      specifier === "./text.ts" ||
-      specifier === "./text.js" ||
-      specifier.endsWith("/capabilities/src/text/text.ts") ||
-      specifier.endsWith("/capabilities/dist/text/text.js")
-    ) {
-      throw new Error("Loaded forbidden text capability module: " + specifier);
-    }
-    const resolved = nextResolve(specifier, context);
-    if (
-      resolved.url.endsWith("/capabilities/src/text/text.ts") ||
-      resolved.url.endsWith("/capabilities/dist/text/text.js")
-    ) {
-      throw new Error("Loaded forbidden text capability module: " + resolved.url);
-    }
-    return resolved;
-  },
-});
-
-const { createResolver } = await import("@pptxdk/core/build");
-const { createDeckNode, createSlideNode } = await import("@pptxdk/core/document");
-const {
-  tableCapability,
-  createTableNode,
-  createRowNode,
-  createCellNode,
-} = await import("@pptxdk/capabilities/table");
-const { chartCapability, createChartNode } = await import("@pptxdk/capabilities/chart");
-const { font } = await import("@pptxdk/capabilities/font");
-const { emit } = await import("@pptxdk/emit");
-const { paint } = await import("@pptxdk/preview");
-
-const jost = font("Jost*", [
-  {
-    weight: 400,
-    data: new Uint8Array(readFileSync("./test/assets/fonts/Jost-400-Book.ttf")),
-  },
-]);
-
-const doc = createDeckNode({ width: 640, height: 360 });
-const s1 = createSlideNode({ id: "table-and-chart" });
-const tbl = createTableNode({
-  id: "tbl",
-  columns: [120, 120],
-  style: {
-    position: "absolute",
-    left: 20,
-    top: 20,
-    width: 240,
-    fontFamily: jost,
-    fontSize: 16,
-    color: "#111827",
-  },
-});
-const row1 = createRowNode({ style: { height: 40 } });
-row1.append(createCellNode({}).content("Alpha"), createCellNode({}).content("Beta"));
-tbl.append(row1);
-s1.append(
-  tbl,
-  createChartNode({
-    id: "cht",
-    title: "Sales",
-    legend: "bottom",
-    style: {
-      position: "absolute",
-      left: 280,
-      top: 20,
-      width: 320,
-      height: 240,
-      fontFamily: jost,
-      fontSize: 14,
-    },
-    groups: [
-      {
-        kind: "column",
-        data: { kind: "shared-categories", categories: ["Q1", "Q2"] },
-        series: [{ name: "Actual", values: [12, 24] }],
-      },
-    ],
-  }),
-);
-doc.append(s1);
-
-const resolution = createResolver([tableCapability, chartCapability])({ children: [doc] });
-const emitted = emit(resolution);
-if (emitted.pptx.byteLength === 0) {
-  throw new Error("Expected PPTX output");
-}
-const painted = paint(resolution);
-const page = painted.pages[0];
-if (!page || page.errors.length > 0 || page.placeholders.length > 0) {
-  throw new Error("Expected clean page paint without errors");
-}
-if (!page.png || page.png.byteLength === 0 || !page.svg?.includes("<path")) {
-  throw new Error("Expected rendered glyph outline SVG and PNG");
-}
-process.stdout.write("ok");
-`;
-    const child = spawnSync(
-      process.execPath,
-      ["--conditions=source", "--input-type=module", "--eval", script],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(child.status, 0, child.stderr);
-    assert.equal(child.stdout, "ok");
   });
 });

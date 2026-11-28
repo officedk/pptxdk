@@ -41,7 +41,7 @@
       "tags": ["quality:light"]
     },
     "test": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": ["^typecheck"],
       "inputs": [
         "src/**",
         "test/**",
@@ -50,8 +50,7 @@
         "tsconfig.node.json"
       ],
       "outputs": [],
-      "cache": false,
-      "tags": ["quality:heavy"]
+      "tags": ["quality:light"]
     }
   }
 }

@@ -177,6 +177,8 @@ describe("Exhaustive production mechanism verification", () => {
       ),
     );
     assert.equal(outcome.codegenScenarioCount, uniqueScenarios.size);
+    assert.equal(outcome.typecheckedCaseCount, uniqueScenarios.size * 4);
+    assert.equal(outcome.relocatedRebuildCount, 14);
     assert.equal(counters.expandJsx, uniqueScenarios.size);
     assert.equal(counters.buildDocument, uniqueScenarios.size);
     assert.equal(counters.import, uniqueScenarios.size);

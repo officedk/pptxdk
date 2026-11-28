@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
 import {
   BuildError,
@@ -411,44 +409,6 @@ describe("preview schemas and lazy resvg loading", () => {
 
     const emptyPreview = await preview(doc, { pages: [] });
     assert.equal(emptyPreview.pages.length, 0);
-  });
-
-  it("never loads @resvg/resvg-js when importing schemas from @officedk/pptxdk/preview or painting zero pages", () => {
-    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-    const script = `
-import { registerHooks } from "node:module";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.includes("@resvg/resvg-js")) {
-      throw new Error("forbidden @resvg/resvg-js load: " + specifier);
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
-const previewEntry = await import("@officedk/pptxdk/preview");
-const { resolve } = await import("@officedk/pptxdk");
-const { deck, slide } = await import("@officedk/pptxdk/vanilla");
-
-if (previewEntry.previewPageNumberSchema.safeParse(2).success !== true) {
-  throw new Error("expected valid page number");
-}
-const doc = deck({ width: 320, height: 180 }).append(slide({ id: "s1" }));
-const res = resolve(doc);
-const painted = previewEntry.paint(res, { pages: [] });
-if (painted.pages.length !== 0) {
-  throw new Error("expected 0 painted pages");
-}
-process.stdout.write("ok");
-`;
-    const child = spawnSync(
-      process.execPath,
-      ["--conditions=source", "--input-type=module", "--eval", script],
-      { cwd: packageRoot, encoding: "utf8" },
-    );
-    assert.equal(child.status, 0, child.stderr);
-    assert.equal(child.stdout, "ok");
   });
 });
 

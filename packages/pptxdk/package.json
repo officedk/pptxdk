@@ -65,7 +65,8 @@
     "lint:fix": "oxlint --format=unix . --fix",
     "typecheck": "tsc -p tsconfig.node.json --noEmit --pretty false",
     "build": "rm -rf dist && tsc -p tsconfig.build.json --pretty false && rolldown -c && rm -rf dist/.declarations && chmod +x dist/cli.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:conditional": "node --conditions=source scripts/check-external-corpus.ts"
   },
   "dependencies": {
     "@boringparts/cli-contract": "catalog:",

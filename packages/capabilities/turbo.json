@@ -39,6 +39,19 @@
       "outputs": [],
       "tags": ["quality:light"]
     },
+    "test:unit": {
+      "dependsOn": ["^typecheck"],
+      "inputs": [
+        "src/**",
+        "test/**",
+        "package.json",
+        "vitest.config.ts",
+        "vitest.unit.config.ts",
+        "tsconfig.node.json"
+      ],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
     "test": {
       "dependsOn": ["build", "^build"],
       "inputs": [
@@ -46,6 +59,7 @@
         "test/**",
         "package.json",
         "vitest.config.ts",
+        "vitest.unit.config.ts",
         "tsconfig.node.json"
       ],
       "outputs": [],

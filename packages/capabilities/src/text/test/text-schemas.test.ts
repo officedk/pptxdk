@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 
-import {
-  slideBackgroundCapability,
-  textCapability,
-} from "@pptxdk/capabilities";
 import { font } from "@pptxdk/capabilities/font";
+import { slideBackgroundCapability } from "@pptxdk/capabilities/slide-background";
+import { textCapability } from "@pptxdk/capabilities/text";
 import { P, SlideNumber, Span, Text } from "@pptxdk/capabilities/text-elements";
 import { BuildError } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
@@ -12,111 +10,11 @@ import { Deck, Slide, expandDocument } from "@pptxdk/react";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
-import {
-  paragraphStyleSchema,
-  parseParagraphStyle,
-  parseRunStyle,
-  parseTextInsets,
-  runStyleSchema,
-  textListSchema,
-} from "../../shared/text-schemas.ts";
+const resolveText = createResolver([slideBackgroundCapability, textCapability]);
 
-describe("Text & font local Zod schemas", () => {
-  it("validates textList, paragraphStyle, runStyle, and insets schemas cleanly", () => {
-    const bullet = textListSchema.parse({
-      type: "bullet",
-      character: "•",
-      level: 2,
-    });
-    assert.deepEqual(bullet, { type: "bullet", character: "•", level: 2 });
-
-    const numbered = textListSchema.parse({
-      type: "number",
-      style: "arabicPeriod",
-      startAt: 3,
-      level: 1,
-    });
-    assert.deepEqual(numbered, {
-      type: "number",
-      style: "arabicPeriod",
-      startAt: 3,
-      level: 1,
-    });
-
-    const pStyle = parseParagraphStyle({
-      align: "center",
-      lineHeight: "24pt",
-      spacingAfter: 8,
-      fontSize: "32pt",
-      fontFamily: "minor",
-      list: { type: "bullet", level: 1 },
-    });
-    assert.equal(pStyle.fontSize, "32pt");
-    assert.equal(pStyle.fontFamily, "minor");
-
-    const rStyle = parseRunStyle({
-      fontSize: 32,
-      fontFamily: "major",
-      letterSpacing: 1.5,
-      textDecoration: "underline",
-      textTransform: "uppercase",
-      lang: "en-US",
-    });
-    assert.equal(rStyle.fontSize, 32);
-    assert.equal(rStyle.fontFamily, "major");
-
-    assert.deepEqual(parseTextInsets({ padding: [4, 8] }), {
-      top: 4,
-      right: 8,
-      bottom: 4,
-      left: 8,
-    });
-    assert.deepEqual(parseTextInsets({ padding: 10, paddingLeft: 20 }), {
-      top: 10,
-      right: 10,
-      bottom: 10,
-      left: 20,
-    });
-
-    assert.equal(
-      paragraphStyleSchema.safeParse({ verticalAlign: "top" }).success,
-      false,
-    );
-    assert.equal(runStyleSchema.safeParse({ align: "left" }).success, false);
-  });
-
-  it("maps Zod schema violations onto exact CapabilityError codes in both schemas and textCapability", async () => {
-    assert.throws(
-      () => parseParagraphStyle({ list: { type: "bullet", character: "ab" } }),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "invalid-list",
-    );
-    assert.throws(
-      () => parseParagraphStyle({ list: { type: "number", startAt: 0 } }),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "invalid-list",
-    );
-    assert.throws(
-      () => parseRunStyle({ align: "center" }),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "unknown-style-property",
-    );
-    assert.throws(
-      () => parseTextInsets({ padding: -2 }),
-      (error: unknown) =>
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "invalid-text-insets",
-    );
-
-    const resolve = createResolver([slideBackgroundCapability, textCapability]);
-    const badTextDoc = await expandDocument(
+describe("Text & font public contract schemas", () => {
+  it("resolves valid textList, paragraphStyle, runStyle, and insets across public JSX and resolver boundaries", async () => {
+    const validDoc = await expandDocument(
       createElement(
         Deck,
         { width: 480, height: 270 },
@@ -126,37 +24,153 @@ describe("Text & font local Zod schemas", () => {
           createElement(
             Text,
             {
-              id: "bad",
+              id: "ok",
               style: {
                 position: "absolute",
                 left: 10,
                 top: 10,
-                width: 200,
-                height: 40,
+                width: 240,
+                height: 140,
+                padding: 10,
+                paddingLeft: 20,
               },
             },
             createElement(
               P,
-              null,
+              {
+                style: {
+                  align: "center",
+                  lineHeight: "24pt",
+                  spacingAfter: 8,
+                  fontSize: "32pt",
+                  fontFamily: "minor",
+                  list: { type: "bullet", character: "•", level: 2 },
+                },
+              },
               createElement(
                 Span,
-                // @ts-expect-error -- align is invalid on Span.style
-                { style: { align: "center" } },
-                "bad span",
+                {
+                  style: {
+                    fontSize: 32,
+                    fontFamily: "major",
+                    letterSpacing: 1.5,
+                    textDecoration: "underline",
+                    textTransform: "uppercase",
+                    lang: "en-US",
+                  },
+                },
+                "Run",
               ),
+            ),
+            createElement(
+              P,
+              {
+                style: {
+                  list: {
+                    type: "number",
+                    style: "arabicPeriod",
+                    startAt: 3,
+                    level: 1,
+                  },
+                },
+              },
+              "Page ",
+              createElement(SlideNumber, null),
             ),
           ),
         ),
       ),
     );
-    assert.throws(
-      () => resolve(badTextDoc),
-      (error: unknown) =>
-        error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "unknown-prop"),
-    );
 
-    const badSlideNumDoc = await expandDocument(
+    const resolution = resolveText(validDoc);
+    assert.equal(resolution.slides.length, 1);
+  });
+
+  it("maps invalid list, run/paragraph style, insets, SlideNumber children, and font options onto typed errors", async () => {
+    const invalidCases = [
+      {
+        label: "multi-char bullet",
+        code: "invalid-style",
+        el: createElement(
+          P,
+          { style: { list: { type: "bullet", character: "ab" } } },
+          "bad",
+        ),
+      },
+      {
+        label: "zero number startAt",
+        code: "invalid-style",
+        el: createElement(
+          P,
+          { style: { list: { type: "number", startAt: 0 } } },
+          "bad",
+        ),
+      },
+      {
+        label: "verticalAlign on Paragraph",
+        code: "unknown-prop",
+        el: createElement(
+          P,
+          { style: { verticalAlign: "top" } as never },
+          "bad",
+        ),
+      },
+      {
+        label: "align on Span",
+        code: "unknown-prop",
+        el: createElement(
+          P,
+          null,
+          createElement(
+            Span,
+            // @ts-expect-error -- align is invalid on Span.style
+            { style: { align: "center" } },
+            "bad span",
+          ),
+        ),
+      },
+      {
+        label: "children on SlideNumber",
+        code: "invalid-prop",
+        el: createElement(SlideNumber, null, "child"),
+      },
+    ] as const;
+
+    for (const item of invalidCases) {
+      const doc = await expandDocument(
+        createElement(
+          Deck,
+          { width: 480, height: 270 },
+          createElement(
+            Slide,
+            { id: "s1" },
+            createElement(
+              Text,
+              {
+                id: "bad",
+                style: {
+                  position: "absolute",
+                  left: 10,
+                  top: 10,
+                  width: 200,
+                  height: 40,
+                },
+              },
+              item.el,
+            ),
+          ),
+        ),
+      );
+      assert.throws(
+        () => resolveText(doc),
+        (error: unknown) =>
+          error instanceof BuildError &&
+          error.diagnostics.some((d) => d.code === item.code),
+        `${item.label} should fail with ${item.code}`,
+      );
+    }
+
+    const badPaddingDoc = await expandDocument(
       createElement(
         Deck,
         { width: 480, height: 270 },
@@ -166,25 +180,26 @@ describe("Text & font local Zod schemas", () => {
           createElement(
             Text,
             {
-              id: "bad-num",
+              id: "bad-pad",
               style: {
                 position: "absolute",
                 left: 10,
                 top: 10,
                 width: 200,
                 height: 40,
+                padding: -2,
               },
             },
-            createElement(SlideNumber, null, "child"),
+            "bad padding",
           ),
         ),
       ),
     );
     assert.throws(
-      () => resolve(badSlideNumDoc),
+      () => resolveText(badPaddingDoc),
       (error: unknown) =>
         error instanceof BuildError &&
-        error.diagnostics.some((d) => d.code === "invalid-prop"),
+        error.diagnostics.some((d) => d.code === "invalid-style"),
     );
 
     assert.throws(

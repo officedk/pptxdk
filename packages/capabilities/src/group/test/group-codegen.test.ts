@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import { deck, group, shape, slide, text } from "@pptxdk/capabilities/document";
 import { CodegenError, createCodegen } from "@pptxdk/codegen";
 import { createMorphScope } from "@pptxdk/core/capability";
 import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
-import { deck, group, shape, slide, text } from "../../document.ts";
 
 describe("group capability codegen", () => {
   it("preserves nested Group hierarchy, member order, bounds, local transforms, and identity in vanilla and react source", () => {

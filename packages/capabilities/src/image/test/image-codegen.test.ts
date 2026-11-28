@@ -4,13 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { documentCapabilities } from "@pptxdk/capabilities/all";
+import {
+  deck,
+  image,
+  preset,
+  slide,
+  text,
+} from "@pptxdk/capabilities/document";
 import { CodegenError, createCodegen } from "@pptxdk/codegen";
 import { PNG } from "pngjs";
 import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
-import { deck, image, slide, text } from "../../document.ts";
-import { preset } from "../../shared/geometry.ts";
 
 function createSamplePngBytes(): Uint8Array {
   const png = new PNG({ width: 4, height: 4 });

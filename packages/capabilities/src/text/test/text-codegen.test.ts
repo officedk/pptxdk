@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 
-import { CodegenError, createCodegen } from "@pptxdk/codegen";
-import { CommonContainer } from "@pptxdk/core/document";
-import { describe, it } from "vitest";
-
-import { documentCapabilities } from "../../all.ts";
+import { documentCapabilities } from "@pptxdk/capabilities/all";
 import {
   deck,
   paragraph,
@@ -13,7 +9,10 @@ import {
   slideNumber,
   span,
   text,
-} from "../../document.ts";
+} from "@pptxdk/capabilities/document";
+import { CodegenError, createCodegen } from "@pptxdk/codegen";
+import { CommonContainer } from "@pptxdk/core/document";
+import { describe, it } from "vitest";
 
 describe("text capability codegen", () => {
   it("generates vanilla and react source for text, paragraph, span, and slide-number including lists, links, empty paragraphs, and whitespace", () => {

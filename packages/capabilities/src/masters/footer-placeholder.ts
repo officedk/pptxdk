@@ -39,6 +39,7 @@ import {
   ooxmlBoolSchema,
   ooxmlNonNegativeIntSchema,
   P_NS,
+  readOoxmlBoxInsets,
   readOoxmlRunAttrStyles,
   readRunFontSlots,
   XML_NS,
@@ -525,10 +526,6 @@ const BodyPrAttrSchema = z.object({
   vert: z.string().optional(),
   wrap: z.enum(["square", "none"]).optional(),
   rtlCol: ooxmlBoolSchema.optional(),
-  lIns: ooxmlNonNegativeIntSchema.optional(),
-  tIns: ooxmlNonNegativeIntSchema.optional(),
-  rIns: ooxmlNonNegativeIntSchema.optional(),
-  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
 });
 
@@ -803,23 +800,34 @@ function readFooterPlaceholderImport(
   if (txBody !== undefined) {
     const bodyPr = txBody.child(A_NS, "bodyPr");
     if (bodyPr !== undefined) {
-      const parsedBody = BodyPrAttrSchema.safeParse(
-        bodyPr.attrsObject([
-          "vert",
-          "wrap",
-          "rtlCol",
-          "lIns",
-          "tIns",
-          "rIns",
-          "bIns",
-          "anchor",
-        ]),
-      );
+      const rawBody = bodyPr.attrsObject([
+        "vert",
+        "wrap",
+        "rtlCol",
+        "lIns",
+        "tIns",
+        "rIns",
+        "bIns",
+        "anchor",
+      ]);
+      const parsedBody = BodyPrAttrSchema.safeParse(rawBody);
       if (parsedBody.success && parsedBody.data.anchor !== undefined) {
         style = mergeFooterStyle(style, {
           verticalAlign: anchorMap[parsedBody.data.anchor],
         });
       }
+      readOoxmlBoxInsets({
+        rawAttrs: rawBody,
+        attrNames: {
+          left: "lIns",
+          top: "tIns",
+          right: "rIns",
+          bottom: "bIns",
+        },
+        elementXpath: bodyPr.xpath,
+        location,
+        diagnostics,
+      });
       bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
       bodyPr.ignoreEmptyChild(A_NS, "normAutofit");
       bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");

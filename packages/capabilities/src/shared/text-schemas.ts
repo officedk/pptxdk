@@ -163,21 +163,29 @@ export const textPositiveSizeSchema = z
     return extent >= 1 && extent <= 2_147_483_647;
   }, "Converted value exceeds shape dimension range");
 
+const maximumWritableInsetEmu = 2_147_483_647;
+
+const isWritableInsetPx = (value: number): boolean => {
+  const converted = pxToEmu(value);
+  return (
+    Number.isSafeInteger(converted) &&
+    converted >= 0 &&
+    converted <= maximumWritableInsetEmu
+  );
+};
+
 const nonNegativeInsetSchema = z
   .number()
   .finite()
   .nonnegative()
-  .refine((value) => {
-    const converted = pxToEmu(value);
-    return Number.isSafeInteger(converted);
-  }, "Inset must be within DrawingML EMU range");
+  .refine(isWritableInsetPx, "Inset must be within DrawingML EMU range");
 
 const spacingValuesWithinEmuRange = (
   spacing: NonNegativeLayoutSpacing,
 ): boolean =>
   typeof spacing === "number"
-    ? Number.isSafeInteger(pxToEmu(spacing))
-    : spacing.every((entry) => Number.isSafeInteger(pxToEmu(entry)));
+    ? isWritableInsetPx(spacing)
+    : spacing.every(isWritableInsetPx);
 
 export const textPaddingValueSchema = nonNegativeLayoutSpacingSchema.refine(
   spacingValuesWithinEmuRange,

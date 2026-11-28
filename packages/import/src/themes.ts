@@ -27,7 +27,9 @@ import {
   hexRgb6Schema,
   ooxmlBoolSchema,
   ooxmlIntSchema,
+  ooxmlLineWidthEmuSchema,
   ooxmlNonNegativeIntSchema,
+  ooxmlWritableExtentEmuSchema,
 } from "#/xml-fragments.ts";
 import { XmlElementCursor, parseXmlPart } from "#/xml-reader.ts";
 
@@ -47,7 +49,7 @@ const sysClrAttrSchema = z.object({
 const colorMapXmlAttrSchema = colorMapSchema;
 
 const lineAttrSchema = z.object({
-  w: ooxmlNonNegativeIntSchema.optional(),
+  w: ooxmlLineWidthEmuSchema.optional(),
   cap: z.enum(["rnd", "sq", "flat"]).optional(),
   cmpd: z.enum(["sng", "dbl", "thickThin", "thinThick", "tri"]).optional(),
   algn: z.enum(["ctr", "in"]).optional(),
@@ -70,8 +72,8 @@ const fillToRectAttrSchema = z.object({
 });
 
 const outerShdwAttrSchema = z.object({
-  blurRad: ooxmlNonNegativeIntSchema.optional(),
-  dist: ooxmlNonNegativeIntSchema.optional(),
+  blurRad: ooxmlWritableExtentEmuSchema.optional(),
+  dist: ooxmlWritableExtentEmuSchema.optional(),
   dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: ooxmlBoolSchema.optional(),
@@ -674,9 +676,28 @@ function readFormatLineStyle(
   slideIndex: number | undefined,
   diagnostics: ImportDiagnostic[],
 ): FormatLineStyle {
-  const parsed = lineAttrSchema.safeParse(
-    lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]),
-  );
+  const rawAttrs = lnCursor.attrsObject(["w", "cap", "cmpd", "algn"]);
+  let widthEmu: number | undefined;
+  if (rawAttrs["w"] !== undefined) {
+    const parsedW = ooxmlLineWidthEmuSchema.safeParse(rawAttrs["w"]);
+    if (parsedW.success) {
+      widthEmu = parsedW.data;
+    } else {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: {
+          part: partPath,
+          xpath: `${lnCursor.xpath}/@w`,
+          ...(slideIndex === undefined ? {} : { slideIndex }),
+        },
+        attributeOrElement: "a:ln/@w",
+        rawValue: rawAttrs["w"],
+      });
+    }
+  }
+  const parsed = lineAttrSchema.omit({ w: true }).safeParse(rawAttrs);
   let fill: FormatFillStyle | undefined;
   let dash: string | undefined;
   for (const child of lnCursor.remainingElementChildren()) {
@@ -715,9 +736,7 @@ function readFormatLineStyle(
     }
   }
   return {
-    ...(parsed.success && parsed.data.w !== undefined
-      ? { widthEmu: parsed.data.w }
-      : {}),
+    ...(widthEmu === undefined ? {} : { widthEmu }),
     ...(parsed.success && parsed.data.cap !== undefined
       ? { cap: parsed.data.cap }
       : {}),
@@ -744,15 +763,30 @@ function readFormatEffectStyle(
     if (child.localName === "effectLst") {
       const outerShdw = child.child(A_NS, "outerShdw");
       if (outerShdw !== undefined) {
-        const parsed = outerShdwAttrSchema.safeParse(
-          outerShdw.attrsObject([
-            "blurRad",
-            "dist",
-            "dir",
-            "algn",
-            "rotWithShape",
-          ]),
-        );
+        const rawShdw = outerShdw.attrsObject([
+          "blurRad",
+          "dist",
+          "dir",
+          "algn",
+          "rotWithShape",
+        ]);
+        const parsed = outerShdwAttrSchema.safeParse(rawShdw);
+        if (!parsed.success) {
+          diagnostics.push({
+            code: "invalid-xml-value",
+            category: "corrupt-input",
+            disposition: "omitted",
+            location: {
+              part: partPath,
+              xpath: outerShdw.xpath,
+              ...(slideIndex === undefined ? {} : { slideIndex }),
+            },
+            attributeOrElement: "a:outerShdw",
+            rawValue: JSON.stringify(rawShdw),
+          });
+          outerShdw.suppressUnconsumed();
+          continue;
+        }
         const colorHex = resolveSimpleThemeHex(
           outerShdw,
           partPath,
@@ -761,13 +795,13 @@ function readFormatEffectStyle(
         );
         shadow = {
           ...(colorHex === undefined ? {} : { color: colorHex }),
-          ...(parsed.success && parsed.data.blurRad !== undefined
+          ...(parsed.data.blurRad !== undefined
             ? { blur: parsed.data.blurRad / 12_700 }
             : {}),
-          ...(parsed.success && parsed.data.dist !== undefined
+          ...(parsed.data.dist !== undefined
             ? { distance: parsed.data.dist / 12_700 }
             : {}),
-          ...(parsed.success && parsed.data.dir !== undefined
+          ...(parsed.data.dir !== undefined
             ? { angle: parsed.data.dir / 60_000 }
             : {}),
         };

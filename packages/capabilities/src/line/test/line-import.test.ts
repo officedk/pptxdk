@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { documentCapabilities } from "@pptxdk/capabilities/all";
 import { CommonNode } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
+import { emit } from "@pptxdk/emit";
 import { A_NS, createImporter, P_NS } from "@pptxdk/import";
+import { validatePptx } from "@pptxdk/validation";
 import { strToU8, zipSync } from "fflate";
 import { describe, it } from "vitest";
 
@@ -405,11 +407,11 @@ describe("Line import and <p:sp> normalization", () => {
           <a:custGeom>
             <a:avLst/><a:gdLst/><a:ahLst/>
             <a:cxnLst>
-              <a:cxn ang="0"><a:pos x="50000" y="0"/></a:cxn>
-              <a:cxn ang="0"><a:pos x="0" y="50000"/></a:cxn>
-              <a:cxn ang="0"><a:pos x="50000" y="100000"/></a:cxn>
-              <a:cxn ang="0"><a:pos x="100000" y="50000"/></a:cxn>
-              <a:cxn ang="0"><a:pos x="25000" y="25000"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="476250" y="0"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="0" y="476250"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="476250" y="952500"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="952500" y="476250"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="238125" y="238125"/></a:cxn>
             </a:cxnLst>
             <a:rect l="0" t="0" r="100000" b="100000"/>
             <a:pathLst>
@@ -453,5 +455,141 @@ describe("Line import and <p:sp> normalization", () => {
     // CustShape at (100, 100) 100x100, site 4 at (25, 25) / (100, 100) => (125, 125)
     assert.equal(resolvedConn?.box?.x, 125);
     assert.equal(resolvedConn?.box?.y, 125);
+  });
+
+  it("maps <a:custGeom><a:cxnLst> in shape EMU space independently of <a:path w h>, evaluates guides, and roundtrips via <a:gdLst>", async () => {
+    const pptx = buildPptxWithSlideBody(`
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="TinyPathCust"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="952500" y="952500"/><a:ext cx="952500" cy="952500"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst><a:gd name="half" fmla="val 476250"/></a:avLst>
+            <a:gdLst>
+              <a:gd name="cxnX" fmla="*/ 1 w 2"/>
+              <a:gd name="cxnY" fmla="val half"/>
+            </a:gdLst>
+            <a:ahLst/>
+            <a:cxnLst>
+              <a:cxn ang="0"><a:pos x="hc" y="0"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="0" y="vc"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="wd2" y="h"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="r" y="hd2"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="476250" y="476250"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="cxnX" y="cxnY"/></a:cxn>
+            </a:cxnLst>
+            <a:rect l="l" t="t" r="r" b="b"/>
+            <a:pathLst>
+              <a:path w="2" h="2">
+                <a:moveTo><a:pt x="0" y="0"/></a:moveTo>
+                <a:lnTo><a:pt x="2" y="0"/></a:lnTo>
+                <a:lnTo><a:pt x="2" y="2"/></a:lnTo>
+                <a:lnTo><a:pt x="0" y="2"/></a:lnTo>
+                <a:close/>
+              </a:path>
+            </a:pathLst>
+          </a:custGeom>
+          <a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill>
+        </p:spPr>
+      </p:sp>
+      <p:cxnSp>
+        <p:nvCxnSpPr>
+          <p:cNvPr id="3" name="CenterConn"/>
+          <p:cNvCxnSpPr><a:stCxn id="2" idx="4"/></p:cNvCxnSpPr>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1428750" y="1428750"/><a:ext cx="952500" cy="0"/></a:xfrm>
+          <a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill></a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `);
+    const imported = importDocument(pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const resolution = resolveDocument(imported.document);
+    const resolvedConn = resolution.slides[0]?.objects.find(
+      (o) => o.name === "CenterConn",
+    );
+    // TinyPathCust at (100, 100) 100x100, EMU cxn site 4 at (476250, 476250) => center (150, 150)
+    assert.equal(resolvedConn?.box?.x, 150);
+    assert.equal(resolvedConn?.box?.y, 150);
+
+    const emitted = emit(resolution);
+    const validation = await validatePptx(emitted.pptx);
+    assert.deepEqual(validation.errors, []);
+
+    const reimported = importDocument(emitted.pptx);
+    assert.deepEqual(reimported.report.diagnostics, []);
+    const reResolved = resolveDocument(reimported.document);
+    const reConn = reResolved.slides[0]?.objects.find(
+      (o) => o.name === "CenterConn",
+    );
+    assert.equal(reConn?.box?.x, 150);
+    assert.equal(reConn?.box?.y, 150);
+  });
+
+  it("drops entire <a:cxnLst> when any <a:cxn> is invalid to avoid connection index shift", () => {
+    const pptx = buildPptxWithSlideBody(`
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="2" name="PartialCorruptCust"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="952500" y="952500"/><a:ext cx="952500" cy="952500"/></a:xfrm>
+          <a:custGeom>
+            <a:avLst/><a:gdLst/><a:ahLst/>
+            <a:cxnLst>
+              <a:cxn ang="0"><a:pos x="476250" y="0"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="badToken" y="476250"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="476250" y="952500"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="952500" y="476250"/></a:cxn>
+              <a:cxn ang="0"><a:pos x="238125" y="238125"/></a:cxn>
+            </a:cxnLst>
+            <a:rect l="l" t="t" r="r" b="b"/>
+            <a:pathLst>
+              <a:path w="100000" h="100000">
+                <a:moveTo><a:pt x="0" y="0"/></a:moveTo>
+                <a:lnTo><a:pt x="100000" y="0"/></a:lnTo>
+                <a:lnTo><a:pt x="100000" y="100000"/></a:lnTo>
+                <a:lnTo><a:pt x="0" y="100000"/></a:lnTo>
+                <a:close/>
+              </a:path>
+            </a:pathLst>
+          </a:custGeom>
+          <a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill>
+        </p:spPr>
+      </p:sp>
+      <p:cxnSp>
+        <p:nvCxnSpPr>
+          <p:cNvPr id="3" name="Port4AfterCorrupt"/>
+          <p:cNvCxnSpPr><a:stCxn id="2" idx="4"/></p:cNvCxnSpPr>
+          <p:nvPr/>
+        </p:nvCxnSpPr>
+        <p:spPr>
+          <a:xfrm><a:off x="1190625" y="1190625"/><a:ext cx="952500" cy="0"/></a:xfrm>
+          <a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom>
+          <a:ln w="12700"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill></a:ln>
+        </p:spPr>
+      </p:cxnSp>
+    `);
+    const imported = importDocument(pptx);
+    assert.ok(
+      imported.report.diagnostics.some((d) => d.code === "invalid-xml-value"),
+    );
+    const nodes = collectNodes(imported.document);
+    const shape = nodes.find((n) => n.props["name"] === "PartialCorruptCust");
+    assert.equal(
+      (shape?.props["geometry"] as { readonly connectionSites?: unknown })
+        ?.connectionSites,
+      undefined,
+    );
+    const conn = nodes.find((n) => n.props["name"] === "Port4AfterCorrupt");
+    assert.equal(conn?.props["from"], undefined);
+    assert.ok(
+      imported.report.diagnostics.some(
+        (d) =>
+          d.code === "compatibility-fallback" &&
+          d.preferredMechanism === "connector-anchor",
+      ),
+    );
   });
 });

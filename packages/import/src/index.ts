@@ -155,8 +155,12 @@ export type {
   ResolvedInternalResource,
 } from "#/resources.ts";
 export {
+  MAXIMUM_COORDINATE_PX,
+  MAXIMUM_LINE_WIDTH_EMU,
+  MAXIMUM_WRITABLE_EMU,
   extentEmuFragmentSchema,
   hexRgb6Schema,
+  nonNegativeExtentEmuFragmentSchema,
   normalizeBulletCharacter,
   offsetEmuFragmentSchema,
   ooxmlAutoNumStartAtSchema,
@@ -167,16 +171,24 @@ export {
   ooxmlLetterSpacingCentipointsSchema,
   ooxmlLineSpacingPercentSchema,
   ooxmlLineSpacingPointsSchema,
+  ooxmlLineWidthEmuSchema,
   ooxmlListLevelSchema,
   ooxmlNonNegativeIntSchema,
   ooxmlParagraphSpacingPointsSchema,
   ooxmlPositiveIntSchema,
+  ooxmlPositiveLineWidthEmuSchema,
+  ooxmlWritableExtentEmuSchema,
+  ooxmlWritableInt32CoordEmuSchema,
+  ooxmlWritablePositiveExtentEmuSchema,
+  readOoxmlBoxInsets,
   readOoxmlRunAttrStyles,
   transformAttributesFragmentSchema,
 } from "#/xml-fragments.ts";
 export type {
   ExtentEmuFragment,
+  NonNegativeExtentEmuFragment,
   OffsetEmuFragment,
+  OoxmlBoxInsetsResult,
   OoxmlRunAttrStyleResult,
   TransformAttributesFragment,
 } from "#/xml-fragments.ts";

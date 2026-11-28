@@ -27,7 +27,9 @@ import {
   ooxmlListLevelSchema,
   ooxmlNonNegativeIntSchema,
   ooxmlParagraphSpacingPointsSchema,
+  ooxmlWritableExtentEmuSchema,
   P_NS,
+  readOoxmlBoxInsets,
   readOoxmlRunAttrStyles,
   readRunFontSlots,
   transformAttributesFragmentSchema,
@@ -96,10 +98,6 @@ const NonVisualSpPrFlagsSchema = z.object({
 const BodyPrFragmentSchema = z.object({
   wrap: z.enum(["square", "none"]).optional(),
   rtlCol: ooxmlBoolSchema.optional(),
-  lIns: ooxmlNonNegativeIntSchema.optional(),
-  tIns: ooxmlNonNegativeIntSchema.optional(),
-  rIns: ooxmlNonNegativeIntSchema.optional(),
-  bIns: ooxmlNonNegativeIntSchema.optional(),
   anchor: z.enum(["t", "ctr", "b"]).optional(),
   anchorCtr: ooxmlBoolSchema.optional(),
   spcFirstLastPara: ooxmlBoolSchema.optional(),
@@ -127,8 +125,8 @@ const TextFieldXmlSchema = z.object({
 });
 
 const OuterShadowXmlSchema = z.object({
-  blurRad: ooxmlNonNegativeIntSchema.optional(),
-  dist: ooxmlNonNegativeIntSchema.optional(),
+  blurRad: ooxmlWritableExtentEmuSchema.optional(),
+  dist: ooxmlWritableExtentEmuSchema.optional(),
   dir: ooxmlIntSchema.optional(),
   algn: z.string().optional(),
   rotWithShape: ooxmlBoolSchema.optional(),
@@ -310,6 +308,7 @@ function readOuterShadow(
       attributeOrElement: "a:outerShdw",
       rawValue: JSON.stringify(raw),
     });
+    outerShdw.suppressUnconsumed();
     return undefined;
   }
 
@@ -939,11 +938,23 @@ export function readRichTextBody(
       if (b.anchor !== undefined) {
         verticalAlign = anchorToVerticalAlign[b.anchor];
       }
-      if (b.lIns !== undefined && b.lIns !== 0) paddingLeft = emuToPx(b.lIns);
-      if (b.tIns !== undefined && b.tIns !== 0) paddingTop = emuToPx(b.tIns);
-      if (b.rIns !== undefined && b.rIns !== 0) paddingRight = emuToPx(b.rIns);
-      if (b.bIns !== undefined && b.bIns !== 0) paddingBottom = emuToPx(b.bIns);
     }
+    const insets = readOoxmlBoxInsets({
+      rawAttrs: rawBodyPr,
+      attrNames: {
+        left: "lIns",
+        top: "tIns",
+        right: "rIns",
+        bottom: "bIns",
+      },
+      elementXpath: bodyPr.xpath,
+      location: { part, slideIndex },
+      diagnostics,
+    });
+    paddingLeft = insets.paddingLeft;
+    paddingTop = insets.paddingTop;
+    paddingRight = insets.paddingRight;
+    paddingBottom = insets.paddingBottom;
     bodyPr.ignoreEmptyChild(A_NS, "noAutofit");
     bodyPr.ignoreEmptyChild(A_NS, "spAutoFit");
     const normAutofit = bodyPr.child(A_NS, "normAutofit");
@@ -1377,22 +1388,23 @@ export function readTextPlaceholderSp(
         ext.attrsObject(["cx", "cy"]),
       );
       if (!parsedOff.success || !parsedExt.success) {
+        // Strip only the invalid local box so bound placeholders inherit layout/master geometry cleanly.
         diagnostics.push({
           code: "invalid-xml-value",
           category: "corrupt-input",
-          disposition: "omitted",
+          disposition: "recovered",
           location: { ...location, xpath: xfrm.xpath },
           attributeOrElement: "a:xfrm",
         });
-        return { diagnostics };
+      } else {
+        fallbackUnits = { w: parsedExt.data.cx, h: parsedExt.data.cy };
+        localBox = {
+          x: emuToPx(parsedOff.data.x),
+          y: emuToPx(parsedOff.data.y),
+          width: emuToPx(parsedExt.data.cx),
+          height: emuToPx(parsedExt.data.cy),
+        };
       }
-      fallbackUnits = { w: parsedExt.data.cx, h: parsedExt.data.cy };
-      localBox = {
-        x: emuToPx(parsedOff.data.x),
-        y: emuToPx(parsedOff.data.y),
-        width: emuToPx(parsedExt.data.cx),
-        height: emuToPx(parsedExt.data.cy),
-      };
     }
   }
 

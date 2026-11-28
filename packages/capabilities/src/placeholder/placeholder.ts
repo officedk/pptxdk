@@ -284,6 +284,14 @@ export function readContentPlaceholderSp(
           width: emuToPx(parsedExt.data.cx),
           height: emuToPx(parsedExt.data.cy),
         };
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...phLocation, xpath: xfrm.xpath },
+          attributeOrElement: "a:xfrm",
+        });
       }
     }
   }

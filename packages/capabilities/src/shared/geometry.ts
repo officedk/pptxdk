@@ -21,6 +21,7 @@ import {
 import { pxToEmu } from "@pptxdk/emit";
 import {
   A_NS,
+  emuToPx,
   ooxmlBoolSchema,
   ooxmlIntSchema,
   ooxmlPositiveIntSchema,
@@ -972,17 +973,27 @@ export function resolvedGeometryXml(geometry: ResolvedGeometry): string {
           return `<a:path w="${widthUnits}" h="${heightUnits}"${pathItem.fill ? "" : ' fill="none"'}${pathItem.stroke ? "" : ' stroke="0"'}>${commands}</a:path>`;
         })
         .join("");
+      const sites = geometry.connectionSites ?? [];
+      const gdListXml =
+        sites.length === 0
+          ? "<a:gdLst/>"
+          : `<a:gdLst>${sites
+              .map((site, index) => {
+                const xUnits = pointUnit(site.x, "connectionSite.x");
+                const yUnits = pointUnit(site.y, "connectionSite.y");
+                return `<a:gd name="cxnX${index}" fmla="*/ ${xUnits} w ${widthUnits}"/><a:gd name="cxnY${index}" fmla="*/ ${yUnits} h ${heightUnits}"/>`;
+              })
+              .join("")}</a:gdLst>`;
       const cxnXml =
-        geometry.connectionSites === undefined ||
-        geometry.connectionSites.length === 0
+        sites.length === 0
           ? "<a:cxnLst/>"
-          : `<a:cxnLst>${geometry.connectionSites
+          : `<a:cxnLst>${sites
               .map(
-                (site) =>
-                  `<a:cxn ang="0"><a:pos x="${pointUnit(site.x, "connectionSite.x")}" y="${pointUnit(site.y, "connectionSite.y")}"/></a:cxn>`,
+                (_site, index) =>
+                  `<a:cxn ang="0"><a:pos x="cxnX${index}" y="cxnY${index}"/></a:cxn>`,
               )
               .join("")}</a:cxnLst>`;
-      return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/>${cxnXml}<a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`;
+      return `<a:custGeom><a:avLst/>${gdListXml}<a:ahLst/>${cxnXml}<a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathList}</a:pathLst></a:custGeom>`;
     }
     default: {
       const exhaustive: never = geometry;
@@ -1125,27 +1136,26 @@ function drawingMlArcToLocalCubics(
   return { commands: result, endX, endY };
 }
 
-function evaluatePresetGeometry(
-  name: PresetGeometryName,
-  adjust: Readonly<Record<string, number>>,
-  box: Rect,
-): EvaluatedGeometry {
-  const def: PresetShapeDefinition = presetDefinitions[name];
-  // Evaluate guides in EMU space to preserve ECMA-376 precision on small pixel boxes.
-  const W = Math.max(1, pxToEmu(box.width));
-  const H = Math.max(1, pxToEmu(box.height));
-  const ss = Math.min(W, H);
-  const ls = Math.max(W, H);
+function createDrawingMlGuideEvaluator(
+  wEmu: number,
+  hEmu: number,
+): {
+  readonly resolveToken: (token: string) => number | undefined;
+  readonly evaluateFormula: (formula: string) => number | undefined;
+  readonly setGuide: (name: string, value: number) => void;
+} {
+  const ss = Math.min(wEmu, hEmu);
+  const ls = Math.max(wEmu, hEmu);
 
   const builtins: Record<string, number> = {
-    w: W,
-    h: H,
+    w: wEmu,
+    h: hEmu,
     l: 0,
     t: 0,
-    r: W,
-    b: H,
-    hc: W / 2,
-    vc: H / 2,
+    r: wEmu,
+    b: hEmu,
+    hc: wEmu / 2,
+    vc: hEmu / 2,
     ss,
     ls,
     cd2: 10_800_000,
@@ -1159,86 +1169,143 @@ function evaluatePresetGeometry(
 
   const env = new Map<string, number>();
 
-  const arg = (token: string): number => {
-    const bound = env.get(token);
+  const resolveToken = (token: string): number | undefined => {
+    const trimmed = token.trim();
+    if (trimmed.length === 0) return undefined;
+    const bound = env.get(trimmed);
     if (bound !== undefined) return bound;
-    const builtin = builtins[token];
+    const builtin = builtins[trimmed];
     if (builtin !== undefined) return builtin;
-    const denomMatch = /^(wd|hd|ssd)(\d+)$/u.exec(token);
+    const denomMatch = /^(wd|hd|ssd)(\d+)$/u.exec(trimmed);
     if (denomMatch !== null) {
       const kind = denomMatch[1];
       const divisor = Number(denomMatch[2]);
+      if (divisor <= 0) return undefined;
       return kind === "wd"
-        ? W / divisor
+        ? wEmu / divisor
         : kind === "hd"
-          ? H / divisor
+          ? hEmu / divisor
           : ss / divisor;
     }
-    const numeric = Number(token);
-    if (!Number.isFinite(numeric)) {
+    if (!/^-?(?:\d+(?:\.\d+)?|\.\d+)$/u.test(trimmed)) {
+      return undefined;
+    }
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  };
+
+  const evaluateFormula = (formula: string): number | undefined => {
+    const parts = formula.trim().split(/\s+/u);
+    const op = parts[0];
+    if (op === undefined || op.length === 0) return undefined;
+    const argAt = (index: number): number | undefined => {
+      const token = parts[index];
+      return token === undefined ? undefined : resolveToken(token);
+    };
+    const x = argAt(1);
+    if (x === undefined) return undefined;
+    let result: number;
+    switch (op) {
+      case "val":
+        result = x;
+        break;
+      case "abs":
+        result = Math.abs(x);
+        break;
+      case "sqrt":
+        result = x <= 0 ? 0 : Math.sqrt(x);
+        break;
+      case "at2":
+      case "cos":
+      case "sin":
+      case "tan":
+      case "max":
+      case "min": {
+        const y = argAt(2);
+        if (y === undefined) return undefined;
+        if (op === "at2") result = radToDrawingAngle(Math.atan2(y, x));
+        else if (op === "cos") result = x * Math.cos(drawingAngleToRad(y));
+        else if (op === "sin") result = x * Math.sin(drawingAngleToRad(y));
+        else if (op === "tan") result = x * Math.tan(drawingAngleToRad(y));
+        else if (op === "max") result = Math.max(x, y);
+        else result = Math.min(x, y);
+        break;
+      }
+      case "*/":
+      case "+-":
+      case "+/":
+      case "?:":
+      case "ifelse":
+      case "cat2":
+      case "sat2":
+      case "mod":
+      case "pin": {
+        const y = argAt(2);
+        const z = argAt(3);
+        if (y === undefined || z === undefined) return undefined;
+        if (op === "*/") result = z === 0 ? 0 : (x * y) / z;
+        else if (op === "+-") result = x + y - z;
+        else if (op === "+/") result = z === 0 ? 0 : (x + y) / z;
+        else if (op === "?:" || op === "ifelse") result = x > 0 ? y : z;
+        else if (op === "cat2") result = x * Math.cos(Math.atan2(z, y));
+        else if (op === "sat2") result = x * Math.sin(Math.atan2(z, y));
+        else if (op === "mod") result = Math.sqrt(x * x + y * y + z * z);
+        else result = y < x ? x : y > z ? z : y;
+        break;
+      }
+      default:
+        return undefined;
+    }
+    return Number.isFinite(result) ? result : undefined;
+  };
+
+  return {
+    resolveToken,
+    evaluateFormula,
+    setGuide(name: string, value: number) {
+      env.set(name, value);
+    },
+  };
+}
+
+function evaluatePresetGeometry(
+  name: PresetGeometryName,
+  adjust: Readonly<Record<string, number>>,
+  box: Rect,
+): EvaluatedGeometry {
+  const def: PresetShapeDefinition = presetDefinitions[name];
+  // Evaluate guides in EMU space to preserve ECMA-376 precision on small pixel boxes.
+  const W = Math.max(1, pxToEmu(box.width));
+  const H = Math.max(1, pxToEmu(box.height));
+  const evaluator = createDrawingMlGuideEvaluator(W, H);
+
+  const arg = (token: string): number => {
+    const resolved = evaluator.resolveToken(token);
+    if (resolved === undefined) {
       invalidGeometry(`Preset ${name} references unknown guide token ${token}`);
     }
-    return numeric;
+    return resolved;
   };
 
   const evalFormula = (formula: string): number => {
-    const parts = formula.trim().split(/\s+/u);
-    const op = parts[0];
-    const x = parts[1] === undefined ? 0 : arg(parts[1]);
-    const y = parts[2] === undefined ? 0 : arg(parts[2]);
-    const z = parts[3] === undefined ? 0 : arg(parts[3]);
-    switch (op) {
-      case "val":
-        return x;
-      case "*/":
-        return z === 0 ? 0 : (x * y) / z;
-      case "+-":
-        return x + y - z;
-      case "+/":
-        return z === 0 ? 0 : (x + y) / z;
-      case "?:":
-      case "ifelse":
-        return x > 0 ? y : z;
-      case "abs":
-        return Math.abs(x);
-      case "at2":
-        return radToDrawingAngle(Math.atan2(y, x));
-      case "cat2":
-        return x * Math.cos(Math.atan2(z, y));
-      case "sat2":
-        return x * Math.sin(Math.atan2(z, y));
-      case "cos":
-        return x * Math.cos(drawingAngleToRad(y));
-      case "sin":
-        return x * Math.sin(drawingAngleToRad(y));
-      case "tan":
-        return x * Math.tan(drawingAngleToRad(y));
-      case "max":
-        return Math.max(x, y);
-      case "min":
-        return Math.min(x, y);
-      case "mod":
-        return Math.sqrt(x * x + y * y + z * z);
-      case "pin":
-        return y < x ? x : y > z ? z : y;
-      case "sqrt":
-        return x <= 0 ? 0 : Math.sqrt(x);
-      default:
-        invalidGeometry(`Preset ${name} uses unsupported guide operator ${op}`);
+    const evaluated = evaluator.evaluateFormula(formula);
+    if (evaluated === undefined) {
+      invalidGeometry(`Preset ${name} uses invalid guide formula ${formula}`);
     }
+    return evaluated;
   };
 
   if (def.av !== undefined) {
     for (const [key, formula] of def.av) {
-      env.set(key, evalFormula(formula));
+      evaluator.setGuide(key, evalFormula(formula));
     }
   }
   for (const [key, value] of Object.entries(adjust)) {
-    env.set(key, value);
+    evaluator.setGuide(key, value);
   }
   if (def.gd !== undefined) {
     for (const [key, formula] of def.gd) {
-      env.set(key, evalFormula(formula));
+      evaluator.setGuide(key, evalFormula(formula));
     }
   }
 
@@ -1523,9 +1590,17 @@ const AdjustGuideXmlSchema = z.object({
   fmla: z.string().regex(/^val\s+(-?\d+)$/u),
 });
 
+const ooxmlInt32Schema = ooxmlIntSchema.refine(
+  (value) => value >= -2_147_483_648 && value <= 2_147_483_647,
+);
+
+const ooxmlPositiveInt32Schema = ooxmlPositiveIntSchema.refine(
+  (value) => value <= 2_147_483_647,
+);
+
 const CustomPathAttrSchema = z.object({
-  w: ooxmlPositiveIntSchema.optional(),
-  h: ooxmlPositiveIntSchema.optional(),
+  w: ooxmlPositiveInt32Schema.optional(),
+  h: ooxmlPositiveInt32Schema.optional(),
   fill: z
     .enum(["none", "norm", "lighten", "lightenLess", "darken", "darkenLess"])
     .optional(),
@@ -1533,8 +1608,8 @@ const CustomPathAttrSchema = z.object({
 });
 
 const CustomPtAttrSchema = z.object({
-  x: ooxmlIntSchema,
-  y: ooxmlIntSchema,
+  x: ooxmlInt32Schema,
+  y: ooxmlInt32Schema,
 });
 
 const CustomArcAttrSchema = z.object({
@@ -1667,31 +1742,64 @@ export function readCustomGeometryXml(
   location: ImportLocation,
   diagnostics: ImportDiagnostic[],
 ): CustomGeometry | undefined {
-  custGeomCursor.ignoreEmptyChild(A_NS, "avLst");
-  const gdLst = custGeomCursor.child(A_NS, "gdLst");
-  if (gdLst !== undefined) {
-    for (const gd of gdLst.children(A_NS, "gd")) {
-      gd.consumeAttr("name");
-      gd.consumeAttr("fmla");
-    }
-  }
-  custGeomCursor.ignoreEmptyChild(A_NS, "ahLst");
-  const cxnLstCursor = custGeomCursor.child(A_NS, "cxnLst");
-  let importedConnectionSites: ScreenPoint[] | undefined;
-  if (cxnLstCursor !== undefined) {
-    const parsedSites: ScreenPoint[] = [];
-    for (const cxnCursor of cxnLstCursor.children(A_NS, "cxn")) {
-      cxnCursor.consumeAttr("ang");
-      const posCursor = cxnCursor.child(A_NS, "pos");
-      if (posCursor !== undefined) {
-        const pt = readCustomPoint(posCursor, location, diagnostics);
-        if (pt !== undefined) {
-          parsedSites.push(pt);
+  const hasPositiveShapeExtent =
+    Number.isFinite(fallbackExtentUnits.w) &&
+    Number.isFinite(fallbackExtentUnits.h) &&
+    fallbackExtentUnits.w > 0 &&
+    fallbackExtentUnits.h > 0;
+  const guideEval = createDrawingMlGuideEvaluator(
+    fallbackExtentUnits.w,
+    fallbackExtentUnits.h,
+  );
+  const readGuideList = (listCursor: XmlElementCursor | undefined): void => {
+    if (listCursor === undefined) return;
+    for (const gd of listCursor.children(A_NS, "gd")) {
+      const { name, fmla } = gd.attrsObject(["name", "fmla"]);
+      if (hasPositiveShapeExtent && name !== undefined && fmla !== undefined) {
+        const value = guideEval.evaluateFormula(fmla);
+        if (value !== undefined) {
+          guideEval.setGuide(name, value);
         }
       }
     }
-    if (parsedSites.length > 0) {
-      importedConnectionSites = parsedSites;
+  };
+  readGuideList(custGeomCursor.child(A_NS, "avLst"));
+  readGuideList(custGeomCursor.child(A_NS, "gdLst"));
+  custGeomCursor.ignoreEmptyChild(A_NS, "ahLst");
+
+  const cxnLstCursor = custGeomCursor.child(A_NS, "cxnLst");
+  const rawCxnPositions: Array<{
+    readonly xpath: string;
+    readonly rawValue: string;
+    readonly posX?: number;
+    readonly posY?: number;
+  }> = [];
+  if (cxnLstCursor !== undefined) {
+    for (const cxnCursor of cxnLstCursor.children(A_NS, "cxn")) {
+      cxnCursor.consumeAttr("ang");
+      const posCursor = cxnCursor.child(A_NS, "pos");
+      if (posCursor === undefined) {
+        rawCxnPositions.push({
+          xpath: cxnCursor.xpath,
+          rawValue: "missing <a:pos>",
+        });
+        continue;
+      }
+      const rawPos = posCursor.attrsObject(["x", "y"]);
+      const posX =
+        hasPositiveShapeExtent && rawPos["x"] !== undefined
+          ? guideEval.resolveToken(rawPos["x"])
+          : undefined;
+      const posY =
+        hasPositiveShapeExtent && rawPos["y"] !== undefined
+          ? guideEval.resolveToken(rawPos["y"])
+          : undefined;
+      rawCxnPositions.push({
+        xpath: posCursor.xpath,
+        rawValue: JSON.stringify(rawPos),
+        ...(posX === undefined ? {} : { posX }),
+        ...(posY === undefined ? {} : { posY }),
+      });
     }
   }
   const rect = custGeomCursor.child(A_NS, "rect");
@@ -1909,6 +2017,45 @@ export function readCustomGeometryXml(
     }
 
     if (pathFailed || commands.length === 0) continue;
+    const withinPathUnitBounds = (n: number): boolean => {
+      const units = Math.round(n * 1000);
+      return Number.isSafeInteger(units) && Math.abs(units) <= 2_147_483_647;
+    };
+    const commandsBounded = commands.every((cmd) => {
+      switch (cmd.op) {
+        case "Z":
+          return true;
+        case "M":
+        case "L":
+          return withinPathUnitBounds(cmd.x) && withinPathUnitBounds(cmd.y);
+        case "Q":
+          return (
+            withinPathUnitBounds(cmd.x1) &&
+            withinPathUnitBounds(cmd.y1) &&
+            withinPathUnitBounds(cmd.x) &&
+            withinPathUnitBounds(cmd.y)
+          );
+        case "C":
+          return (
+            withinPathUnitBounds(cmd.x1) &&
+            withinPathUnitBounds(cmd.y1) &&
+            withinPathUnitBounds(cmd.x2) &&
+            withinPathUnitBounds(cmd.y2) &&
+            withinPathUnitBounds(cmd.x) &&
+            withinPathUnitBounds(cmd.y)
+          );
+      }
+    });
+    if (!commandsBounded) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: pathCursor.xpath },
+        attributeOrElement: "a:path",
+      });
+      continue;
+    }
     paths.push({
       commands,
       ...(parsedPath.data.fill === "none" ? { fill: false } : {}),
@@ -1924,6 +2071,59 @@ export function readCustomGeometryXml(
     paths.length === 0
   ) {
     return undefined;
+  }
+
+  let importedConnectionSites: ScreenPoint[] | undefined;
+  if (rawCxnPositions.length > 0) {
+    // All-or-nothing import for <a:cxnLst>: skipping individual broken sites shifts port indices for <p:cxnSp>.
+    const mappedSites: ScreenPoint[] = [];
+    let failedCxn:
+      | { readonly xpath: string; readonly rawValue: string }
+      | undefined;
+
+    for (const rawSite of rawCxnPositions) {
+      if (
+        !hasPositiveShapeExtent ||
+        rawSite.posX === undefined ||
+        rawSite.posY === undefined ||
+        !Number.isFinite(rawSite.posX) ||
+        !Number.isFinite(rawSite.posY) ||
+        Math.abs(emuToPx(rawSite.posX)) > 1_000_000 ||
+        Math.abs(emuToPx(rawSite.posY)) > 1_000_000
+      ) {
+        failedCxn = { xpath: rawSite.xpath, rawValue: rawSite.rawValue };
+        break;
+      }
+      const mappedX = (rawSite.posX / fallbackExtentUnits.w) * viewWidth;
+      const mappedY = (rawSite.posY / fallbackExtentUnits.h) * viewHeight;
+      const unitX = Math.round(mappedX * 1000);
+      const unitY = Math.round(mappedY * 1000);
+      if (
+        !Number.isFinite(mappedX) ||
+        !Number.isFinite(mappedY) ||
+        !Number.isSafeInteger(unitX) ||
+        Math.abs(unitX) > 2_147_483_647 ||
+        !Number.isSafeInteger(unitY) ||
+        Math.abs(unitY) > 2_147_483_647
+      ) {
+        failedCxn = { xpath: rawSite.xpath, rawValue: rawSite.rawValue };
+        break;
+      }
+      mappedSites.push({ x: mappedX, y: mappedY });
+    }
+
+    if (failedCxn !== undefined) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: failedCxn.xpath },
+        attributeOrElement: "a:cxnLst",
+        rawValue: failedCxn.rawValue,
+      });
+    } else if (mappedSites.length > 0) {
+      importedConnectionSites = mappedSites;
+    }
   }
 
   return {

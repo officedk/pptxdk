@@ -4,6 +4,8 @@ import {
   A_NS,
   DIAGRAM_NS,
   DSP_NS,
+  MAXIMUM_COORDINATE_PX,
+  MAXIMUM_WRITABLE_EMU,
   P_NS,
   REL_DIAGRAM_DATA,
   REL_DIAGRAM_DRAWING,
@@ -22,6 +24,7 @@ import {
   transformAttributesFragmentSchema,
   type ImportDiagnostic,
   type ImportLocation,
+  type OmittedSlideObjectInfo,
   type ScopeConnectorResolutionContext,
   type ShapeTreeImportContext,
   type ShapeTreeImportHandler,
@@ -116,6 +119,27 @@ function memberUnionPx(members: readonly CommonNode[]): PxBox | undefined {
     height: maxBottom - minY,
   };
 }
+
+const isValidMappedBox = (box: PxBox, allowZeroExtent = false): boolean => {
+  if (
+    !Number.isFinite(box.x) ||
+    !Number.isFinite(box.y) ||
+    Math.abs(box.x) > MAXIMUM_COORDINATE_PX ||
+    Math.abs(box.y) > MAXIMUM_COORDINATE_PX ||
+    !Number.isFinite(box.width) ||
+    !Number.isFinite(box.height)
+  ) {
+    return false;
+  }
+  const cx = pxToEmu(box.width);
+  const cy = pxToEmu(box.height);
+  if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cy)) return false;
+  if (cx > MAXIMUM_WRITABLE_EMU || cy > MAXIMUM_WRITABLE_EMU) return false;
+  if (allowZeroExtent) {
+    return cx >= 0 && cy >= 0 && (cx > 0 || cy > 0);
+  }
+  return cx >= 1 && cy >= 1;
+};
 
 const identityMapper: BoxCoordinateMapper = (box) => box;
 
@@ -325,14 +349,43 @@ function readGroupSpSlideSpace(
 
   const members: CommonNode[] = [];
   const groupObjectsBySpid = new Map<number, CommonNode>();
+  const groupOmittedSpids = new Map<number, OmittedSlideObjectInfo>();
   const groupUsedAuthorIds = new Set<string>();
   const groupDeferredConnectors: Array<
     (ctx: ScopeConnectorResolutionContext) => void
   > = [];
+  const recordGroupOmission = (
+    spid: number | undefined,
+    name: string | undefined,
+  ): void => {
+    if (spid !== undefined) {
+      groupOmittedSpids.set(spid, {
+        ...(name === undefined ? {} : { objectName: name }),
+        reason: "corrupt",
+      });
+    }
+  };
   const recordGroupMember = (
     spid: number | undefined,
+    memberName: string | undefined,
     memberNode: CommonNode,
+    memberXpath: string,
   ): void => {
+    const memberBox = nodeBoundsPx(memberNode);
+    if (
+      memberBox !== undefined &&
+      !isValidMappedBox(memberBox, memberNode.type === "line")
+    ) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "omitted",
+        location: { ...location, xpath: memberXpath },
+        attributeOrElement: "a:xfrm",
+      });
+      recordGroupOmission(spid, memberName);
+      return;
+    }
     if (spid !== undefined) {
       context.registerImportedObject?.(spid, memberNode);
       groupObjectsBySpid.set(spid, memberNode);
@@ -370,9 +423,16 @@ function readGroupSpSlideSpace(
       if (outcome.diagnostics !== undefined) {
         diagnostics.push(...outcome.diagnostics);
       }
+      const identity = peekShapeTreeObjectIdentity(childCursor.element);
       if (outcome.node !== undefined) {
-        const identity = peekShapeTreeObjectIdentity(childCursor.element);
-        recordGroupMember(identity.objectId, outcome.node);
+        recordGroupMember(
+          identity.objectId,
+          identity.objectName,
+          outcome.node,
+          childCursor.xpath,
+        );
+      } else {
+        recordGroupOmission(identity.objectId, identity.objectName);
       }
       continue;
     }
@@ -383,10 +443,17 @@ function readGroupSpSlideSpace(
         if (outcome.diagnostics !== undefined) {
           diagnostics.push(...outcome.diagnostics);
         }
+        const identity = peekShapeTreeObjectIdentity(childCursor.element);
         if (outcome.node !== undefined) {
           applyMemberMapper(outcome.node, memberMapper);
-          const identity = peekShapeTreeObjectIdentity(childCursor.element);
-          recordGroupMember(identity.objectId, outcome.node);
+          recordGroupMember(
+            identity.objectId,
+            identity.objectName,
+            outcome.node,
+            childCursor.xpath,
+          );
+        } else {
+          recordGroupOmission(identity.objectId, identity.objectName);
         }
         continue;
       }
@@ -396,9 +463,16 @@ function readGroupSpSlideSpace(
         if (outcome.diagnostics !== undefined) {
           diagnostics.push(...outcome.diagnostics);
         }
+        const identity = peekShapeTreeObjectIdentity(childCursor.element);
         if (outcome.node !== undefined) {
-          const identity = peekShapeTreeObjectIdentity(childCursor.element);
-          recordGroupMember(identity.objectId, outcome.node);
+          recordGroupMember(
+            identity.objectId,
+            identity.objectName,
+            outcome.node,
+            childCursor.xpath,
+          );
+        } else {
+          recordGroupOmission(identity.objectId, identity.objectName);
         }
         continue;
       }
@@ -407,9 +481,16 @@ function readGroupSpSlideSpace(
       if (outcome.diagnostics !== undefined) {
         diagnostics.push(...outcome.diagnostics);
       }
+      const identity = peekShapeTreeObjectIdentity(childCursor.element);
       if (outcome.node !== undefined) {
-        const identity = peekShapeTreeObjectIdentity(childCursor.element);
-        recordGroupMember(identity.objectId, outcome.node);
+        recordGroupMember(
+          identity.objectId,
+          identity.objectName,
+          outcome.node,
+          childCursor.xpath,
+        );
+      } else {
+        recordGroupOmission(identity.objectId, identity.objectName);
       }
       continue;
     }
@@ -419,9 +500,16 @@ function readGroupSpSlideSpace(
       if (outcome.diagnostics !== undefined) {
         diagnostics.push(...outcome.diagnostics);
       }
+      const identity = peekShapeTreeObjectIdentity(childCursor.element);
       if (outcome.node !== undefined) {
-        const identity = peekShapeTreeObjectIdentity(childCursor.element);
-        recordGroupMember(identity.objectId, outcome.node);
+        recordGroupMember(
+          identity.objectId,
+          identity.objectName,
+          outcome.node,
+          childCursor.xpath,
+        );
+      } else {
+        recordGroupOmission(identity.objectId, identity.objectName);
       }
       continue;
     }
@@ -431,10 +519,17 @@ function readGroupSpSlideSpace(
       if (outcome.diagnostics !== undefined) {
         diagnostics.push(...outcome.diagnostics);
       }
+      const identity = peekShapeTreeObjectIdentity(childCursor.element);
       if (outcome.node !== undefined) {
         applyMemberMapper(outcome.node, memberMapper);
-        const identity = peekShapeTreeObjectIdentity(childCursor.element);
-        recordGroupMember(identity.objectId, outcome.node);
+        recordGroupMember(
+          identity.objectId,
+          identity.objectName,
+          outcome.node,
+          childCursor.xpath,
+        );
+      } else {
+        recordGroupOmission(identity.objectId, identity.objectName);
       }
       continue;
     }
@@ -468,11 +563,10 @@ function readGroupSpSlideSpace(
     height: extH,
   });
   const unionPx = memberUnionPx(members);
-  // Group resolution requires non-zero bounding width and height across surviving members.
-  // If corrupt/omitted siblings left only a zero-width or zero-height line/member, omit the collapsed group.
+  // Group resolution requires non-zero bounding width and height within writable DrawingML limits.
   if (
-    unionPx !== undefined &&
-    (pxToEmu(unionPx.width) < 1 || pxToEmu(unionPx.height) < 1)
+    (unionPx !== undefined && !isValidMappedBox(unionPx, false)) ||
+    !isValidMappedBox(mappedGroupBox, true)
   ) {
     if (!diagnostics.some((d) => d.disposition === "omitted")) {
       diagnostics.push({
@@ -481,7 +575,12 @@ function readGroupSpSlideSpace(
         disposition: "omitted",
         location: { ...location, xpath: cursor.xpath },
         attributeOrElement: cursor.localName,
-        rawValue: pxToEmu(unionPx.width) < 1 ? "width=0" : "height=0",
+        rawValue:
+          unionPx !== undefined && pxToEmu(unionPx.width) < 1
+            ? "width=0"
+            : unionPx !== undefined && pxToEmu(unionPx.height) < 1
+              ? "height=0"
+              : "bounds-overflow",
       });
     }
     return { diagnostics };
@@ -502,7 +601,7 @@ function readGroupSpSlideSpace(
   if (groupDeferredConnectors.length > 0) {
     const scopeContext: ScopeConnectorResolutionContext = {
       scopeObjectsBySpid: groupObjectsBySpid,
-      omittedSpids: new Map(),
+      omittedSpids: groupOmittedSpids,
       usedAuthorIds: groupUsedAuthorIds,
       diagnostics,
     };

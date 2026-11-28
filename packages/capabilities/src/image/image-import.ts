@@ -527,6 +527,7 @@ function readEffectList(
         attributeOrElement: "a:outerShdw",
         rawValue: JSON.stringify(rawShadow),
       });
+      outerShdw.suppressUnconsumed();
     } else {
       const color = readColorElement(outerShdw, part, slideIndex, diagnostics);
       boxShadow = {
@@ -887,23 +888,34 @@ export function readImagePic(
     const rawExt = ext.attrsObject(["cx", "cy"]);
     const parsedExt = extentEmuFragmentSchema.safeParse(rawExt);
     if (!parsedOff.success || !parsedExt.success) {
-      diagnostics.push({
-        code: "invalid-xml-value",
-        category: "corrupt-input",
-        disposition: "omitted",
-        location: { ...picLocation, xpath: xfrm.xpath },
-        attributeOrElement: "a:xfrm",
-        ...(cascadedForPicture.length === 0
-          ? {}
-          : { cascaded: cascadedForPicture }),
-      });
-      return { diagnostics };
+      if (nativeRef !== undefined) {
+        // Strip only the invalid local box so bound image placeholders inherit layout/master geometry cleanly.
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...picLocation, xpath: xfrm.xpath },
+          attributeOrElement: "a:xfrm",
+        });
+      } else {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "omitted",
+          location: { ...picLocation, xpath: xfrm.xpath },
+          attributeOrElement: "a:xfrm",
+          ...(cascadedForPicture.length === 0
+            ? {}
+            : { cascaded: cascadedForPicture }),
+        });
+        return { diagnostics };
+      }
+    } else {
+      localX = emuToPx(parsedOff.data.x);
+      localY = emuToPx(parsedOff.data.y);
+      localWidth = emuToPx(parsedExt.data.cx);
+      localHeight = emuToPx(parsedExt.data.cy);
     }
-
-    localX = emuToPx(parsedOff.data.x);
-    localY = emuToPx(parsedOff.data.y);
-    localWidth = emuToPx(parsedExt.data.cx);
-    localHeight = emuToPx(parsedExt.data.cy);
     rotate =
       parsedXfrm.success &&
       parsedXfrm.data.rot !== undefined &&

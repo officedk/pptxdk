@@ -750,6 +750,26 @@ function sanitizeGeometryElementBbox(
       }
       return bbox;
     }
+    case "use": {
+      if (hasNonFiniteAttr(element, ["x", "y", "width", "height"])) {
+        return null;
+      }
+      const x = parseNumber(element.attrs.get("x")) ?? 0;
+      const y = parseNumber(element.attrs.get("y")) ?? 0;
+      const width = parseNumber(element.attrs.get("width")) ?? 1;
+      const height = parseNumber(element.attrs.get("height")) ?? 1;
+      if (
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        width <= EPSILON ||
+        height <= EPSILON
+      ) {
+        return null;
+      }
+      return { minX: x, minY: y, maxX: x + width, maxY: y + height };
+    }
     default:
       return null;
   }

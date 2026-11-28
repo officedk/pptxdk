@@ -8,7 +8,7 @@ import { strFromU8, unzipSync, zipSync } from "fflate";
 import { createElement } from "react";
 import { describe, it } from "vitest";
 
-import { build } from "../../../test/test-helpers.ts";
+import { build, preview } from "../../../test/test-helpers.ts";
 
 describe("Line geometry, strokes, and arrows", () => {
   it("writes valid DrawingML headEnd and tailEnd line arrows in schema element sequence", async () => {
@@ -189,5 +189,45 @@ describe("Line geometry, strokes, and arrows", () => {
       file.errors.some((err) => err.code === "invalid-line-end-type"),
       "Expected invalid-line-end-type error on corrupted line end type",
     );
+  });
+
+  it("paints zero-height horizontal and zero-width vertical Line dividers into SVG and PNG", async () => {
+    const rendered = await preview(
+      createElement(
+        Deck,
+        { width: 320, height: 180 },
+        createElement(
+          Slide,
+          { id: "s1", background: "#FFFFFF" },
+          createElement(Line, {
+            id: "h-rule",
+            stroke: { color: "#A8823A", width: 2 },
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 40,
+              width: 280,
+              height: 0,
+            },
+          }),
+          createElement(Line, {
+            id: "v-rule",
+            stroke: { color: "#1F3B33", width: 2, endArrow: "arrow" },
+            style: {
+              position: "absolute",
+              left: 160,
+              top: 50,
+              width: 0,
+              height: 100,
+            },
+          }),
+        ),
+      ),
+    );
+    const page = rendered.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.ok(page.svg !== undefined && page.svg.includes('stroke="#A8823A"'));
+    assert.ok(page.svg.includes('stroke="#1F3B33"'));
+    assert.ok(page.png !== undefined && page.png.byteLength > 0);
   });
 });

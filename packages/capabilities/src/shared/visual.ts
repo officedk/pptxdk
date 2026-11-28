@@ -541,6 +541,18 @@ function isFinitePositiveBox(box: ShapeBox): boolean {
   );
 }
 
+function isFiniteSingleZeroBox(box: ShapeBox): boolean {
+  return (
+    Number.isFinite(box.x) &&
+    Number.isFinite(box.y) &&
+    Number.isFinite(box.width) &&
+    Number.isFinite(box.height) &&
+    box.width >= 0 &&
+    box.height >= 0 &&
+    (box.width > 1e-6 || box.height > 1e-6)
+  );
+}
+
 /** Generates deterministic SVG `<linearGradient>` or `<radialGradient>` definition markup. */
 export function gradientDefSvg(
   id: string,
@@ -1609,10 +1621,14 @@ export function paintVisualModel(options: {
   readonly model: ResolvedVisualModel;
   readonly slideNumber: number;
   readonly objectId: number;
+  readonly allowSingleZeroExtent?: boolean;
 }): PaintOutput {
   const { model, slideNumber, objectId } = options;
   const { box } = model;
-  if (!isFinitePositiveBox(box)) {
+  const hasPaintableBox = options.allowSingleZeroExtent
+    ? isFiniteSingleZeroBox(box)
+    : isFinitePositiveBox(box);
+  if (!hasPaintableBox) {
     return {
       svg: "",
       ...(model.fill.kind === "image" && model.fill.source.kind === "external"

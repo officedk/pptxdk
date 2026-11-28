@@ -181,4 +181,69 @@ describe("@pptxdk/preview pure unit contract (without rasterizer)", () => {
     const validSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><defs><linearGradient id="g-ok" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#1D4ED8"/><stop offset="100%" stop-color="#0EA5E9"/></linearGradient></defs><g transform="translate(100 100) scale(-1 1)"><path d="M0 0 L80 0 L80 40 L0 40 Z" fill="url(#g-ok)"/></g></svg>`;
     assert.equal(sanitizeSvgForRasterization(validSvg, dimensions), validSvg);
   });
+
+  it("deduplicates repeated large raster data URIs across layers into shared <defs> before joining slide SVG", () => {
+    const minimalPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AAAAMBAQAY3Y2wAAAAAElFTkSuQmCC",
+      "base64",
+    );
+    const payloadLen = 3_600_000;
+    const largePng = new Uint8Array(minimalPng.byteLength + 12 + payloadLen);
+    const iendOffset = minimalPng.byteLength - 12;
+    largePng.set(minimalPng.subarray(0, iendOffset), 0);
+    new DataView(largePng.buffer).setUint32(iendOffset, payloadLen);
+    largePng.set([0x74, 0x45, 0x58, 0x74], iendOffset + 4);
+    largePng.set(minimalPng.subarray(iendOffset), iendOffset + 12 + payloadLen);
+    const repeatedBase64 = Buffer.from(largePng).toString("base64");
+
+    const repeatedImageCapability: ObjectCapabilityModule = {
+      declaration: "repeated-raster",
+      bind: (input, context) => ({
+        contract: parseCapabilityLayoutContract({
+          nativeKind: "sp",
+          props: input.props,
+          allowedStyleKeys: new Set(layoutStyleKeys),
+          path: context.path,
+        }),
+        resolve: (ctx) => ({
+          observation: {
+            id: 1,
+            kind: "repeated-raster",
+            name: "repeated-raster",
+            ...(ctx.layoutBox === undefined ? {} : { box: ctx.layoutBox }),
+          },
+          extensions: [],
+          emit: () => ({ xml: "" }),
+          paint: () => ({
+            svg: `<image x="10" y="10" width="20" height="20" preserveAspectRatio="none" href="data:image/png;base64,${repeatedBase64}"/>`,
+          }),
+        }),
+      }),
+    };
+    const resolve = createResolver([repeatedImageCapability]);
+    const doc = createDeckNode({ width: 320, height: 180 }).append(
+      createSlideNode({ id: "s1" }).append(
+        ...Array.from(
+          { length: 120 },
+          (_, i) =>
+            new CommonNode("repeated-raster", "repeated-raster", {
+              id: `img-${i}`,
+              style: {
+                position: "absolute",
+                left: 10,
+                top: 10,
+                width: 20,
+                height: 20,
+              },
+            }),
+        ),
+      ),
+    );
+    const resolution = resolve(doc);
+    const rendered = paint(resolution);
+    const page = rendered.pages[0]!;
+    assert.deepEqual(page.errors, []);
+    assert.ok(page.png !== undefined && page.png.byteLength > 0);
+    assert.ok(page.svg !== undefined && page.svg.length < 6_000_000);
+  });
 });

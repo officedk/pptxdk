@@ -19,6 +19,7 @@ import {
 import { BuildError, createMorphScope, targets } from "@pptxdk/core";
 import { createResolver } from "@pptxdk/core/build";
 import { emit } from "@pptxdk/emit";
+import { createImporter } from "@pptxdk/import";
 import { paint } from "@pptxdk/preview";
 import { expandDocument } from "@pptxdk/react";
 import { Deck, Slide } from "@pptxdk/react";
@@ -567,5 +568,136 @@ describe("chartCapability resolved contract", () => {
     assert.ok(slide1Xml.includes(`name="${morphName}"`));
     assert.ok(slide1Xml.includes("<a:hlinkClick"));
     assert.ok(slide1Xml.includes("<p:timing>"));
+  });
+
+  it("materializes default -90° rotation for both primary and secondary vertical axis titles across emit, paint, and import roundtrip", async () => {
+    const resolve = createResolver([
+      slideBackgroundCapability,
+      chartCapability,
+    ]);
+    const importChart = createImporter([
+      slideBackgroundCapability,
+      chartCapability,
+    ]);
+    const doc = await expandDocument(
+      createElement(
+        Deck,
+        { width: 640, height: 360 },
+        createElement(
+          Slide,
+          { id: "dual-axis", background: "#FFFFFF" },
+          createElement(Chart, {
+            id: "dual",
+            title: "Revenue & Margin",
+            style: {
+              position: "absolute",
+              left: 20,
+              top: 20,
+              width: 600,
+              height: 320,
+              fontFamily: jostFont,
+              fontSize: 12,
+            },
+            axes: {
+              quarter: { kind: "category", title: "Quarter" },
+              revenue: {
+                kind: "value",
+                position: "left",
+                title: "Revenue ($M)",
+                min: 0,
+                max: 100,
+              },
+              margin: {
+                kind: "value",
+                position: "right",
+                title: "Operating Margin (%)",
+                min: 0,
+                max: 1,
+                numberFormat: "0%",
+              },
+            },
+            groups: [
+              {
+                kind: "column",
+                axes: { category: "quarter", value: "revenue" },
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Q1", "Q2", "Q3"],
+                },
+                series: [{ name: "Revenue", values: [30, 60, 90] }],
+              },
+              {
+                kind: "line",
+                axes: { category: "quarter", value: "margin" },
+                data: {
+                  kind: "shared-categories",
+                  categories: ["Q1", "Q2", "Q3"],
+                },
+                series: [{ name: "Margin", values: [0.2, 0.4, 0.7] }],
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+
+    const resolution = resolve(doc);
+    const painted = paint(resolution);
+    assert.deepEqual(painted.pages[0]?.errors, []);
+    const svg = painted.pages[0]?.svg ?? "";
+    const negRotMatches = svg.match(/<g transform="rotate\(-90\b/gu) ?? [];
+    const posRotMatches = svg.match(/<g transform="rotate\(90\b/gu) ?? [];
+    assert.equal(
+      negRotMatches.length,
+      2,
+      "Both left and right vertical axis titles must render at -90 degrees",
+    );
+    assert.equal(
+      posRotMatches.length,
+      0,
+      "Right secondary vertical axis title must not render at +90 degrees",
+    );
+
+    const emitted = emit(resolution);
+    const validation = await validatePptx(emitted.pptx);
+    assert.deepEqual(validation.errors, []);
+    const chartXml = strFromU8(
+      unzipSync(emitted.pptx)["ppt/charts/chart1.xml"]!,
+    );
+    const rotBodyPrMatches =
+      chartXml.match(/<a:bodyPr\b[^>]*\brot="-5400000"[^>]*>/gu) ?? [];
+    // Each vertical axis title emits <c:tx><c:rich><a:bodyPr ...> and <c:txPr><a:bodyPr ...> (2 per axis title = 4 total).
+    assert.equal(
+      rotBodyPrMatches.length,
+      4,
+      'Both vertical axis titles must materialize rot="-5400000" in OOXML',
+    );
+
+    const imported = importChart(emitted.pptx);
+    assert.deepEqual(imported.report.diagnostics, []);
+    const importedSlide = imported.document.children.find(
+      (child) => "kind" in child && child.kind === "slide",
+    );
+    const importedChart =
+      importedSlide !== undefined && "children" in importedSlide
+        ? importedSlide.children.find(
+            (child) => "kind" in child && child.kind === "chart",
+          )
+        : undefined;
+    assert.ok(importedChart !== undefined && "style" in importedChart);
+    (importedChart as { style(patch: unknown): unknown }).style({
+      fontFamily: jostFont,
+    });
+    const rtResolution = resolve(imported.document);
+    const rtPainted = paint(rtResolution);
+    assert.deepEqual(rtPainted.pages[0]?.errors, []);
+    const rtSvg = rtPainted.pages[0]?.svg ?? "";
+    assert.equal(
+      (rtSvg.match(/<g transform="rotate\(-90\b/gu) ?? []).length,
+      2,
+    );
+    assert.equal((rtSvg.match(/<g transform="rotate\(90\b/gu) ?? []).length, 0);
+    const rtEmitted = emit(rtResolution);
+    assert.deepEqual((await validatePptx(rtEmitted.pptx)).errors, []);
   });
 });

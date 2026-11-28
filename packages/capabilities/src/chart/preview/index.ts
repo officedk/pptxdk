@@ -30,6 +30,16 @@ export function drawChartPreview(
   box: Rect,
   context: PaintContext,
 ): PaintOutput {
+  if (
+    !Number.isFinite(box.x) ||
+    !Number.isFinite(box.y) ||
+    !Number.isFinite(box.width) ||
+    !Number.isFinite(box.height) ||
+    box.width <= 1e-6 ||
+    box.height <= 1e-6
+  ) {
+    return { svg: "" };
+  }
   const baseChartTextStyle = textOnlyChartStyle(parsed.style);
   const { style: resolvedChartStyle } = parseTextContent(
     [],

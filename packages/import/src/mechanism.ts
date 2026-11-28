@@ -4,6 +4,7 @@ import type {
   EmitOutput,
   Geometry,
   MasterPlaceholderMap,
+  MasterTextStyles,
   NativeColorSlot,
   PaintContext,
   PaintOutput,
@@ -43,6 +44,7 @@ export type ShapeTreeImportContext = {
   readonly package: PptxPackage;
   readonly containerNode?: CommonNode;
   readonly relationships?: ReadonlyMap<string, ParsedRelationshipEntry>;
+  readonly relationshipEntries?: readonly ParsedRelationshipEntry[];
   readonly registerDeferredSlideLink?: (link: DeferredSlideLink) => void;
   readonly registerImportedObject?: (spid: number, node: CommonNode) => void;
   readonly registerDeferredConnector?: (
@@ -50,6 +52,12 @@ export type ShapeTreeImportContext = {
   ) => void;
   readonly layoutPlaceholders?: PlaceholderMap;
   readonly masterPlaceholders?: MasterPlaceholderMap;
+  readonly masterTextStyles?: MasterTextStyles;
+  readonly slideDimensions?: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly claimedPlaceholderKeys?: Set<string>;
   readonly clrMap?: Readonly<Record<string, NativeColorSlot>>;
 };
 
@@ -61,6 +69,13 @@ export type ShapeTreeImportOutcome = {
 export type ShapeTreeImportHandler = {
   readonly target: "shape-tree";
   readonly localName: "sp" | "pic" | "grpSp" | "graphicFrame" | "cxnSp";
+  readonly alternateLocalNames?: readonly (
+    | "sp"
+    | "pic"
+    | "grpSp"
+    | "graphicFrame"
+    | "cxnSp"
+  )[];
   /** Refines matching when multiple mechanisms share an element localName (such as `p:sp`). */
   matches?(cursor: XmlElementCursor): boolean;
   read(context: ShapeTreeImportContext): ShapeTreeImportOutcome;

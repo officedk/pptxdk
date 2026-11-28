@@ -60,3 +60,53 @@ export const transformAttributesFragmentSchema = z.object({
 export type TransformAttributesFragment = z.infer<
   typeof transformAttributesFragmentSchema
 >;
+
+function isValidXml10CodePoint(codePoint: number): boolean {
+  return (
+    codePoint === 0x9 ||
+    codePoint === 0xa ||
+    codePoint === 0xd ||
+    (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+    (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+    (codePoint >= 0x10000 && codePoint <= 0x10ffff)
+  );
+}
+
+function isBulletSkipCodePoint(codePoint: number): boolean {
+  return (
+    codePoint <= 0x20 ||
+    (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
+    (codePoint >= 0xe0100 && codePoint <= 0xe01ef)
+  );
+}
+
+/**
+ * Normalizes `<a:buChar char="..."/>` to a single valid XML 1.0 Unicode code point,
+ * falling back to `"•"` when empty or malformed.
+ */
+export function normalizeBulletCharacter(raw: string | undefined): {
+  readonly character: string;
+  readonly recovered: boolean;
+} {
+  if (raw !== undefined && raw.length > 0) {
+    const first = raw.codePointAt(0);
+    if (
+      first !== undefined &&
+      String.fromCodePoint(first) === raw &&
+      isValidXml10CodePoint(first)
+    ) {
+      return { character: raw, recovered: false };
+    }
+    for (const unit of raw) {
+      const cp = unit.codePointAt(0);
+      if (
+        cp !== undefined &&
+        isValidXml10CodePoint(cp) &&
+        !isBulletSkipCodePoint(cp)
+      ) {
+        return { character: String.fromCodePoint(cp), recovered: true };
+      }
+    }
+  }
+  return { character: "•", recovered: true };
+}

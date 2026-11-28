@@ -104,6 +104,7 @@ export {
   spinAngleSchema,
   spinOptionsSchema,
   steppedEffectSchema,
+  maxRepeatCount,
   maximumTimeNodeValue,
 } from "./motion-schemas.ts";
 export type {
@@ -760,7 +761,8 @@ function normalizeColor(
   return parsed.data;
 }
 
-function relativeLuminance(color: string): number {
+/** Computes WCAG relative luminance of a normalized `#RRGGBB` color string. */
+export function relativeLuminance(color: string): number {
   const channels = [1, 3, 5].map(
     (offset) => Number.parseInt(color.slice(offset, offset + 2), 16) / 255,
   );

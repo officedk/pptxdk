@@ -1,5 +1,4 @@
 import {
-  matchLayoutPlaceholderKey,
   type ColorValue,
   type NativePlaceholderRef,
 } from "@pptxdk/core/capability";
@@ -18,8 +17,10 @@ import {
 
 import { readClickLink, type ClickLinkReadResult } from "../shared/identity.ts";
 import {
+  emitPlaceholderUnbindDiagnostic,
   isPlaceholderGraphicFrameElement,
   readNvPrPlaceholder,
+  resolvePlaceholderImportClaim,
 } from "../shared/placeholder-import.ts";
 import {
   readDrawingColor,
@@ -382,7 +383,7 @@ function readAnchorCell(
 export function readTableGraphicFrame(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, layoutPlaceholders } = context;
+  const { cursor, part, slideIndex } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvGraphicFramePr = cursor.child(P_NS, "nvGraphicFramePr");
@@ -463,13 +464,17 @@ export function readTableGraphicFrame(
   }
   const nativeRef: NativePlaceholderRef | undefined =
     phResult.kind === "ok" ? phResult.nativeRef : undefined;
-  const matchedKey =
+  const tableCompatiblePlaceholderRoles = new Set<string>(["tbl", "obj"]);
+  const claim =
     nativeRef === undefined
       ? undefined
-      : matchLayoutPlaceholderKey(layoutPlaceholders, {
-          type: nativeRef.type,
-          idx: nativeRef.idx,
+      : resolvePlaceholderImportClaim({
+          context,
+          nativeRef,
+          compatibleRoles: tableCompatiblePlaceholderRoles,
         });
+  const matchedKey = claim?.bound === true ? claim.key : undefined;
+  const unboundPlaceholder = claim !== undefined && !claim.bound;
 
   const xfrmCursor = cursor.child(P_NS, "xfrm") ?? cursor.child(A_NS, "xfrm");
   if (xfrmCursor === undefined) {
@@ -756,11 +761,20 @@ export function readTableGraphicFrame(
   const tableProps: TableDeclarationProps = {
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
-    ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
+    ...(matchedKey === undefined || nativeRef === undefined
+      ? {}
+      : { nativePlaceholder: nativeRef }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
     columns,
     style: tableStyle,
   };
+  if (unboundPlaceholder) {
+    emitPlaceholderUnbindDiagnostic({
+      diagnostics,
+      location: tableLocation,
+      retainedAs: "table",
+    });
+  }
   const tableNode = createTableNode(tableProps);
   tableNode.append(...rowNodes);
 

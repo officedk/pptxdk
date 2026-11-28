@@ -1,7 +1,5 @@
 import {
   assertValidLang,
-  matchLayoutPlaceholderKey,
-  matchMasterPlaceholderSpec,
   placeholderStyleSchema,
   schemeColorNameSchema,
   type ColorValue,
@@ -20,6 +18,7 @@ import {
   EMU_PER_PX,
   extentEmuFragmentSchema,
   hexRgb6Schema,
+  normalizeBulletCharacter,
   offsetEmuFragmentSchema,
   ooxmlBoolSchema,
   ooxmlIntSchema,
@@ -51,10 +50,25 @@ import {
 import {
   directElementChild,
   directPlaceholderElement,
+  emitPlaceholderUnbindDiagnostic,
   isPlaceholderSpElement,
+  materializeUnboundVisualStyle,
   readNvPrPlaceholder,
+  resolvePlaceholderImportClaim,
+  resolveUnboundPlaceholderBox,
+  stripPlaceholderClearSentinels,
 } from "../shared/placeholder-import.ts";
-import type { ParagraphStyle, TextList } from "../shared/text-schemas.ts";
+import {
+  resolvePlaceholderBaseTextStyle,
+  resolvePlaceholderLevelTextStyle,
+} from "../shared/style-inheritance.ts";
+import {
+  paragraphStyleKeys,
+  paragraphStyleSchema,
+  textBoxStyleSchema,
+  type ParagraphStyle,
+  type TextList,
+} from "../shared/text-schemas.ts";
 import {
   readSpPrAppearance,
   readSpPrVisuals,
@@ -101,10 +115,6 @@ const SpacingPointsXmlSchema = z.object({
 
 const SpacingPercentXmlSchema = z.object({
   val: ooxmlPositiveIntSchema,
-});
-
-const BulletCharXmlSchema = z.object({
-  char: z.string().min(1),
 });
 
 const AutoNumXmlSchema = z.object({
@@ -178,6 +188,8 @@ const textCompatiblePlaceholderRoles = new Set<string>([
   "obj",
 ]);
 
+const footerPlaceholderRoles = new Set<string>(["dt", "ftr", "sldNum"]);
+
 /** Side-effect-free predicate distinguishing `<p:sp>` text boxes (`txBox="1"`) from shapes and placeholders. */
 function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
   if (hasPlaceholderElement(cursor)) return false;
@@ -191,7 +203,7 @@ function isTextBoxSpElement(cursor: XmlElementCursor): boolean {
 
 export { isPlaceholderSpElement };
 
-/** Side-effect-free predicate matching populated text-compatible `<p:sp>` placeholder elements. */
+/** Side-effect-free predicate matching non-footer populated `<p:sp>` placeholder elements. */
 export function isTextPlaceholderSpElement(cursor: XmlElementCursor): boolean {
   const ph = directPlaceholderElement(cursor, "nvSpPr");
   if (ph === undefined) return false;
@@ -200,7 +212,7 @@ export function isTextPlaceholderSpElement(cursor: XmlElementCursor): boolean {
   }
   const rawType = ph.getAttribute("type");
   const role = rawType === null || rawType === "" ? "obj" : rawType;
-  return textCompatiblePlaceholderRoles.has(role);
+  return !footerPlaceholderRoles.has(role);
 }
 
 function readColorModifier(
@@ -569,6 +581,8 @@ type ImportedRun =
 type ImportedParagraph = {
   readonly runs: readonly ImportedRun[];
   readonly style: ParagraphStyle;
+  readonly level0?: number;
+  readonly buNone?: boolean;
 };
 
 function readParagraph(
@@ -582,6 +596,7 @@ function readParagraph(
 
   let align: TextAlignment | undefined;
   let lvl: number | undefined;
+  let buNone = false;
   let list: TextList | undefined;
   let lnSpcNode: XmlElementCursor | undefined;
   let spcAftNode: XmlElementCursor | undefined;
@@ -629,30 +644,31 @@ function readParagraph(
     lnSpcNode = pPr.child(A_NS, "lnSpc");
     spcAftNode = pPr.child(A_NS, "spcAft");
 
-    pPr.ignoreEmptyChild(A_NS, "buNone");
+    if (pPr.child(A_NS, "buNone") !== undefined) {
+      buNone = true;
+    }
     const buFont = pPr.child(A_NS, "buFont");
     buFont?.attrsObject(["typeface", "pitchFamily", "charset", "panose"]);
     const buChar = pPr.child(A_NS, "buChar");
     const buAutoNum = pPr.child(A_NS, "buAutoNum");
     if (buChar !== undefined) {
       const rawBu = buChar.attrsObject(["char"]);
-      const parsedBu = BulletCharXmlSchema.safeParse(rawBu);
-      if (!parsedBu.success) {
+      const normalized = normalizeBulletCharacter(rawBu["char"]);
+      if (normalized.recovered) {
         diagnostics.push({
           code: "invalid-xml-value",
           category: "corrupt-input",
-          disposition: "omitted",
+          disposition: "recovered",
           location: { part, xpath: buChar.xpath, slideIndex },
           attributeOrElement: "a:buChar/@char",
           rawValue: rawBu["char"] ?? "",
         });
-      } else {
-        list = {
-          type: "bullet",
-          character: parsedBu.data.char,
-          ...(lvl === undefined ? {} : { level: lvl }),
-        };
       }
+      list = {
+        type: "bullet",
+        character: normalized.character,
+        ...(lvl === undefined ? {} : { level: lvl }),
+      };
     } else if (buAutoNum !== undefined) {
       const rawNum = buAutoNum.attrsObject(["type", "startAt"]);
       const parsedNum = AutoNumXmlSchema.safeParse(rawNum);
@@ -892,7 +908,12 @@ function readParagraph(
     ...(list === undefined ? {} : { list }),
   };
 
-  return { runs, style };
+  return {
+    runs,
+    style,
+    ...(lvl === undefined ? {} : { level0: lvl }),
+    ...(buNone ? { buNone: true } : {}),
+  };
 }
 
 export type ImportedRichTextBody = {
@@ -1278,13 +1299,7 @@ export function readTextBoxSp(
 export function readTextPlaceholderSp(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const {
-    cursor,
-    part,
-    slideIndex,
-    layoutPlaceholders,
-    package: pkg,
-  } = context;
+  const { cursor, part, slideIndex, package: pkg } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvSpPr = cursor.child(P_NS, "nvSpPr");
@@ -1413,16 +1428,14 @@ export function readTextPlaceholderSp(
     }
   }
 
-  const matchedKey = matchLayoutPlaceholderKey(layoutPlaceholders, {
-    type: nativeRef.type,
-    idx: nativeRef.idx,
+  const claim = resolvePlaceholderImportClaim({
+    context,
+    nativeRef,
+    compatibleRoles: textCompatiblePlaceholderRoles,
+    allowMasterDirectFallback: true,
   });
-  const layoutPlaceholder =
-    matchedKey === undefined ? undefined : layoutPlaceholders?.[matchedKey];
-  const masterPlaceholder = matchMasterPlaceholderSpec(
-    context.masterPlaceholders,
-    nativeRef.type,
-  );
+  const layoutPlaceholder = claim.layoutPlaceholder;
+  const masterPlaceholder = claim.masterPlaceholder;
   const layoutPhWidth =
     typeof layoutPlaceholder?.style?.width === "number"
       ? layoutPlaceholder.style.width
@@ -1479,6 +1492,178 @@ export function readTextPlaceholderSp(
           allowShadowNone: true,
         });
 
+  if (!claim.bound) {
+    const resolvedBox = resolveUnboundPlaceholderBox({
+      inheritanceContext: claim.inheritanceContext,
+      ...(localBox === undefined ? {} : { localBox }),
+      requireHeight: false,
+    });
+    if (resolvedBox === undefined) {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: { ...location, xpath: cursor.xpath },
+        namespaceUri: P_NS,
+        localName: "ph",
+        mechanismHint: "orphan-placeholder-without-box",
+      });
+      return { diagnostics };
+    }
+
+    const freeVisualStyle = materializeUnboundVisualStyle({
+      inheritanceContext: claim.inheritanceContext,
+      localVisualStyle: {
+        ...visualStyle,
+        ...(flipH === undefined ? {} : { flipH }),
+        ...(flipV === undefined ? {} : { flipV }),
+      },
+      ...(appearance.geometry === undefined
+        ? {}
+        : { localGeometry: appearance.geometry }),
+      boxSize: {
+        width: resolvedBox.width,
+        height: resolvedBox.height ?? 100,
+      },
+    });
+    const baseTextStyle = stripPlaceholderClearSentinels({
+      ...resolvePlaceholderBaseTextStyle(
+        claim.inheritanceContext,
+        imported?.boxStyle,
+      ),
+    });
+
+    const pickParagraphStyle = (
+      source: Readonly<Record<string, unknown>>,
+    ): ParagraphStyle => {
+      const picked: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(source)) {
+        if (v !== undefined && paragraphStyleKeys.has(k)) {
+          picked[k] = v;
+        }
+      }
+      const cleaned = stripPlaceholderClearSentinels(picked);
+      const parsed = paragraphStyleSchema.safeParse(cleaned);
+      return parsed.success ? parsed.data : {};
+    };
+
+    const importedParagraphs = imported?.importedParagraphs ?? [];
+    const p0 =
+      importedParagraphs.length === 1 ? importedParagraphs[0]! : undefined;
+    const p0LevelRaw =
+      p0 === undefined
+        ? undefined
+        : resolvePlaceholderLevelTextStyle(
+            claim.inheritanceContext,
+            p0.level0 ?? 0,
+            p0.style,
+          );
+    const p0Level =
+      p0LevelRaw !== undefined && p0?.buNone
+        ? { ...p0LevelRaw, list: undefined }
+        : p0LevelRaw;
+
+    let freeSingleText: string | undefined;
+    let freeParagraphs: readonly ImportedParagraph[] | undefined;
+    let extraFlatStyle: Record<string, unknown> = {};
+
+    const singlePlainRun =
+      p0 !== undefined &&
+      p0.runs.length === 1 &&
+      p0.runs[0]!.kind === "text" &&
+      p0.runs[0]!.style.baselineShift === undefined
+        ? p0.runs[0]!
+        : undefined;
+
+    if (
+      p0 !== undefined &&
+      singlePlainRun !== undefined &&
+      p0Level?.list === undefined
+    ) {
+      const { baselineShift: _b, ...runRest } = singlePlainRun.style;
+      extraFlatStyle = {
+        ...pickParagraphStyle(p0Level ?? {}),
+        ...runRest,
+      };
+      freeSingleText = singlePlainRun.text;
+    } else if (
+      p0 !== undefined &&
+      p0.runs.length === 0 &&
+      p0Level?.list === undefined
+    ) {
+      extraFlatStyle = pickParagraphStyle(p0Level ?? {});
+    } else if (importedParagraphs.length > 0) {
+      freeParagraphs = importedParagraphs.map((para) => {
+        const rawLvl = resolvePlaceholderLevelTextStyle(
+          claim.inheritanceContext,
+          para.level0 ?? 0,
+          para.style,
+        );
+        const lvl = para.buNone ? { ...rawLvl, list: undefined } : rawLvl;
+        return {
+          runs: para.runs,
+          style: pickParagraphStyle(lvl),
+        };
+      });
+    }
+
+    const combinedFreeStyle: Record<string, unknown> =
+      stripPlaceholderClearSentinels({
+        ...baseTextStyle,
+        ...extraFlatStyle,
+        ...freeVisualStyle,
+        position: "absolute",
+        left: resolvedBox.x,
+        top: resolvedBox.y,
+        width: resolvedBox.width,
+        ...(resolvedBox.height === undefined
+          ? {}
+          : { height: resolvedBox.height }),
+      });
+    const parsedFreeStyle = textBoxStyleSchema.safeParse(combinedFreeStyle);
+    let validatedFreeStyle: TextDeclarationProps["style"] | undefined;
+    if (parsedFreeStyle.success) {
+      validatedFreeStyle = parsedFreeStyle.data;
+    } else {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: { ...location, xpath: cursor.xpath },
+        attributeOrElement: "p:sp",
+        rawValue: parsedFreeStyle.error.issues[0]?.message ?? "invalid style",
+      });
+      validatedFreeStyle = {
+        position: "absolute",
+        left: resolvedBox.x,
+        top: resolvedBox.y,
+        width: resolvedBox.width,
+        ...(resolvedBox.height === undefined
+          ? {}
+          : { height: resolvedBox.height }),
+      };
+    }
+
+    const freeNode = createTextNode({
+      ...(objectName === undefined ? {} : { name: objectName }),
+      ...(link === undefined ? {} : { link }),
+      style: validatedFreeStyle,
+    });
+    if (freeSingleText !== undefined) {
+      freeNode.content(freeSingleText);
+    } else if (freeParagraphs !== undefined) {
+      populateRichTextNode(freeNode, freeParagraphs);
+    }
+    attachDeferredSlideLink(freeNode, deferredSlideLink, context);
+    emitPlaceholderUnbindDiagnostic({
+      diagnostics,
+      location: { ...location, xpath: cursor.xpath },
+      retainedAs: "text",
+    });
+    return { node: freeNode, diagnostics };
+  }
+
+  const matchedKey = claim.key;
   const { boxStyle, singleText, paragraphsToPopulate } =
     flattenImportedTextBody(imported, visualStyle);
 

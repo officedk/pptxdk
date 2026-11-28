@@ -35,7 +35,10 @@ import {
   floatUp,
   fly,
   flyOut,
+  maxRepeatCount,
+  maximumTimeNodeValue,
   onStep,
+  relativeLuminance,
   repeat,
   spin,
   spinIn,
@@ -677,6 +680,70 @@ function commonEffectPropsMatch(
   );
 }
 
+function targetParagraphCount(node: CommonNode): number {
+  if (node.kind !== "text" && node.kind !== "shape") return 0;
+  const explicitCount = node.children.filter(
+    (c) => c instanceof CommonNode && c.type === "paragraph",
+  ).length;
+  if (explicitCount > 0) return explicitCount;
+  return node.children.length > 0 || node.kind === "text" ? 1 : 0;
+}
+
+function shapeFillState(node: CommonNode): {
+  readonly filled: boolean;
+  readonly solidFilled: boolean;
+} {
+  if (node.kind !== "shape") {
+    return { filled: false, solidFilled: false };
+  }
+  const style = node.props["style"];
+  if (typeof style !== "object" || style === null) {
+    return { filled: false, solidFilled: false };
+  }
+  const background = (style as Readonly<Record<string, unknown>>)["background"];
+  if (background === undefined || background === "none") {
+    return { filled: false, solidFilled: false };
+  }
+  const solidFilled =
+    typeof background === "string" ||
+    (typeof background === "object" &&
+      background !== null &&
+      "color" in background &&
+      typeof (background as Readonly<Record<string, unknown>>)["color"] ===
+        "string");
+  return { filled: true, solidFilled };
+}
+
+function isValidRepeatModifier(args: {
+  readonly preset: Effect["preset"];
+  readonly repeatCount: RepeatCount;
+  readonly by?: MotionGranularity | number;
+  readonly durationMs: number;
+  readonly delayMs: number;
+}): boolean {
+  const { preset, repeatCount, by, durationMs, delayMs } = args;
+  if (preset !== "spin" && preset !== "breathe") return false;
+  if (repeatCount === "forever") return preset === "breathe";
+  if (by !== undefined && typeof by !== "number") return false;
+  if (
+    !Number.isSafeInteger(repeatCount) ||
+    repeatCount < 1 ||
+    repeatCount > maxRepeatCount ||
+    repeatCount * 1000 > maximumTimeNodeValue
+  ) {
+    return false;
+  }
+  const unitDur =
+    preset === "breathe" ? durationMs / 2 : Math.round(durationMs);
+  return (
+    Math.round(delayMs) <= maximumTimeNodeValue &&
+    unitDur <= maximumTimeNodeValue &&
+    Number.isSafeInteger(
+      Math.round(delayMs) + Math.round(durationMs) * repeatCount,
+    )
+  );
+}
+
 /**
  * Reads slide, layout, or master `<p:timing>` back into live `enter`/`emphasis`,
  * `Step`/`MotionScope`, or `OwnerMotion` declarations, emitting localized diagnostics
@@ -1046,9 +1113,8 @@ export function readSlideMotionImport(
   const omittedNodeIds = new Set<number>();
 
   const isKnownSlideTarget = (spid: number): boolean =>
-    context.placeholderKeyBySpid !== undefined
-      ? true
-      : context.objectBySpid?.has(spid) === true;
+    context.placeholderKeyBySpid?.has(spid) === true ||
+    context.objectBySpid?.has(spid) === true;
 
   for (const [timingId, rawNode] of rawNodesById) {
     if (rawNode.kind !== "effect") continue;
@@ -1137,6 +1203,73 @@ export function readSlideMotionImport(
       omittedNodeIds.add(timingId);
       rawNode.cursor.suppressUnconsumed();
       continue;
+    }
+
+    const targetId = rawNode.targetIds[0]!;
+    const targetNode = context.objectBySpid?.get(targetId);
+
+    const omitInvalidEffect = (
+      localName: string,
+      mechanismHint: string,
+    ): void => {
+      rootDiagnosticByNodeId.set(timingId, {
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: locationFor(context, rawNode.xpath, targetId),
+        namespaceUri: P_NS,
+        localName,
+        mechanismHint,
+      });
+      omittedNodeIds.add(timingId);
+      rawNode.cursor.suppressUnconsumed();
+    };
+
+    if (rawNode.targetRange?.type === "paragraph" && targetNode !== undefined) {
+      const paraCount = targetParagraphCount(targetNode);
+      if (paraCount === 0 || rawNode.targetRange.end >= paraCount) {
+        omitInvalidEffect("pRg", "invalid-paragraph-range");
+        continue;
+      }
+    }
+
+    if (
+      rawNode.targetRange?.type === "chart" &&
+      targetNode !== undefined &&
+      targetNode.kind !== "chart"
+    ) {
+      omitInvalidEffect("graphicEl", "invalid-chart-target");
+      continue;
+    }
+
+    if (preset === "fillColor") {
+      if (
+        rawNode.targetRange !== undefined ||
+        (targetNode !== undefined && !shapeFillState(targetNode).solidFilled)
+      ) {
+        omitInvalidEffect("animClr", "invalid-fill-color-target");
+        continue;
+      }
+    }
+
+    if (preset === "breathe") {
+      const clrBehavior = rawNode.behaviors.find(
+        (b) => b.localName === "animClr",
+      );
+      const fromColor = clrBehavior?.fromColor ?? "#000000";
+      const toColor = clrBehavior?.toColor ?? "#FFFFFF";
+      if (
+        rawNode.presetClass !== "emph" ||
+        rawNode.targetRange !== undefined ||
+        (targetNode !== undefined && !shapeFillState(targetNode).filled)
+      ) {
+        omitInvalidEffect("animClr", "invalid-breathe-target");
+        continue;
+      }
+      if (relativeLuminance(toColor) <= relativeLuminance(fromColor)) {
+        omitInvalidEffect("animClr", "invalid-breathe-colors");
+        continue;
+      }
     }
   }
 
@@ -1285,18 +1418,30 @@ export function readSlideMotionImport(
     const durationMs =
       preset === "breathe" ? traversalDurationMs * 2 : traversalDurationMs;
 
-    const easing: Easing | undefined =
+    let easing: Easing | undefined;
+    if (
       (node.accel !== undefined && node.accel !== 0) ||
       (node.decel !== undefined && node.decel !== 0)
-        ? {
-            ...(node.accel !== undefined && node.accel !== 0
-              ? { accelerate: node.accel / 100_000 }
-              : {}),
-            ...(node.decel !== undefined && node.decel !== 0
-              ? { decelerate: node.decel / 100_000 }
-              : {}),
-          }
-        : undefined;
+    ) {
+      const accelRatio =
+        node.accel !== undefined && node.accel !== 0 ? node.accel / 100_000 : 0;
+      const decelRatio =
+        node.decel !== undefined && node.decel !== 0 ? node.decel / 100_000 : 0;
+      if (accelRatio < 0 || decelRatio < 0 || accelRatio + decelRatio > 1) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: locationFor(context, node.xpath, targetId),
+          attributeOrElement: "p:cTn/@accel",
+        });
+      } else {
+        easing = {
+          ...(accelRatio > 0 ? { accelerate: accelRatio } : {}),
+          ...(decelRatio > 0 ? { decelerate: decelRatio } : {}),
+        };
+      }
+    }
 
     let from: MotionDirection | number | undefined;
     if (
@@ -1313,6 +1458,27 @@ export function readSlideMotionImport(
 
     let to: number | undefined;
     let by: MotionGranularity | number | undefined = node.iterateBy;
+    let iterateIntervalMs = node.iterateIntervalMs;
+    const targetNode = context.objectBySpid?.get(targetId);
+    if (
+      by !== undefined &&
+      (preset === "fillColor" ||
+        preset === "breathe" ||
+        preset === "spin" ||
+        (targetNode !== undefined && targetParagraphCount(targetNode) === 0))
+    ) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: locationFor(context, node.xpath, targetId),
+        attributeOrElement: "p:cTn/p:iterate",
+        rawValue: by,
+      });
+      by = undefined;
+      iterateIntervalMs = undefined;
+    }
+
     if (preset === "spin") {
       const rotBehavior = node.behaviors.find((b) => b.localName === "animRot");
       if (rotBehavior?.rotationBy !== undefined) {
@@ -1345,6 +1511,28 @@ export function readSlideMotionImport(
       return;
     }
 
+    let effectiveRepeatCount = node.repeatCount;
+    if (
+      effectiveRepeatCount !== undefined &&
+      !isValidRepeatModifier({
+        preset,
+        repeatCount: effectiveRepeatCount,
+        ...(by === undefined ? {} : { by }),
+        durationMs,
+        delayMs: effectiveDelayMs,
+      })
+    ) {
+      diagnostics.push({
+        code: "invalid-xml-value",
+        category: "corrupt-input",
+        disposition: "recovered",
+        location: locationFor(context, node.xpath, targetId),
+        attributeOrElement: "p:cTn/@repeatCount",
+        rawValue: String(effectiveRepeatCount),
+      });
+      effectiveRepeatCount = undefined;
+    }
+
     const built = buildEffectDeclaration({
       preset,
       kind,
@@ -1356,12 +1544,12 @@ export function readSlideMotionImport(
       ...(toColor === undefined ? {} : { toColor }),
       ...(easing === undefined ? {} : { easing }),
       ...(by === undefined ? {} : { by }),
-      ...(node.iterateIntervalMs === undefined
+      ...(iterateIntervalMs === undefined
         ? {}
-        : { intervalMs: node.iterateIntervalMs }),
-      ...(node.repeatCount === undefined
+        : { intervalMs: iterateIntervalMs }),
+      ...(effectiveRepeatCount === undefined
         ? {}
-        : { repeatCount: node.repeatCount }),
+        : { repeatCount: effectiveRepeatCount }),
     });
 
     survivingEffects.push({
@@ -1387,15 +1575,15 @@ export function readSlideMotionImport(
             startAfterOffsetMs: effectiveStartAfter.offsetMs,
           }),
       ...(easing === undefined ? {} : { easing }),
-      ...(node.repeatCount === undefined
+      ...(effectiveRepeatCount === undefined
         ? {}
-        : { repeatCount: node.repeatCount }),
+        : { repeatCount: effectiveRepeatCount }),
       ...(from === undefined ? {} : { from }),
       ...(to === undefined ? {} : { to }),
       ...(by === undefined ? {} : { by }),
-      ...(node.iterateIntervalMs === undefined
+      ...(iterateIntervalMs === undefined
         ? {}
-        : { intervalMs: node.iterateIntervalMs }),
+        : { intervalMs: iterateIntervalMs }),
       ...(fromColor === undefined ? {} : { fromColor }),
       ...(toColor === undefined ? {} : { toColor }),
     });
@@ -1409,28 +1597,75 @@ export function readSlideMotionImport(
 
   // 5. SlideMaster / SlideLayout owner timing reconstruction
   if (context.placeholderKeyBySpid !== undefined) {
+    // resolveSharedCanvasLayers() assigns emitted spids starting after declared
+    // placeholders (2 + placeholderCount) in pre-order across object nodes.
+    // Remap imported XML spids for surviving non-placeholder children to their
+    // deterministic emitted spids so resolve -> emit -> validatePptx never writes
+    // stale source spids.
+    const placeholdersProp = context.slideNode.props["placeholders"];
+    const placeholderCount =
+      typeof placeholdersProp === "object" &&
+      placeholdersProp !== null &&
+      !Array.isArray(placeholdersProp)
+        ? Object.keys(placeholdersProp).length
+        : 0;
+    const emittedSpidByNode = new Map<CommonNode, number>();
+    let nextOwnerObjectId = 2 + placeholderCount;
+    const assignEmittedOwnerSpids = (children: readonly unknown[]): void => {
+      for (const child of children) {
+        if (!(child instanceof CommonNode)) continue;
+        emittedSpidByNode.set(child, nextOwnerObjectId++);
+        if (child.kind === "group") {
+          assignEmittedOwnerSpids(child.children);
+        }
+      }
+    };
+    assignEmittedOwnerSpids(context.slideNode.children);
+
     const ownerSteps: OwnerMotionStep[] = [];
     for (const stepInfo of stepInfos) {
       const stepEffects = survivingEffects.filter(
         (eff) => eff.stepIndex === stepInfo.stepIndex,
       );
       if (stepEffects.length === 0) continue;
-      const mappedEffects: OwnerMotionEffect[] = stepEffects.map((eff) => {
+      const mappedEffects: OwnerMotionEffect[] = [];
+      for (const eff of stepEffects) {
         const placeholderKey = context.placeholderKeyBySpid?.get(eff.targetId);
-        const target: OwnerMotionTarget =
-          placeholderKey !== undefined
-            ? { placeholder: placeholderKey }
-            : { spid: eff.targetId };
-        return {
+        let target: OwnerMotionTarget | undefined;
+        if (placeholderKey !== undefined) {
+          target = { placeholder: placeholderKey };
+        } else {
+          const targetNode = context.objectBySpid?.get(eff.targetId);
+          const emittedSpid =
+            targetNode === undefined
+              ? undefined
+              : emittedSpidByNode.get(targetNode);
+          if (emittedSpid !== undefined) {
+            target = { spid: emittedSpid };
+          } else {
+            diagnostics.push({
+              code: "unsupported-mechanism",
+              category: "unsupported",
+              disposition: "omitted",
+              location: locationFor(context, timingCursor.xpath, eff.targetId),
+              namespaceUri: P_NS,
+              localName: "spTgt",
+            });
+            continue;
+          }
+        }
+        mappedEffects.push({
           target,
           effect: eff.declaration as OwnerMotionEffect["effect"],
           ...(eff.targetRange === undefined ? {} : { range: eff.targetRange }),
-        };
-      });
-      ownerSteps.push({
-        trigger: stepInfo.trigger,
-        effects: mappedEffects,
-      });
+        });
+      }
+      if (mappedEffects.length > 0) {
+        ownerSteps.push({
+          trigger: stepInfo.trigger,
+          effects: mappedEffects,
+        });
+      }
     }
     if (ownerSteps.length > 0) {
       const motion: OwnerMotion = { steps: ownerSteps };
@@ -1496,6 +1731,20 @@ export function readSlideMotionImport(
       const baseDelay = Math.min(
         ...groupIndices.map((idx) => survivingEffects[idx]!.effectiveDelayMs),
       );
+      const effectiveRepeat =
+        mappedBy !== undefined && head.repeatCount !== undefined
+          ? undefined
+          : head.repeatCount;
+      if (mappedBy !== undefined && head.repeatCount !== undefined) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: locationFor(context, timingCursor.xpath, head.targetId),
+          attributeOrElement: "p:cTn/@repeatCount",
+          rawValue: String(head.repeatCount),
+        });
+      }
       const rebuilt = buildEffectDeclaration({
         preset: head.effect.preset,
         kind: head.effect.kind,
@@ -1507,15 +1756,22 @@ export function readSlideMotionImport(
         ...(head.toColor === undefined ? {} : { toColor: head.toColor }),
         ...(head.easing === undefined ? {} : { easing: head.easing }),
         ...(mappedBy === undefined ? {} : { by: mappedBy }),
-        ...(head.repeatCount === undefined
+        ...(effectiveRepeat === undefined
           ? {}
-          : { repeatCount: head.repeatCount }),
+          : { repeatCount: effectiveRepeat }),
       });
-      const { targetRange: _omittedRange, ...headRest } = head;
+      const {
+        targetRange: _omittedRange,
+        repeatCount: _droppedRepeat,
+        ...headRest
+      } = head;
       collapsedEffects.push({
         ...headRest,
         effectiveDelayMs: baseDelay,
         ...(mappedBy === undefined ? {} : { by: mappedBy }),
+        ...(effectiveRepeat === undefined
+          ? {}
+          : { repeatCount: effectiveRepeat }),
         effect: rebuilt.effect,
         declaration: rebuilt.declaration,
       });
@@ -1572,6 +1828,18 @@ export function readSlideMotionImport(
               (idx) => survivingEffects[idx]!.effectiveDelayMs,
             ),
           );
+          const effectiveRepeat =
+            head.repeatCount !== undefined ? undefined : head.repeatCount;
+          if (head.repeatCount !== undefined) {
+            diagnostics.push({
+              code: "invalid-xml-value",
+              category: "corrupt-input",
+              disposition: "recovered",
+              location: locationFor(context, timingCursor.xpath, head.targetId),
+              attributeOrElement: "p:cTn/@repeatCount",
+              rawValue: String(head.repeatCount),
+            });
+          }
           const rebuilt = buildEffectDeclaration({
             preset: head.effect.preset,
             kind: head.effect.kind,
@@ -1585,15 +1853,22 @@ export function readSlideMotionImport(
             ...(head.toColor === undefined ? {} : { toColor: head.toColor }),
             ...(head.easing === undefined ? {} : { easing: head.easing }),
             by: "paragraph",
-            ...(head.repeatCount === undefined
+            ...(effectiveRepeat === undefined
               ? {}
-              : { repeatCount: head.repeatCount }),
+              : { repeatCount: effectiveRepeat }),
           });
-          const { targetRange: _omittedRange, ...headRest } = head;
+          const {
+            targetRange: _omittedRange,
+            repeatCount: _droppedRepeat,
+            ...headRest
+          } = head;
           collapsedEffects.push({
             ...headRest,
             effectiveDelayMs: baseDelay,
             by: "paragraph",
+            ...(effectiveRepeat === undefined
+              ? {}
+              : { repeatCount: effectiveRepeat }),
             effect: rebuilt.effect,
             declaration: rebuilt.declaration,
           });
@@ -1972,7 +2247,14 @@ export function readSlideMotionImport(
       targetNode.children.length > 0
     ) {
       const p0 = createParagraphNode({});
-      p0.content(...(targetNode.children as RichTextItem[]));
+      const rawChildren = [...targetNode.children];
+      p0.content(
+        ...rawChildren.map((child) =>
+          child instanceof CommonNode
+            ? child
+            : (child as { readonly text: string }).text,
+        ),
+      );
       targetNode.content(p0);
     }
     const pNodes = targetNode.children.filter(

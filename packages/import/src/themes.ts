@@ -792,6 +792,22 @@ function readFormatEffectStyle(
   return shadow === undefined ? {} : { shadow };
 }
 
+const defaultFormatFill: FormatFillStyle = {
+  kind: "solid",
+  color: { color: "phClr" },
+};
+const defaultFormatLine: FormatLineStyle = {
+  widthEmu: 6350,
+  fill: defaultFormatFill,
+};
+const defaultFormatEffect: FormatEffectStyle = {};
+
+function padFormatList<T>(list: T[], fallback: T, minimum = 3): void {
+  while (list.length < minimum) {
+    list.push(fallback);
+  }
+}
+
 function readFmtScheme(
   fmtSchemeCursor: XmlElementCursor,
   partPath: string,
@@ -815,6 +831,7 @@ function readFmtScheme(
       );
       if (parsed !== undefined) fillStyles.push(parsed);
     }
+    padFormatList(fillStyles, defaultFormatFill);
   }
   const lnStyleLst = fmtSchemeCursor.child(A_NS, "lnStyleLst");
   if (lnStyleLst !== undefined) {
@@ -823,6 +840,7 @@ function readFmtScheme(
         readFormatLineStyle(child, partPath, slideIndex, diagnostics),
       );
     }
+    padFormatList(lineStyles, defaultFormatLine);
   }
   const effectStyleLst = fmtSchemeCursor.child(A_NS, "effectStyleLst");
   if (effectStyleLst !== undefined) {
@@ -831,6 +849,7 @@ function readFmtScheme(
         readFormatEffectStyle(child, partPath, slideIndex, diagnostics),
       );
     }
+    padFormatList(effectStyles, defaultFormatEffect);
   }
   const bgFillStyleLst = fmtSchemeCursor.child(A_NS, "bgFillStyleLst");
   if (bgFillStyleLst !== undefined) {
@@ -843,6 +862,7 @@ function readFmtScheme(
       );
       if (parsed !== undefined) bgFillStyles.push(parsed);
     }
+    padFormatList(bgFillStyles, defaultFormatFill);
   }
 
   return {

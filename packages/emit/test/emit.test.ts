@@ -213,4 +213,30 @@ describe("@pptxdk/emit pure unit contract", () => {
       /<a:minorFont><a:latin typeface="Aptos"\/><a:ea typeface="Microsoft YaHei"\/><a:cs typeface="Aptos"\/><\/a:minorFont>/u,
     );
   });
+
+  it("pads theme formatScheme style lists to at least 3 items in themeXml", () => {
+    const theme = defineTheme({
+      name: "PartialFmt",
+      formatScheme: {
+        fillStyles: [{ kind: "solid", color: { color: "phClr" } }],
+        lineStyles: [{ widthEmu: 9525 }],
+        effectStyles: [{}],
+        bgFillStyles: [{ kind: "solid", color: { color: "phClr" } }],
+      },
+    });
+    const xml = themeXml(theme);
+    const fillMatch = /<a:fillStyleLst>([\s\S]*?)<\/a:fillStyleLst>/u.exec(xml);
+    const lnMatch = /<a:lnStyleLst>([\s\S]*?)<\/a:lnStyleLst>/u.exec(xml);
+    const effMatch = /<a:effectStyleLst>([\s\S]*?)<\/a:effectStyleLst>/u.exec(
+      xml,
+    );
+    const bgMatch = /<a:bgFillStyleLst>([\s\S]*?)<\/a:bgFillStyleLst>/u.exec(
+      xml,
+    );
+    assert.ok(fillMatch && lnMatch && effMatch && bgMatch);
+    assert.equal(fillMatch[1]!.match(/<a:solidFill>/gu)?.length, 3);
+    assert.equal(lnMatch[1]!.match(/<a:ln\b/gu)?.length, 3);
+    assert.equal(effMatch[1]!.match(/<a:effectStyle>/gu)?.length, 3);
+    assert.equal(bgMatch[1]!.match(/<a:solidFill>/gu)?.length, 3);
+  });
 });

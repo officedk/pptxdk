@@ -6,6 +6,7 @@ import {
 } from "@pptxdk/core/capability";
 import {
   A_NS,
+  normalizeBulletCharacter,
   ooxmlBoolSchema,
   ooxmlIntSchema,
   ooxmlNonNegativeIntSchema,
@@ -86,10 +87,6 @@ const RunPrAttrSchema = z.object({
   baseline: ooxmlIntSchema.optional(),
   dirty: ooxmlBoolSchema.optional(),
   smtClean: ooxmlBoolSchema.optional(),
-});
-
-const BulletCharAttrSchema = z.object({
-  char: z.string().min(1),
 });
 
 const BulletAutoNumAttrSchema = z.object({
@@ -472,16 +469,23 @@ function readShapeParagraph(
     pPr.ignoreEmptyChild(A_NS, "buNone");
     const buChar = pPr.child(A_NS, "buChar");
     if (buChar !== undefined) {
-      const parsedBu = BulletCharAttrSchema.safeParse(
-        buChar.attrsObject(["char"]),
-      );
-      if (parsedBu.success) {
-        list = {
-          type: "bullet",
-          character: parsedBu.data.char,
-          ...(level > 0 ? { level } : {}),
-        };
+      const rawBu = buChar.attrsObject(["char"]);
+      const normalized = normalizeBulletCharacter(rawBu["char"]);
+      if (normalized.recovered) {
+        diagnostics.push({
+          code: "invalid-xml-value",
+          category: "corrupt-input",
+          disposition: "recovered",
+          location: { ...location, xpath: buChar.xpath },
+          attributeOrElement: "a:buChar/@char",
+          rawValue: rawBu["char"] ?? "",
+        });
       }
+      list = {
+        type: "bullet",
+        character: normalized.character,
+        ...(level > 0 ? { level } : {}),
+      };
     } else {
       const buAutoNum = pPr.child(A_NS, "buAutoNum");
       if (buAutoNum !== undefined) {

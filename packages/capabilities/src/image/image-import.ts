@@ -1,5 +1,4 @@
 import {
-  matchLayoutPlaceholderKey,
   schemeColorNameSchema,
   type ColorValue,
   type NativePlaceholderRef,
@@ -40,8 +39,12 @@ import {
 } from "../shared/geometry.ts";
 import { readClickLink, type ClickLinkReadResult } from "../shared/identity.ts";
 import {
+  emitPlaceholderUnbindDiagnostic,
   isPlaceholderPicElement,
+  materializeUnboundVisualStyle,
   readNvPrPlaceholder,
+  resolvePlaceholderImportClaim,
+  resolveUnboundPlaceholderBox,
 } from "../shared/placeholder-import.ts";
 import {
   createImageNode,
@@ -55,6 +58,8 @@ import {
   customPathAttributesSchema,
   customPathPointSchema,
   geomGuideFragmentSchema,
+  imageStyleSchema,
+  imageVisualStyleKeys,
   lineAttributesFragmentSchema,
   nonVisualPicIdSchema,
   outerShadowFragmentSchema,
@@ -570,7 +575,7 @@ function readEffectList(
 export function readImagePic(
   context: ShapeTreeImportContext,
 ): ShapeTreeImportOutcome {
-  const { cursor, part, slideIndex, layoutPlaceholders } = context;
+  const { cursor, part, slideIndex } = context;
   const diagnostics: ImportDiagnostic[] = [];
 
   const nvPicPr = cursor.child(P_NS, "nvPicPr");
@@ -821,15 +826,21 @@ export function readImagePic(
     stretch.ignoreEmptyChild(A_NS, "fillRect");
   }
 
-  const matchedKey =
+  const imageCompatiblePlaceholderRoles = new Set<string>([
+    "pic",
+    "clipArt",
+    "obj",
+  ]);
+  const claim =
     nativeRef === undefined
       ? undefined
-      : matchLayoutPlaceholderKey(layoutPlaceholders, {
-          type: nativeRef.type,
-          idx: nativeRef.idx,
+      : resolvePlaceholderImportClaim({
+          context,
+          nativeRef,
+          compatibleRoles: imageCompatiblePlaceholderRoles,
         });
-  const matchedLayoutPh =
-    matchedKey === undefined ? undefined : layoutPlaceholders?.[matchedKey];
+  const matchedKey = claim?.bound === true ? claim.key : undefined;
+  const matchedLayoutPh = claim?.layoutPlaceholder;
 
   let localX: number | undefined;
   let localY: number | undefined;
@@ -942,12 +953,7 @@ export function readImagePic(
     diagnostics.push(...clickResult.diagnostics);
   }
 
-  const style: NonNullable<ImageDeclarationProps["style"]> = {
-    ...(localX !== undefined && localY !== undefined
-      ? { position: "absolute", left: localX, top: localY }
-      : {}),
-    ...(localWidth === undefined ? {} : { width: localWidth }),
-    ...(localHeight === undefined ? {} : { height: localHeight }),
+  const localVisualStyle: Record<string, unknown> = {
     ...(flipH === undefined ? {} : { flipH }),
     ...(flipV === undefined ? {} : { flipV }),
     ...(opacity === undefined ? {} : { opacity }),
@@ -956,11 +962,107 @@ export function readImagePic(
     ...effects,
   };
 
+  if (claim !== undefined && !claim.bound) {
+    const resolvedBox = resolveUnboundPlaceholderBox({
+      inheritanceContext: claim.inheritanceContext,
+      localBox: {
+        ...(localX === undefined ? {} : { x: localX }),
+        ...(localY === undefined ? {} : { y: localY }),
+        ...(localWidth === undefined ? {} : { width: localWidth }),
+        ...(localHeight === undefined ? {} : { height: localHeight }),
+      },
+      requireHeight: true,
+    });
+    if (resolvedBox === undefined || resolvedBox.height === undefined) {
+      diagnostics.push({
+        code: "unsupported-mechanism",
+        category: "unsupported",
+        disposition: "omitted",
+        location: picLocation,
+        namespaceUri: P_NS,
+        localName: "ph",
+        mechanismHint: "orphan-placeholder-without-box",
+      });
+      return { diagnostics };
+    }
+    const materialized = materializeUnboundVisualStyle({
+      inheritanceContext: claim.inheritanceContext,
+      localVisualStyle,
+      ...(geometry === undefined ? {} : { localGeometry: geometry }),
+      boxSize: { width: resolvedBox.width, height: resolvedBox.height },
+    });
+    const imageVisual: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(materialized)) {
+      if (imageVisualStyleKeys.has(k)) {
+        imageVisual[k] = v;
+      }
+    }
+    const rawFreeStyle = {
+      position: "absolute" as const,
+      left: resolvedBox.x,
+      top: resolvedBox.y,
+      width: resolvedBox.width,
+      height: resolvedBox.height,
+      ...imageVisual,
+    };
+    const parsedFreeStyle = imageStyleSchema.safeParse(rawFreeStyle);
+    const effectiveGeom =
+      geometry ??
+      claim.layoutPlaceholder?.geometry ??
+      claim.masterPlaceholder?.geometry;
+    const freeNode = createImageNode({
+      src,
+      ...(objectName === undefined ? {} : { name: objectName }),
+      ...(alt === undefined ? {} : { alt }),
+      ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
+      ...(effectiveGeom === undefined ? {} : { geometry: effectiveGeom }),
+      ...(crop === undefined ? {} : { crop }),
+      style: parsedFreeStyle.success
+        ? parsedFreeStyle.data
+        : {
+            position: "absolute",
+            left: resolvedBox.x,
+            top: resolvedBox.y,
+            width: resolvedBox.width,
+            height: resolvedBox.height,
+          },
+    });
+    if (
+      clickResult?.deferredSlideLink !== undefined &&
+      context.registerDeferredSlideLink !== undefined
+    ) {
+      const pending = clickResult.deferredSlideLink;
+      context.registerDeferredSlideLink({
+        ...pending,
+        apply(targetSlideId) {
+          freeNode.set({ link: { id: targetSlideId } });
+        },
+      });
+    }
+    emitPlaceholderUnbindDiagnostic({
+      diagnostics,
+      location: picLocation,
+      retainedAs: "image",
+    });
+    return { node: freeNode, diagnostics };
+  }
+
+  const style: NonNullable<ImageDeclarationProps["style"]> = {
+    ...(localX !== undefined && localY !== undefined
+      ? { position: "absolute", left: localX, top: localY }
+      : {}),
+    ...(localWidth === undefined ? {} : { width: localWidth }),
+    ...(localHeight === undefined ? {} : { height: localHeight }),
+    ...localVisualStyle,
+  };
+
   const props: ImageDeclarationProps = {
     src,
     ...(objectName === undefined ? {} : { name: objectName }),
     ...(matchedKey === undefined ? {} : { placeholder: matchedKey }),
-    ...(nativeRef === undefined ? {} : { nativePlaceholder: nativeRef }),
+    ...(matchedKey === undefined || nativeRef === undefined
+      ? {}
+      : { nativePlaceholder: nativeRef }),
     ...(alt === undefined ? {} : { alt }),
     ...(clickResult?.link === undefined ? {} : { link: clickResult.link }),
     ...(geometry === undefined ? {} : { geometry }),

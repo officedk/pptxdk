@@ -20,6 +20,7 @@ import {
   SlideContainer,
   SlideLayoutContainer,
   SlideMasterContainer,
+  defaultColorMap,
   defineTheme,
   type LayoutPlaceholderSpec,
   type Theme,
@@ -689,7 +690,40 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
     assert.ok(layoutsImported.document instanceof DeckContainer);
     assert.equal(layoutsImported.document.masters[0]?.layouts.length, 11);
 
-    const layoutsEmit = emit(resolveDocument(layoutsImported.document));
+    const layoutSlides = collectSlides(layoutsImported.document);
+    // Slide 5 (Comparison layout) preserves deterministic body-1..content-4 keys and <p:spPr/> (no local box).
+    const slide5 = layoutSlides[4]!;
+    assert.ok(slide5.placeholder("body-1") !== undefined);
+    assert.ok(slide5.placeholder("content-2") !== undefined);
+    assert.ok(slide5.placeholder("body-3") !== undefined);
+    assert.ok(slide5.placeholder("content-4") !== undefined);
+    assert.equal(layoutSlides[0]?.props["footer"], undefined);
+    assert.equal(layoutSlides[0]?.props["slideNumber"], undefined);
+    assert.equal(
+      (
+        layoutSlides[9]?.props["dateTime"] as
+          | { readonly text?: string }
+          | undefined
+      )?.text,
+      "Friday, October 21, 2011",
+    );
+    assert.equal(
+      (
+        layoutSlides[9]?.props["footer"] as
+          | { readonly text?: string }
+          | undefined
+      )?.text,
+      "Apache Software Foundation",
+    );
+    assert.ok(layoutSlides[9]?.props["slideNumber"] !== undefined);
+
+    // Slide 7 (Blank with <p:ph type="title" idx="4294967295"/>) falls back to master title placeholder.
+    const layoutsResolved = resolveDocument(layoutsImported.document);
+    assert.equal(
+      layoutsResolved.report.slides[6]?.objects[0]?.text,
+      "Blank with Default Title",
+    );
+    const layoutsEmit = emit(layoutsResolved);
     const layoutsValidated = await validatePptx(layoutsEmit.pptx);
     assert.deepEqual(layoutsValidated.errors, []);
     assert.equal(layoutsValidated.masters?.[0]?.layouts.length, 11);
@@ -697,18 +731,40 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
       assert.equal(layout.preserve, true);
     }
     assert.equal(layoutsValidated.slides.length, 10);
+    assert.equal(
+      layoutsValidated.slides[4]?.objects[1]?.hasLocalTransform,
+      false,
+    );
+    assert.equal(
+      layoutsValidated.slides[6]?.objects[0]?.hasLocalTransform,
+      false,
+    );
     assert.deepEqual(
       layoutsValidated.slides[9]?.footerPlaceholders?.map((p) => p.kind),
       ["dt", "ftr", "sldNum"],
     );
+    assert.equal(
+      layoutsValidated.slides[9]?.footerPlaceholders?.[2]?.hasSlideNumberField,
+      true,
+    );
+    const layoutsReimported = importDocument(layoutsEmit.pptx);
+    assert.deepEqual(layoutsReimported.report.diagnostics, []);
 
     const plcRaw = readMasterFixture("placeholder-layout-color.pptx");
     const plcImported = importDocument(plcRaw);
     plcRaw.fill(0);
+    assert.ok(plcImported.document instanceof DeckContainer);
+    const plcImportedMaster = plcImported.document.masters[0]!;
+    assert.equal((plcImportedMaster.theme as Theme).colors.dk1, "#2D2842");
+    assert.deepEqual(
+      { ...(plcImportedMaster.props["colorMap"] as Record<string, string>) },
+      { ...defaultColorMap, bg2: "dk2", tx2: "lt2" },
+    );
     const plcResolution = resolveDocument(plcImported.document);
     const plcEmit = emit(plcResolution);
     const plcValidated = await validatePptx(plcEmit.pptx);
     assert.deepEqual(plcValidated.errors, []);
+    assert.equal(plcValidated.slides[0]?.objects[0]?.hasLocalTransform, true);
     assert.equal(plcValidated.slides[0]?.objects[0]?.text?.text, "CYAN TEXT");
     const plcZip = unzipSync(plcEmit.pptx);
     assert.match(
@@ -719,6 +775,8 @@ describe("Masters capability acceptance, external fixtures, inheritance & isolat
       strFromU8(plcZip["ppt/slides/slide1.xml"]!),
       /00FFFF|sz="3500"/u,
     );
+    const plcReimported = importDocument(plcEmit.pptx);
+    assert.deepEqual(plcReimported.report.diagnostics, []);
 
     // Pure-file paint reports unembedded font error; separate editable instance with Jost* TTF paints cleanly.
     const plcPurePaint = paint(plcResolution);

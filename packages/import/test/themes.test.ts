@@ -132,34 +132,6 @@ describe("Native themes, color maps, and theme overrides import", () => {
     );
   });
 
-  it("imports placeholder-layout-color.pptx with non-default master clrMap and Simple Light theme", () => {
-    const bytes = new Uint8Array(
-      readFileSync(
-        new URL("./fixtures/placeholder-layout-color.pptx", import.meta.url),
-      ),
-    );
-    const importer = createImporter([testMastersCap]);
-    const result = importer(bytes);
-    bytes.fill(0);
-
-    assert.ok(result.document instanceof DeckContainer);
-    assert.equal(result.document.masters.length, 1);
-    const master = result.document.masters[0]!;
-    const theme = master.theme as Theme;
-    assert.equal(isTheme(theme), true);
-    assert.equal(theme.name, "Modern Geometric Pitch Deck by Slidesgo");
-    assert.equal(theme.colors.dk1, "#2D2842");
-    assert.equal(theme.colors.lt1, "#FFFFFF");
-    assert.deepEqual(
-      { ...(master.props["colorMap"] as Record<string, string>) },
-      {
-        ...defaultColorMap,
-        bg2: "dk2",
-        tx2: "lt2",
-      },
-    );
-  });
-
   it("deduplicates shared theme OPC parts to the exact same Theme instance and reads themeOverride parts", () => {
     const pptx = zipSync({
       "_rels/.rels": strToU8(

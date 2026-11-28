@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   CommonNode,
@@ -14,8 +13,10 @@ import {
   OPC_REL_NS,
   P_NS,
   REL_OFFICE_DOCUMENT,
+  REL_SLIDE,
   REL_SLIDE_LAYOUT,
   REL_SLIDE_MASTER,
+  REL_THEME,
   R_NS,
   XmlElementCursor,
   createImporter,
@@ -27,13 +28,46 @@ import { describe, it } from "vitest";
 
 import { testMastersCap } from "./test-masters-cap.ts";
 
+const minimalThemeXml = `<a:theme xmlns:a="${A_NS}" name="T"><a:themeElements><a:clrScheme name="C"><a:dk1><a:srgbClr val="111111"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="222222"/></a:dk2><a:lt2><a:srgbClr val="EEEEEE"/></a:lt2><a:accent1><a:srgbClr val="2563EB"/></a:accent1><a:accent2><a:srgbClr val="10B981"/></a:accent2><a:accent3><a:srgbClr val="F59E0B"/></a:accent3><a:accent4><a:srgbClr val="EF4444"/></a:accent4><a:accent5><a:srgbClr val="8B5CF6"/></a:accent5><a:accent6><a:srgbClr val="06B6D4"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme><a:fontScheme name="F"><a:majorFont><a:latin typeface="Arial"/></a:majorFont><a:minorFont><a:latin typeface="Arial"/></a:minorFont></a:fontScheme><a:fmtScheme name="O"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
+
 describe("SlideMaster and SlideLayout import", () => {
-  it("imports prs-slide-masters.pptx with 0 slides, 2 masters, preserve distinction, and 2 idle layouts", () => {
-    const bytes = new Uint8Array(
-      readFileSync(
-        new URL("./fixtures/prs-slide-masters.pptx", import.meta.url),
+  it("imports a 0-slide multi-master deck with preserve distinction and idle layouts", () => {
+    const bytes = zipSync({
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
       ),
-    );
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/><p:sldMasterId id="2147483649" r:id="rId2"/></p:sldMasterIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster2.xml"/></Relationships>`,
+      ),
+      "ppt/theme/theme1.xml": strToU8(minimalThemeXml),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideMasters/slideMaster2.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" preserve="1"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483651" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster2.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout2.xml"/><Relationship Id="rId2" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout2.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout2.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster2.xml"/></Relationships>`,
+      ),
+    });
     const importer = createImporter([testMastersCap]);
     const result = importer(bytes);
     bytes.fill(0);
@@ -82,68 +116,88 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(withSlideResolution.report.slides[0]?.layout, "Blank");
   });
 
-  it("imports layouts.pptx retaining all 11 layouts (9 used + 2 idle) and preserve flags", () => {
-    const bytes = new Uint8Array(
-      readFileSync(new URL("./fixtures/layouts.pptx", import.meta.url)),
-    );
+  it("imports used and idle vertical layouts and disambiguates Comparison placeholder keys", () => {
+    const bytes = zipSync({
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE}" Target="slides/slide1.xml"/></Relationships>`,
+      ),
+      "ppt/theme/theme1.xml": strToU8(minimalThemeXml),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/><p:sldLayoutId id="2147483651" r:id="rId2"/><p:sldLayoutId id="2147483652" r:id="rId3"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz="4400"/></a:lvl1pPr></p:titleStyle><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout2.xml"/><Relationship Id="rId3" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout3.xml"/><Relationship Id="rId4" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="twoTxTwoObj" preserve="1"><p:cSld name="Comparison"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Left Text"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Left Content"/><p:cNvSpPr/><p:nvPr><p:ph idx="2"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="5" name="Right Text"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="3"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="6" name="Right Content"/><p:cNvSpPr/><p:nvPr><p:ph idx="4"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="7" name="Date"/><p:cNvSpPr/><p:nvPr><p:ph type="dt" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="8" name="Footer"/><p:cNvSpPr/><p:nvPr><p:ph type="ftr" idx="11"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="9" name="Number"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum" idx="12"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout2.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="vertTx" preserve="1"><p:cSld name="Title and Vertical Text"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout2.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout3.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="vertTitleAndTx" preserve="1"><p:cSld name="Vertical Title and Text"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout3.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slides/slide1.xml": strToU8(
+        `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+      ),
+      "ppt/slides/_rels/slide1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+      ),
+    });
     const importer = createImporter([testMastersCap]);
     const result = importer(bytes);
     bytes.fill(0);
 
-    assert.equal(result.report.slideCount, 10);
+    assert.equal(result.report.slideCount, 1);
     assert.ok(result.document instanceof DeckContainer);
-    assert.equal(result.document.masters.length, 1);
-
     const master = result.document.masters[0]!;
     assert.equal(master.props["preserve"], undefined);
-    assert.equal(master.layouts.length, 11);
-
-    const layoutNames = master.layouts.map((layout) => layout.props["name"]);
-    assert.deepEqual(layoutNames, [
-      "Title Slide",
-      "Title and Content",
-      "Section Header",
-      "Two Content",
-      "Comparison",
-      "Title Only",
-      "Blank",
-      "Content with Caption",
-      "Picture with Caption",
-      "Title and Vertical Text",
-      "Vertical Title and Text",
-    ]);
-
+    assert.equal(master.layouts.length, 3);
+    assert.deepEqual(
+      master.layouts.map((layout) => layout.props["name"]),
+      ["Comparison", "Title and Vertical Text", "Vertical Title and Text"],
+    );
     for (const layout of master.layouts) {
       assert.equal(layout.props["preserve"], true);
     }
 
-    // Idle layouts 10 and 11 can be queried directly from the master scope.
     const queriedIdle = result.document.query
       .get(master.id!)
       .get("Title and Vertical Text").node;
-    assert.equal(queriedIdle, master.layouts[9]);
+    assert.equal(queriedIdle, master.layouts[1]);
 
-    // Slide 1..9 bind to layouts 1..9; slide 10 binds to layout 2 ("Title and Content").
     const slides = result.document.children.filter(
       (child): child is CommonNode =>
         child instanceof CommonNode && child.kind === "slide",
     );
-    assert.equal(slides.length, 10);
     assert.equal(slides[0]?.props["layout"], master.layouts[0]);
-    assert.equal(slides[9]?.props["layout"], master.layouts[1]);
 
     const resolve = createResolver([testMastersCap]);
     const resolved = resolve(result.document);
     const resolvedLayouts: readonly ResolvedSlideLayout[] =
       resolved.report.masters?.[0]?.layouts ?? [];
-    assert.equal(resolvedLayouts.length, 11);
-    assert.equal(resolvedLayouts[9]?.type, "vertTx");
-    assert.equal(resolvedLayouts[10]?.type, "vertTitleAndTx");
+    assert.equal(resolvedLayouts.length, 3);
+    assert.equal(resolvedLayouts[1]?.type, "vertTx");
+    assert.equal(resolvedLayouts[2]?.type, "vertTitleAndTx");
 
-    // Master txStyles and placeholders + deterministic Comparison placeholder keys.
     assert.ok(master.props["textStyles"] !== undefined);
     assert.ok(master.props["placeholders"] !== undefined);
-    const comparisonPlaceholders = master.layouts[4]?.props["placeholders"] as
+    const comparisonPlaceholders = master.layouts[0]?.props["placeholders"] as
       | Readonly<
           Record<string, { readonly type: string; readonly idx?: number }>
         >
@@ -169,12 +223,37 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(comparisonPlaceholders["content-4"]?.idx, 4);
   });
 
-  it("imports placeholder-layout-color.pptx with layout listStyles (35pt #00FFFF), master clrMap, and disambiguated duplicate title keys", () => {
-    const bytes = new Uint8Array(
-      readFileSync(
-        new URL("./fixtures/placeholder-layout-color.pptx", import.meta.url),
+  it("imports layout listStyles, disambiguated duplicate title keys, hasCustomPrompt, and master headerFooter flags", () => {
+    const bytes = zipSync({
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
       ),
-    );
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE}" Target="slides/slide1.xml"/></Relationships>`,
+      ),
+      "ppt/theme/theme1.xml": strToU8(minimalThemeXml),
+      "ppt/slideMasters/slideMaster1.xml": strToU8(
+        `<p:sldMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="dk2" tx2="lt2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483650" r:id="rId1"/></p:sldLayoutIdLst><p:hf dt="0" ftr="0" hdr="0" sldNum="0"/><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`,
+      ),
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="${REL_THEME}" Target="../theme/theme1.xml"/></Relationships>`,
+      ),
+      "ppt/slideLayouts/slideLayout1.xml": strToU8(
+        `<p:sldLayout xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}" type="title"><p:cSld name="DualTitle"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title 1"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle><a:lvl1pPr><a:defRPr sz="3500"><a:solidFill><a:srgbClr val="00FFFF"/></a:solidFill><a:latin typeface="+mj-lt"/></a:defRPr></a:lvl1pPr></a:lstStyle><a:p/></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Title 2"/><p:cNvSpPr/><p:nvPr><p:ph type="title" idx="2" hasCustomPrompt="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle><a:lvl1pPr><a:defRPr sz="8000"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle><a:p/></p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+      ),
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_MASTER}" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
+      ),
+      "ppt/slides/slide1.xml": strToU8(
+        `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+      ),
+      "ppt/slides/_rels/slide1.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_SLIDE_LAYOUT}" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
+      ),
+    });
     const importer = createImporter([testMastersCap]);
     const result = importer(bytes);
     bytes.fill(0);
@@ -182,6 +261,16 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(result.report.slideCount, 1);
     assert.ok(result.document instanceof DeckContainer);
     const master = result.document.masters[0]!;
+    assert.deepEqual(
+      { ...(master.props["headerFooter"] as Record<string, unknown>) },
+      {
+        dateTime: false,
+        footer: false,
+        header: false,
+        slideNumber: false,
+      },
+    );
+
     const layout = master.layouts[0]!;
     const layoutPlaceholders = layout.props["placeholders"] as
       | Readonly<
@@ -278,29 +367,6 @@ describe("SlideMaster and SlideLayout import", () => {
     assert.equal(second?.id, "Shared Name-2");
     assert.equal(second?.props["name"], "Shared Name");
     assert.equal(second?.props["preserve"], true);
-  });
-
-  it("imports placeholder-layout-color.pptx headerFooter flags on SlideMaster", () => {
-    const bytes = new Uint8Array(
-      readFileSync(
-        new URL("./fixtures/placeholder-layout-color.pptx", import.meta.url),
-      ),
-    );
-    const importer = createImporter([testMastersCap]);
-    const result = importer(bytes);
-    bytes.fill(0);
-
-    assert.ok(result.document instanceof DeckContainer);
-    const master = result.document.masters[0]!;
-    assert.deepEqual(
-      { ...(master.props["headerFooter"] as Record<string, unknown>) },
-      {
-        dateTime: false,
-        footer: false,
-        header: false,
-        slideNumber: false,
-      },
-    );
   });
 
   it("imports placeholder geometry, flipH/flipV, background, border, and size onto unified style and size", () => {

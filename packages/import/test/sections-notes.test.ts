@@ -395,15 +395,30 @@ describe("Presentation slide order, hidden state, sections, and notes/handout ma
       assert.equal(notesMasterLosses[0].location.objectId, 8);
     }
 
-    // Verify layouts.pptx baseline notesMaster1.xml produces zero notesMaster diagnostics.
-    const layoutsRaw = new Uint8Array(
-      readFileSync(new URL("./fixtures/layouts.pptx", import.meta.url)),
+    // Standard notesMaster1.xml containing only native placeholders emits zero notesMaster diagnostics.
+    const cleanNotesMasterPptx = zipSync({
+      "_rels/.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_OFFICE_DOCUMENT}" Target="ppt/presentation.xml"/></Relationships>`,
+      ),
+      "ppt/presentation.xml": strToU8(
+        `<p:presentation xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:notesMasterIdLst><p:notesMasterId r:id="rId1"/></p:notesMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      ),
+      "ppt/_rels/presentation.xml.rels": strToU8(
+        `<Relationships xmlns="${OPC_REL_NS}"><Relationship Id="rId1" Type="${REL_NOTES_MASTER}" Target="notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="${REL_SLIDE}" Target="slides/slide1.xml"/></Relationships>`,
+      ),
+      "ppt/slides/slide1.xml": strToU8(
+        `<p:sld xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld></p:sld>`,
+      ),
+      "ppt/notesMasters/notesMaster1.xml": strToU8(
+        `<p:notesMaster xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide Image"/><p:cNvSpPr/><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp><p:sp><p:nvSpPr><p:cNvPr id="4" name="Slide Number"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum" idx="10"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:notesStyle/></p:notesMaster>`,
+      ),
+    });
+    const cleanResult = importer(cleanNotesMasterPptx);
+    assert.deepEqual(
+      cleanResult.report.diagnostics.filter((d) =>
+        d.location.part.startsWith("ppt/notesMasters/"),
+      ),
+      [],
     );
-    const layoutsResult = importer(layoutsRaw);
-    layoutsRaw.fill(0);
-    const layoutsNotesDiags = layoutsResult.report.diagnostics.filter((d) =>
-      d.location.part.startsWith("ppt/notesMasters/"),
-    );
-    assert.deepEqual(layoutsNotesDiags, []);
   });
 });

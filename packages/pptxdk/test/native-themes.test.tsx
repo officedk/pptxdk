@@ -514,62 +514,6 @@ describe("Slice 2: multi-master theme identity, clrMap, clrMapOvr, and themeOver
     assert.equal(indValidated.masters?.[1]?.theme?.colors.accent1, "#0D9488");
   });
 
-  it("imports external themes.pptx and placeholder-layout-color.pptx via SDK importPptx", () => {
-    const themesBytes = new Uint8Array(
-      readFileSync(new URL("./fixtures/themes.pptx", import.meta.url)),
-    );
-    const themesResult = importPptx(themesBytes);
-    themesBytes.fill(0);
-    assert.ok(themesResult.document instanceof DeckContainer);
-    assert.equal(themesResult.document.masters.length, 7);
-    assert.equal(
-      (themesResult.document.masters[6]!.theme as Theme).name,
-      "Tradeshow",
-    );
-    assert.deepEqual(
-      {
-        ...(themesResult.document.masters[6]!.props["colorMap"] as Record<
-          string,
-          string
-        >),
-      },
-      {
-        ...defaultColorMap,
-        bg1: "dk1",
-        tx1: "lt1",
-        bg2: "dk2",
-        tx2: "lt2",
-      },
-    );
-
-    const plcBytes = new Uint8Array(
-      readFileSync(
-        new URL("./fixtures/placeholder-layout-color.pptx", import.meta.url),
-      ),
-    );
-    const plcResult = importPptx(plcBytes);
-    plcBytes.fill(0);
-    assert.ok(plcResult.document instanceof DeckContainer);
-    assert.equal(plcResult.document.masters.length, 1);
-    assert.equal(
-      (plcResult.document.masters[0]!.theme as Theme).colors.dk1,
-      "#2D2842",
-    );
-    assert.deepEqual(
-      {
-        ...(plcResult.document.masters[0]!.props["colorMap"] as Record<
-          string,
-          string
-        >),
-      },
-      {
-        ...defaultColorMap,
-        bg2: "dk2",
-        tx2: "lt2",
-      },
-    );
-  });
-
   it("preserves schemeClr tx1/bg1/tx2/bg2 in master txStyles across emit -> import -> resolve -> paint so dark layout colorMapOverride resolves inherited title color to lt1", async () => {
     const darkLayout = defineSlideLayout({
       id: "dark-title",

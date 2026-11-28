@@ -321,6 +321,7 @@ function paintConnectorLineModel(
     model: model.visual,
     slideNumber: paintContext.slideNumber,
     objectId: paintContext.objectId,
+    allowSingleZeroExtent: true,
   });
 }
 

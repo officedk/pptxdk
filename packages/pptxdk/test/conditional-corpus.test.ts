@@ -69,6 +69,14 @@ const jostAssetUrl = new URL(
   "./assets/fonts/Jost-400-Book.ttf",
   import.meta.url,
 );
+const jostItalicAssetUrl = new URL(
+  "./assets/fonts/Jost-400-Italic.ttf",
+  import.meta.url,
+);
+const darkerAssetUrl = new URL(
+  "./assets/fonts/DarkerGrotesque-SemiBold.ttf",
+  import.meta.url,
+);
 
 describe("L4 decoupled conditional external corpus runner", () => {
   it("verifies a single .pptx file and a flat top-layer directory with substitute fonts while ignoring subdirectories and non-pptx files", async () => {
@@ -149,6 +157,11 @@ describe("L4 decoupled conditional external corpus runner", () => {
         new Uint8Array(await readFile(jostAssetUrl)),
       );
       await writeFile(join(fontsDir, "Jost.ttc"), jostTtcBytes);
+      await copyFile(jostItalicAssetUrl, join(fontsDir, "Jost-400-Italic.ttf"));
+      await copyFile(
+        darkerAssetUrl,
+        join(fontsDir, "DarkerGrotesque-SemiBold.ttf"),
+      );
       await copyFile(
         jostAssetUrl,
         join(fontsDir, "nested-fonts", "Nested.ttf"),
@@ -173,6 +186,26 @@ describe("L4 decoupled conditional external corpus runner", () => {
       assert.equal(dirReport.results[0]?.status, "passed");
       assert.equal(dirReport.results[1]?.status, "rejected-typed");
       assert.equal(dirReport.results[1]?.importErrorCode, "corrupt-archive");
+
+      const concurrentReport = await runExternalCorpusCheck({
+        input: flatDir,
+        fontsDir,
+        concurrency: 2,
+      });
+      assert.equal(concurrentReport.passed, true);
+      assert.equal(concurrentReport.totalFiles, 2);
+      assert.deepEqual(
+        concurrentReport.results.map((item) => ({
+          file: item.file,
+          status: item.status,
+          importErrorCode: item.importErrorCode,
+        })),
+        dirReport.results.map((item) => ({
+          file: item.file,
+          status: item.status,
+          importErrorCode: item.importErrorCode,
+        })),
+      );
 
       const persisted = JSON.parse(await readFile(reportPath, "utf8")) as {
         readonly totalFiles: number;
@@ -206,6 +239,11 @@ describe("L4 decoupled conditional external corpus runner", () => {
       await assert.rejects(
         () => runExternalCorpusCheck({ input: onlySubdirDir }),
         /No top-level \.pptx files found/u,
+      );
+
+      await assert.rejects(
+        () => runExternalCorpusCheck({ input: onlySubdirDir, concurrency: 0 }),
+        /Invalid concurrency/u,
       );
 
       // Timeout isolation marks sample violated without crashing the orchestrator.

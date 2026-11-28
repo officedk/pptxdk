@@ -600,12 +600,19 @@ function readImageSource(source: unknown): ResolvedImageSource {
       "Image.src must be a file path, file URL, image bytes, or externalUrl descriptor",
     );
   }
-  const externalParsed = externalImageSourceSchema.safeParse(parsed.data);
-  if (externalParsed.success) {
-    return {
-      kind: "external",
-      externalUrl: externalParsed.data.externalUrl,
-    };
+  if (
+    typeof parsed.data === "object" &&
+    parsed.data !== null &&
+    !(parsed.data instanceof Uint8Array) &&
+    !(parsed.data instanceof URL)
+  ) {
+    const externalParsed = externalImageSourceSchema.safeParse(parsed.data);
+    if (externalParsed.success) {
+      return {
+        kind: "external",
+        externalUrl: externalParsed.data.externalUrl,
+      };
+    }
   }
   return {
     kind: "embedded",

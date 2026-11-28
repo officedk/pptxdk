@@ -9,7 +9,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, extname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -41,12 +41,14 @@ import { z } from "zod";
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const tscBin = join(packageRoot, "node_modules/.bin/tsc");
 const defaultTimeoutMs = 30_000;
+const defaultConcurrency = Math.min(8, Math.max(1, availableParallelism()));
 
 export type ExternalCorpusOptions = {
   readonly input: string;
   readonly fontsDir?: string | undefined;
   readonly reportPath?: string | undefined;
   readonly timeoutMs?: number | undefined;
+  readonly concurrency?: number | undefined;
 };
 
 export type SampleCheckResult = {
@@ -173,8 +175,39 @@ async function loadTopLevelSubstituteFontPool(
     .map((entry) => join(absDir, entry.name))
     .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
-  const byFamily = new Map<string, FontFace[]>();
-  const fallback: FontFace[] = [];
+  const byFamilyBuckets = new Map<string, Map<string, FontFace>>();
+  const fallbackBySlot = new Map<string, FontFace>();
+  const preferredFallbackFamilies = new Set([
+    "microsoft yahei",
+    "noto sans sc",
+    "noto serif sc",
+  ]);
+  const fallbackPreferredSlots = new Set<string>();
+
+  const registerFamilyFace = (
+    familyKey: string,
+    face: FontFace,
+    isPreferredFallback: boolean,
+  ) => {
+    const slotKey = `${face.weight ?? 400}:${face.style ?? "normal"}`;
+    let bucket = byFamilyBuckets.get(familyKey);
+    if (bucket === undefined) {
+      bucket = new Map<string, FontFace>();
+      byFamilyBuckets.set(familyKey, bucket);
+    }
+    if (!bucket.has(slotKey)) {
+      bucket.set(slotKey, face);
+    }
+    if (
+      !fallbackBySlot.has(slotKey) ||
+      (isPreferredFallback && !fallbackPreferredSlots.has(slotKey))
+    ) {
+      fallbackBySlot.set(slotKey, face);
+      if (isPreferredFallback) {
+        fallbackPreferredSlots.add(slotKey);
+      }
+    }
+  };
 
   for (const filePath of fontFiles) {
     const raw = new Uint8Array(await readFile(filePath));
@@ -208,11 +241,11 @@ async function loadTopLevelSubstituteFontPool(
           });
           const faces = unpackedFont.faces ?? [];
           if (faces.length === 0) continue;
-          fallback.push(...faces);
           const key = fam.toLowerCase();
-          const bucket = byFamily.get(key) ?? [];
-          bucket.push(...faces);
-          byFamily.set(key, bucket);
+          const isPreferred = preferredFallbackFamilies.has(key);
+          for (const face of faces) {
+            registerFamilyFace(key, face, isPreferred);
+          }
         } catch {
           continue;
         }
@@ -224,6 +257,13 @@ async function loadTopLevelSubstituteFontPool(
     let style: FontFaceStyle = "normal";
     try {
       const opened = fontkit.create(Buffer.from(raw));
+      if (
+        "fvar" in opened &&
+        opened["fvar"] !== undefined &&
+        opened["fvar"] !== null
+      ) {
+        continue;
+      }
       if ("familyName" in opened && typeof opened.familyName === "string") {
         familyName = opened.familyName.trim();
       }
@@ -238,23 +278,48 @@ async function loadTopLevelSubstituteFontPool(
           weight = weightClass;
         }
         const fsSelection = opened["OS/2"]["fsSelection"];
-        if (typeof fsSelection === "number" && (fsSelection & 1) !== 0) {
+        const isItalicFromFs =
+          (isRecord(fsSelection) &&
+            (Boolean(fsSelection["italic"]) ||
+              Boolean(fsSelection["oblique"]))) ||
+          (typeof fsSelection === "number" && (fsSelection & 1) !== 0);
+        const isItalicFromAngle =
+          "italicAngle" in opened &&
+          typeof opened.italicAngle === "number" &&
+          opened.italicAngle !== 0;
+        if (isItalicFromFs || isItalicFromAngle) {
           style = "italic";
         }
+      } else if (
+        "italicAngle" in opened &&
+        typeof opened.italicAngle === "number" &&
+        opened.italicAngle !== 0
+      ) {
+        style = "italic";
       }
     } catch {
       continue;
     }
 
     const face: FontFace = { weight, style, data: raw };
-    fallback.push(face);
     if (familyName !== undefined && familyName !== "") {
       const key = familyName.toLowerCase();
-      const bucket = byFamily.get(key) ?? [];
-      bucket.push(face);
-      byFamily.set(key, bucket);
+      registerFamilyFace(key, face, preferredFallbackFamilies.has(key));
+    } else {
+      const slotKey = `${face.weight ?? 400}:${face.style ?? "normal"}`;
+      if (!fallbackBySlot.has(slotKey)) {
+        fallbackBySlot.set(slotKey, face);
+      }
     }
   }
+
+  const byFamily = new Map<string, readonly FontFace[]>(
+    [...byFamilyBuckets.entries()].map(([key, bucket]) => [
+      key,
+      [...bucket.values()],
+    ]),
+  );
+  const fallback = [...fallbackBySlot.values()];
 
   return { byFamily, fallback };
 }
@@ -767,62 +832,82 @@ async function runBatchTscCheck(
 export async function runExternalCorpusCheck(
   options: ExternalCorpusOptions,
 ): Promise<ExternalCorpusReport> {
-  const files = await discoverTopLevelPptxFiles(options.input);
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
     throw new Error(`Invalid timeoutMs: ${String(timeoutMs)}`);
   }
+  const concurrency = options.concurrency ?? defaultConcurrency;
+  if (!Number.isInteger(concurrency) || concurrency <= 0) {
+    throw new Error(`Invalid concurrency: ${String(concurrency)}`);
+  }
+  const files = await discoverTopLevelPptxFiles(options.input);
 
   const tempRoot = await mkdtemp(join(tmpdir(), "pptxdk-conditional-corpus-"));
   try {
-    const results: SampleCheckResult[] = [];
-    for (const [index, file] of files.entries()) {
-      const caseDir = join(tempRoot, "cases", `s${String(index)}`);
-      const stageFile = join(tempRoot, `stage-${String(index)}.json`);
-      const sampleResult = await runIsolatedSample({
-        file,
-        caseDir,
-        stageFile,
-        fontsDir: options.fontsDir,
-        timeoutMs,
-      });
-      results.push(sampleResult);
-    }
+    const results = Array.from<SampleCheckResult | undefined>({
+      length: files.length,
+    });
+    const workerCount = Math.min(concurrency, files.length);
+    let nextIndex = 0;
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (nextIndex < files.length) {
+          const index = nextIndex;
+          nextIndex += 1;
+          const file = files[index]!;
+          const caseDir = join(tempRoot, "cases", `s${String(index)}`);
+          const stageFile = join(tempRoot, `stage-${String(index)}.json`);
+          results[index] = await runIsolatedSample({
+            file,
+            caseDir,
+            stageFile,
+            fontsDir: options.fontsDir,
+            timeoutMs,
+          });
+        }
+      }),
+    );
+    const orderedResults = results.map((item) => {
+      if (item === undefined) {
+        throw new Error("Missing sample result from worker pool");
+      }
+      return item;
+    });
 
-    const codegenPassedCount = results.filter(
+    const codegenPassedCount = orderedResults.filter(
       (item) => item.codegenStatus === "passed",
     ).length;
     const batchTsc = await runBatchTscCheck(tempRoot, codegenPassedCount > 0);
 
-    const typedRejectedCount = results.filter(
+    const typedRejectedCount = orderedResults.filter(
       (item) => item.status === "rejected-typed",
     ).length;
-    const importedCount = results.filter(
+    const importedCount = orderedResults.filter(
       (item) =>
         item.status !== "rejected-typed" && item.slideCount !== undefined,
     ).length;
-    const emitPassedCount = results.filter(
+    const emitPassedCount = orderedResults.filter(
       (item) => item.emitStatus === "passed",
     ).length;
-    const emitSkippedFontUnavailableCount = results.filter(
+    const emitSkippedFontUnavailableCount = orderedResults.filter(
       (item) => item.emitStatus === "skipped-font-unavailable",
     ).length;
-    const paintCompletedCount = results.filter(
+    const paintCompletedCount = orderedResults.filter(
       (item) =>
         item.paintStatus === "passed" ||
         item.paintStatus === "completed-with-page-errors",
     ).length;
-    const paintPageErrorsCount = results.reduce(
+    const paintPageErrorsCount = orderedResults.reduce(
       (sum, item) => sum + (item.previewErrors?.length ?? 0),
       0,
     );
-    const crashedCount = results.filter(
+    const crashedCount = orderedResults.filter(
       (item) => item.signal !== undefined,
     ).length;
-    const timedOutCount = results.filter(
+    const timedOutCount = orderedResults.filter(
       (item) => item.timedOut === true,
     ).length;
-    const sampleViolations = results.filter(
+    const sampleViolations = orderedResults.filter(
       (item) => item.status === "violated",
     ).length;
     const violations = sampleViolations + (batchTsc.passed ? 0 : 1);
@@ -850,7 +935,7 @@ export async function runExternalCorpusCheck(
       ...(batchTsc.diagnostics === undefined
         ? {}
         : { batchTscDiagnostics: batchTsc.diagnostics }),
-      results,
+      results: orderedResults,
     };
 
     if (options.reportPath !== undefined) {
@@ -888,6 +973,11 @@ function parseCliArgs(argv: readonly string[]): CliParseResult {
     rawTimeout === undefined || rawTimeout.trim() === ""
       ? undefined
       : Number(rawTimeout);
+  const rawConcurrency = process.env["PPTXDK_CONDITIONAL_CONCURRENCY"];
+  let concurrency =
+    rawConcurrency === undefined || rawConcurrency.trim() === ""
+      ? undefined
+      : Number(rawConcurrency);
   let caseDir: string | undefined;
   let stageFile: string | undefined;
 
@@ -912,6 +1002,10 @@ function parseCliArgs(argv: readonly string[]): CliParseResult {
     }
     if (arg === "--timeout-ms") {
       timeoutMs = Number(argv[++i]);
+      continue;
+    }
+    if (arg === "--concurrency") {
+      concurrency = Number(argv[++i]);
       continue;
     }
     if (arg === "--case-dir") {
@@ -950,7 +1044,7 @@ function parseCliArgs(argv: readonly string[]): CliParseResult {
 
   if (input === undefined || input.trim() === "") {
     throw new Error(
-      "Usage: check-external-corpus --input <pptx-file-or-flat-dir> [--fonts <flat-font-dir>] [--report <report.json>] [--timeout-ms <ms>]",
+      "Usage: check-external-corpus --input <pptx-file-or-flat-dir> [--fonts <flat-font-dir>] [--report <report.json>] [--timeout-ms <ms>] [--concurrency <n>]",
     );
   }
   return {
@@ -960,6 +1054,7 @@ function parseCliArgs(argv: readonly string[]): CliParseResult {
       fontsDir,
       reportPath,
       timeoutMs,
+      concurrency,
     },
   };
 }
